@@ -38,7 +38,7 @@ transition_rule = ForAll([x, y],
         And(x == b2, y == b1, Not(ON(x, y)))  # Negated case: Not(ON(x, y)) when x == b2 and y == b1
     )
 )
-solver.add(transition_rule)
+# solver.add(transition_rule)
 # transition_rule = ForAll([x, y], 
 #     ON_after(x, y) == If(And(x == b2, y == b1), Not(ON(x, y)), ON(x, y))
 # )
@@ -46,13 +46,13 @@ solver.add(transition_rule)
 
 ON_trans_after = TransitiveClosure(ON_after)
 ON_star_after = Function("ON_star_after", Box, Box, BoolSort())
-solver.add(ForAll([x, y], ON_star_after(x, y) == Or(x == y, ON_trans_after(x, y))))
+# solver.add(ForAll([x, y], ON_star_after(x, y) == Or(x == y, ON_trans_after(x, y))))
 
 # postcondition
 # postcondition = And([ON_star_after(b, b0) for b in [b0, b1, b2]])
-postcondition = ON_after(b2, b2)
+# postcondition = ON_star_after(b2, b2)
 # solver.add(Not(postcondition))
-solver.add(postcondition)
+# solver.add(postcondition)
 
 
 # Check satisfiability

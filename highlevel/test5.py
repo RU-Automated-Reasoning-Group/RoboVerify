@@ -24,12 +24,12 @@ solver.add(Not(ON_after(b2, b2)))
 
 
 ON_trans_after = TransitiveClosure(ON_after)
-ON_star_after = Function("ON_star_after", Box, Box, BoolSort())
-solver.add(ForAll([x, y], ON_star_after(x, y) == Or(x == y, ON_trans_after(x, y))))
+# ON_star_after = Function("ON_star_after", Box, Box, BoolSort())
+# solver.add(ForAll([x, y], ON_star_after(x, y) == Or(x == y, ON_trans_after(x, y))))
 
-postcondition = ON_star_after(b2, b2)
-# solver.add(postcondition)
-solver.add(Not(postcondition))
+postcondition = ON_trans_after(b0, b0)
+solver.add(postcondition)
+# solver.add(Not(postcondition))
 
 if solver.check() == sat:
     print("SAT - The constraints are consistent!")
