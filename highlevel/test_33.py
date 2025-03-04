@@ -14,8 +14,18 @@ solver.add(ForAll([x], ON_star(x, x)))
 def top(x):
     return Not(Exists([y], And(Not(y == x), ON_star(y, x))))
 
+def substituted_top(x, b_prime, b):
+    return Not(Exists([y], And(Not(y == x), Or(ON_star(y, x), And(ON_star(y, b_prime), ON_star(b, x))))))
+
 def loop_invariant(b):
     return And(ForAll([a], Or(ON_star(a, b0), top(a))), ON_star(b, b0), top(b))
+
+def substituted_loop_invariant(x, b_prime, b):
+    return And(
+        ForAll([a], Or(Or(ON_star(a, b0), And(ON_star(a, b_prime), ON_star(b, b0))), substituted_top(a, b_prime, b))),
+        Or(ON_star(x, b0), And(ON_star(x, b_prime), ON_star(b, b0))),
+        substituted_top(x, b_prime, b)
+    )
 
 def while_cond(b_prime):
     return Exists([b_prime], And(top(b_prime), b_prime != b))
@@ -38,9 +48,8 @@ def postcondition():
 # while loop correctness: verify while condition (true) + loop invariant implies another loop invariant
 solver.add(while_cond_instantized(b_prime))
 solver.add(loop_invariant(b))
-solver.add(ON_star(b_prime, b))
-# solver.add(Not(loop_invariant(b_prime)))
-
+wp = And(Not(ON_star(b, b_prime)), substituted_loop_invariant(b_prime, b_prime, b))
+solver.add(Not(wp))
 
 # postcondition correctness: verify while condition (false) + loop invariant implies postcondition
 # solver.add(loop_invariant(b))
