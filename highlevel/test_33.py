@@ -6,10 +6,10 @@ Box = DeclareSort('Box')
 # Box, (b0, b1, b2) = EnumSort('Box', ['b0', 'b1', 'b2'])
 x, y, c, a, b_prime, b, b0 = Consts("x y c a b_prime b b0", Box)
 ON_star = Function('ON_star', Box, Box, BoolSort())
+solver.add(ForAll([x, y, c], Implies(And(ON_star(x, y), ON_star(y, c)), ON_star(x, c))))
 solver.add(ForAll([x], ON_star(x, x)))
-# solver.add(ForAll([x, y], Implies(x != y, Not(And( ON(x, y),  ON(y, x) )))))
-# solver.add(ForAll([x, y, c], Implies(And(ON(x, c), ON(y, c), x != c, y != c), x == y)))
-# ON_star = TransitiveClosure(ON)
+solver.add(ForAll([x, y, c], Implies(And(ON_star(x, y), ON_star(x, c)), Or(ON_star(y, c), ON_star(c, y)))))
+solver.add(ForAll([x, y], Implies(ON_star(x, y), Implies(ON_star(y, x), x == y))))
 
 def top(x):
     return Not(Exists([y], And(Not(y == x), ON_star(y, x))))
@@ -39,29 +39,43 @@ def precondition():
 def postcondition():
     return ForAll([a], ON_star(a, b0))
 
+def check_solver(x):
+    if x.check() == sat:
+        print("constraints satisfiable")
+        print("model is")
+        print(x.model())
+        import pdb; pdb.set_trace()
+    else:
+        # print("NOT satisfiable")
+        print(x.check())
+
 # precondition correctness: precondition + b <- b0 implies loop invariant
-# solver.add(precondition())
-# solver.add(Not(loop_invariant(b0)))
+print("verifying precondition")
+solver.push()
+solver.add(precondition())
+solver.add(Not(loop_invariant(b0)))
+check_solver(solver)
+solver.pop()
 
 
 
 # while loop correctness: verify while condition (true) + loop invariant implies another loop invariant
+print("verifying inductive loop invariant")
+solver.push()
 solver.add(while_cond_instantized(b_prime))
 solver.add(loop_invariant(b))
 wp = And(Not(ON_star(b, b_prime)), substituted_loop_invariant(b_prime, b_prime, b))
 solver.add(Not(wp))
+check_solver(solver)
+solver.pop()
 
 # postcondition correctness: verify while condition (false) + loop invariant implies postcondition
-# solver.add(loop_invariant(b))
-# solver.add(Not(while_cond(b_prime)))
-# solver.add(Not(postcondition()))
-
-if solver.check() == sat:
-    print("constraints satisfiable")
-    print("model is")
-    print(solver.model())
-    import pdb; pdb.set_trace()
-else:
-    print("NOT satisfiable")
+print("verifying post condition")
+solver.push()
+solver.add(loop_invariant(b))
+solver.add(Not(while_cond(b_prime)))
+solver.add(Not(postcondition()))
+check_solver(solver)
+solver.pop()
 
 

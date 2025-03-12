@@ -19,7 +19,8 @@ def check_solver(x):
         print(x.model())
         import pdb; pdb.set_trace()
     else:
-        print("NOT satisfiable")
+        # print("NOT satisfiable")
+        print(x.check())
 
 def top(x):
     return Not(Exists([y], And(Not(y == x), ON_star(y, x))))

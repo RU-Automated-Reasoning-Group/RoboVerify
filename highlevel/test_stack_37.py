@@ -7,7 +7,7 @@ Box = DeclareSort('Box')
 # Box, (b9, b10, b11) = EnumSort('Box', ['b9', 'b10', 'b11'])
 x, y, c, a, b_prime, b, b0 = Consts("x y c a b_prime b b0", Box)
 ON_star = Function('ON_star', Box, Box, BoolSort())
-solver.add(ForAll([x, y, c], Implies(And(ON_star(x, y), ON_star(y, c)), ON_star(y, c))))
+solver.add(ForAll([x, y, c], Implies(And(ON_star(x, y), ON_star(y, c)), ON_star(x, c))))
 solver.add(ForAll([x], ON_star(x, x)))
 solver.add(ForAll([x, y, c], Implies(And(ON_star(x, y), ON_star(x, c)), Or(ON_star(y, c), ON_star(c, y)))))
 solver.add(ForAll([x, y], Implies(ON_star(x, y), Implies(ON_star(y, x), x == y))))
@@ -22,7 +22,8 @@ def check_solver(x):
         #         print(f"{name1}, {name2}: {x.model().evaluate(ON_star(box1, box2))}")
         import pdb; pdb.set_trace()
     else:
-        print("NOT satisfiable")
+        # print("NOT satisfiable")
+        print(x.check())
 
 def on_table(x):
     return Not(Exists([y], And(Not(y == x), ON_star(x, y))))
