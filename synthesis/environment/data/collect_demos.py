@@ -9,6 +9,7 @@ from environment.data.custom_block_controller import get_custom_block_control
 from environment.data.pickplacemulti_controller import get_pickmulti_control
 # from environment.data.pickplacemulti_controller_v0 import get_pickmulti_control
 from environment.data.pushmulti_controller import get_pushmulti_control
+from environment.data.pickplace_dest import get_pickdest_control
 from environment.utils.general_utils import AttrDict
 from environment.general_env import GeneralEnv, GymToGymnasium
 from environment.fetch_custom.get_fetch_env import get_env, get_pickplace_env, episode_render_fn
@@ -128,9 +129,9 @@ class CollectDemos():
             if require_id:
                 obj_ids = []
 
-            self.x_noise = PerlinNoise(octaves=3)
-            self.y_noise = PerlinNoise(octaves=3)
-            self.z_noise = PerlinNoise(octaves=3)
+            self.x_noise = PerlinNoise(octaves=3, seed=1)
+            self.y_noise = PerlinNoise(octaves=3, seed=2)
+            self.z_noise = PerlinNoise(octaves=3, seed=3)
 
             if self.task == 'push':
                 controller = get_push_control
@@ -141,7 +142,7 @@ class CollectDemos():
             elif self.task == 'custom_block' or self.task == 'custom_pick':
                 controller = get_custom_block_control
             elif self.task == 'pickmulti':
-                controller = get_pickmulti_control
+                controller = get_pickdest_control
             elif self.task == 'tower':
                 controller = get_pickmulti_control
             elif self.task == 'pushmulti':
@@ -150,7 +151,10 @@ class CollectDemos():
                 pdb.set_trace()
 
             idx = 0
-
+            initial_box = self.env.flatten_observation(self.env._get_obs())[10:13]
+            initial_box[0] -= 0.1
+            initial_box[1] -= 0.1
+            initial_box[2] += 0.1
             # only for debug
             # plt.figure()
             while not done:
@@ -168,7 +172,7 @@ class CollectDemos():
                 idx += 1
 
                 if self.task == 'block' or self.task == 'pickmulti' or self.task == 'pushmulti' or self.task == 'tower':
-                    action, success = controller(obs, block_id=self.block_id, last_block=self.block_id==(self.block_num-1))
+                    action, success = controller(obs, initial_box, block_id=self.block_id, last_block=self.block_id==(self.block_num-1))
                     if action is None:
                         print('wrong block id')
                         # pdb.set_trace()
@@ -200,6 +204,7 @@ class CollectDemos():
                 actions.append(action)
 
                 obs, reward, done, _, info = self.env.step(action)
+                self.env.render()
                 if done and self.task == 'pushmulti':
                     done = False
 
@@ -216,6 +221,7 @@ class CollectDemos():
                     break
                 elif len(actions) >= self.traj_len:
                     # pdb.set_trace()
+                    success = True
                     break
 
                 # only for debug
@@ -236,6 +242,18 @@ class CollectDemos():
                 obj_ids.append(self.block_id)
             obs_imgs[-1].append(self.env.render())
 
+            collect_traj_num += 1
+            if require_id:
+                self.seqs.append(AttrDict(
+                    obs=observations,
+                    actions=actions,
+                    obj_ids=obj_ids
+                    ))
+            else:
+                self.seqs.append(AttrDict(
+                    obs=observations,
+                    actions=actions,
+                    ))
             if len(actions) <= self.subseq_len+1:
                 obs_imgs.pop(-1)
                 continue

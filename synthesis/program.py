@@ -1,7 +1,10 @@
+import pdb
 from abc import ABC, abstractmethod
-import numpy as np
-from typing import List
 from copy import deepcopy
+from typing import List
+
+import numpy as np
+
 
 class Parameter:
     def __init__(self, val: int = 0):
@@ -40,11 +43,30 @@ class Skip(Instruction):
 class PickPlace(Instruction):
     def __init__(self, box_id: int):
         self.box_id = box_id
-        self.target_offset = [Parameter() for _ in range(3)]
+        # self.target_offset = [Parameter(0) for _ in range(3)]
+        self.target_offset = [Parameter(-0.0), Parameter(-0.2), Parameter(0.08)]
 
-    def eval(self, env):
+    def eval(self, env, traj, limit: int = 50):
         # call the neural controller here
-        pass
+        from environment.data.pickplace_dest import get_pickdest_control
+
+        success = False
+        initial_box = traj[-1][10:13]
+        step = 0
+        while not success and step < limit:
+            obs = env.flatten_observation(env._get_obs())
+            # import pdb; pdb.set_trace()
+            action, success = get_pickdest_control(
+                obs,
+                initial_box + np.array([offset.val for offset in self.target_offset]),
+                block_id=0,
+                last_block=True,
+            )
+            env.step(action)
+            step += 1
+            # env.render()
+            # print(step, success)
+            traj.append(obs)
 
     def register_trainable_parameter(self, parameter: List):
         for p in self.target_offset:
@@ -62,11 +84,9 @@ class Program:
 
     def eval(self, env):
         """evaluate the program in the environment and return the trajectories"""
-        traj = [env.reset()]
+        traj = [env.reset()[0]]
         for line in self.instructions:
-            segment = line.eval(env)
-            traj.extend(segment)
-
+            line.eval(env, traj)
         return traj
 
     def register_trainable_parameter(self):
@@ -87,6 +107,7 @@ def evaluate_program(p: Program, parameter: List):
 
 
 if __name__ == "__main__":
+
     program = Program(3)
     program.instructions = [PickPlace(0), PickPlace(0), PickPlace(0)]
     trainable_parameters = program.register_trainable_parameter()

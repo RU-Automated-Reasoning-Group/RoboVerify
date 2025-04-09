@@ -1,4 +1,6 @@
+import numpy as np
 import torch
+from scipy.stats import gaussian_kde
 from sklearn.mixture import GaussianMixture
 
 
@@ -75,3 +77,25 @@ def kl_divergence_gmm(gmm_p, gmm_q, n_samples=10000):
     # KL(P || Q) = E_P[log P - log Q]
     kl_estimate = torch.mean(log_p - log_q)
     return kl_estimate.item()
+
+
+def kl_divergence_kde(states_P, states_Q, n_samples=10000):
+    """
+    Estimate KL(P || Q) where states_P and states_Q are arrays of shape (N, d)
+    representing states from two different trajectory sets.
+    KDE is used to estimate occupancy distributions.
+    """
+    # import pdb; pdb.set_trace()
+    kde_P = gaussian_kde(states_P.T)
+    kde_Q = gaussian_kde(states_Q.T)
+    # Sample from P (or use its raw samples)
+    samples = states_P[np.random.choice(len(states_P), size=n_samples, replace=True)]
+    # Evaluate densities
+    p_vals = kde_P(samples.T)
+    q_vals = kde_Q(samples.T)
+    # Avoid log(0); use small value for numerical stability
+    epsilon = 1e-10
+    p_vals = np.clip(p_vals, epsilon, None)
+    q_vals = np.clip(q_vals, epsilon, None)
+    kl = np.mean(np.log(p_vals / q_vals))
+    return kl
