@@ -1,5 +1,6 @@
 from z3 import *
-
+import pdb
+pdb.set_trace()
 # set_option("smt.mbqi", False)
 
 solver = Solver()

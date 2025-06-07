@@ -306,24 +306,24 @@ if __name__ == "__main__":
         PickPlace(grab_box_id=0, target_box_id=1),  # move down to place on box 1
     ]
     p.register_trainable_parameter()
-    p.update_trainable_parameter(
-        [
-            0.0279608,
-            0.04278932,
-            0.13399421,
-            0.02289095,
-            -0.04434892,
-            0.13288633,
-            -0.01862492,
-            0.00964001,
-            0.05832452,
-        ]
-    )
+    # p.update_trainable_parameter(
+    #     [
+    #         0.0279608,
+    #         0.04278932,
+    #         0.13399421,
+    #         0.02289095,
+    #         -0.04434892,
+    #         0.13288633,
+    #         -0.01862492,
+    #         0.00964001,
+    #         0.05832452,
+    #     ]
+    # )
     # p.instructions[0].target_offset = [Parameter(0.), Parameter(0.), Parameter(0.2)]
     # p.instructions[1].target_offset = [Parameter(0), Parameter(0), Parameter(0.2)]
     # p.instructions[2].target_offset = [Parameter(0), Parameter(0), Parameter(0.05)]
-    for _ in range(50):
-        print(mutate_program(p))
+    # for _ in range(50):
+    #     print(mutate_program(p))
     pdb.set_trace()
     states, imgs = evaluate_program(p, 15, True)
     pdb.set_trace()
