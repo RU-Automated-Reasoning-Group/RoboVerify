@@ -1,16 +1,28 @@
 from z3 import *
-set_option("smt.mbqi", False)
+# set_option("smt.mbqi", False)
 
 solver = Solver()
 
 Box = DeclareSort('Box')
 # Box, (b0, b1, b2) = EnumSort('Box', ['b0', 'b1', 'b2'])
 x, y, c, a, b_prime, b, b0 = Consts("x y c a b_prime b b0", Box)
-ON = Function('ON', Box, Box, BoolSort())
+# ON = Function('ON', Box, Box, BoolSort())
+
+# x, y, c, a, b_prime, b, b0 = Consts("x y c a b_prime b b0", Box)
+ON_star = Function("ON_star", Box, Box, BoolSort())
+solver.add(ForAll([x, y, c], Implies(And(ON_star(x, y), ON_star(y, c)), ON_star(x, c))))
+solver.add(ForAll([x], ON_star(x, x)))
+solver.add(
+    ForAll(
+        [x, y, c],
+        Implies(And(ON_star(x, y), ON_star(x, c)), Or(ON_star(y, c), ON_star(c, y))),
+    )
+)
+solver.add(ForAll([x, y], Implies(ON_star(x, y), Implies(ON_star(y, x), x == y))))
 # solver.add(ForAll([x, y, c], Implies(And(ON_star(x, y), ON_star(y, c)), ON_star(x, c))))
 # solver.add(ForAll([x, y], Implies(x != y, Not(And( ON(x, y),  ON(y, x) )))))
 # solver.add(ForAll([x, y, c], Implies(And(ON(x, c), ON(y, c), x != c, y != c), x == y)))
-ON_star = TransitiveClosure(ON)
+# ON_star = TransitiveClosure(ON)
 
 def check_solver(x):
     if x.check() == sat:
