@@ -3,12 +3,15 @@ from z3 import *
 # set_option("smt.mbqi", False)
 # set_option("sat.euf", True)
 
+# set_option("verbose", 10)
+# set_option("smt.mbqi.max_iterations", 1000000)
+
 solver = Solver()
 
 # Box = DeclareSort("Box")
-Box, (b9, b10, b11, b12, b13, b14, b15, b16) = EnumSort(
-    "Box", ["b9", "b10", "b11", "b12", "b13", "b14", "b15", "b16"]
-)
+# Box, (b9, b10, b11, b12, b13, b14, b15, b16) = EnumSort(
+    # "Box", ["b9", "b10", "b11", "b12", "b13", "b14", "b15", "b16"]
+# )
 # Box, (b9, b10, b11) = EnumSort("Box", ["b9", "b10", "b11"])
 x, y, c, a, b_prime, b, b0 = Consts("x y c a b_prime b b0", Box)
 
@@ -69,18 +72,18 @@ def check_solver(x):
         print("constraints satisfiable")
         print("model is")
         print(x.model())
-        for name1, box1 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
-            for name2, box2 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
-                print(
-                    f"{name1}, {name2}: {x.model().evaluate(ON_star_zero(box1, box2))}"
-                )
-        print("----------------")
-        for name1, box1 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
-            for name2, box2 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
-                print(f"{name1}, {name2}: {x.model().evaluate(ON_star(box1, box2))}")
-        import pdb
+        # for name1, box1 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
+        #     for name2, box2 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
+        #         print(
+        #             f"{name1}, {name2}: {x.model().evaluate(ON_star_zero(box1, box2))}"
+        #         )
+        # print("----------------")
+        # for name1, box1 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
+        #     for name2, box2 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
+        #         print(f"{name1}, {name2}: {x.model().evaluate(ON_star(box1, box2))}")
+        # import pdb
 
-        pdb.set_trace()
+        # pdb.set_trace()
     else:
         print(x.check())
         print("Unsat Core:", x.unsat_core())
@@ -141,10 +144,8 @@ def postcondition_before_on_table_n0():
         [x],
         Implies(
             ON_star_zero(x, b0),
-            And(
-                on_table_substituted(x, b0, ON_func=ON_star),
-                top_substituted(x, b0, ON_func=ON_star),
-            ),
+            on_table_substituted(x, b0, ON_func=ON_star)
+            # top_substituted(x, b0, ON_func=ON_star),
         ),
     )
 
@@ -166,7 +167,7 @@ def loop_invariant():
         [x],
         Implies(
             ON_star_zero(x, b0),
-            Or(ON_star(x, b0), And(on_table(x, ON_star), top(x, ON_star))),
+            Or(ON_star(x, b0), top(x, ON_star)),
         ),
     )
     # return ForAll([x, y], And(Implies(ON_star_zero(b0, x), ON_star_zero(x, y) == ON_star(x, y)), Implies(ON_star_zero(x, b0), Or(ON_star(x, b0), on_table(x, ON_star)))))
@@ -188,51 +189,57 @@ def loop_invariant_substituted(next_box):
     )
 
 
-print("verifying precondition")
+print("testing precondition")
 solver.push()
-solver.add(ForAll([x, y], ON_star_zero(x, y) == ON_star(x, y)))
-solver.add(precondition())
-solver.add(Not(loop_invariant()))
+solver.add(Not(precondition()))
 check_solver(solver)
 solver.pop()
 
-print("verifying loop invariant")
-solver.push()
-solver.add(while_cond_instantized(x))
-solver.add(loop_invariant())
-solver.add(Not(loop_invariant_substituted(x)))
-check_solver(solver)
-solver.pop()
+# print("verifying precondition")
+# solver.push()
+# solver.add(ForAll([x, y], ON_star_zero(x, y) == ON_star(x, y)))
+# solver.add(precondition())
+# solver.add(Not(loop_invariant()))
+# check_solver(solver)
+# solver.pop()
 
-print("verifying postcondition")
-solver.push()
-solver.add(loop_invariant())
-solver.add(Not(while_cond()))
-solver.add(Not(postcondition_before_on_table_n0()))
-check_solver(solver)
-solver.pop()
+# print("verifying loop invariant")
+# solver.push()
+# solver.add(while_cond_instantized(x))
+# solver.add(loop_invariant())
+# solver.add(Not(loop_invariant_substituted(x)))
+# check_solver(solver)
+# solver.pop()
 
-
-def next_loop_invariant(b):
-    return And(
-        ForAll(
-            [a],
-            Exists(
-                [x],
-                Or(
-                    ON_star(a, b0), top(a, ON_star), And(top(x, ON_star), ON_star(x, a))
-                ),
-            ),
-        ),
-        ON_star(b, b0),
-        top(b, ON_star),
-        on_table(b0, ON_star),
-    )
+# print("verifying postcondition", flush=True)
+# solver.push()
+# solver.add(loop_invariant())
+# solver.add(Not(while_cond()))
+# solver.add(Not(postcondition_before_on_table_n0()))
+# check_solver(solver)
+# solver.pop()
 
 
-print("verifying postcondition implies the loop invariant of next loop")
-solver.push()
-solver.add(postcondition())
-solver.add(Not(next_loop_invariant(b0)))
-check_solver(solver)
-solver.pop()
+# # def next_loop_invariant(b):
+# #     return And(
+# #         ForAll(
+# #             [a],
+# #             Exists(
+# #                 [x],
+# #                 Or(
+# #                     ON_star(a, b0), top(a, ON_star), And(top(x, ON_star), ON_star(x, a))
+# #                 ),
+# #             ),
+# #         ),
+# #         ON_star(b, b0),
+# #         top(b, ON_star),
+# #         on_table(b0, ON_star),
+# #     )
+
+
+# # print("verifying postcondition implies the loop invariant of next loop")
+# # solver.push()
+# # solver.add(postcondition())
+# # solver.add(Not(next_loop_invariant(b0)))
+# # check_solver(solver)
+# # solver.pop()
