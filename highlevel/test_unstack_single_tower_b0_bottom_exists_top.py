@@ -117,18 +117,31 @@ def top_substituted(x, next_box, ON_func=ON_star):
 def exists_next():
     return ForAll(
         [x],
-        Exists(
-            [y],
-            And(
-                (y != x),
-                ForAll([x1], Implies(And(x1 != x, ON_star(x, x1)), ON_star(y, x1)))
-            ) 
+        Or(
+            Exists(
+                [y],
+                And(
+                    (y != x),
+                    ForAll([x1], Implies(And(x1 != x, ON_star(x, x1)), ON_star(y, x1)))
+                ) 
+            ),
+            on_table(x)
         )
     )
 
-print("testing")
+# print("testing")
+# solver.push()
+# solver.assert_and_track(
+#     Not(ForAll([t], Exists([x], Or(top(t), And(top(x), ON_star(x, t)))))),
+#     "test"
+# )
+# solver.add(Not(exists_next()))
 # check_solver(solver)
 # solver.pop()
+solver.assert_and_track(
+    exists_next(),
+    "exist_next"
+)
 
 print("verifying precondition")
 solver.push()
@@ -145,9 +158,6 @@ solver.assert_and_track(
     Not(loop_invariant_substituted(x)),
     "substituted_loop_invar"
 )
-solver.assert_and_track(exists_next(), "exists_next_block")
-
-# solver.assert_and_track(not_loop_invar_instance(x), "my")
 check_solver(solver)
 solver.pop()
 
@@ -156,7 +166,5 @@ solver.push()
 solver.assert_and_track(Not(while_cond()), "not_while_cond")
 solver.assert_and_track(loop_invariant(), "loop_invar")
 solver.assert_and_track(Not(postcondition()), "not_post_cond")
-solver.assert_and_track(exists_next(), "exists_next_block")
-
 check_solver(solver)
 solver.pop()
