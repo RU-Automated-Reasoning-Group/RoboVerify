@@ -51,7 +51,10 @@ def check_solver(x):
         print("Unsat Core:", x.unsat_core())
 
 def precondition():
-    return ForAll([x], ON_star(x, n0))
+    return And(
+        ForAll([x], ON_star(x, n0)),
+        Exists([x], And(top(x), ON_star(x, n0)))
+    )
 
 def postcondition():
     return ForAll([x], top(x))
@@ -62,37 +65,58 @@ def on_table(x, ON_func=ON_star):
 def top(x, ON_func=ON_star):
     return Not(Exists([y], And(Not(y == x), ON_func(y, x))))
 
+def while_cond():
+    return Exists([x], And(top(x), ON_star(x, n0), x != n0))
+
+def while_cond_instance(x):
+    return And(top(x), ON_star(x, n0), x != n0)
+
+def loop_invariant():
+    return And(
+        ForAll([x], Or(top(x), ON_star(x, n0))),
+        Exists([t], And(top(t), ON_star(t, n0)))
+    )
+
+def loop_invariant_substituted(next_box):
+    return And(
+        ForAll([x], Or(top_substituted(x, next_box), ON_func_substituted(x, n0, next_box))),
+        Exists([t], And(top_substituted(t, next_box), ON_func_substituted(t, n0, next_box)))
+    )
+
+def ON_func_substituted(alpha, beta, next_box, ON_func=ON_star):
+    return And(
+        ON_func(alpha, beta), Or(Not(ON_func(alpha, next_box)), ON_func(beta, next_box))
+    )
+
+def top_substituted(x, next_box, ON_func=ON_star):
+    return Not(
+        Exists(
+            [y], And(Not(y == x), ON_func_substituted(y, x, next_box, ON_func=ON_func))
+        )
+    )
+
 print("verifying precondition")
 solver.push()
 solver.assert_and_track(precondition(), "pre_cond")
-solver.assert_and_track(And(top(t), ON_star(t, n0)), "t_constraint")
-solver.assert_and_track(Not(loop_invariant(t)), "not_loop_invar")
+solver.assert_and_track(Not(loop_invariant()), "not_loop_invar")
 check_solver(solver)
 solver.pop()
 
 print("verifying loop invariant")
 solver.push()
-solver.assert_and_track(while_cond(), "while_cond")
-solver.assert_and_track(loop_invariant(t), "loop_invar")
+solver.assert_and_track(while_cond_instance(x), "while_cond")
+solver.assert_and_track(loop_invariant(), "loop_invar")
 solver.assert_and_track(
-    Not(loop_invariant_substituted(t)),
+    Not(loop_invariant_substituted(x)),
     "substituted_loop_invar"
 )
-# solver.assert_and_track(
-#     Not(top_substituted(x1, t)),
-#     "exist_1"
-# )
-# solver.assert_and_track(
-#     Not(ON_func_substituted(x1, n0, t)),
-#     "exist_2"
-# )
 check_solver(solver)
 solver.pop()
 
 print("verifying post condition")
 solver.push()
 solver.assert_and_track(Not(while_cond()), "not_while_cond")
-solver.assert_and_track(loop_invariant(t), "loop_invar")
+solver.assert_and_track(loop_invariant(), "loop_invar")
 solver.assert_and_track(Not(postcondition()), "not_post_cond")
 check_solver(solver)
 solver.pop()
