@@ -1,12 +1,12 @@
 from z3 import *
 
-set_option("smt.core.minimize", "true")
+# set_option("smt.core.minimize", "true")
 
 solver = Solver()
 solver.set(unsat_core=True)
 
 Box = DeclareSort("Box")
-# Box, (b9, b10, b11, b12, b13, b14, b15) = EnumSort('Box', ['b9', 'b10', 'b11', 'b12', 'b13', 'b14', 'b15'])
+# Box, (b9, b10, b11, b12, b13, b14, b15, b16, b17, b18) = EnumSort('Box', ['b9', 'b10', 'b11', 'b12', 'b13', 'b14', 'b15', 'b16', 'b17', 'b18'])
 # Box, (b9, b10, b11) = EnumSort("Box", ["b9", "b10", "b11"])
 x, y, c, n0, t, next_box, x1 = Consts("x y c n0 t next_box x1", Box)
 
@@ -73,15 +73,34 @@ def while_cond_instance(x):
 
 def loop_invariant():
     return And(
-        ForAll([x], Or(top(x), ON_star(x, n0))),
+        ForAll([t], Or(top(t), ON_star(t, n0))),
         Exists([t], And(top(t), ON_star(t, n0)))
     )
 
 def loop_invariant_substituted(next_box):
+    # # return ForAll(
+    #     # [x], 
+    #     # Or(top_substituted(x, next_box), ON_func_substituted(x, n0, next_box))
+    # # )
+
+    # # return Not(
+    #     # ForAll(
+    #         # [x], 
+    #         # Or(top_substituted(x, next_box), ON_func_substituted(x, n0, next_box))
+    #     # )
+    # # )
+
+    # return Exists(
+    #     [x],
+    #     And(Not(top_substituted(x, next_box)), Not(ON_func_substituted(x, n0, next_box)))
+    # )
     return And(
-        ForAll([x], Or(top_substituted(x, next_box), ON_func_substituted(x, n0, next_box))),
+        ForAll([t], Or(top_substituted(t, next_box), ON_func_substituted(t, n0, next_box))),
         Exists([t], And(top_substituted(t, next_box), ON_func_substituted(t, n0, next_box)))
     )
+
+def not_loop_invar_instance(next_box):
+    return And(Not(top_substituted(b11, next_box)), Not(ON_func_substituted(b11, n0, next_box)))
 
 def ON_func_substituted(alpha, beta, next_box, ON_func=ON_star):
     return And(
@@ -94,6 +113,22 @@ def top_substituted(x, next_box, ON_func=ON_star):
             [y], And(Not(y == x), ON_func_substituted(y, x, next_box, ON_func=ON_func))
         )
     )
+
+def exists_next():
+    return ForAll(
+        [x],
+        Exists(
+            [y],
+            And(
+                (y != x),
+                ForAll([x1], Implies(And(x1 != x, ON_star(x, x1)), ON_star(y, x1)))
+            ) 
+        )
+    )
+
+print("testing")
+# check_solver(solver)
+# solver.pop()
 
 print("verifying precondition")
 solver.push()
@@ -110,6 +145,9 @@ solver.assert_and_track(
     Not(loop_invariant_substituted(x)),
     "substituted_loop_invar"
 )
+solver.assert_and_track(exists_next(), "exists_next_block")
+
+# solver.assert_and_track(not_loop_invar_instance(x), "my")
 check_solver(solver)
 solver.pop()
 
@@ -118,5 +156,7 @@ solver.push()
 solver.assert_and_track(Not(while_cond()), "not_while_cond")
 solver.assert_and_track(loop_invariant(), "loop_invar")
 solver.assert_and_track(Not(postcondition()), "not_post_cond")
+solver.assert_and_track(exists_next(), "exists_next_block")
+
 check_solver(solver)
 solver.pop()
