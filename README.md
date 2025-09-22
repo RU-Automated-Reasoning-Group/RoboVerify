@@ -12,3 +12,15 @@ average of best k 0.9930374597434389
 best mu [ 0.02423896  0.05111898  0.12557382 -0.00520431  0.00344668  0.15214003
  -0.00435389  0.00562681  0.14773177]
 next mu: 
+
+Reverse program
+```python
+def reverse(n0):
+    t = tbl
+    while exists(x.):
+        put(x, t) # put x on t
+        t = x
+    put(n0, t)
+```
+
+For this program, we need to systematically analyze if `t` is null for each of its appearence.

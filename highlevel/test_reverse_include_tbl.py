@@ -8,6 +8,7 @@ solver.set(unsat_core=True)
 Box = DeclareSort("Box")
 # Box, (b9, b10, b11, b12, b13) = EnumSort('Box', ['b9', 'b10', 'b11', 'b12', 'b13'])
 # Box, (b9, b10, b11) = EnumSort("Box", ["b9", "b10", "b11"])
+# Box, (b9, b10) = EnumSort("Box", ["b9", "b10"])
 x, y, c, n0, t, next_box, x1, tbl = Consts("x y c n0 t next_box x1 tbl", Box)
 
 
@@ -88,6 +89,16 @@ def check_solver(x):
                 print(
                     f"ON_star_zero({name1}, {name2}): {x.model().evaluate(ON_star_zero(box1, box2))}"
                 )
+        # for name1, box1 in zip(["b9", "b10", ], [b9, b10]):
+        #     for name2, box2 in zip(["b9", "b10", ], [b9, b10]):
+        #         print(
+        #             f"ON_star({name1}, {name2}): {x.model().evaluate(ON_star(box1, box2))}"
+        #         )
+        # for name1, box1 in zip(["b9", "b10", ], [b9, b10]):
+        #     for name2, box2 in zip(["b9", "b10", ], [b9, b10]):
+        #         print(
+        #             f"ON_star_zero({name1}, {name2}): {x.model().evaluate(ON_star_zero(box1, box2))}"
+        #         )
         import pdb
 
         pdb.set_trace()
@@ -96,8 +107,8 @@ def check_solver(x):
         print("Unsat Core:", x.unsat_core())
 
 
-def precondition():
-    return ForAll([x], Implies(x != tbl, ON_star(x, n0)))
+def precondition(ON_func):
+    return ForAll([x], Implies(x != tbl, ON_func(x, n0)))
 
 
 def postcondition():
@@ -108,10 +119,15 @@ def postcondition():
 
 
 def postcondition_substituted(b_prime, b):
+    if b == tbl:
+        return And(
+        ForAll([x], Implies(x != tbl, ON_func_substituted(n0, x, b_prime, b, ON_star))),
+        ForAll([x, y], Implies(And(x != tbl, y != tbl), ON_star_zero(x, y) == ON_func_substituted(y, x, b_prime, b, ON_star)))
+    )
     return And(
         Not(ON_star(b, b_prime)),
-        ForAll([x], ON_func_substituted(n0, x, b_prime, b, ON_star)),
-        ForAll([x, y], ON_star_zero(x, y) == ON_func_substituted(y, x, b_prime, b, ON_star))
+        ForAll([x], Implies(x != tbl, ON_func_substituted(n0, x, b_prime, b, ON_star))),
+        ForAll([x, y], Implies(And(x != tbl, y != tbl), ON_star_zero(x, y) == ON_func_substituted(y, x, b_prime, b, ON_star)))
     )
 
 
@@ -216,11 +232,11 @@ def ON_func_substituted(alpha, beta, b_prime, b, ON_func):
 # add ON_star and ON_star_zero
 ON_star = define_ON_func("ON_star", solver)
 ON_star_zero = define_ON_func("ON_star_zero", solver)
+solver.assert_and_track(precondition(ON_star_zero), "pre_cond")
 
 print("verifying precondition")
 solver.push()
 solver.assert_and_track(func_equiv(ON_star, ON_star_zero), "two_on_equiv")
-solver.assert_and_track(precondition(), "pre_cond")
 solver.assert_and_track(Not(loop_invariant(tbl)), "not_loop_invar")
 check_solver(solver)
 solver.pop()
@@ -233,18 +249,27 @@ solver.pop()
 # check_solver(solver)
 # solver.pop()
 
-# print("verifying post condition")
+
+# print("verifying post condition when t is tbl")
 # solver.push()
-# solver.assert_and_track(top(n0, ON_star), "top_n0")
+# solver.assert_and_track(t == tbl, "t_is_tbl")
 # solver.assert_and_track(t != n0, "t_neq_n0")
+
 # solver.assert_and_track(Exists([x], And(top(x, ON_star), ON_star(x, n0))), "top_n0")
 # solver.assert_and_track(Not(while_cond()), "not_while_cond")
 # solver.assert_and_track(loop_invariant(t), "loop_invar")
-# solver.assert_and_track(
-    # Not(ForAll([x], Implies(x != n0, ON_star(t, x)))),
-    # "simple_postcond"
-# )
-# solver.assert_and_track(Not(postcondition()), "not_post_cond")
-# solver.assert_and_track(Not(postcondition_substituted(n0, t)), "not_post_cond")
+# solver.assert_and_track(Not(postcondition_substituted(n0, tbl)), "not_post_cond")
 # check_solver(solver)
 # solver.pop()
+
+print("verifying post condition when t is not tbl")
+solver.push()
+solver.assert_and_track(t != tbl, "t_neq_tbl")
+solver.assert_and_track(t != n0, "t_neq_n0")
+solver.assert_and_track(Exists([x], And(top(x, ON_star), ON_star(x, n0))), "top_n0")
+solver.assert_and_track(Not(while_cond()), "not_while_cond")
+solver.assert_and_track(loop_invariant(t), "loop_invar")
+
+solver.assert_and_track(Not(postcondition_substituted(n0, t)), "not_post_cond")
+check_solver(solver)
+solver.pop()
