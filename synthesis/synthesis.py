@@ -7,10 +7,101 @@ import ffmpeg
 import imageio
 import numpy as np
 from cost_func import *
-from environment.cee_us_env.fpp_construction_env import FetchPickAndPlaceConstruction
-from environment.data.collect_demos import CollectDemos
-from environment.general_env import GymToGymnasium
+# from environment.cee_us_env.fpp_construction_env import FetchPickAndPlaceConstruction
+# from environment.data.collect_demos import CollectDemos
+# from environment.general_env import GymToGymnasium
 from program import *
+
+from typing import Any, Callable, List, Tuple
+from copy import deepcopy
+import random
+import decision_tree
+
+def learn(
+    demos: list[list[Any]],
+    predicates: list[Callable[[Any], bool]],
+    success_threshold: float,
+    mcmc_iters: int,
+    num_seeds: int,
+    cem_N: int = 16,
+    cem_K: int = 4
+) -> Tuple[Any, Callable[[Any], bool], int]:
+    """
+    Learn a program from demonstrations using MCMC. If the program
+    fails to achieve a success rate above `success_threshold`, extract
+    positive/negative examples and learn a decision tree labeling function.
+
+    Parameters
+    ----------
+    demos : list[list[Any]]
+        Expert demonstration sequences (list of states per demo).
+    predicates : list[Callable[[Any], bool]]
+        Predicates used to build the decision tree labeling function.
+    success_threshold : float
+        Minimum acceptable success rate for the best program.
+    mcmc_iters : int
+        Number of MCMC iterations.
+    num_seeds : int
+        Number of seeds for program evaluation or CEM optimization.
+    cem_N : int
+        CEM parameter N (population size).
+    cem_K : int
+        CEM parameter K (top-K selection).
+    
+    Returns
+    -------
+    best_model_or_program : Either the best decision tree (if threshold not met) or the best program.
+    label_fn : Callable[[Any], bool]
+        Either the decision tree labeling function or a wrapper around the program.
+    best_idx : int
+        Index of best tree if tree learned, otherwise 0.
+    """
+    # 1️⃣ Run MCMC to propose programs
+    initial_program = Program()  # assuming Program class exists and has a default constructor
+    samples, costs = MCMC(
+        current_program=initial_program,
+        iters=mcmc_iters,
+        expert_states=demos,
+        num_seeds=num_seeds,
+        cem_N=cem_N,
+        cem_K=cem_K
+    )
+
+    # 2️⃣ Pick the best program (lowest cost)
+    best_idx_prog = costs.index(min(costs))
+    best_program = samples[best_idx_prog]
+
+    # 3️⃣ Evaluate best program
+    success_rate, states = evaluate(best_program)  # should return success rate and states visited
+
+    if success_rate >= success_threshold:
+        # Program is good enough: return it directly
+        def program_label_fn(state: Any) -> bool:
+            # Wrap the program's decision as a labeling function
+            return best_program.apply(state)  # assuming apply(state) returns True/False
+        return best_program, program_label_fn, 0
+
+    # 4️⃣ Collect positive/negative examples from evaluation
+    neg_examples: list[Any] = states  # all visited states
+    pos_examples: list[Any] = []
+    for state_seq in states:
+        if len(state_seq) >= 2:
+            pos_examples.append(state_seq[-2])  # state immediately before last
+        else:
+            pos_examples.append(state_seq[0])
+
+    # 5️⃣ Learn decision tree labeling function
+    best_tree, label_fn, tree_idx = decision_tree.select_best_tree(
+        pos_examples=pos_examples,
+        neg_examples=neg_examples,
+        predicates=predicates,
+        demos=demos,
+        n_trees=10,  # fixed number of trees
+        base_tree_config={'max_depth': 3, 'criterion': 'entropy'},
+        visualize_dir=None  # can optionally provide a directory
+    )
+
+    return best_tree, label_fn, tree_idx
 
 
 def sample_proportional(values):
@@ -44,6 +135,7 @@ def swap_two_elements_maybe_same(lst):
 
     i = random.randint(0, len(lst) - 1)
     j = random.randint(0, len(lst) - 1)
+    print(f"swap instructions {i} and {j}")
     lst[i], lst[j] = lst[j], lst[i]
     return lst
 
@@ -54,19 +146,27 @@ def mutate_program(current_program: Program):
     ps = 1  # swap
     pi = 1  # instruction
     sampled_mutation = sample_proportional([pc, po, ps, pi])
-    print("mutation type", sampled_mutation)
+    mutate_type_name = {
+        0: "opcode",
+        1: "operand",
+        2: "swap",
+        3: "instruction",
+    }[sampled_mutation]
+    print("mutation type", mutate_type_name)
+
     new_program = deepcopy(current_program)
     if sampled_mutation == 0:
         pass
     elif sampled_mutation == 1:
         index = random.randint(0, len(new_program.instructions) - 1)
         operands = new_program.instructions[index].get_operand()
-        operand_index = random.randint(0, len(operands) - 1)
-        proposed_operand = random.choice(
-            available_operands[operands[operand_index]["type"]]
-        )
-        operands[operand_index]["val"] = proposed_operand
-        new_program.instructions[index].set_operand(operands)
+        if operands:
+            operand_index = random.randint(0, len(operands) - 1)
+            proposed_operand = random.choice(
+                available_operands[operands[operand_index]["type"]]
+            )
+            operands[operand_index]["val"] = proposed_operand
+            new_program.instructions[index].set_operand(operands)
     elif sampled_mutation == 2:
         swap_two_elements_maybe_same(new_program.instructions)
     elif sampled_mutation == 3:
@@ -97,24 +197,31 @@ def MCMC(
     cem_N: int = 16,
     cem_K: int = 4,
 ):
-    current_cost = optimize_program(
-        current_program, expert_states, num_seeds, cem_N, cem_K
-    )
+    # current_cost = optimize_program(
+        # current_program, expert_states, num_seeds, cem_N, cem_K
+    # )
+    print("=== initial program ===\n", current_program)
+    current_cost = 0
     current_program = current_program
     samples = [deepcopy(current_program)]
     costs = [current_cost]
 
     for i in range(iters):
         new_program = mutate_program(current_program)
-        new_cost = optimize_program(new_program)
+        print("=== iter {i} program ===\n", new_program)
+        # new_cost = optimize_program(new_program)
+        new_cost = 0
 
-        acceptance_ratio = math.exp(current_cost - new_cost)
+        # acceptance_ratio = math.exp(current_cost - new_cost)
+        acceptance_ratio = 1
         if random.random() < acceptance_ratio:
             current_program = new_program
             current_cost = new_cost
 
+
         samples.append(deepcopy(new_program))
         costs.append(new_cost)
+        
     return samples, costs
 
 
@@ -289,6 +396,7 @@ if __name__ == "__main__":
         "Box": [0, 1, 2],
     }
     available_instructions = [PickPlace]
+    MCMC(Program(3), 100, None, None)
 
     # images_to_video("images", "groundtruth.mp4")
     # exit()
