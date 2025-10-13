@@ -58,7 +58,7 @@ def grippers_are_open(obs, atol=1e-3):
     # return gripper_state[0] > threshold + atol
     return np.sum(gripper_state) > 2 * threshold + atol
 
-def get_pickdest_control(obs, place_position, relative_grasp_position=(0., 0., -0.02), workspace_height=0.1, dist_atol=3e-2, other_atol=1e-3, gain=10, block_id=0, last_block=False):
+def get_pick_control_naive(obs, place_position, relative_grasp_position=(0., 0., -0.02), workspace_height=0.1, dist_atol=3e-2, other_atol=1e-3, gain=10, block_id=0, last_block=False):
     """
     Returns
     -------
@@ -83,7 +83,7 @@ def get_pickdest_control(obs, place_position, relative_grasp_position=(0., 0., -
     #     return None, False
     # elif check_block == block_num:
     #     return np.array([0., 0., 0., -1.]), True
-    if check_block == block_num:
+    if check_block == 1:
         return np.array([0., 0., 0., -1.]), True
 
     # get position
@@ -91,6 +91,8 @@ def get_pickdest_control(obs, place_position, relative_grasp_position=(0., 0., -
     block_position = obs[10+block_id*12:10+block_id*12+3]
     # place_position = obs[10+block_num*12+3*block_id:10+block_num*12+3*block_id+3]
     
+    # pdb.set_trace()
+
     # If the block is already at the place position, do nothing except keep the gripper closed
     if np.linalg.norm(block_position - place_position) < dist_atol:
         # open and move up
@@ -118,34 +120,43 @@ def get_pickdest_control(obs, place_position, relative_grasp_position=(0., 0., -
         return np.array([0., 0., 0., .2]), True
 
     # If gripper is already above place position
-    target_position = place_position
-    if np.linalg.norm(block_position[:2] - target_position[:2]) < dist_atol:
-        if DEBUG:
-            print("Move down to the place position")
-        return get_move_action(obs, target_position, atol=dist_atol, close_gripper=True, gain=gain), False
+    # target_position = place_position
+    # if np.linalg.norm(block_position[:2] - target_position[:2]) < dist_atol:
+        # if DEBUG:
+            # print("Move down to the place position")
+        # return get_move_action(obs, target_position, atol=dist_atol, close_gripper=True, gain=gain), False
 
     # If block high enough, move to above place position
     if place_position[2] > 0.6:
         used_workspace_height = 0
     else:
         used_workspace_height = workspace_height
-    if block_is_grasped(obs, relative_grasp_position, block_position, dist_atol=dist_atol, other_atol=other_atol) and \
-        (block_position[2] - place_position[2] - used_workspace_height) > 0:
-        target_position = copy.deepcopy(place_position)
-        target_position[2] += used_workspace_height
-        if DEBUG:
-            print("Move to above place position")
-        return get_move_action(obs, target_position, atol=dist_atol, close_gripper=True, gain=gain), False
 
-    # If the gripper is already grasping the block
+    # If the gripper is already grasping the block, directly go to the target pos
     if block_is_grasped(obs, relative_grasp_position, block_position, dist_atol=dist_atol, other_atol=other_atol):
         # Move to the place position while keeping the gripper closed
-        target_position = copy.deepcopy(block_position)
-        target_position[2] = place_position[2] + used_workspace_height
+        target_position = copy.deepcopy(place_position)
         if DEBUG:
-            print("Move to above current position")
-        # return get_move_action(obs, target_position, atol=dist_atol, close_gripper=True, gain=gain), False
-        return np.array([0., 0., 1., -0.2]), False
+            print("Move to target")
+        return get_move_action(obs, target_position, atol=dist_atol, close_gripper=True, gain=gain), False
+
+    # if block_is_grasped(obs, relative_grasp_position, block_position, dist_atol=dist_atol, other_atol=other_atol) and \
+    #     (block_position[2] - place_position[2] - used_workspace_height) > 0:
+    #     target_position = copy.deepcopy(place_position)
+    #     target_position[2] += used_workspace_height
+    #     if DEBUG:
+    #         print("Move to above place position")
+    #     return get_move_action(obs, target_position, atol=dist_atol, close_gripper=True, gain=gain), False
+
+    # # If the gripper is already grasping the block
+    # if block_is_grasped(obs, relative_grasp_position, block_position, dist_atol=dist_atol, other_atol=other_atol):
+    #     # Move to the place position while keeping the gripper closed
+    #     target_position = copy.deepcopy(block_position)
+    #     target_position[2] = place_position[2] + used_workspace_height
+    #     if DEBUG:
+    #         print("Move to above current position")
+    #     # return get_move_action(obs, target_position, atol=dist_atol, close_gripper=True, gain=gain), False
+    #     return np.array([0., 0., 1., -0.2]), False
 
     # If the block is ready to be grasped
     if block_inside_grippers(obs, relative_grasp_position, block_position, atol=dist_atol):

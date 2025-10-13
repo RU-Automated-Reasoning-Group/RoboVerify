@@ -1,36 +1,37 @@
 import pdb
 from abc import ABC, abstractmethod
 from copy import deepcopy
-from typing import List
 
 import numpy as np
 
 
 class Parameter:
     def __init__(self, val: float = 0):
-        self.pos = None
-        self.val = val
+        self.pos: int | None = None
+        self.val: float = val
 
-    def register(self, parameters: List):
+    def register(self, parameters: list):
         self.pos = len(parameters)
         parameters.append(self.val)
 
-    def update(self, new_parameter: List):
-        self.val = new_parameter[self.pos]
-    
+    def update(self, new_parameter: list[float]):
+        if self.pos:
+            self.val = new_parameter[self.pos]
+        raise ValueError
+
     def __str__(self):
         return f"{self.val:.3}"
 
 
 class Instruction(ABC):
     @abstractmethod
-    def eval(self, env):
+    def eval(self, env, traj, return_image=False) -> list:
         pass
 
-    def register_trainable_parameter(self, parameters: List):
+    def register_trainable_parameter(self, parameters: list):
         pass
 
-    def update_trainable_parameter(self, new_parameter: List):
+    def update_trainable_parameter(self, new_parameter: list):
         pass
 
     def get_operand(self):
@@ -48,9 +49,9 @@ class Skip(Instruction):
     def __init__(self, skip_steps: int = 10):
         self.skip_steps = skip_steps
 
-    def eval(self, env):
+    def eval(self, env, traj, return_img=False):
         # TODO: wee need to consider what we should do for skip
-        pass
+        return []
 
     def __str__(self):
         return "Skip"
@@ -101,11 +102,11 @@ class PickPlace(Instruction):
             traj.append(obs)
         return imgs
 
-    def register_trainable_parameter(self, parameter: List):
+    def register_trainable_parameter(self, parameter: list[float]):
         for p in self.target_offset:
             p.register(parameter)
 
-    def update_trainable_parameter(self, new_parameter):
+    def update_trainable_parameter(self, new_parameter: list[float]):
         for p in self.target_offset:
             p.update(new_parameter)
 
@@ -128,7 +129,7 @@ class PickPlace(Instruction):
 class Program:
     def __init__(self, length: int = 5):
         self.length = length
-        self.instructions = [Skip() for _ in range(self.length)]
+        self.instructions: list[Instruction] = [Skip() for _ in range(self.length)]
 
     def eval(self, env, return_img=False):
         """evaluate the program in the environment and return the trajectories"""
@@ -152,16 +153,10 @@ class Program:
     def update_trainable_parameter(self, new_parameter):
         for line in self.instructions:
             line.update_trainable_parameter(new_parameter)
-    
+
     def __str__(self):
         instruction_str = [f"\t{inst}" for inst in self.instructions]
         return "\n".join(["begin", *instruction_str, "end"])
-
-
-def evaluate_program(p: Program, parameter: List):
-    p = deepcopy(p)
-    p.update_trainable_parameter(parameter)
-    return p.eval()
 
 
 if __name__ == "__main__":

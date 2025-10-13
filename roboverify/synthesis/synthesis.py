@@ -7,101 +7,107 @@ import ffmpeg
 import imageio
 import numpy as np
 from cost_func import *
-# from environment.cee_us_env.fpp_construction_env import FetchPickAndPlaceConstruction
-# from environment.data.collect_demos import CollectDemos
-# from environment.general_env import GymToGymnasium
+from environment.cee_us_env.fpp_construction_env import FetchPickAndPlaceConstruction
+from environment.data.collect_demos import CollectDemos
+from environment.general_env import GymToGymnasium
 from program import *
 
-from typing import Any, Callable, List, Tuple
+from typing import Any
 from copy import deepcopy
 import random
 import decision_tree
 
-def learn(
-    demos: list[list[Any]],
-    predicates: list[Callable[[Any], bool]],
-    success_threshold: float,
-    mcmc_iters: int,
-    num_seeds: int,
-    cem_N: int = 16,
-    cem_K: int = 4
-) -> Tuple[Any, Callable[[Any], bool], int]:
-    """
-    Learn a program from demonstrations using MCMC. If the program
-    fails to achieve a success rate above `success_threshold`, extract
-    positive/negative examples and learn a decision tree labeling function.
 
-    Parameters
-    ----------
-    demos : list[list[Any]]
-        Expert demonstration sequences (list of states per demo).
-    predicates : list[Callable[[Any], bool]]
-        Predicates used to build the decision tree labeling function.
-    success_threshold : float
-        Minimum acceptable success rate for the best program.
-    mcmc_iters : int
-        Number of MCMC iterations.
-    num_seeds : int
-        Number of seeds for program evaluation or CEM optimization.
-    cem_N : int
-        CEM parameter N (population size).
-    cem_K : int
-        CEM parameter K (top-K selection).
-    
-    Returns
-    -------
-    best_model_or_program : Either the best decision tree (if threshold not met) or the best program.
-    label_fn : Callable[[Any], bool]
-        Either the decision tree labeling function or a wrapper around the program.
-    best_idx : int
-        Index of best tree if tree learned, otherwise 0.
-    """
-    # 1️⃣ Run MCMC to propose programs
-    initial_program = Program()  # assuming Program class exists and has a default constructor
-    samples, costs = MCMC(
-        current_program=initial_program,
-        iters=mcmc_iters,
-        expert_states=demos,
-        num_seeds=num_seeds,
-        cem_N=cem_N,
-        cem_K=cem_K
-    )
+# def learn(
+#     demos: list[list[Any]],
+#     predicates: list[Callable[[Any], bool]],
+#     success_threshold: float,
+#     mcmc_iters: int,
+#     num_seeds: int,
+#     cem_N: int = 16,
+#     cem_K: int = 4,
+# ) -> Tuple[Any, Callable[[Any], bool], int]:
+#     """
+#     Learn a program from demonstrations using MCMC. If the program
+#     fails to achieve a success rate above `success_threshold`, extract
+#     positive/negative examples and learn a decision tree labeling function.
 
-    # 2️⃣ Pick the best program (lowest cost)
-    best_idx_prog = costs.index(min(costs))
-    best_program = samples[best_idx_prog]
+#     Parameters
+#     ----------
+#     demos : list[list[Any]]
+#         Expert demonstration sequences (list of states per demo).
+#     predicates : list[Callable[[Any], bool]]
+#         Predicates used to build the decision tree labeling function.
+#     success_threshold : float
+#         Minimum acceptable success rate for the best program.
+#     mcmc_iters : int
+#         Number of MCMC iterations.
+#     num_seeds : int
+#         Number of seeds for program evaluation or CEM optimization.
+#     cem_N : int
+#         CEM parameter N (population size).
+#     cem_K : int
+#         CEM parameter K (top-K selection).
 
-    # 3️⃣ Evaluate best program
-    success_rate, states = evaluate(best_program)  # should return success rate and states visited
+#     Returns
+#     -------
+#     best_model_or_program : Either the best decision tree (if threshold not met) or the best program.
+#     label_fn : Callable[[Any], bool]
+#         Either the decision tree labeling function or a wrapper around the program.
+#     best_idx : int
+#         Index of best tree if tree learned, otherwise 0.
+#     """
+#     # 1️⃣ Run MCMC to propose programs
+#     initial_program = (
+#         Program()
+#     )  # assuming Program class exists and has a default constructor
+#     samples, costs = MCMC(
+#         current_program=initial_program,
+#         iters=mcmc_iters,
+#         expert_states=demos,
+#         num_seeds=num_seeds,
+#         cem_N=cem_N,
+#         cem_K=cem_K,
+#     )
 
-    if success_rate >= success_threshold:
-        # Program is good enough: return it directly
-        def program_label_fn(state: Any) -> bool:
-            # Wrap the program's decision as a labeling function
-            return best_program.apply(state)  # assuming apply(state) returns True/False
-        return best_program, program_label_fn, 0
+#     # 2️⃣ Pick the best program (lowest cost)
+#     best_idx_prog = costs.index(min(costs))
+#     best_program = samples[best_idx_prog]
 
-    # 4️⃣ Collect positive/negative examples from evaluation
-    neg_examples: list[Any] = states  # all visited states
-    pos_examples: list[Any] = []
-    for state_seq in states:
-        if len(state_seq) >= 2:
-            pos_examples.append(state_seq[-2])  # state immediately before last
-        else:
-            pos_examples.append(state_seq[0])
+#     # 3️⃣ Evaluate best program
+#     success_rate, states = evaluate(
+#         best_program
+#     )  # should return success rate and states visited
 
-    # 5️⃣ Learn decision tree labeling function
-    best_tree, label_fn, tree_idx = decision_tree.select_best_tree(
-        pos_examples=pos_examples,
-        neg_examples=neg_examples,
-        predicates=predicates,
-        demos=demos,
-        n_trees=10,  # fixed number of trees
-        base_tree_config={'max_depth': 3, 'criterion': 'entropy'},
-        visualize_dir=None  # can optionally provide a directory
-    )
+#     if success_rate >= success_threshold:
+#         # Program is good enough: return it directly
+#         def program_label_fn(state: Any) -> bool:
+#             # Wrap the program's decision as a labeling function
+#             return best_program.apply(state)  # assuming apply(state) returns True/False
 
-    return best_tree, label_fn, tree_idx
+#         return best_program, program_label_fn, 0
+
+#     # 4️⃣ Collect positive/negative examples from evaluation
+#     neg_examples: list[Any] = states  # all visited states
+#     pos_examples: list[Any] = []
+#     for state_seq in states:
+#         if len(state_seq) >= 2:
+#             pos_examples.append(state_seq[-2])  # state immediately before last
+#         else:
+#             pos_examples.append(state_seq[0])
+
+#     # 5️⃣ Learn decision tree labeling function
+#     best_tree, label_fn, tree_idx = decision_tree.select_best_tree(
+#         pos_examples=pos_examples,
+#         neg_examples=neg_examples,
+#         predicates=predicates,
+#         demos=demos,
+#         n_trees=10,  # fixed number of trees
+#         base_tree_config={"max_depth": 3, "criterion": "entropy"},
+#         visualize_dir=None,  # can optionally provide a directory
+#     )
+
+#     return best_tree, label_fn, tree_idx
 
 
 def sample_proportional(values):
@@ -140,7 +146,11 @@ def swap_two_elements_maybe_same(lst):
     return lst
 
 
-def mutate_program(current_program: Program):
+def mutate_program(
+    current_program: Program,
+    available_operands: dict,
+    available_instructions: list,
+):
     pc = 1  # opcode
     po = 1  # operand
     ps = 1  # swap
@@ -191,26 +201,30 @@ def mutate_program(current_program: Program):
 
 def MCMC(
     current_program: Program,
+    available_operands: dict,
+    available_instructions: list,
     iters: int,
     expert_states,
     num_seeds: int,
     cem_N: int = 16,
     cem_K: int = 4,
 ):
-    # current_cost = optimize_program(
-        # current_program, expert_states, num_seeds, cem_N, cem_K
-    # )
+    current_cost, current_program = optimize_program(
+        current_program, expert_states, num_seeds, cem_N, cem_K
+    )
     print("=== initial program ===\n", current_program)
-    current_cost = 0
     current_program = current_program
     samples = [deepcopy(current_program)]
     costs = [current_cost]
 
     for i in range(iters):
-        new_program = mutate_program(current_program)
+        new_program = mutate_program(
+            current_program, available_operands, available_instructions
+        )
         print("=== iter {i} program ===\n", new_program)
-        # new_cost = optimize_program(new_program)
-        new_cost = 0
+        new_cost, new_program = optimize_program(
+            new_program, expert_states, num_seeds, cem_N, cem_K
+        )
 
         # acceptance_ratio = math.exp(current_cost - new_cost)
         acceptance_ratio = 1
@@ -218,18 +232,22 @@ def MCMC(
             current_program = new_program
             current_cost = new_cost
 
-
         samples.append(deepcopy(new_program))
         costs.append(new_cost)
-        
+
     return samples, costs
 
 
-def optimize_program(p: Program, expert_states, num_seeds: int, cem_N: int, cem_K: int):
+def optimize_program(
+    p: Program, expert_states, num_seeds: int, cem_N: int, cem_K: int
+) -> tuple[float, Program]:
     f = Runner(p, expert_states, num_seeds)
     initial_parameters = p.register_trainable_parameter()
-    best_cost = cem.cem_optimize(f, len(initial_parameters), N=cem_N, K=cem_K)
-    return best_cost
+    best_cost, best_parameter = cem.cem_optimize(
+        f, len(initial_parameters), N=cem_N, K=cem_K, init_mu=initial_parameters
+    )
+    p.update_trainable_parameter(best_parameter)
+    return best_cost, p
 
 
 def set_np_seed(seed: int):
@@ -376,17 +394,17 @@ class Runner:
     def __init__(self, program: Program, expert_states, num_seeds: int = 10):
         self.p = program
         self.expert_states = np.array(expert_states)
-        self.slices = [slice(None)] * self.expert_states.ndim
+        self.slices: list[Any] = [slice(None)] * self.expert_states.ndim
         self.slices[1] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 22, 23, 24]
-        self.slices = tuple(self.slices)
-        self.expert_states = self.expert_states[self.slices]
+        self.tuple_slices = tuple(self.slices)
+        self.expert_states = self.expert_states[self.tuple_slices]
         self.num_seeds = num_seeds
 
     def __call__(self, new_parameters):
         p = deepcopy(self.p)
         p.update_trainable_parameter(new_parameters)
         policy_states = evaluate_program(p, self.num_seeds)
-        policy_states = np.array(policy_states)[self.slices]
+        policy_states = np.array(policy_states)[self.tuple_slices]
         kl_value = kl_divergence_kde(policy_states, self.expert_states)
         return -kl_value
 
@@ -396,7 +414,17 @@ if __name__ == "__main__":
         "Box": [0, 1, 2],
     }
     available_instructions = [PickPlace]
-    MCMC(Program(3), 100, None, None)
+    num_seeds = 15
+    expert_states = collect_trajectories("pickmulti1", num_seeds, save_imgs=True)
+
+    MCMC(
+        Program(3),
+        available_operands,
+        available_instructions,
+        100,
+        expert_states=expert_states,
+        num_seeds=num_seeds,
+    )
 
     # images_to_video("images", "groundtruth.mp4")
     # exit()
@@ -405,40 +433,40 @@ if __name__ == "__main__":
 
     # expert_states = collect_trajectories("pickmulti1", num_seeds, save_imgs=True)
     # exit()
-    p = Program(3)
-    p.instructions = [
-        PickPlace(grab_box_id=0, target_box_id=0),  # move up with respect to box 0
-        PickPlace(
-            grab_box_id=0, target_box_id=1
-        ),  # move horizontally to the top of box 1
-        PickPlace(grab_box_id=0, target_box_id=1),  # move down to place on box 1
-    ]
-    p.register_trainable_parameter()
-    # p.update_trainable_parameter(
-    #     [
-    #         0.0279608,
-    #         0.04278932,
-    #         0.13399421,
-    #         0.02289095,
-    #         -0.04434892,
-    #         0.13288633,
-    #         -0.01862492,
-    #         0.00964001,
-    #         0.05832452,
-    #     ]
-    # )
-    # p.instructions[0].target_offset = [Parameter(0.), Parameter(0.), Parameter(0.2)]
-    # p.instructions[1].target_offset = [Parameter(0), Parameter(0), Parameter(0.2)]
-    # p.instructions[2].target_offset = [Parameter(0), Parameter(0), Parameter(0.05)]
-    # for _ in range(50):
-    #     print(mutate_program(p))
-    pdb.set_trace()
-    states, imgs = evaluate_program(p, 15, True)
-    pdb.set_trace()
+    # p = Program(3)
+    # p.instructions = [
+    #     PickPlace(grab_box_id=0, target_box_id=0),  # move up with respect to box 0
+    #     PickPlace(
+    #         grab_box_id=0, target_box_id=1
+    #     ),  # move horizontally to the top of box 1
+    #     PickPlace(grab_box_id=0, target_box_id=1),  # move down to place on box 1
+    # ]
+    # p.register_trainable_parameter()
+    # # p.update_trainable_parameter(
+    # #     [
+    # #         0.0279608,
+    # #         0.04278932,
+    # #         0.13399421,
+    # #         0.02289095,
+    # #         -0.04434892,
+    # #         0.13288633,
+    # #         -0.01862492,
+    # #         0.00964001,
+    # #         0.05832452,
+    # #     ]
+    # # )
+    # # p.instructions[0].target_offset = [Parameter(0.), Parameter(0.), Parameter(0.2)]
+    # # p.instructions[1].target_offset = [Parameter(0), Parameter(0), Parameter(0.2)]
+    # # p.instructions[2].target_offset = [Parameter(0), Parameter(0), Parameter(0.05)]
+    # # for _ in range(50):
+    # #     print(mutate_program(p))
+    # pdb.set_trace()
+    # states, imgs = evaluate_program(p, 15, True)
+    # pdb.set_trace()
 
-    f = Runner(p, expert_states, num_seeds)
-    initial_parameters = p.register_trainable_parameter()
-    cem.cem_optimize(f, len(initial_parameters), N=16, K=4, init_mu=initial_parameters)
+    # f = Runner(p, expert_states, num_seeds)
+    # initial_parameters = p.register_trainable_parameter()
+    # cem.cem_optimize(f, len(initial_parameters), N=16, K=4, init_mu=initial_parameters)
 
 # expert_states = np.array(expert_states)[:,:3]
 # pdb.set_trace()

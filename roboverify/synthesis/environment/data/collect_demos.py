@@ -32,7 +32,7 @@ class CollectDemos():
     Class to generate a dataset of demonstrations for the Fetch environment tasks using a set of handcrafted controllers.
 
     """
-    def __init__(self, demo_path, num_trajectories=5, subseq_len=10, task="block", env=None, traj_len=100, img_path=None, env_name=None, block_num=3, debug=False):
+    def __init__(self, demo_path, num_trajectories=5, subseq_len=10, task="block", env=None, traj_len=100, img_path=None, env_name=None, block_num=3, debug=False, render=False):
 
         self.seqs = []
         self.task = task
@@ -55,7 +55,7 @@ class CollectDemos():
             self.env = GymToGymnasium(FetchPickAndPlaceConstruction(name=env_name, sparse=False, shaped_reward=False, num_blocks=block_num, reward_type='sparse', case = 'PickAndPlace', visualize_mocap=False, simple=True))
             self.block_num = block_num
         elif self.task == 'tower':
-            self.env = GymToGymnasium(FetchPickAndPlaceConstruction(name=env_name, sparse=False, shaped_reward=False, num_blocks=block_num, reward_type='sparse', case = 'Singletower', visualize_mocap=False, stack_only=True, simple=True))
+            self.env = GymToGymnasium(FetchPickAndPlaceConstruction(name=env_name, sparse=False, shaped_reward=False, num_blocks=block_num, reward_type='sparse', case = 'Singletower', visualize_mocap=False, stack_only=True, simple=True), render_mode='human' if render else 'rgb_array')
             self.block_num = block_num
         elif self.task == 'pushmulti':
             self.env = GymToGymnasium(FetchNPushObsWrapper(FetchNPushEnv(reward_type='sparse', num_objects=block_num, collisions=True)))
@@ -144,17 +144,16 @@ class CollectDemos():
             elif self.task == 'pickmulti':
                 controller = get_pickdest_control
             elif self.task == 'tower':
-                controller = get_pickmulti_control
+                # controller = get_pickmulti_control
+                controller = get_pickdest_control
             elif self.task == 'pushmulti':
                 controller = get_pushmulti_control
             else:
                 pdb.set_trace()
 
             idx = 0
-            initial_box = self.env.flatten_observation(self.env._get_obs())[10:13]
-            initial_box[0] -= 0.1
-            initial_box[1] -= 0.1
-            initial_box[2] += 0.1
+            initial_box = self.env.flatten_observation(self.env._get_obs())[22:25]
+            initial_box[2] += 0.05
             # only for debug
             # plt.figure()
             while not done:
@@ -179,6 +178,7 @@ class CollectDemos():
                         break
                     else:
                         if success:
+                            break
                             if self.block_id < self.block_num - 1:
                                 self.block_id += 1
                                 success = False
@@ -242,18 +242,6 @@ class CollectDemos():
                 obj_ids.append(self.block_id)
             obs_imgs[-1].append(self.env.render())
 
-            collect_traj_num += 1
-            if require_id:
-                self.seqs.append(AttrDict(
-                    obs=observations,
-                    actions=actions,
-                    obj_ids=obj_ids
-                    ))
-            else:
-                self.seqs.append(AttrDict(
-                    obs=observations,
-                    actions=actions,
-                    ))
             if len(actions) <= self.subseq_len+1:
                 obs_imgs.pop(-1)
                 continue
