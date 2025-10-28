@@ -86,7 +86,9 @@ def kl_divergence_kde(states_P, states_Q, n_samples=10000):
     KDE is used to estimate occupancy distributions.
     """
     # import pdb; pdb.set_trace()
-    kde_P = gaussian_kde(states_P.T)
+    states_P_noisy = states_P + 1e-6 * np.random.randn(*states_P.shape)
+    # states_Q_noisy = states_Q + 1e-6 * np.random.randn(*states_Q.shape)
+    kde_P = gaussian_kde(states_P_noisy.T)
     kde_Q = gaussian_kde(states_Q.T)
     # Sample from P (or use its raw samples)
     samples = states_P[np.random.choice(len(states_P), size=n_samples, replace=True)]

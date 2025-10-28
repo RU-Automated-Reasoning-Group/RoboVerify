@@ -152,7 +152,8 @@ class CollectDemos():
                 pdb.set_trace()
 
             idx = 0
-            initial_box = self.env.flatten_observation(self.env._get_obs())[22:25]
+            # pdb.set_trace()
+            initial_box = self.env.flatten_observation(self.env.env._get_obs())[22:25]
             initial_box[2] += 0.05
             # only for debug
             # plt.figure()

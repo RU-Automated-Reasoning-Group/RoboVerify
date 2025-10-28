@@ -15,9 +15,11 @@ class Parameter:
         parameters.append(self.val)
 
     def update(self, new_parameter: list[float]):
-        if self.pos:
+        if self.pos is not None:
             self.val = new_parameter[self.pos]
-        raise ValueError
+        else:
+            pdb.set_trace()
+            raise ValueError
 
     def __str__(self):
         return f"{self.val:.3}"
@@ -46,12 +48,17 @@ class Instruction(ABC):
 
 
 class Skip(Instruction):
-    def __init__(self, skip_steps: int = 10):
+    def __init__(self, skip_steps: int = 20):
         self.skip_steps = skip_steps
 
     def eval(self, env, traj, return_img=False):
-        # TODO: wee need to consider what we should do for skip
-        return []
+        imgs = []
+        for _ in range(self.skip_steps):
+            obs = env.flatten_observation(env.env._get_obs())
+            if return_img:
+                imgs.append(env.render())
+            traj.append(obs)
+        return imgs
 
     def __str__(self):
         return "Skip"
@@ -85,7 +92,7 @@ class PickPlace(Instruction):
         initial_goal_box = self.get_box_pos(self.target_box_id, traj[-1])
         step = 0
         while not success and step < self.limit:
-            obs = env.flatten_observation(env._get_obs())
+            obs = env.flatten_observation(env.env._get_obs())
             # import pdb; pdb.set_trace()
             action, success = get_pick_control_naive(
                 obs,

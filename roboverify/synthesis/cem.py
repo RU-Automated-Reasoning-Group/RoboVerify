@@ -9,11 +9,12 @@ def cem_optimize(
 
     mu_list = []
     score_list = []
+    # evaluate current mu
+    mu_list.append(mu)
+    score_list.append(f(mu))
 
     for _ in range(iterations):
-        # evaluate current mu
-        mu_list.append(mu)
-        score_list.append(f(mu))
+
 
         samples = np.random.randn(N, dim) * sigma + mu
         scores = np.array([f(x) for x in samples])
@@ -25,6 +26,10 @@ def cem_optimize(
         mu = elites.mean(axis=0)
         print("next mu:", mu)
         sigma = elites.std(axis=0)
+
+        # evaluate current mu
+        mu_list.append(mu)
+        score_list.append(f(mu))
 
     max_idx = np.argmax(score_list)
     return score_list[max_idx], mu_list[max_idx]

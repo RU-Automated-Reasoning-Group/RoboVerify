@@ -1,10 +1,10 @@
 from z3 import *
-# set_option("smt.mbqi", False)
+set_option("smt.mbqi", False)
 # set_option("sat.euf", True)
 solver = Solver()
 
-# Box = DeclareSort('Box')
-Box, _ = EnumSort('Box', ['b9', 'b10', 'b11', 'b12', 'b13', "b14", "b15", 'b16', 'b17', 'b18'])
+Box = DeclareSort('Box')
+# Box, _ = EnumSort('Box', ['b9', 'b10', 'b11', 'b12', 'b13', "b14", "b15", 'b16', 'b17', 'b18'])
 x, y, c, a, b_prime, b, b0 = Consts("x y c a b_prime b b0", Box)
 ON_star = Function('ON_star', Box, Box, BoolSort())
 solver.add(ForAll([x, y, c], Implies(And(ON_star(x, y), ON_star(y, c)), ON_star(x, c))))

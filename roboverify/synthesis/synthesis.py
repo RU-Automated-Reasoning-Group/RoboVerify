@@ -209,10 +209,10 @@ def MCMC(
     cem_N: int = 16,
     cem_K: int = 4,
 ):
+    print("=== initial program ===\n", current_program)
     current_cost, current_program = optimize_program(
         current_program, expert_states, num_seeds, cem_N, cem_K
     )
-    print("=== initial program ===\n", current_program)
     current_program = current_program
     samples = [deepcopy(current_program)]
     costs = [current_cost]
@@ -345,10 +345,12 @@ def evaluate_program(p: Program, n: int, return_img=False):
         traj = p.eval(env, return_img)
         if return_img:
             traj, traj_imgs = traj
+            for image in traj_imgs:
+                imgs.append(image)
+
         for state in traj:
             states.append(state)
-        for image in traj_imgs:
-            imgs.append(image)
+
     print("number of policy states", len(states))
     if return_img:
         return states, imgs
