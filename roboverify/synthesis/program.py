@@ -21,6 +21,11 @@ class Parameter:
             pdb.set_trace()
             raise ValueError
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Parameter):
+            return False
+        return self.pos == other.pos and self.val == other.val
+
     def __str__(self):
         return f"{self.val:.3}"
 
@@ -98,7 +103,7 @@ class PickPlace(Instruction):
                 obs,
                 initial_goal_box
                 + np.array([offset.val for offset in self.target_offset]),
-                block_id=0,
+                block_id=self.grab_box_id,
                 last_block=True,
             )
             env.step(action)
@@ -128,6 +133,14 @@ class PickPlace(Instruction):
         assert new_operands[1]["type"] == "Box"
         self.grab_box_id = new_operands[0]["val"]
         self.target_box_id = new_operands[1]["val"]
+    
+    def __eq__(self, other):
+        if not isinstance(other, PickPlace):
+            return False
+        cond1 = self.get_operand() == other.get_operand()
+        cond2 = self.target_offset == other.target_offset
+        return cond1 and cond2
+
 
     def __str__(self):
         return f"PickPlace({self.grab_box_id}, {self.target_box_id}, {[str(x) for x in self.target_offset]})"

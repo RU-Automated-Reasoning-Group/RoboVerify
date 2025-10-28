@@ -16,6 +16,8 @@ from typing import Any
 from copy import deepcopy
 import random
 import decision_tree
+import pickle
+from PIL import Image  # for saving images as PNG
 
 
 # def learn(
@@ -150,8 +152,8 @@ def mutate_program(
     current_program: Program,
     available_operands: dict,
     available_instructions: list,
-):
-    pc = 1  # opcode
+) -> tuple[Program, bool]:
+    pc = 0  # opcode
     po = 1  # operand
     ps = 1  # swap
     pi = 1  # instruction
@@ -169,20 +171,28 @@ def mutate_program(
         pass
     elif sampled_mutation == 1:
         index = random.randint(0, len(new_program.instructions) - 1)
-        operands = new_program.instructions[index].get_operand()
-        if operands:
-            operand_index = random.randint(0, len(operands) - 1)
+        old_operands = new_program.instructions[index].get_operand()
+        if old_operands:
+            operand_index = random.randint(0, len(old_operands) - 1)
             proposed_operand = random.choice(
-                available_operands[operands[operand_index]["type"]]
+                available_operands[old_operands[operand_index]["type"]]
             )
-            operands[operand_index]["val"] = proposed_operand
-            new_program.instructions[index].set_operand(operands)
+            print("old operand", old_operands[operand_index], "proposed operand", proposed_operand)
+            if old_operands[operand_index] == proposed_operand:
+                return new_program, False
+            old_operands[operand_index]["val"] = proposed_operand
+            new_program.instructions[index].set_operand(old_operands)
+        else:
+            return new_program, False
     elif sampled_mutation == 2:
         swap_two_elements_maybe_same(new_program.instructions)
     elif sampled_mutation == 3:
         index = random.randint(0, len(new_program.instructions) - 1)
         pu = 0.25  # probability the SKIP token is proposed
         if random.random() < pu:
+            if type(new_program.instructions[index]) == Skip:
+                print("chaning skip to skip")
+                return new_program, False
             new_program.instructions[index] = Skip()
         else:
             new_instruction = random.choice(available_instructions)()
@@ -196,8 +206,14 @@ def mutate_program(
     else:
         assert False, "unknown mutation"
 
-    return new_program
+    return new_program, True
 
+
+import os
+import pickle
+import math
+import random
+from copy import deepcopy
 
 def MCMC(
     current_program: Program,
@@ -208,29 +224,96 @@ def MCMC(
     num_seeds: int,
     cem_N: int = 16,
     cem_K: int = 4,
+    save_dir: str = "MCMC_results"
 ):
+    # Ensure save_dir exists
+    os.makedirs(save_dir, exist_ok=True)
+
     print("=== initial program ===\n", current_program)
     current_cost, current_program = optimize_program(
         current_program, expert_states, num_seeds, cem_N, cem_K
     )
-    current_program = current_program
+    print("evaluated with cost", current_cost)
+
     samples = [deepcopy(current_program)]
     costs = [current_cost]
 
     for i in range(iters):
-        new_program = mutate_program(
+        iter_folder = os.path.join(save_dir, f"iter{i}")
+        os.makedirs(iter_folder, exist_ok=True)
+
+        new_program, changed = mutate_program(
             current_program, available_operands, available_instructions
         )
-        print("=== iter {i} program ===\n", new_program)
-        new_cost, new_program = optimize_program(
-            new_program, expert_states, num_seeds, cem_N, cem_K
-        )
+        print(f"=== iter {i} program ===\n", new_program)
 
-        # acceptance_ratio = math.exp(current_cost - new_cost)
-        acceptance_ratio = 1
-        if random.random() < acceptance_ratio:
-            current_program = new_program
-            current_cost = new_cost
+        ins1 = [x for x in current_program.instructions if type(x) != Skip]
+        ins2 = [x for x in new_program.instructions if type(x) != Skip]
+        equivalence = ins1 == ins2
+        print("program equivalence", equivalence)
+
+        # Save a copy of current_program BEFORE acceptance update
+        saved_current_program = deepcopy(current_program)
+        saved_current_cost = current_cost
+
+        if changed and not equivalence:
+            # Optimize new_program, which may modify it
+            new_cost, new_program = optimize_program(
+                new_program, expert_states, num_seeds, cem_N, cem_K
+            )
+            print("evaluated with cost", new_cost)
+        else:
+            new_cost = current_cost
+
+        # Save a copy of new_program AFTER optimization
+        saved_new_program = deepcopy(new_program)
+
+        # Decide acceptance
+        if changed and not equivalence:
+            acceptance_ratio = math.exp(new_cost - current_cost)
+            print("acceptance_ratio is", acceptance_ratio)
+            if random.random() < acceptance_ratio:
+                print("new program accepted")
+                current_program = new_program
+                current_cost = new_cost
+            else:
+                print("new program NOT accepted")
+
+        # Save pickle files
+        with open(os.path.join(iter_folder, "current_program.pkl"), "wb") as f:
+            pickle.dump(saved_current_program, f)
+        with open(os.path.join(iter_folder, "new_program.pkl"), "wb") as f:
+            pickle.dump(saved_new_program, f)
+
+        # Save text summary
+        with open(os.path.join(iter_folder, "summary.txt"), "w") as f:
+            f.write("=== Current Program ===\n")
+            f.write(str(saved_current_program) + "\n")
+            f.write(f"Current Cost: {saved_current_cost}\n\n")
+            f.write("=== New Program ===\n")
+            f.write(str(saved_new_program) + "\n")
+            f.write(f"New Cost: {new_cost}\n")
+            f.write(f"Program Equivalence: {equivalence}\n")
+            f.write(f"Accepted: {current_program == new_program}\n")
+
+        # --- Evaluate program and save images/video ---
+        frames_dir = os.path.join(iter_folder, "frames")
+        os.makedirs(frames_dir, exist_ok=True)
+
+        # Evaluate new_program and get images
+        _, imgs = evaluate_program(saved_new_program, n=num_seeds, return_img=True)
+
+        # Save each image as PNG
+        for idx, img in enumerate(imgs):
+            img_path = os.path.join(frames_dir, f"img{idx:04d}.png")
+            if isinstance(img, Image.Image):
+                img.save(img_path)
+            else:  # assume numpy array
+                Image.fromarray(img).save(img_path)
+
+        # Generate video
+        output_video_path = os.path.join(iter_folder, "program_video.mp4")
+        images_to_video(frames_dir, output_video_path=output_video_path)
 
         samples.append(deepcopy(new_program))
         costs.append(new_cost)
@@ -243,8 +326,14 @@ def optimize_program(
 ) -> tuple[float, Program]:
     f = Runner(p, expert_states, num_seeds)
     initial_parameters = p.register_trainable_parameter()
+    iterations = 3 if initial_parameters else 0
     best_cost, best_parameter = cem.cem_optimize(
-        f, len(initial_parameters), N=cem_N, K=cem_K, init_mu=initial_parameters
+        f,
+        len(initial_parameters),
+        iterations,
+        N=cem_N,
+        K=cem_K,
+        init_mu=initial_parameters,
     )
     p.update_trainable_parameter(best_parameter)
     return best_cost, p
@@ -413,11 +502,12 @@ class Runner:
 
 if __name__ == "__main__":
     available_operands = {
-        "Box": [0, 1, 2],
+        "Box": [0, 1],
     }
     available_instructions = [PickPlace]
     num_seeds = 15
     expert_states = collect_trajectories("pickmulti1", num_seeds, save_imgs=True)
+    images_to_video("images", "groundtruth.mp4")
 
     MCMC(
         Program(3),
@@ -428,41 +518,59 @@ if __name__ == "__main__":
         num_seeds=num_seeds,
     )
 
-    # images_to_video("images", "groundtruth.mp4")
-    # exit()
+
+    exit()
 
     # num_seeds = 15
 
     # expert_states = collect_trajectories("pickmulti1", num_seeds, save_imgs=True)
     # exit()
-    # p = Program(3)
-    # p.instructions = [
-    #     PickPlace(grab_box_id=0, target_box_id=0),  # move up with respect to box 0
-    #     PickPlace(
-    #         grab_box_id=0, target_box_id=1
-    #     ),  # move horizontally to the top of box 1
-    #     PickPlace(grab_box_id=0, target_box_id=1),  # move down to place on box 1
-    # ]
-    # p.register_trainable_parameter()
-    # # p.update_trainable_parameter(
-    # #     [
-    # #         0.0279608,
-    # #         0.04278932,
-    # #         0.13399421,
-    # #         0.02289095,
-    # #         -0.04434892,
-    # #         0.13288633,
-    # #         -0.01862492,
-    # #         0.00964001,
-    # #         0.05832452,
-    # #     ]
-    # # )
+    p = Program(3)
+    p.instructions = [
+        PickPlace(grab_box_id=1, target_box_id=1),  # move up with respect to box 0
+        PickPlace(
+            grab_box_id=1, target_box_id=0
+        ),  # move horizontally to the top of box 1
+        PickPlace(grab_box_id=1, target_box_id=0),  # move down to place on box 1
+    ]
+    p.register_trainable_parameter()
+    p.update_trainable_parameter(
+        [
+            0.0279608,
+            0.04278932,
+            0.13399421,
+            0.02289095,
+            -0.04434892,
+            0.13288633,
+            -0.01862492,
+            0.00964001,
+            0.05832452,
+        ]
+    )
     # # p.instructions[0].target_offset = [Parameter(0.), Parameter(0.), Parameter(0.2)]
     # # p.instructions[1].target_offset = [Parameter(0), Parameter(0), Parameter(0.2)]
     # # p.instructions[2].target_offset = [Parameter(0), Parameter(0), Parameter(0.05)]
     # # for _ in range(50):
     # #     print(mutate_program(p))
     # pdb.set_trace()
+    iter_folder = "tmp_testing1"
+    frames_dir = os.path.join(iter_folder, "frames")
+    os.makedirs(frames_dir, exist_ok=True)
+
+    # Evaluate new_program and get images
+    _, imgs = evaluate_program(p, n=num_seeds, return_img=True)
+
+    # Save each image as PNG
+    for idx, img in enumerate(imgs):
+        img_path = os.path.join(frames_dir, f"img{idx:04d}.png")
+        if isinstance(img, Image.Image):
+            img.save(img_path)
+        else:  # assume numpy array
+            Image.fromarray(img).save(img_path)
+
+    # Generate video
+    output_video_path = os.path.join(iter_folder, "program_video.mp4")
+    images_to_video(frames_dir, output_video_path=output_video_path)
     # states, imgs = evaluate_program(p, 15, True)
     # pdb.set_trace()
 
