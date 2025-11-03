@@ -5,6 +5,7 @@ from z3 import (
     BoolSort,
     Consts,
     DeclareSort,
+    EnumSort,
     Exists,
     ForAll,
     Function,
@@ -33,7 +34,26 @@ solver.add(
         Implies(And(ON_star(x, y), ON_star(x, c)), Or(ON_star(y, c), ON_star(c, y))),
     )
 )
+solver.add(
+    ForAll(
+        [x, y, c],
+        Implies(And(ON_star(x, c), ON_star(y, c)), Or(ON_star(x, y), ON_star(y, x))),
+    )
+)
 solver.add(ForAll([x, y], Implies(ON_star(x, y), Implies(ON_star(y, x), x == y))))
+
+higher = Function("higher", Box, Box, BoolSort())
+solver.add(ForAll([x, y, c], Implies(And(higher(x, y), higher(y, c)), higher(x, c))))
+solver.add(ForAll([x], higher(x, x)))
+solver.add(
+    ForAll(
+        [x, y, c],
+        Implies(And(higher(x, y), higher(x, c)), Or(higher(y, c), higher(c, y))),
+    )
+)
+# solver.add(
+#     ForAll([x, y], Implies(And(ON_star(x, y), Not(ON_star(y, x))), And(higher(x, y), Not(higher(y, x)))))
+# )
 
 
 def check_solver(x):
@@ -41,9 +61,13 @@ def check_solver(x):
         print("constraints satisfiable")
         print("model is")
         print(x.model())
-        # for name1, box1 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
-        #     for name2, box2 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
-        #         print(f"{name1}, {name2}: {x.model().evaluate(ON_star(box1, box2))}")
+        for name1, box1 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
+            for name2, box2 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
+                print(f"ON({name1}, {name2}): {x.model().evaluate(ON_star(box1, box2))}")
+
+        for name1, box1 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
+            for name2, box2 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
+                print(f"higher({name1}, {name2}): {x.model().evaluate(higher(box1, box2))}")
         import pdb
 
         pdb.set_trace()
@@ -53,7 +77,7 @@ def check_solver(x):
 
 
 def on_table(x):
-    return Not(Exists([y], And(Not(y == x), ON_star(x, y))))
+    return ForAll([y], higher(y, x))
 
 
 def top(x):
@@ -71,6 +95,13 @@ def substituted_top(x, b_prime, b):
     )
 
 
+def substituted_on_table(x, b_prime, b):
+    return ForAll(
+        [y],
+        Or(higher(y, x), And(higher(y, b_prime), higher(b, x)))
+    )
+
+
 def while_cond(b_prime):
     return Exists([b_prime], And(top(b_prime), b_prime != b))
 
@@ -85,7 +116,7 @@ def postcondition():
 
 def loop_invariant(b):
     return And(
-        ForAll([a], Or(top(a), ON_star(a, b0))),
+        ForAll([a], Or(And(top(a), on_table(a)), ON_star(a, b0))),
         ON_star(b, b0),
         top(b),
     )
@@ -96,7 +127,7 @@ def substituted_loop_invariant(x, b_prime, b):
         ForAll(
             [a],
             Or(
-                substituted_top(a, b_prime, b),
+                And(substituted_top(a, b_prime, b), substituted_on_table(a, b_prime, b)),
                 Or(ON_star(a, b0), And(ON_star(a, b_prime), ON_star(b, b0))),
             ),
         ),
@@ -108,6 +139,7 @@ def substituted_loop_invariant(x, b_prime, b):
 # while loop correctness: verify while condition (true) + loop invariant implies another loop invariant
 solver.push()
 print("verifying inductive loop invariant")
+solver.add(on_table(b0))
 solver.add(while_cond_instantized(b_prime))
 solver.add(loop_invariant(b))
 wp = And(Not(ON_star(b, b_prime)), substituted_loop_invariant(b_prime, b_prime, b))

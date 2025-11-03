@@ -24,3 +24,8 @@ def reverse(n0):
 ```
 
 For this program, we need to systematically analyze if `t` is null for each of its appearence.
+
+## Up-to-date files
+reverse: test_reverse_include_tbl.py
+unstack: test_unstack_single_tower_b0_bottom_exists_top.py
+stack: 
