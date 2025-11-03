@@ -177,7 +177,12 @@ def mutate_program(
             proposed_operand = random.choice(
                 available_operands[old_operands[operand_index]["type"]]
             )
-            print("old operand", old_operands[operand_index], "proposed operand", proposed_operand)
+            print(
+                "old operand",
+                old_operands[operand_index],
+                "proposed operand",
+                proposed_operand,
+            )
             if old_operands[operand_index] == proposed_operand:
                 return new_program, False
             old_operands[operand_index]["val"] = proposed_operand
@@ -215,6 +220,7 @@ import math
 import random
 from copy import deepcopy
 
+
 def MCMC(
     current_program: Program,
     available_operands: dict,
@@ -224,14 +230,15 @@ def MCMC(
     num_seeds: int,
     cem_N: int = 16,
     cem_K: int = 4,
-    save_dir: str = "MCMC_results"
+    cem_iterations: int = 10,
+    save_dir: str = "MCMC_results",
 ):
     # Ensure save_dir exists
     os.makedirs(save_dir, exist_ok=True)
 
     print("=== initial program ===\n", current_program)
     current_cost, current_program = optimize_program(
-        current_program, expert_states, num_seeds, cem_N, cem_K
+        current_program, expert_states, num_seeds, cem_N, cem_K, cem_iterations
     )
     print("evaluated with cost", current_cost)
 
@@ -259,7 +266,7 @@ def MCMC(
         if changed and not equivalence:
             # Optimize new_program, which may modify it
             new_cost, new_program = optimize_program(
-                new_program, expert_states, num_seeds, cem_N, cem_K
+                new_program, expert_states, num_seeds, cem_N, cem_K, cem_iterations
             )
             print("evaluated with cost", new_cost)
         else:
@@ -322,11 +329,16 @@ def MCMC(
 
 
 def optimize_program(
-    p: Program, expert_states, num_seeds: int, cem_N: int, cem_K: int
+    p: Program,
+    expert_states,
+    num_seeds: int,
+    cem_N: int,
+    cem_K: int,
+    cem_iterations: int,
 ) -> tuple[float, Program]:
     f = Runner(p, expert_states, num_seeds)
     initial_parameters = p.register_trainable_parameter()
-    iterations = 3 if initial_parameters else 0
+    iterations = cem_iterations if initial_parameters else 0
     best_cost, best_parameter = cem.cem_optimize(
         f,
         len(initial_parameters),
@@ -513,11 +525,10 @@ if __name__ == "__main__":
         Program(3),
         available_operands,
         available_instructions,
-        100,
+        200,
         expert_states=expert_states,
         num_seeds=num_seeds,
     )
-
 
     exit()
 

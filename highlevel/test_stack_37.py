@@ -1,4 +1,4 @@
-from z3 import *
+from z3 import Solver, DeclareSort, Function, Consts, BoolSort, ForAll, Implies, And, Or, Not, sat, unsat, Exists
 import pdb
 pdb.set_trace()
 # set_option("smt.mbqi", False)
@@ -70,7 +70,7 @@ def postcondition():
 def loop_invariant(b):
     return And(
         ForAll(
-            [a], Exists([x], Or(ON_star(a, b0), top(a), And(top(x), ON_star(x, a))))
+            [a], Or(top(a), ON_star(a, b0))
         ),
         ON_star(b, b0),
         top(b),
@@ -80,18 +80,12 @@ def loop_invariant(b):
 def substituted_loop_invariant(x, b_prime, b):
     return And(
         ForAll(
-            [a],
-            Exists(
-                [y],
-                Or(
-                    Or(ON_star(a, b0), And(ON_star(a, b_prime), ON_star(b, b0))),
-                    substituted_top(a, b_prime, b),
-                    And(
-                        substituted_top(y, b_prime, b),
-                        Or(ON_star(y, a), And(ON_star(y, b_prime), ON_star(b, a))),
-                    ),
-                ),
+            [a],                   
+            Or(
+                substituted_top(a, b_prime, b),
+                Or(ON_star(a, b0), And(ON_star(a, b_prime), ON_star(b, b0))),
             ),
+
         ),
         Or(ON_star(x, b0), And(ON_star(x, b_prime), ON_star(b, b0))),
         substituted_top(x, b_prime, b),
@@ -101,7 +95,6 @@ def substituted_loop_invariant(x, b_prime, b):
 # while loop correctness: verify while condition (true) + loop invariant implies another loop invariant
 solver.push()
 print("verifying inductive loop invariant")
-solver.add(on_table(b0))
 solver.add(while_cond_instantized(b_prime))
 solver.add(loop_invariant(b))
 wp = And(Not(ON_star(b, b_prime)), substituted_loop_invariant(b_prime, b_prime, b))
@@ -111,7 +104,6 @@ solver.pop()
 
 print("verifying postcondition")
 solver.push()
-solver.add(on_table(b0))
 solver.add(loop_invariant(b))
 solver.add(Not(while_cond(b_prime)))
 solver.add(Not(postcondition()))

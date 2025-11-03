@@ -68,23 +68,28 @@ def get_pick_control_naive(obs, place_position, relative_grasp_position=(0., 0.,
     # dist_atol = 5e-2
 
     # find current goal
-    block_num = (obs.shape[0] - 13) // 15
-    check_block = 0
-    while check_block < block_num:
-        cur_block = obs[10+check_block*12:10+check_block*12+3]
-        # cur_goal = obs[10+block_num*12+3*check_block:10+block_num*12+3*check_block+3]
-        cur_goal = place_position
-        if np.linalg.norm(cur_block - cur_goal) >= dist_atol:
-            break
-        check_block += 1
+    # block_num = (obs.shape[0] - 13) // 15
+    # check_block = 0
+    # while check_block < block_num:
+    #     cur_block = obs[10+block_id*12:10+block_id*12+3]
+    #     # cur_goal = obs[10+block_num*12+3*check_block:10+block_num*12+3*check_block+3]
+    #     cur_goal = place_position
+    #     print(np.linalg.norm(cur_block - cur_goal))
+    #     # import time
+    #     # time.sleep(0.3)
+    #     if np.linalg.norm(cur_block - cur_goal) >= dist_atol:
+    #         break
+    #     check_block += 1
 
-    # only for now
-    # if check_block < block_id:
-    #     return None, False
-    # elif check_block == block_num:
+    # # only for now
+    # # if check_block < block_id:
+    # #     return None, False
+    # # elif check_block == block_num:
+    # #     return np.array([0., 0., 0., -1.]), True
+    # if check_block == 1:
+    #     pdb.set_trace()
+    # if check_block == 1:
     #     return np.array([0., 0., 0., -1.]), True
-    if check_block == 1:
-        return np.array([0., 0., 0., -1.]), True
 
     # get position
     gripper_position = obs[:3]
@@ -94,7 +99,12 @@ def get_pick_control_naive(obs, place_position, relative_grasp_position=(0., 0.,
     # pdb.set_trace()
 
     # If the block is already at the place position, do nothing except keep the gripper closed
-    if np.linalg.norm(block_position - place_position) < dist_atol:
+    if np.linalg.norm(block_position - place_position) < dist_atol and block_is_grasped(obs, relative_grasp_position, block_position, dist_atol=dist_atol, other_atol=other_atol):
+        if DEBUG:
+            print("reach target")
+        return np.array([0., 0., 0., -1.0]), True
+        print("enter here")
+        import pdb; pdb.set_trace()
         # open and move up
         if not grippers_are_open(obs, atol=other_atol):
             if DEBUG:
