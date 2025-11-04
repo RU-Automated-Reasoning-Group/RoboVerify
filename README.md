@@ -29,3 +29,7 @@ For this program, we need to systematically analyze if `t` is null for each of i
 reverse: test_reverse_include_tbl.py
 unstack: test_unstack_single_tower_b0_bottom_exists_top.py
 stack: 
+
+## define a scattered relation that are true when two blocks are both on_table
+
+## in the low level verification, we will translate this to boxes are far apart from each other.
