@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from copy import deepcopy
 
 import numpy as np
-
+from z3 import Implies, And, Or, Not
 
 class Parameter:
     def __init__(self, val: float = 0):
@@ -146,6 +146,13 @@ class PickPlace(Instruction):
         return f"PickPlace({self.grab_box_id}, {self.target_box_id}, {[str(x) for x in self.target_offset]})"
 
 
+class While:
+    def __init__(self, cond, body: list[Instruction], invariant):
+        self.cond = cond
+        self.body = body
+        self.invariant = invariant
+
+
 class Program:
     def __init__(self, length: int = 5):
         self.length = length
@@ -177,7 +184,52 @@ class Program:
     def __str__(self):
         instruction_str = [f"\t{inst}" for inst in self.instructions]
         return "\n".join(["begin", *instruction_str, "end"])
+    
+    def VC_gen(self, P, Q):
+        # P, Q are z3 formula
+        seq_instruction = to_seq(self.instructions)
+        return [Implies(P, self.wp(Q))] + VC_aux(seq_instruction, Q)
 
+    def wp(self, Q):
+        seq_instruction = to_seq(self.instructions)
+        return wp(seq_instruction, Q)
+
+class Assign(Instruction):
+    def __init__(self, left, right):
+        self.left = left
+        self.right = right
+    
+    def __str__(self):
+        return f"{self.left} <- {self.right}"
+
+
+class Seq:
+    def __init__(self, s1, s2):
+        self.s1 = s1
+        self.s2 = s2
+
+def to_seq(instructions):
+    return []
+
+def wp(seq_instruction, Q):
+    if isinstance(seq_instruction, Skip):
+        return Q
+    elif isinstance(seq_instruction, Seq):
+        return wp(seq_instruction.s1, wp(seq_instruction.s2, Q))
+    elif isinstance(seq_instruction, While):
+        return seq_instruction.invariant
+    elif isinstance(seq_instruction, Assign)
+    assert False, "Unrecognized seq instruction to calculate wp"
+
+def VC_aux(seq_instruction, Q) -> list:
+    if isinstance(seq_instruction, Seq):
+        return VC_aux(seq_instruction.s1, wp(seq_instruction.s2, Q)) + VC_aux(seq_instruction.s2, Q)
+    elif isinstance(seq_instruction, Instruction):
+        return []
+    elif isinstance(seq_instruction, While):
+        return VC_aux(seq_instruction.body, seq_instruction.invariant) + [Implies(And(seq_instruction.cond, seq_instruction.invariant), wp(seq_instruction.body, seq_instruction.invariant)), 
+                                                                          Implies(And(Not(seq_instruction.cond), seq_instruction.invariant), Q)]
+    assert False, "Unrecognized seq instruction for VC_aux"
 
 if __name__ == "__main__":
     program = Program(3)
