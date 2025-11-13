@@ -1,20 +1,40 @@
 import pdb
+from typing import List, Union
+
+# list = List
 from abc import ABC, abstractmethod
 from copy import deepcopy
 
 import numpy as np
-from z3 import Implies, And, Or, Not
+from z3 import (
+    Z3_OP_UNINTERPRETED,
+    And,
+    Consts,
+    Exists,
+    ForAll,
+    Implies,
+    Not,
+    Or,
+    is_app,
+    substitute,
+    is_quantifier,
+    Const,
+)
+
+import highlevel_verification_lib
+from highlevel_verification_lib import BoxSort, ON_star, higher
+
 
 class Parameter:
     def __init__(self, val: float = 0):
         self.pos: int | None = None
         self.val: float = val
 
-    def register(self, parameters: list):
+    def register(self, parameters: List):
         self.pos = len(parameters)
         parameters.append(self.val)
 
-    def update(self, new_parameter: list[float]):
+    def update(self, new_parameter: List[float]):
         if self.pos is not None:
             self.val = new_parameter[self.pos]
         else:
@@ -32,13 +52,13 @@ class Parameter:
 
 class Instruction(ABC):
     @abstractmethod
-    def eval(self, env, traj, return_image=False) -> list:
+    def eval(self, env, traj, return_image=False) -> List:
         pass
 
-    def register_trainable_parameter(self, parameters: list):
+    def register_trainable_parameter(self, parameters: List):
         pass
 
-    def update_trainable_parameter(self, new_parameter: list):
+    def update_trainable_parameter(self, new_parameter: List):
         pass
 
     def get_operand(self):
@@ -114,11 +134,11 @@ class PickPlace(Instruction):
             traj.append(obs)
         return imgs
 
-    def register_trainable_parameter(self, parameter: list[float]):
+    def register_trainable_parameter(self, parameter: List[float]):
         for p in self.target_offset:
             p.register(parameter)
 
-    def update_trainable_parameter(self, new_parameter: list[float]):
+    def update_trainable_parameter(self, new_parameter: List[float]):
         for p in self.target_offset:
             p.update(new_parameter)
 
@@ -133,7 +153,7 @@ class PickPlace(Instruction):
         assert new_operands[1]["type"] == "Box"
         self.grab_box_id = new_operands[0]["val"]
         self.target_box_id = new_operands[1]["val"]
-    
+
     def __eq__(self, other):
         if not isinstance(other, PickPlace):
             return False
@@ -141,22 +161,140 @@ class PickPlace(Instruction):
         cond2 = self.target_offset == other.target_offset
         return cond1 and cond2
 
-
     def __str__(self):
         return f"PickPlace({self.grab_box_id}, {self.target_box_id}, {[str(x) for x in self.target_offset]})"
 
 
 class While:
-    def __init__(self, cond, body: list[Instruction], invariant):
+    def __init__(self, cond, instantiated_cond, body, invariant):
         self.cond = cond
+        self.instantiated_cond = instantiated_cond
         self.body = body
         self.invariant = invariant
 
 
+class Put(Instruction):
+    def __init__(self, upper_block, base_block):
+        self.base_block = base_block
+        self.upper_block = upper_block
+
+    def __str__(self):
+        return f"put({self.base_block}, {self.upper_block})"
+
+    def eval(self, env, traj, return_image=False) -> List:
+        pass
+
+
+def rewrite_for_put_for_ON_star(expr, b_prime, b):
+    """Rewrite every possible occurrence of alpha<on*> beta to
+    Or(alpha<on*>beta, And(alpha<on*>b_prime, b<on*>beta))
+    """
+    # Case 1: Quantifier
+    if is_quantifier(expr):
+        # Extract info about the quantifier
+        num_vars = expr.num_vars()
+        var_sorts = [expr.var_sort(i) for i in range(num_vars)]
+        var_names = [expr.var_name(i) for i in range(num_vars)]
+
+        # Extract and rewrite the body
+        body = expr.body()
+        rewritten_body = rewrite_for_put_for_ON_star(body, b_prime, b)
+
+        # Rebuild the quantifier (keep same type)
+        if expr.is_forall():
+            return ForAll(
+                list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
+                rewritten_body,
+            )
+        else:
+            return Exists(
+                list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
+                rewritten_body,
+            )
+
+    # Case 2: Function application (And, Or, ON_star, etc.)
+    elif is_app(expr):
+        decl = expr.decl()
+
+        # Match ON_star(a,b)
+        if decl.kind() == Z3_OP_UNINTERPRETED and decl.name() == "ON_star":
+            alpha, beta = expr.children()
+            return Or(
+                ON_star(alpha, beta), And(ON_star(alpha, b_prime), ON_star(b, beta))
+            )
+
+        # Otherwise rebuild recursively
+        new_children = [
+            rewrite_for_put_for_ON_star(c, b_prime, b) for c in expr.children()
+        ]
+        return decl(*new_children)
+
+    # Case 3: Constants, bound variables, etc.
+    else:
+        return expr
+
+
+def rewrite_for_put_for_higher(expr, b_prime, b):
+    """Rewrite every possible occurrence of alpha<higher> beta to
+    Or(alpha<higher>beta, And(alpha<higher>b_prime, b<higher>beta))
+    """
+    # Case 1: Quantifier
+    if is_quantifier(expr):
+        # Extract info about the quantifier
+        num_vars = expr.num_vars()
+        var_sorts = [expr.var_sort(i) for i in range(num_vars)]
+        var_names = [expr.var_name(i) for i in range(num_vars)]
+
+        # Extract and rewrite the body
+        body = expr.body()
+        rewritten_body = rewrite_for_put_for_higher(body, b_prime, b)
+
+        # Rebuild the quantifier (keep same type)
+        if expr.is_forall():
+            return ForAll(
+                list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
+                rewritten_body,
+            )
+        else:
+            return Exists(
+                list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
+                rewritten_body,
+            )
+
+    # Case 2: Function application (And, Or, ON_star, etc.)
+    elif is_app(expr):
+        decl = expr.decl()
+
+        # Match ON_star(a,b)
+        if decl.kind() == Z3_OP_UNINTERPRETED and decl.name() == "higher":
+            alpha, beta = expr.children()
+            return Or(higher(alpha, beta), And(higher(alpha, b_prime), higher(b, beta)))
+
+        # Otherwise rebuild recursively
+        new_children = [
+            rewrite_for_put_for_higher(c, b_prime, b) for c in expr.children()
+        ]
+        return decl(*new_children)
+
+    # Case 3: Constants, bound variables, etc.
+    else:
+        return expr
+
+
+Stmt = Union[Instruction, While]
+
+
 class Program:
-    def __init__(self, length: int = 5):
+    length: int
+    instructions: List[Stmt]
+
+    def __init__(self, length: int, instructions: Union[List[Stmt], None] = None):
         self.length = length
-        self.instructions: list[Instruction] = [Skip() for _ in range(self.length)]
+        if instructions:
+            assert len(instructions) == length
+            self.instructions = deepcopy(instructions)
+        else:
+            self.instructions = [Skip() for _ in range(self.length)]
 
     def eval(self, env, return_img=False):
         """evaluate the program in the environment and return the trajectories"""
@@ -184,7 +322,7 @@ class Program:
     def __str__(self):
         instruction_str = [f"\t{inst}" for inst in self.instructions]
         return "\n".join(["begin", *instruction_str, "end"])
-    
+
     def VC_gen(self, P, Q):
         # P, Q are z3 formula
         seq_instruction = to_seq(self.instructions)
@@ -194,13 +332,28 @@ class Program:
         seq_instruction = to_seq(self.instructions)
         return wp(seq_instruction, Q)
 
+    def highlevel_verification(self, P, Q):
+        vcs = self.VC_gen(P, Q)
+        for idx, vc in enumerate(vcs):
+            print(f"verifying VC {idx}", vc)
+            solver = highlevel_verification_lib.highlevel_z3_solver()
+            solver.start_verification(vc)
+            print("=====================")
+
+    def lowlevel_verification(self):
+        pass
+
+
 class Assign(Instruction):
     def __init__(self, left, right):
         self.left = left
         self.right = right
-    
+
     def __str__(self):
         return f"{self.left} <- {self.right}"
+
+    def eval(self, env, traj, return_image=False) -> List:
+        pass
 
 
 class Seq:
@@ -208,34 +361,117 @@ class Seq:
         self.s1 = s1
         self.s2 = s2
 
+
 def to_seq(instructions):
-    return []
+    """convert a list of instructions to Seq connected expression (Seq is left associate)
+    That is x;y;z is equivalent to ((x;y);z)
+    """
+    if len(instructions) == 1:
+        return instructions[0]
+    elif len(instructions) > 1:
+        return Seq(to_seq(instructions[:-1]), instructions[-1])
+    else:
+        assert False, "unable to convert to seq for empty instructions"
+
 
 def wp(seq_instruction, Q):
+    """calculate weakest precondition"""
     if isinstance(seq_instruction, Skip):
         return Q
     elif isinstance(seq_instruction, Seq):
         return wp(seq_instruction.s1, wp(seq_instruction.s2, Q))
     elif isinstance(seq_instruction, While):
         return seq_instruction.invariant
-    elif isinstance(seq_instruction, Assign)
-    assert False, "Unrecognized seq instruction to calculate wp"
+    elif isinstance(seq_instruction, Assign):
+        return substitute(
+            Q,
+            (
+                highlevel_verification_lib.get_consts(seq_instruction.left),
+                highlevel_verification_lib.get_consts(seq_instruction.right),
+            ),
+        )
+    elif isinstance(seq_instruction, Put):
+        b_prime = highlevel_verification_lib.get_consts(seq_instruction.upper_block)
+        b = highlevel_verification_lib.get_consts(seq_instruction.base_block)
+        Q = And(Not(ON_star(b, b_prime)), rewrite_for_put_for_ON_star(Q, b_prime, b))
+        # return Q
+        return And(Not(higher(b, b_prime)), rewrite_for_put_for_higher(Q, b_prime, b))
+    assert (
+        False
+    ), f"Unrecognized seq instruction {type(seq_instruction)} to calculate wp"
 
-def VC_aux(seq_instruction, Q) -> list:
+
+def VC_aux(seq_instruction, Q) -> List:
+    """generate auxiliary verification conditions"""
     if isinstance(seq_instruction, Seq):
-        return VC_aux(seq_instruction.s1, wp(seq_instruction.s2, Q)) + VC_aux(seq_instruction.s2, Q)
+        return VC_aux(seq_instruction.s1, wp(seq_instruction.s2, Q)) + VC_aux(
+            seq_instruction.s2, Q
+        )
     elif isinstance(seq_instruction, Instruction):
         return []
     elif isinstance(seq_instruction, While):
-        return VC_aux(seq_instruction.body, seq_instruction.invariant) + [Implies(And(seq_instruction.cond, seq_instruction.invariant), wp(seq_instruction.body, seq_instruction.invariant)), 
-                                                                          Implies(And(Not(seq_instruction.cond), seq_instruction.invariant), Q)]
+        return VC_aux(to_seq(seq_instruction.body), seq_instruction.invariant) + [
+            Implies(
+                And(seq_instruction.instantiated_cond, seq_instruction.invariant),
+                wp(to_seq(seq_instruction.body), seq_instruction.invariant),
+            ),
+            Implies(And(Not(seq_instruction.cond), seq_instruction.invariant), Q),
+        ]
     assert False, "Unrecognized seq instruction for VC_aux"
 
+
 if __name__ == "__main__":
-    program = Program(3)
-    program.instructions = [PickPlace(0), PickPlace(0), PickPlace(0)]
-    trainable_parameters = program.register_trainable_parameter()
-    print(trainable_parameters)
-    updated_paremters = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
-    program.update_trainable_parameter(updated_paremters)
-    print(program.register_trainable_parameter())
+    # program = Program(3)
+    # program.instructions = [PickPlace(0), PickPlace(0), PickPlace(0)]
+    # trainable_parameters = program.register_trainable_parameter()
+    # print(trainable_parameters)
+    # updated_paremters = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+    # program.update_trainable_parameter(updated_paremters)
+    # print(program.register_trainable_parameter())
+
+    pdb.set_trace()
+
+    b_prime, b, n, b0, a = Consts("b_prime b n b0 a", BoxSort)
+    instructions = [
+        Assign("b", "b0"),
+        While(
+            cond=(
+                Exists(
+                    [b_prime],
+                    And(
+                        ForAll([n], Or(b_prime == n, Not(ON_star(n, b_prime)))),
+                        b_prime != b,
+                    ),
+                )
+            ),
+            instantiated_cond=And(
+                ForAll([n], Or(b_prime == n, Not(ON_star(n, b_prime)))),
+                b_prime != b,
+            ),
+            body=[Put("b_prime", "b"), Assign("b", "b_prime")],
+            invariant=And(
+                ForAll(
+                    [a],
+                    Or(
+                        ON_star(a, b0),
+                        And(
+                            ForAll([n], Or(n == a, Not(ON_star(n, a)))),
+                            # ForAll([n], higher(n, a)),
+                        ),
+                    ),
+                ),
+                ON_star(b, b0),
+                ForAll([n], Or(n == b, Not(ON_star(n, b)))),
+            ),
+        ),
+    ]
+    p = Program(2, instructions=instructions)
+
+    m, n = Consts("m n", BoxSort)
+    precondition = ForAll([m], ForAll([n], Or(m == n, Not(ON_star(n, m)))))
+
+    m, n, b0 = Consts("m n b0", BoxSort)
+    postcondition = ForAll([m], ON_star(m, b0))
+
+    # print(p.VC_gen(precondition, postcondition))
+    p.highlevel_verification(precondition, postcondition)
