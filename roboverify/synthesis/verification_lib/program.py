@@ -334,6 +334,11 @@ class Program:
 
     def highlevel_verification(self, P, Q):
         vcs = self.VC_gen(P, Q)
+        print("testing axioms")
+        solver = highlevel_verification_lib.highlevel_z3_solver()
+        solver.start_verification()
+        print("=====================")
+
         for idx, vc in enumerate(vcs):
             print(f"verifying VC {idx}", vc)
             solver = highlevel_verification_lib.highlevel_z3_solver()
@@ -395,7 +400,7 @@ def wp(seq_instruction, Q):
         b = highlevel_verification_lib.get_consts(seq_instruction.base_block)
         Q = And(Not(ON_star(b, b_prime)), rewrite_for_put_for_ON_star(Q, b_prime, b))
         # return Q
-        return And(Not(higher(b, b_prime)), rewrite_for_put_for_higher(Q, b_prime, b))
+        return rewrite_for_put_for_higher(Q, b_prime, b)
     assert (
         False
     ), f"Unrecognized seq instruction {type(seq_instruction)} to calculate wp"
@@ -456,7 +461,7 @@ if __name__ == "__main__":
                         ON_star(a, b0),
                         And(
                             ForAll([n], Or(n == a, Not(ON_star(n, a)))),
-                            # ForAll([n], higher(n, a)),
+                            ForAll([n], higher(n, a)),
                         ),
                     ),
                 ),

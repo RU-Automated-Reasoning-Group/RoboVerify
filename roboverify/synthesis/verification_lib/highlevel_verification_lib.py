@@ -11,8 +11,10 @@ from z3 import (
     Solver,
     sat,
     unsat,
+    EnumSort
 )
 
+# BoxSort, val = EnumSort("Box", ["b9", "b10", "b11"])
 BoxSort = DeclareSort("Box")
 Variable_pools = {}
 
@@ -26,12 +28,14 @@ def get_consts(symbol: str):
 
 
 class highlevel_z3_solver:
-    def start_verification(self, vc):
+    def start_verification(self, vc=None):
         s = Solver()
         self.add_axiom(s)
-        s.add(Not(vc))
+        if vc is not None:
+            s.add(Not(vc))
         if s.check() == sat:
             print("VC is satisfiable")
+            print(s.model())
         elif s.check() == unsat:
             print("VC is unsatisfiable")
 
