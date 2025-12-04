@@ -6,7 +6,7 @@ import copy
 
 import pdb
 
-DEBUG = False
+DEBUG = True
 
 def get_move_action(observation, target_position, atol=1e-3, gain=10., close_gripper=False):
     """
@@ -68,23 +68,24 @@ def get_pickdest_control(obs, place_position, relative_grasp_position=(0., 0., -
     # dist_atol = 5e-2
 
     # find current goal
-    block_num = (obs.shape[0] - 13) // 15
-    check_block = 0
-    while check_block < block_num:
-        cur_block = obs[10+check_block*12:10+check_block*12+3]
-        # cur_goal = obs[10+block_num*12+3*check_block:10+block_num*12+3*check_block+3]
-        cur_goal = place_position
-        if np.linalg.norm(cur_block - cur_goal) >= dist_atol:
-            break
-        check_block += 1
+    # block_num = (obs.shape[0] - 13) // 15
+    # check_block = 0
+    # while check_block < block_num:
+    #     block_idx = 2 - check_block
+    #     cur_block = obs[10+block_idx*12:10+block_idx*12+3]
+    #     # cur_goal = obs[10+block_num*12+3*check_block:10+block_num*12+3*check_block+3]
+    #     cur_goal = place_position
+    #     if np.linalg.norm(cur_block - cur_goal) >= dist_atol:
+    #         break
+    #     check_block += 1
 
     # only for now
     # if check_block < block_id:
     #     return None, False
     # elif check_block == block_num:
     #     return np.array([0., 0., 0., -1.]), True
-    if check_block == 1:
-        return np.array([0., 0., 0., -1.]), True
+    # if check_block == 1:
+        # return np.array([0., 0., 0., -1.]), True
 
     # get position
     gripper_position = obs[:3]
@@ -103,7 +104,7 @@ def get_pickdest_control(obs, place_position, relative_grasp_position=(0., 0., -
         # target_position = np.add(block_position, relative_grasp_position)
         target_position = copy.deepcopy(block_position)
         if last_block:
-            target_position[2] += workspace_height * 2    
+            target_position[2] += workspace_height * 2 
         else:
             target_position[2] += workspace_height
         if gripper_position[2] - target_position[2] < 0:

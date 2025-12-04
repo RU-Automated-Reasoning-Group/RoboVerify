@@ -23,4 +23,5 @@ dependencies = [
     "torch==2.8.0",
     "tqdm==4.67.1",
     "wheel==0.38.0",
+    "z3-solver>=4.15.4.0",
 ]

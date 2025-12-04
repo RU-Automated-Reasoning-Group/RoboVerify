@@ -10,7 +10,7 @@ from cost_func import *
 from environment.cee_us_env.fpp_construction_env import FetchPickAndPlaceConstruction
 from environment.data.collect_demos import CollectDemos
 from environment.general_env import GymToGymnasium
-from program import *
+from verification_lib.program import *
 
 from typing import Any
 from copy import deepcopy
@@ -19,7 +19,7 @@ import decision_tree
 import pickle
 from PIL import Image  # for saving images as PNG
 
-
+BLOCK_LENGTH = 0.025 * 2 # (0.025, 0.025, 0.025) in the xml file of the gym env is half length
 # def learn(
 #     demos: list[list[Any]],
 #     predicates: list[Callable[[Any], bool]],
@@ -394,6 +394,21 @@ def save_numpy_arrays_as_images(arrays, output_dir="images"):
         filepath = os.path.join(output_dir, filename)
         imageio.imwrite(filepath, arr)
 
+def on(block1, block2):
+    """define the numerical interpretation of the on(block1, block2) between two blocks"""
+    x1, y1, z1 = block1
+    x2, y2, z2 = block2
+    return abs(x1 - x2) < BLOCK_LENGTH / 2 and abs(y1 - y2) < BLOCK_LENGTH / 2 and 0 <= z1 - z2 < 1.5 * BLOCK_LENGTH 
+
+def get_block_pos(obs, block_id):
+    start_idx = 10 + 12 * block_id
+    end_idx = start_idx + 3
+    return np.array(obs[start_idx:end_idx])
+
+def print_block_layout(obs):
+    for i in range(0, 3):
+        for j in range(0, 3):
+            print(f"on({i}, {j})", on(get_block_pos(obs, i), get_block_pos(obs, j)))
 
 def collect_trajectories(env_name: str, n: int, save_imgs=False):
     states = []
@@ -402,17 +417,23 @@ def collect_trajectories(env_name: str, n: int, save_imgs=False):
         set_np_seed(i)
         collector = CollectDemos(
             "demo",
-            traj_len=50,
+            traj_len=150,
             num_trajectories=1,
             task="tower",
             img_path="img",
             env_name=env_name,
-            block_num=int(2),
+            block_num=int(3),
             debug=False,
             render=False,
         )
         obs_seq, obs_imgs = collector.collect(store=False)
+        # pdb.set_trace()
         collector.env.close()
+        print("initial layout")
+        print_block_layout(obs_seq[0]["obs"][0])
+        print("final layout")
+        # pdb.set_trace()
+        print_block_layout(obs_seq[0]["obs"][-1])
         del collector
         for state in obs_seq[0]["obs"]:
             states.append(state)
@@ -518,17 +539,17 @@ if __name__ == "__main__":
     }
     available_instructions = [PickPlace]
     num_seeds = 15
-    expert_states = collect_trajectories("pickmulti1", num_seeds, save_imgs=True)
+    expert_states = collect_trajectories("pickmulti3", num_seeds, save_imgs=True)
     images_to_video("images", "groundtruth.mp4")
 
-    MCMC(
-        Program(3),
-        available_operands,
-        available_instructions,
-        200,
-        expert_states=expert_states,
-        num_seeds=num_seeds,
-    )
+    # MCMC(
+    #     Program(3),
+    #     available_operands,
+    #     available_instructions,
+    #     200,
+    #     expert_states=expert_states,
+    #     num_seeds=num_seeds,
+    # )
 
     exit()
 

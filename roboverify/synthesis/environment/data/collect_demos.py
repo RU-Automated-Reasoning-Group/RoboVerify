@@ -153,11 +153,14 @@ class CollectDemos():
 
             idx = 0
             # pdb.set_trace()
-            initial_box = self.env.flatten_observation(self.env.env._get_obs())[22:25]
+            start_idx = 10 + 12 * (2 - self.block_id)
+            end_idx = start_idx + 3
+            initial_box = self.env.flatten_observation(self.env.env._get_obs())[start_idx:end_idx]
             initial_box[2] += 0.05
             # only for debug
             # plt.figure()
-            while not done:
+            steps = 0
+            while not done and steps < 200:
                 if self.debug:
                     observations.append(self.env.env.get_custom_obs(0))
                 else:
@@ -172,16 +175,26 @@ class CollectDemos():
                 idx += 1
 
                 if self.task == 'block' or self.task == 'pickmulti' or self.task == 'pushmulti' or self.task == 'tower':
-                    action, success = controller(obs, initial_box, block_id=self.block_id, last_block=self.block_id==(self.block_num-1))
+                    print("block id", self.block_id)
+                    action, success = controller(obs, initial_box, block_id=(1-self.block_id), last_block=self.block_id==(self.block_num-1))
+                    steps += 1
+                    # if steps == 90:
+                        # pdb.set_trace()
+                    print("steps", steps)
+                    # import pdb; pdb.set_trace()
                     if action is None:
                         print('wrong block id')
                         # pdb.set_trace()
                         break
                     else:
                         if success:
-                            break
-                            if self.block_id < self.block_num - 1:
+                            # break
+                            if self.block_id < self.block_num - 2:
                                 self.block_id += 1
+                                start_idx = 10 + 12 * (2 - self.block_id)
+                                end_idx = start_idx + 3
+                                initial_box = self.env.flatten_observation(self.env.env._get_obs())[start_idx:end_idx]
+                                initial_box[2] += 0.05
                                 success = False
                 elif self.task == 'custom_block' or self.task == 'custom_pick':
                     new_obs = copy.deepcopy(obs)
@@ -215,7 +228,7 @@ class CollectDemos():
                 if success or (self.task=='block' and reward==1) or (self.task=='custom_pick' and reward==0):
                     if (self.task == 'pickmulti' or self.task == 'tower' or self.task=='pushmulti') and reward != 0:
                         # pdb.set_trace()
-                        success = False
+                        success = True
                         break
                     success = True
                     # pdb.set_trace()
@@ -225,6 +238,7 @@ class CollectDemos():
                     success = True
                     break
 
+                print(steps, done)
                 # only for debug
                 # plt.imshow(img_array)
                 # plt.title(idx)
@@ -243,18 +257,20 @@ class CollectDemos():
                 obj_ids.append(self.block_id)
             obs_imgs[-1].append(self.env.render())
 
-            if len(actions) <= self.subseq_len+1:
-                obs_imgs.pop(-1)
-                continue
-            elif not success:
-                obs_imgs.pop(-1)
-                continue
-            elif self.task == 'pickmulti' and reward < 0:
-                obs_imgs.pop(-1)
-                continue
-            elif self.task == 'pushmulti' and reward < 0:
-                obs_imgs.pop(-1)
-                continue
+            # if len(actions) <= self.subseq_len+1:
+            #     obs_imgs.pop(-1)
+            #     continue
+            # elif not success:
+            #     obs_imgs.pop(-1)
+            #     continue
+            # elif self.task == 'pickmulti' and reward < 0:
+            #     obs_imgs.pop(-1)
+            #     continue
+            # elif self.task == 'pushmulti' and reward < 0:
+            #     obs_imgs.pop(-1)
+            #     continue
+            if False:
+                pass
             else:
                 collect_traj_num += 1
                 if require_id:

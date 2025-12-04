@@ -21,8 +21,8 @@ from z3 import (
     Const,
 )
 
-import highlevel_verification_lib
-from highlevel_verification_lib import BoxSort, ON_star, higher
+import verification_lib.highlevel_verification_lib
+from verification_lib.highlevel_verification_lib import BoxSort, ON_star, higher
 
 
 class Parameter:
