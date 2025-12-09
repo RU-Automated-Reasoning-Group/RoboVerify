@@ -1,7 +1,7 @@
-from sklearn.metrics import accuracy_score
-from sklearn.tree import DecisionTreeClassifier, plot_tree
 import matplotlib.pyplot as plt
 import numpy as np
+from copy import deepcopy
+from sklearn import tree
 
 BLOCK_LENGTH = (
     0.025 * 2
@@ -43,17 +43,78 @@ class ON_feature(Feature):
         return f"ON({self.b1}, {self.b2})"
 
 
-def learn_features(sample_trajs, demos, demo_goal_idxs, features):
+def compute_ON_features(num_block: int):
+    features = []
+    for b1 in range(num_block):
+        for b2 in range(num_block):
+            features.append(ON_feature(b1, b2))
+    return features
+
+
+def learn_features(sample_trajs, demos, demo_goal_idxs, features, num_trees: int):
+    """learn the feature that could seperate the positive and negative samples"""
     positive_samples = compute_positive_set(demos, demo_goal_idxs)
-    negative_samples = sample_trajs
-    all_samples, all_features = compute_features(
+    negative_samples = compute_negative_set(sample_trajs)
+    all_samples, all_features, all_labels = compute_features(
         positive_samples, negative_samples, features
     )
+    all_trees = []
+    for _ in range(num_trees):
+        clf = tree.DecisionTreeClassifier()
+        clf = clf.fit(all_features, all_labels)
+        all_trees.append(clf)
+    
+    best_tree, best_goal_idx = None, None
+    for cur_tree in all_trees:
+        # for each classifying feature, check the first index that this feature becomes true after
+        avg_goal_idx, _ = check_feature(cur_tree, demos, demo_goal_idxs)
+        if best_goal_idx is None or best_goal_idx > avg_goal_idx:
+            best_goal_idx, best_tree = avg_goal_idx, cur_tree
+    return best_tree
 
 
-def compute_positive_set(demos, demo_goal_idxs):
-    pass
+def check_feature(feature, demos, demo_goal_idxs):
+    """return the average index that the feature becomes true afterwards"""
+    first_idxs = []
+    for demo, goal_idx in zip(demos, demo_goal_idxs):
+        assert goal_idx > 0
+        assert feature(demo[goal_idx - 1])
+        cur_idx = goal_idx
+        while cur_idx > 0:
+            if not feature(demo[cur_idx - 1]):
+                first_idxs.append(cur_idx)
+                break
+            cur_idx -= 1;
+    return sum(first_idxs) / len(first_idxs), first_idxs
 
 
 def compute_features(positive_samples, negative_samples, features):
-    pass
+    all_samples = positive_samples + negative_samples
+    all_labels = [1 for _ in range(positive_samples)] + [0 for _ in range(negative_samples)]
+    all_features = []
+    for sample in all_samples:
+        all_features.append(
+            [f(sample) for f in features]
+        )
+    return all_samples, all_features, all_labels
+
+
+def compute_negative_set(sample_trajs):
+    """sample_trajs is a 2D list of sampled trajectories using current program"""
+    negative_samples = []
+    for traj in sample_trajs:
+        for state in traj:
+            negative_samples.append(deepcopy(state))
+    return negative_samples
+
+
+def compute_positive_set(demos, demo_goal_idxs):
+    """demos is 2D array of demo trajectories, demo_gaol_idxs is a list containing current idxs"""
+    positive_samples = []
+    assert len(demos) == len(demo_goal_idxs)
+    for demo, goal_idx in zip(demos, demo_goal_idxs):
+        if goal_idx == 0:
+            print("current goal idx is already 0, aborting")
+            exit()
+        positive_samples.append(deepcopy(demo[goal_idx - 1]))
+    return positive_samples

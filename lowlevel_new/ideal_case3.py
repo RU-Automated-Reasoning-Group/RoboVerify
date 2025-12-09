@@ -47,7 +47,7 @@ def visualize_scene(model, blocks, X, Y, Z, L=1.0):
         s = str(model.eval(z3val).as_decimal(20))
         return float(s) if s[-1] != '?' else float(s[:-1])
 
-    for b, color in zip(blocks, ["red", "blue", "yellow"]):
+    for b, color in zip(blocks, ["red", "blue", "yellow", "green", "gray"]):
         cx = f(X(b))
         cy = f(Y(b))
         cz = f(Z(b))
@@ -159,9 +159,9 @@ from matplotlib import pyplot as plt
 
 set_option("smt.core.minimize", "true")
 # --- Sorts and functions ---
-# Box = DeclareSort("Box")
+Box = DeclareSort("Box")
 # Box, (b9, b10, b11, b12, b13) = EnumSort("Box", ["b9", "b10", "b11", "b12", "b13"])
-Box, (b9, b10, b11) = EnumSort("Box", ["b9", "b10", "b11"])
+# Box, (b9, b10, b11) = EnumSort("Box", ["b9", "b10", "b11"])
 X = Function("X", Box, RealSort())
 Y = Function("Y", Box, RealSort())
 Z = Function("Z", Box, RealSort())
@@ -193,9 +193,18 @@ def top_one(b1, b2):
     # b1 is top
     return Or(box_equal(b1, b2), Not(ideal_on(b2, b1)))
 
+def top_higher(b1, b2_bottom, b3_s):
+    return Implies(And(ideal_on(b1, b2_bottom), ideal_on(b3_s, b2_bottom)), higher(b1, b3_s))
+
 
 def top(b1):
-    return And(top_one(b1, b), top_one(b1, b0), top_one(b1, b_prime), top_one(b1, sym))
+    top_one_list = [top_one(b1, b), top_one(b1, b0), top_one(b1, b_prime), top_one(b1, sym)]
+    top_higher_list = []
+    for b2_bottom in [b, b0, b_prime, sym]:
+        for b3_s in [b, b0, b_prime, sym]:
+            top_higher_list.append(top_higher(b1, b2_bottom, b3_s))
+    top_all_list = top_one_list + top_higher_list
+    return And(*top_all_list)
 
 
 def higher(b1, b2):
@@ -245,7 +254,7 @@ def check_solver(s):
     elif s.check() == sat:
         print(s.model())
         m = s.model()
-        ax = visualize_scene(m, [b9, b10, b11], X, Y, Z, L=1.0)
+        ax = visualize_scene(m, [b9, b10, b11, b12, b13], X, Y, Z, L=1.0)
         # draw_vertical_swept_volume_from_block(
         #     ax,
         #     model=s.model(),
@@ -309,6 +318,15 @@ s.assert_and_track(scattered_all(), "scattered_all")
 
 s.assert_and_track(on_table(b0), "on_table_b0")
 s.assert_and_track(on_table(b_prime), "on_table_b_prime")
+
+print("checking if all premises is consistent")
+s.push()
+print(s.check())
+if s.check() != sat:
+    print("INCONSISTENT premises!!!!!!")
+else:
+    print("valid premises")
+s.pop()
 
 print("checking tube1")
 s.push()
