@@ -3,6 +3,7 @@ import numpy as np
 from copy import deepcopy
 from sklearn import tree
 
+
 BLOCK_LENGTH = (
     0.025 * 2
 )  # (0.025, 0.025, 0.025) in the xml file of the gym env is half length
@@ -42,6 +43,9 @@ class ON_feature(Feature):
     def __str__(self) -> str:
         return f"ON({self.b1}, {self.b2})"
 
+    def __repr__(self) -> str:
+        return self.__str__()
+
 
 def compute_ON_features(num_block: int):
     features = []
@@ -51,7 +55,9 @@ def compute_ON_features(num_block: int):
     return features
 
 
-def learn_features(sample_trajs, demos, demo_goal_idxs, features, num_trees: int):
+def learn_features(
+    num_block: int, sample_trajs, demos, demo_goal_idxs, features, num_trees: int
+):
     """learn the feature that could seperate the positive and negative samples"""
     positive_samples = compute_positive_set(demos, demo_goal_idxs)
     negative_samples = compute_negative_set(sample_trajs)
@@ -59,18 +65,37 @@ def learn_features(sample_trajs, demos, demo_goal_idxs, features, num_trees: int
         positive_samples, negative_samples, features
     )
     all_trees = []
-    for _ in range(num_trees):
-        clf = tree.DecisionTreeClassifier()
+    for i in range(num_trees):
+        clf = tree.DecisionTreeClassifier(max_depth=1, random_state=i)
         clf = clf.fit(all_features, all_labels)
-        all_trees.append(clf)
-    
-    best_tree, best_goal_idx = None, None
-    for cur_tree in all_trees:
+        training_score = clf.score(all_features, all_labels)
+        all_trees.append((clf, training_score))
+
+    best_feature_idx, best_tree, best_goal_idx = None, None, None
+    for idx, (cur_tree, training_score) in enumerate(all_trees):
+        fig, axes = plt.subplots(nrows=1, ncols=1, figsize=(4, 4), dpi=300)
+        tree.plot_tree(cur_tree, filled=True, rounded=True, ax=axes)
+        plt.savefig(f"decision_tree{idx}.png", dpi=300, bbox_inches="tight")
+
+        if training_score < 1.0:
+            continue
         # for each classifying feature, check the first index that this feature becomes true after
-        avg_goal_idx, _ = check_feature(cur_tree, demos, demo_goal_idxs)
+        feature_id = cur_tree.tree_.feature[0]
+        avg_goal_idx, _ = check_feature(features[feature_id], demos, demo_goal_idxs)
+        print(
+            f"learned tree {idx} is using feature {features[feature_id]} with average goal index {avg_goal_idx}"
+        )
         if best_goal_idx is None or best_goal_idx > avg_goal_idx:
-            best_goal_idx, best_tree = avg_goal_idx, cur_tree
-    return best_tree
+            best_feature_id, best_goal_idx, best_tree = (
+                feature_id,
+                avg_goal_idx,
+                cur_tree,
+            )
+
+    print(
+        f"selecting tree with feature {features[best_feature_id]} with average goal idx {best_goal_idx}"
+    )
+    return best_tree, features[best_feature_id]
 
 
 def check_feature(feature, demos, demo_goal_idxs):
@@ -84,18 +109,18 @@ def check_feature(feature, demos, demo_goal_idxs):
             if not feature(demo[cur_idx - 1]):
                 first_idxs.append(cur_idx)
                 break
-            cur_idx -= 1;
+            cur_idx -= 1
     return sum(first_idxs) / len(first_idxs), first_idxs
 
 
 def compute_features(positive_samples, negative_samples, features):
     all_samples = positive_samples + negative_samples
-    all_labels = [1 for _ in range(positive_samples)] + [0 for _ in range(negative_samples)]
+    all_labels = [1 for _ in range(len(positive_samples))] + [
+        0 for _ in range(len(negative_samples))
+    ]
     all_features = []
     for sample in all_samples:
-        all_features.append(
-            [f(sample) for f in features]
-        )
+        all_features.append([f(sample) for f in features])
     return all_samples, all_features, all_labels
 
 

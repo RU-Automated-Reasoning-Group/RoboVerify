@@ -101,12 +101,11 @@ class PickPlace(Instruction):
         # self.target_offset = [Parameter(-0.0), Parameter(-0.2), Parameter(0.08)]  # target offset is applied to goal_box
 
     def get_box_pos(self, box_id, obs):
-        if box_id == 0:
-            return obs[10:13]
-        elif box_id == 1:
-            return obs[22:25]
+        block_num = (obs.shape[0] - 13) // 15
+        if 0 <= box_id < block_num:
+            return obs[10+box_id*12: 10+box_id*12+3]
         else:
-            assert False, "unknown box id"
+            assert False, f"unknown box id {box_id}"
 
     def eval(self, env, traj, return_img=False):
         # call the neural controller here

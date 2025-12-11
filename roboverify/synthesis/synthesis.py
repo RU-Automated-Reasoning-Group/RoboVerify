@@ -18,8 +18,11 @@ import random
 import decision_tree
 import pickle
 from PIL import Image  # for saving images as PNG
+from copy import deepcopy
 
-BLOCK_LENGTH = 0.025 * 2 # (0.025, 0.025, 0.025) in the xml file of the gym env is half length
+BLOCK_LENGTH = (
+    0.025 * 2
+)  # (0.025, 0.025, 0.025) in the xml file of the gym env is half length
 # def learn(
 #     demos: list[list[Any]],
 #     predicates: list[Callable[[Any], bool]],
@@ -394,25 +397,34 @@ def save_numpy_arrays_as_images(arrays, output_dir="images"):
         filepath = os.path.join(output_dir, filename)
         imageio.imwrite(filepath, arr)
 
+
 def on(block1, block2):
     """define the numerical interpretation of the on(block1, block2) between two blocks"""
     x1, y1, z1 = block1
     x2, y2, z2 = block2
-    return abs(x1 - x2) < BLOCK_LENGTH / 2 and abs(y1 - y2) < BLOCK_LENGTH / 2 and 0 <= z1 - z2 < 1.5 * BLOCK_LENGTH 
+    return (
+        abs(x1 - x2) < BLOCK_LENGTH / 2
+        and abs(y1 - y2) < BLOCK_LENGTH / 2
+        and 0 <= z1 - z2 < 1.5 * BLOCK_LENGTH
+    )
+
 
 def get_block_pos(obs, block_id):
     start_idx = 10 + 12 * block_id
     end_idx = start_idx + 3
     return np.array(obs[start_idx:end_idx])
 
+
 def print_block_layout(obs):
     for i in range(0, 3):
         for j in range(0, 3):
             print(f"on({i}, {j})", on(get_block_pos(obs, i), get_block_pos(obs, j)))
 
-def collect_trajectories(env_name: str, n: int, save_imgs=False):
+
+def collect_trajectories(num_block: int, env_name: str, n: int, save_imgs=False):
     states = []
     imgs = []
+    individual_traj = []
     for i in range(n):
         set_np_seed(i)
         collector = CollectDemos(
@@ -422,7 +434,7 @@ def collect_trajectories(env_name: str, n: int, save_imgs=False):
             task="tower",
             img_path="img",
             env_name=env_name,
-            block_num=int(3),
+            block_num=int(num_block),
             debug=False,
             render=False,
         )
@@ -435,28 +447,32 @@ def collect_trajectories(env_name: str, n: int, save_imgs=False):
         # pdb.set_trace()
         print_block_layout(obs_seq[0]["obs"][-1])
         del collector
+        traj = []
         for state in obs_seq[0]["obs"]:
             states.append(state)
+            traj.append(deepcopy(state))
+        individual_traj.append(traj)
         for image in obs_imgs[0]:
             imgs.append(image)
     if save_imgs:
         save_numpy_arrays_as_images(imgs)
     print("number of expert states", len(states))
-    return states
+    return states, individual_traj
 
 
-def evaluate_program(p: Program, n: int, return_img=False):
+def evaluate_program(p: Program, n: int, num_block: int, return_img=False):
     states = []
     imgs = []
+    individual_traj = []
     for i in range(n):
         set_np_seed(i)
-        env_name = "pickmulti1"
+        env_name = f"pickmulti{num_block}"
         env = GymToGymnasium(
             FetchPickAndPlaceConstruction(
                 name=env_name,
                 sparse=False,
                 shaped_reward=False,
-                num_blocks=int(2),
+                num_blocks=int(num_block),
                 reward_type="sparse",
                 case="Singletower",
                 visualize_mocap=False,
@@ -470,13 +486,16 @@ def evaluate_program(p: Program, n: int, return_img=False):
             for image in traj_imgs:
                 imgs.append(image)
 
+        copy_traj = []
         for state in traj:
             states.append(state)
+            copy_traj.append(deepcopy(state))
+        individual_traj.append(copy_traj)
 
     print("number of policy states", len(states))
     if return_img:
-        return states, imgs
-    return states
+        return states, individual_traj, imgs
+    return states, individual_traj, []
 
 
 # set_np_seed(10)
@@ -537,10 +556,71 @@ if __name__ == "__main__":
     available_operands = {
         "Box": [0, 1],
     }
+
+    ############## 3BLOCK TEST ##############
     available_instructions = [PickPlace]
     num_seeds = 15
-    expert_states = collect_trajectories("pickmulti3", num_seeds, save_imgs=True)
+    num_block = 3
+    expert_states, positive_trajs = collect_trajectories(
+        num_block, "pickmulti3", num_seeds, save_imgs=True
+    )
     images_to_video("images", "groundtruth.mp4")
+
+    p = Program(3)
+    p.instructions = [
+        PickPlace(grab_box_id=0, target_box_id=0),  # move up with respect to box 0
+        PickPlace(
+            grab_box_id=0, target_box_id=1
+        ),  # move horizontally to the top of box 1
+        PickPlace(grab_box_id=0, target_box_id=0),  # move down to place on box 1
+    ]
+    p.register_trainable_parameter()
+    p.update_trainable_parameter(
+        [
+            -0.055,
+            -0.0318,
+            0.145,
+            -0.0448,
+            -0.0214,
+            0.116,
+            0.0179,
+            -0.00182,
+            0.0428,
+        ]
+    )
+
+    iter_folder = "tmp_testing_3block"
+    frames_dir = os.path.join(iter_folder, "frames")
+    os.makedirs(frames_dir, exist_ok=True)
+
+    # Evaluate new_program and get images
+    _, negative_trajs, imgs = evaluate_program(
+        p, n=num_seeds, num_block=num_block, return_img=True
+    )
+
+    # Save each image as PNG
+    for idx, img in enumerate(imgs):
+        img_path = os.path.join(frames_dir, f"img{idx:04d}.png")
+        if isinstance(img, Image.Image):
+            img.save(img_path)
+        else:  # assume numpy array
+            Image.fromarray(img).save(img_path)
+
+    # Generate video
+    output_video_path = os.path.join(iter_folder, "program_video.mp4")
+    images_to_video(frames_dir, output_video_path=output_video_path)
+
+    # learn the features
+    goal_idxs = [len(traj) for traj in positive_trajs]
+    features = []
+    for b1 in range(0, 3):
+        for b2 in range(0, 3):
+            features.append(decision_tree.ON_feature(b1, b2))
+    print(features)
+    decision_tree.learn_features(
+        num_block, negative_trajs, positive_trajs, goal_idxs, features, num_trees=3
+    )
+    ############## END OF 3BLOCK TEST ##############
 
     # MCMC(
     #     Program(3),
