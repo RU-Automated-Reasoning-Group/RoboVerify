@@ -23,6 +23,15 @@ def on(block1, block2):
         and 0 <= z1 - z2 < 1.5 * BLOCK_LENGTH
     )
 
+def on_star_implentation(block1, block2):
+    """define the numerical interpretation of the on(block1, block2) between two blocks"""
+    x1, y1, z1 = block1
+    x2, y2, z2 = block2
+    return (
+        abs(x1 - x2) < BLOCK_LENGTH / 2
+        and abs(y1 - y2) < BLOCK_LENGTH / 2
+        and 0 <= z1 - z2
+    )
 
 def get_block_pos(obs, block_id):
     start_idx = 10 + 12 * block_id
