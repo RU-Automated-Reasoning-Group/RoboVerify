@@ -4,6 +4,7 @@ from typing import Dict, List, Set, Tuple
 
 import sympy
 import z3
+
 from synthesis.decision_tree import on_star_implentation
 from synthesis.verification_lib.highlevel_verification_lib import (
     BoxSort,
@@ -156,7 +157,7 @@ def learn_from_partition(S: Set, U: Set):
                     disj.append(sel[i] == 1)
                 # otherwise this predicate can't distinguish s and u
             opt.add(z3.Or(*disj))
-    opt.add(sel[1] == 0)
+    # opt.add(sel[1] == 0)
     # Objective φc: minimize Σ_i sel_i
     opt.minimize(z3.Sum(sel))
 
@@ -289,7 +290,9 @@ def add_universal_quantifiers(clauses: List, universal_quantified_vars: List):
 
 
 def check_tautology(clause) -> bool:
-    """Check whether clause can be directly derived from the axioms we already have"""
+    """Check whether clause can be directly derived from the axioms we already have
+    Returns True if the caluse is a tautology
+    """
     solver = z3.Solver()
 
     # add all axioms
@@ -341,6 +344,7 @@ def loop_inference(
         current_U=project_to_selected(full_U, phi_selected_idxs),
         num_selected=len(phi_selected_idxs),
     )
+    print("selected indices are", phi_selected_idxs, selected_omega)
     print(phi)
     z3_phi = sympy_to_z3(phi, z3_terms=selected_omega)
     print("z3_phi", z3_phi)
@@ -350,9 +354,11 @@ def loop_inference(
     )
     print(universal_quantified_clauses)
     useful_invariant = [
-        x for x in universal_quantified_clauses if not check_tautology(x)
+        z3.simplify(x) for x in universal_quantified_clauses if not check_tautology(x)
     ]
     print("useful invariant", useful_invariant)
+    print("length", len(useful_invariant))
+
     # learn phi_prime in target => phi_prime
     # phi_prime_selected_idx = learn_from_partition(full_S, reduced_U)
     # phi_prime = construct_truth_table_and_extract_expression()
@@ -374,4 +380,12 @@ if __name__ == "__main__":
     constants = [b0, b, b_prime]
     constants_mapping = {b0: "x1", b: "x3", b_prime: "x4"}
     index = 0
+    loop_inference(states, k, relations, constants, constants_mapping, index)
+    index = 1
+    loop_inference(states, k, relations, constants, constants_mapping, index)
+    index = 2
+    loop_inference(states, k, relations, constants, constants_mapping, index)
+    index = 3
+    loop_inference(states, k, relations, constants, constants_mapping, index)
+    index = 4
     loop_inference(states, k, relations, constants, constants_mapping, index)
