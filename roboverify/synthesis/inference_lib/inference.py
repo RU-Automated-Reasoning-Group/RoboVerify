@@ -1,4 +1,5 @@
 import itertools
+import pdb
 from copy import deepcopy
 from typing import Dict, List, Set, Tuple
 
@@ -130,9 +131,6 @@ def learn_from_partition(S: Set, U: Set):
     """Encode the constraint system of the learning program using z3 for samples in S and U
     returns the indexes selected
     """
-    import pdb
-
-    pdb.set_trace()
     n = None
     for d in S:
         n = len(d)
@@ -362,7 +360,7 @@ def check_tautology(clause) -> bool:
         assert False, f"unknown z3 result {result}"
 
 
-def loop_inference(
+def loop_inference_by_index(
     states: List,
     k: int,
     relations: List,
@@ -370,14 +368,13 @@ def loop_inference(
     constants_mapping: Dict,
     index: int,
 ):
-    import pdb
-
-    pdb.set_trace()
     omega_inv, universal_quantified_vars = compute_omega_k(k, relations, constants)
 
     a, y = universal_quantified_vars
     b0, b, b_prime = constants
     omega_inv = [ON_star(a, b0), ON_star(y, a), ON_star(a, b), a == y, b == a]
+
+    print(f"=========== learning with index = {index} with target predicate {omega_inv[index]}")
 
     dataset = compute_dataset(
         states, omega_inv, universal_quantified_vars, constants, constants_mapping
@@ -388,7 +385,6 @@ def loop_inference(
     reduced_U = full_U - full_S
 
     # learn phi in phi => target
-    pdb.set_trace()
     phi_selected_idxs = learn_from_partition(reduced_S, full_U)
     selected_phi_omega = [reduced_omega[i] for i in phi_selected_idxs]
     phi, phi_sympy_vars = construct_truth_table_and_extract_expression_for_phi(
@@ -405,13 +401,13 @@ def loop_inference(
     )
     print("universal quantified phi clauses", universal_quantified_phi_clauses)
     useful_invariant_with_phi = [
-        x for x in universal_quantified_phi_clauses if not check_tautology(x)
+        z3.simplify(x) for x in universal_quantified_phi_clauses if not check_tautology(x)
     ]
     print("useful invariant using phi", useful_invariant_with_phi)
     print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
     # learn phi_prime in target => phi_prime
     phi_prime_selected_idxs = learn_from_partition(full_S, reduced_U)
-    selected_phi_prime_omega = [reduced_omega[i] for i in phi_prime_selected_idx]
+    selected_phi_prime_omega = [reduced_omega[i] for i in phi_prime_selected_idxs]
     phi_prime, phi_prime_sympy_vars = (
         construct_truth_table_and_extract_expression_for_phi_prime(
             current_S=project_to_selected(full_S, phi_prime_selected_idxs),
@@ -430,11 +426,16 @@ def loop_inference(
         "universal quantified phi prime clauses", universal_quantified_phi_prime_clauses
     )
     useful_invariant_with_phi_prime = [
-        x for x in universal_quantified_phi_prime_clauses if not check_tautology(x)
+        z3.simplify(x) for x in universal_quantified_phi_prime_clauses if not check_tautology(x)
     ]
     print("useful invariant using phi prime", useful_invariant_with_phi_prime)
-    return useful_invariant_with_phi + useful_invariant_with_phi_prime
+    all_invariant = useful_invariant_with_phi + useful_invariant_with_phi_prime
+    print("total length", len(all_invariant))
+    return all_invariant
 
+
+def loop_inference():
+    pass
 
 if __name__ == "__main__":
     # try the example from the ara proposal
