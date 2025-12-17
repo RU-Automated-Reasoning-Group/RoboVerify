@@ -170,14 +170,16 @@ def learn_from_partition(S: Set, U: Set):
         return None
 
 
-def construct_truth_table_and_extract_expression(
-    current_S: Set, current_U: Set, num_selected: int, adding_to_S: bool = True
+def construct_truth_table_and_extract_expression_for_phi(
+    current_S: Set, current_U: Set, num_selected: int
 ):
     """Construct the truth table for all possible valuations, reject those in U and accept the rest in S, then extact a minimized the logic expression for this
 
     Current_S contains data from S projected to selected indices
     Current_U contains data from U projected to selected indices
-    adding_to_S is not used for now
+
+    Current strategy: reject all sample from current_U and accepting all the rest,
+    include those in current_S
     """
     assert len(current_S & current_U) == 0
 
@@ -195,6 +197,35 @@ def construct_truth_table_and_extract_expression(
 
     var_symbols = sympy.symbols(f"term0:{num_selected}")
     return sympy.SOPform(var_symbols, accepted_values), var_symbols
+
+
+def construct_truth_table_and_extract_expression_for_phi_prime(
+    current_S: Set, current_U: Set, num_selected: int
+):
+    """Construct the truth table for all possible valuations, reject those in U and accept the rest in S, then extact a minimized the logic expression for this
+
+    Current_S contains data from S projected to selected indices
+    Current_U contains data from U projected to selected indices
+
+    Current strategy: accept all sample from current_S and reject all the rest,
+    include those in current_U
+    """
+    assert len(current_S & current_U) == 0
+
+    accepted_values = []
+    rejected_values = []
+    for assignment in itertools.product((0, 1), repeat=num_selected):
+        if assignment in current_S:
+            accepted_values.append(assignment)
+        else:
+            rejected_values.append(assignment)
+
+    good = all([u_data in rejected_values for u_data in current_U])
+    if not good:
+        raise ValueError("Not all assignment from current_U are rejected")
+
+    var_symbols = sympy.symbols(f"term0:{num_selected}")
+    return sympy.POSform(var_symbols, accepted_values), var_symbols
 
 
 def project_to_selected(dataset: Set, selected: List) -> Set:
@@ -240,6 +271,27 @@ def sympy_to_z3(expr, z3_terms):
         return z3.Or(*(sympy_to_z3(arg, z3_terms) for arg in expr.args))
 
     raise TypeError(f"Unsupported SymPy expression type: {type(expr)}")
+
+
+def implication_pos_to_clauses_z3(target, N):
+    """
+    Given Z3 expressions `target` and `N` (N in product-of-sums form),
+    return a list of clauses: [Not(target) Or Xi] for each sum term Xi in N.
+    """
+
+    not_target = z3.Not(target)
+
+    # If N is an AND, extract its arguments
+    if z3.is_and(N):
+        clauses = list(N.children())
+    else:
+        # Otherwise treat N as a single clause
+        clauses = [N]
+
+    # Build Not(target) OR Xi for each clause Xi
+    result = [z3.Or(not_target, clause) for clause in clauses]
+
+    return result
 
 
 def implication_sop_to_clauses_z3(M, N):
@@ -335,27 +387,50 @@ def loop_inference(
     # learn phi in phi => target
     pdb.set_trace()
     phi_selected_idxs = learn_from_partition(reduced_S, full_U)
-    selected_omega = [reduced_omega[i] for i in phi_selected_idxs]
-    phi, sympy_vars = construct_truth_table_and_extract_expression(
+    selected_phi_omega = [reduced_omega[i] for i in phi_selected_idxs]
+    phi, phi_sympy_vars = construct_truth_table_and_extract_expression_for_phi(
         current_S=project_to_selected(reduced_S, phi_selected_idxs),
         current_U=project_to_selected(full_U, phi_selected_idxs),
         num_selected=len(phi_selected_idxs),
     )
-    print(phi)
-    z3_phi = sympy_to_z3(phi, z3_terms=selected_omega)
+    print("phi", phi)
+    z3_phi = sympy_to_z3(phi, z3_terms=selected_phi_omega)
     print("z3_phi", z3_phi)
-    clauses = implication_sop_to_clauses_z3(z3_phi, target)
-    universal_quantified_clauses = add_universal_quantifiers(
-        clauses, universal_quantified_vars
+    phi_clauses = implication_sop_to_clauses_z3(z3_phi, target)
+    universal_quantified_phi_clauses = add_universal_quantifiers(
+        phi_clauses, universal_quantified_vars
     )
-    print(universal_quantified_clauses)
-    useful_invariant = [
-        x for x in universal_quantified_clauses if not check_tautology(x)
+    print("universal quantified phi clauses", universal_quantified_phi_clauses)
+    useful_invariant_with_phi = [
+        x for x in universal_quantified_phi_clauses if not check_tautology(x)
     ]
-    print("useful invariant", useful_invariant)
+    print("useful invariant using phi", useful_invariant_with_phi)
+    print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
     # learn phi_prime in target => phi_prime
-    # phi_prime_selected_idx = learn_from_partition(full_S, reduced_U)
-    # phi_prime = construct_truth_table_and_extract_expression()
+    phi_prime_selected_idxs = learn_from_partition(full_S, reduced_U)
+    selected_phi_prime_omega = [reduced_omega[i] for i in phi_prime_selected_idx]
+    phi_prime, phi_prime_sympy_vars = (
+        construct_truth_table_and_extract_expression_for_phi_prime(
+            current_S=project_to_selected(full_S, phi_prime_selected_idxs),
+            current_U=project_to_selected(reduced_U, phi_prime_selected_idxs),
+            num_selected=len(phi_prime_selected_idxs),
+        )
+    )
+    print("phi_prime", phi_prime)
+    z3_phi_prime = sympy_to_z3(phi_prime, z3_terms=selected_phi_prime_omega)
+    print("z3_phi_prime", z3_phi_prime)
+    phi_prime_clauses = implication_pos_to_clauses_z3(target, z3_phi_prime)
+    universal_quantified_phi_prime_clauses = add_universal_quantifiers(
+        phi_prime_clauses, universal_quantified_vars
+    )
+    print(
+        "universal quantified phi prime clauses", universal_quantified_phi_prime_clauses
+    )
+    useful_invariant_with_phi_prime = [
+        x for x in universal_quantified_phi_prime_clauses if not check_tautology(x)
+    ]
+    print("useful invariant using phi prime", useful_invariant_with_phi_prime)
+    return useful_invariant_with_phi + useful_invariant_with_phi_prime
 
 
 if __name__ == "__main__":
