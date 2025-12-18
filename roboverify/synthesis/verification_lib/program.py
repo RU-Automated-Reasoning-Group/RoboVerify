@@ -1,14 +1,15 @@
 import pdb
-from typing import List, Union
-
-# list = List
 from abc import ABC, abstractmethod
 from copy import deepcopy
+from typing import List, Union
 
 import numpy as np
+import verification_lib.highlevel_verification_lib as highlevel_verification_lib
+from verification_lib.highlevel_verification_lib import BoxSort, ON_star, higher
 from z3 import (
     Z3_OP_UNINTERPRETED,
     And,
+    Const,
     Consts,
     Exists,
     ForAll,
@@ -16,13 +17,11 @@ from z3 import (
     Not,
     Or,
     is_app,
-    substitute,
     is_quantifier,
-    Const,
+    substitute,
 )
 
-import verification_lib.highlevel_verification_lib
-from verification_lib.highlevel_verification_lib import BoxSort, ON_star, higher
+import synthesis.inference_lib.inference
 
 
 class Parameter:
@@ -103,7 +102,7 @@ class PickPlace(Instruction):
     def get_box_pos(self, box_id, obs):
         block_num = (obs.shape[0] - 13) // 15
         if 0 <= box_id < block_num:
-            return obs[10+box_id*12: 10+box_id*12+3]
+            return obs[10 + box_id * 12 : 10 + box_id * 12 + 3]
         else:
             assert False, f"unknown box id {box_id}"
 
@@ -424,17 +423,8 @@ def VC_aux(seq_instruction, Q) -> List:
     assert False, "Unrecognized seq instruction for VC_aux"
 
 
-if __name__ == "__main__":
-    # program = Program(3)
-    # program.instructions = [PickPlace(0), PickPlace(0), PickPlace(0)]
-    # trainable_parameters = program.register_trainable_parameter()
-    # print(trainable_parameters)
-    # updated_paremters = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
-    # program.update_trainable_parameter(updated_paremters)
-    # print(program.register_trainable_parameter())
-
-    pdb.set_trace()
-
+def run_stack_example():
+    inferred_invariant = synthesis.inference_lib.inference.run_proposal_example()
     b_prime, b, n, b0, a = Consts("b_prime b n b0 a", BoxSort)
     instructions = [
         Assign("b", "b0"),
@@ -453,20 +443,7 @@ if __name__ == "__main__":
                 b_prime != b,
             ),
             body=[Put("b_prime", "b"), Assign("b", "b_prime")],
-            invariant=And(
-                ForAll(
-                    [a],
-                    Or(
-                        ON_star(a, b0),
-                        And(
-                            ForAll([n], Or(n == a, Not(ON_star(n, a)))),
-                            ForAll([n], higher(n, a)),
-                        ),
-                    ),
-                ),
-                ON_star(b, b0),
-                ForAll([n], Or(n == b, Not(ON_star(n, b)))),
-            ),
+            invariant=inferred_invariant,
         ),
     ]
     p = Program(2, instructions=instructions)
@@ -479,3 +456,16 @@ if __name__ == "__main__":
 
     # print(p.VC_gen(precondition, postcondition))
     p.highlevel_verification(precondition, postcondition)
+
+
+if __name__ == "__main__":
+    # program = Program(3)
+    # program.instructions = [PickPlace(0), PickPlace(0), PickPlace(0)]
+    # trainable_parameters = program.register_trainable_parameter()
+    # print(trainable_parameters)
+    # updated_paremters = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+    # program.update_trainable_parameter(updated_paremters)
+    # print(program.register_trainable_parameter())
+
+    pdb.set_trace()
+    run_stack_example()
