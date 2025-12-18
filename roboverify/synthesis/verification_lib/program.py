@@ -4,8 +4,8 @@ from copy import deepcopy
 from typing import List, Union
 
 import numpy as np
-import verification_lib.highlevel_verification_lib as highlevel_verification_lib
-from verification_lib.highlevel_verification_lib import BoxSort, ON_star, higher
+import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
+from synthesis.verification_lib.highlevel_verification_lib import BoxSort, ON_star, higher
 from z3 import (
     Z3_OP_UNINTERPRETED,
     And,
