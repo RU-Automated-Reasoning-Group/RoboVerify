@@ -163,10 +163,11 @@ def learn_from_partition(S: Set, U: Set):
     result = opt.check()
     if result == z3.sat:
         model = opt.model()
+        print("model is", model)
         chosen = [i for i in range(n) if model[sel[i]].as_long() == 1]
         return chosen
     else:
-        return None
+        pdb.set_trace()
 
 
 def construct_truth_table_and_extract_expression_for_phi(
@@ -362,19 +363,15 @@ def check_tautology(clause) -> bool:
 
 def loop_inference_by_index(
     states: List,
-    k: int,
-    relations: List,
     constants: List,
     constants_mapping: Dict,
     index: int,
+    omega_inv: List,
+    universal_quantified_vars: List,
 ):
-    omega_inv, universal_quantified_vars = compute_omega_k(k, relations, constants)
-
-    a, y = universal_quantified_vars
-    b0, b, b_prime = constants
-    omega_inv = [ON_star(a, b0), ON_star(y, a), ON_star(a, b), a == y, b == a]
-
-    print(f"=========== learning with index = {index} with target predicate {omega_inv[index]}")
+    print(
+        f"=========== learning with index = {index} with target predicate {omega_inv[index]}"
+    )
 
     dataset = compute_dataset(
         states, omega_inv, universal_quantified_vars, constants, constants_mapping
@@ -401,7 +398,9 @@ def loop_inference_by_index(
     )
     print("universal quantified phi clauses", universal_quantified_phi_clauses)
     useful_invariant_with_phi = [
-        z3.simplify(x) for x in universal_quantified_phi_clauses if not check_tautology(x)
+        z3.simplify(x)
+        for x in universal_quantified_phi_clauses
+        if not check_tautology(x)
     ]
     print("useful invariant using phi", useful_invariant_with_phi)
     print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
@@ -426,7 +425,9 @@ def loop_inference_by_index(
         "universal quantified phi prime clauses", universal_quantified_phi_prime_clauses
     )
     useful_invariant_with_phi_prime = [
-        z3.simplify(x) for x in universal_quantified_phi_prime_clauses if not check_tautology(x)
+        z3.simplify(x)
+        for x in universal_quantified_phi_prime_clauses
+        if not check_tautology(x)
     ]
     print("useful invariant using phi prime", useful_invariant_with_phi_prime)
     all_invariant = useful_invariant_with_phi + useful_invariant_with_phi_prime
@@ -434,17 +435,73 @@ def loop_inference_by_index(
     return all_invariant
 
 
-def loop_inference():
-    pass
+def loop_inference(
+    states: List, k: int, relations: List, constants: List, constants_mapping: Dict
+):
+    omega_inv, universal_quantified_vars = compute_omega_k(k, relations, constants)
 
-if __name__ == "__main__":
-    # try the example from the ara proposal
+    ############### ! temp shortcut starts
+    a, y = universal_quantified_vars
+    b0, b, b_prime = constants
+    omega_inv = [ON_star(a, b0), ON_star(y, a), ON_star(a, b), a == y, b == a]
+    ############## ! temp shortcut end
+
+    inferred_invariants = []
+    for i in range(len(omega_inv)):
+        inferred_invariants.extend(
+            loop_inference_by_index(
+                states,
+                constants,
+                constants_mapping,
+                i,
+                omega_inv,
+                universal_quantified_vars,
+            )
+        )
+    print("inferred_invariants", len(inferred_invariants))
+
+    filtered_invariants = check_redundancy(inferred_invariants)
+    print("filtered candidates", len(filtered_invariants))
+    print(filtered_invariants)
+
+    final_result = z3.And(*filtered_invariants)
+    print("final result", final_result)
+    return final_result
+
+
+def check_redundancy(candidates: List) -> List:
+    print("======= starting check redundancy =======")
+    filtered_invariants = []
+    for candidate in candidates:
+        solver = z3.Solver()
+        highlevel_verification = highlevel_z3_solver()
+        highlevel_verification.add_axiom(solver)
+
+        for existing in filtered_invariants:
+            solver.add(existing)
+        solver.add(z3.Not(candidate))
+        
+        result = solver.check()
+        if result == z3.sat:
+            # not redundant
+            filtered_invariants.append(candidate)
+            print("not redundant", candidate)
+        elif result == z3.unsat:
+            print("redundant candidate", candidate)
+        else:
+            assert False, f"unknown verification result = {result}"
+
+    return filtered_invariants
+
+
+def run_proposal_example():
     states: List[Dict] = [
         {
             "x1": [0.0, 0.0, 0.0],
             "x2": [0.0, 0.0, 0.05],
             "x3": [0.0, 0.0, 0.1],
             "x4": [5.0, 5.0, 0.0],
+            "x5": [10.0, 10.0, 0.0],
         }
     ]
     k = 2
@@ -452,13 +509,10 @@ if __name__ == "__main__":
     b0, b, b_prime = get_consts("b0"), get_consts("b"), get_consts("b_prime")
     constants = [b0, b, b_prime]
     constants_mapping = {b0: "x1", b: "x3", b_prime: "x4"}
-    index = 0
-    loop_inference(states, k, relations, constants, constants_mapping, index)
-    index = 1
-    loop_inference(states, k, relations, constants, constants_mapping, index)
-    index = 2
-    loop_inference(states, k, relations, constants, constants_mapping, index)
-    index = 3
-    loop_inference(states, k, relations, constants, constants_mapping, index)
-    index = 4
-    loop_inference(states, k, relations, constants, constants_mapping, index)
+
+    return loop_inference(states, k, relations, constants, constants_mapping)
+
+
+if __name__ == "__main__":
+    # try the example from the ara proposal
+    run_proposal_example()
