@@ -136,6 +136,11 @@ def learn_from_partition(S: Set, U: Set):
         n = len(d)
         break
 
+    if n is None:
+        for d in U:
+            n = len(d)
+            break
+
     # sel_i ∈ {0,1}
     sel = [z3.Int(f"sel_{i}") for i in range(n)]
 
@@ -441,9 +446,9 @@ def loop_inference(
     omega_inv, universal_quantified_vars = compute_omega_k(k, relations, constants)
 
     ############### ! temp shortcut starts
-    a, y = universal_quantified_vars
-    b0, b, b_prime = constants
-    omega_inv = [ON_star(a, b0), ON_star(y, a), ON_star(a, b), a == y, b == a]
+    # a, y = universal_quantified_vars
+    # b0, b, b_prime = constants
+    # omega_inv = [ON_star(a, b0), ON_star(y, a), ON_star(a, b), a == y, b == a]
     ############## ! temp shortcut end
 
     inferred_invariants = []
