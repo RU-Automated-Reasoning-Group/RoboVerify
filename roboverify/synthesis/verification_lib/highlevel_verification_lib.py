@@ -14,8 +14,8 @@ from z3 import (
     EnumSort
 )
 
-BoxSort, (b9, b10, b11) = EnumSort("Box", ["b9", "b10", "b11"])
-# BoxSort = DeclareSort("Box")
+# BoxSort, (b9, b10, b11) = EnumSort("Box", ["b9", "b10", "b11"])
+BoxSort = DeclareSort("Box")
 Variable_pools = {}
 
 ON_star = Function("ON_star", BoxSort, BoxSort, BoolSort())
@@ -37,13 +37,13 @@ class highlevel_z3_solver:
         if s.check() == sat:
             print("VC is satisfiable")
             print(s.model())
-            for name1, box1 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
-                for name2, box2 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
-                        print(f"ON_star({name1}, {name2}): {s.model().evaluate(ON_star(box1, box2))}")
+            # for name1, box1 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
+            #     for name2, box2 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
+            #             print(f"ON_star({name1}, {name2}): {s.model().evaluate(ON_star(box1, box2))}")
 
-            for name1, box1 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
-                for name2, box2 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
-                    print(f"higher({name1}, {name2}): {s.model().evaluate(higher(box1, box2))}")
+            # for name1, box1 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
+            #     for name2, box2 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
+            #         print(f"higher({name1}, {name2}): {s.model().evaluate(higher(box1, box2))}")
         elif s.check() == unsat:
             print("VC is unsatisfiable")
 

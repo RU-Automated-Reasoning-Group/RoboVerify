@@ -46,13 +46,13 @@ def compute_dataset(
     omega_k: List,
     universal_quantified_vars: List,
     constants: List,
-    constants_mapping: Dict,
+    constants_mappings: List[Dict],
 ) -> Set:
     """Compute the dataset for each state and for each relation in the vocabulary
     Each universally quantified variable needs to be bind into one of the existing blocks in the states
     """
     dataset = set()
-    for state in states:
+    for state, mapping in zip(states, constants_mappings):
         all_objects = list(state.keys())
         for assignment in itertools.product(
             all_objects, repeat=len(universal_quantified_vars)
@@ -65,7 +65,7 @@ def compute_dataset(
                 state,
                 omega_k,
                 var_mapping,
-                constants_mapping,
+                mapping,
             )
             print("var_mapping", var_mapping)
             print("data", d)
@@ -135,6 +135,11 @@ def learn_from_partition(S: Set, U: Set):
     for d in S:
         n = len(d)
         break
+
+    if n is None:
+        for d in U:
+            n = len(d)
+            break
 
     # sel_i ∈ {0,1}
     sel = [z3.Int(f"sel_{i}") for i in range(n)]
@@ -364,7 +369,7 @@ def check_tautology(clause) -> bool:
 def loop_inference_by_index(
     states: List,
     constants: List,
-    constants_mapping: Dict,
+    constants_mappings: List[Dict],
     index: int,
     omega_inv: List,
     universal_quantified_vars: List,
@@ -374,7 +379,7 @@ def loop_inference_by_index(
     )
 
     dataset = compute_dataset(
-        states, omega_inv, universal_quantified_vars, constants, constants_mapping
+        states, omega_inv, universal_quantified_vars, constants, constants_mappings
     )
     full_S, full_U, target, reduced_omega = compute_S_U(dataset, omega_inv, index)
 
@@ -436,15 +441,21 @@ def loop_inference_by_index(
 
 
 def loop_inference(
-    states: List, k: int, relations: List, constants: List, constants_mapping: Dict
+    states: List,
+    k: int,
+    relations: List,
+    constants: List,
+    constants_mappings: List[Dict],
 ):
     omega_inv, universal_quantified_vars = compute_omega_k(k, relations, constants)
 
     ############### ! temp shortcut starts
-    a, y = universal_quantified_vars
-    b0, b, b_prime = constants
-    omega_inv = [ON_star(a, b0), ON_star(y, a), ON_star(a, b), a == y, b == a]
+    # a, y = universal_quantified_vars
+    # b0, b, b_prime = constants
+    # omega_inv = [ON_star(a, b0), ON_star(y, a), ON_star(a, b), a == y, b == a]
     ############## ! temp shortcut end
+
+    print("omega_inv", omega_inv)
 
     inferred_invariants = []
     for i in range(len(omega_inv)):
@@ -452,7 +463,7 @@ def loop_inference(
             loop_inference_by_index(
                 states,
                 constants,
-                constants_mapping,
+                constants_mappings,
                 i,
                 omega_inv,
                 universal_quantified_vars,
@@ -466,7 +477,7 @@ def loop_inference(
 
     final_result = z3.And(*filtered_invariants)
     print("final result", final_result)
-    return final_result
+    return final_result, filtered_invariants
 
 
 def check_redundancy(candidates: List) -> List:
@@ -480,7 +491,7 @@ def check_redundancy(candidates: List) -> List:
         for existing in filtered_invariants:
             solver.add(existing)
         solver.add(z3.Not(candidate))
-        
+
         result = solver.check()
         if result == z3.sat:
             # not redundant
@@ -502,15 +513,19 @@ def run_proposal_example():
             "x3": [0.0, 0.0, 0.1],
             "x4": [5.0, 5.0, 0.0],
             "x5": [10.0, 10.0, 0.0],
-        }
+        },
+        {"x1": [0.0, 0.0, 0.0], "x2": [5.0, 5.0, 0.0], "x3": [10.0, 10.0, 0.0]}
     ]
     k = 2
     relations = [ON_star, "equality"]
     b0, b, b_prime = get_consts("b0"), get_consts("b"), get_consts("b_prime")
     constants = [b0, b, b_prime]
-    constants_mapping = {b0: "x1", b: "x3", b_prime: "x4"}
+    constants_mappings = [
+        {b0: "x1", b: "x3", b_prime: "x4"},
+        {b0: "x1", b: "x1", b_prime: "x2"},
+    ]
 
-    return loop_inference(states, k, relations, constants, constants_mapping)
+    return loop_inference(states, k, relations, constants, constants_mappings)
 
 
 if __name__ == "__main__":

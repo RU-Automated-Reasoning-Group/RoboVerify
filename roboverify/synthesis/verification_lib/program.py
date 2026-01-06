@@ -467,5 +467,5 @@ if __name__ == "__main__":
     # program.update_trainable_parameter(updated_paremters)
     # print(program.register_trainable_parameter())
 
-    pdb.set_trace()
+    # pdb.set_trace()
     run_stack_example()
