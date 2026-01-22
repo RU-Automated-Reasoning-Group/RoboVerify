@@ -66,10 +66,12 @@ def top(x, ON_func=ON_star):
     return Not(Exists([y], And(Not(y == x), ON_func(y, x))))
 
 def while_cond():
-    return Exists([x], And(top(x), ON_star(x, n0), x != n0))
+    return Exists([x], ForAll([c], Implies(Or(ON_star(n0, x), ON_star(c, n0)), ON_star(x, c))))
+    # return Exists([x], And(top(x), ON_star(x, n0), x != n0))
 
 def while_cond_instance(x):
-    return And(top(x), ON_star(x, n0), x != n0)
+    return ForAll([c], Implies(Or(ON_star(n0, x), ON_star(c, n0)), ON_star(x, c)))
+    # return And(top(x), ON_star(x, n0), x != n0)
 
 def loop_invariant():
     return And(

@@ -231,6 +231,7 @@ def MCMC(
     iters: int,
     expert_states,
     num_seeds: int,
+    num_block: int,
     cem_N: int = 16,
     cem_K: int = 4,
     cem_iterations: int = 10,
@@ -311,7 +312,7 @@ def MCMC(
         os.makedirs(frames_dir, exist_ok=True)
 
         # Evaluate new_program and get images
-        _, imgs = evaluate_program(saved_new_program, n=num_seeds, return_img=True)
+        _, _, imgs = evaluate_program(saved_new_program, n=num_seeds, num_block=num_block, return_img=True)
 
         # Save each image as PNG
         for idx, img in enumerate(imgs):
@@ -339,7 +340,7 @@ def optimize_program(
     cem_K: int,
     cem_iterations: int,
 ) -> tuple[float, Program]:
-    f = Runner(p, expert_states, num_seeds)
+    f = Runner(p, expert_states, num_seeds, num_block)
     initial_parameters = p.register_trainable_parameter()
     iterations = cem_iterations if initial_parameters else 0
     best_cost, best_parameter = cem.cem_optimize(
@@ -534,7 +535,7 @@ def evaluate_program(p: Program, n: int, num_block: int, return_img=False):
 
 
 class Runner:
-    def __init__(self, program: Program, expert_states, num_seeds: int = 10):
+    def __init__(self, program: Program, expert_states, num_seeds: int, num_block: int):
         self.p = program
         self.expert_states = np.array(expert_states)
         self.slices: list[Any] = [slice(None)] * self.expert_states.ndim
@@ -542,11 +543,12 @@ class Runner:
         self.tuple_slices = tuple(self.slices)
         self.expert_states = self.expert_states[self.tuple_slices]
         self.num_seeds = num_seeds
+        self.num_block = num_block
 
     def __call__(self, new_parameters):
         p = deepcopy(self.p)
         p.update_trainable_parameter(new_parameters)
-        policy_states = evaluate_program(p, self.num_seeds)
+        policy_states = evaluate_program(p, self.num_seeds, self.num_block)
         policy_states = np.array(policy_states)[self.tuple_slices]
         kl_value = kl_divergence_kde(policy_states, self.expert_states)
         return -kl_value
@@ -566,70 +568,80 @@ if __name__ == "__main__":
     )
     images_to_video("images", "groundtruth.mp4")
 
-    p = Program(3)
-    p.instructions = [
-        PickPlace(grab_box_id=0, target_box_id=0),  # move up with respect to box 0
-        PickPlace(
-            grab_box_id=0, target_box_id=1
-        ),  # move horizontally to the top of box 1
-        PickPlace(grab_box_id=0, target_box_id=0),  # move down to place on box 1
-    ]
-    p.register_trainable_parameter()
-    p.update_trainable_parameter(
-        [
-            -0.055,
-            -0.0318,
-            0.145,
-            -0.0448,
-            -0.0214,
-            0.116,
-            0.0179,
-            -0.00182,
-            0.0428,
-        ]
-    )
+    # p = Program(3)
+    # p.instructions = [
+    #     PickPlace(grab_box_id=0, target_box_id=0),  # move up with respect to box 0
+    #     PickPlace(
+    #         grab_box_id=0, target_box_id=1
+    #     ),  # move horizontally to the top of box 1
+    #     PickPlace(grab_box_id=0, target_box_id=0),  # move down to place on box 1
+    # ]
+    # p.register_trainable_parameter()
+    # p.update_trainable_parameter(
+    #     [
+    #         -0.055,
+    #         -0.0318,
+    #         0.145,
+    #         -0.0448,
+    #         -0.0214,
+    #         0.116,
+    #         0.0179,
+    #         -0.00182,
+    #         0.0428,
+    #     ]
+    # )
 
-    iter_folder = "tmp_testing_3block"
-    frames_dir = os.path.join(iter_folder, "frames")
-    os.makedirs(frames_dir, exist_ok=True)
+    # iter_folder = "tmp_testing_3block"
+    # frames_dir = os.path.join(iter_folder, "frames")
+    # os.makedirs(frames_dir, exist_ok=True)
 
-    # Evaluate new_program and get images
-    _, negative_trajs, imgs = evaluate_program(
-        p, n=num_seeds, num_block=num_block, return_img=True
-    )
+    # # Evaluate new_program and get images
+    # _, negative_trajs, imgs = evaluate_program(
+    #     p, n=num_seeds, num_block=num_block, return_img=True
+    # )
 
-    # Save each image as PNG
-    for idx, img in enumerate(imgs):
-        img_path = os.path.join(frames_dir, f"img{idx:04d}.png")
-        if isinstance(img, Image.Image):
-            img.save(img_path)
-        else:  # assume numpy array
-            Image.fromarray(img).save(img_path)
+    # # Save each image as PNG
+    # for idx, img in enumerate(imgs):
+    #     img_path = os.path.join(frames_dir, f"img{idx:04d}.png")
+    #     if isinstance(img, Image.Image):
+    #         img.save(img_path)
+    #     else:  # assume numpy array
+    #         Image.fromarray(img).save(img_path)
 
-    # Generate video
-    output_video_path = os.path.join(iter_folder, "program_video.mp4")
-    images_to_video(frames_dir, output_video_path=output_video_path)
+    # # Generate video
+    # output_video_path = os.path.join(iter_folder, "program_video.mp4")
+    # images_to_video(frames_dir, output_video_path=output_video_path)
 
-    # learn the features
-    goal_idxs = [len(traj) for traj in positive_trajs]
-    features = []
-    for b1 in range(0, 3):
-        for b2 in range(0, 3):
-            features.append(decision_tree.ON_feature(b1, b2))
-    print(features)
-    decision_tree.learn_features(
-        num_block, negative_trajs, positive_trajs, goal_idxs, features, num_trees=3
-    )
+    # # learn the features
+    # goal_idxs = [len(traj) for traj in positive_trajs]
+    # features = []
+    # for b1 in range(0, 3):
+    #     for b2 in range(0, 3):
+    #         features.append(decision_tree.ON_feature(b1, b2))
+    # print(features)
+    # decision_tree.learn_features(
+    #     num_block, negative_trajs, positive_trajs, goal_idxs, features, num_trees=3
+    # )
     ############## END OF 3BLOCK TEST ##############
 
-    # MCMC(
-    #     Program(3),
-    #     available_operands,
-    #     available_instructions,
-    #     200,
-    #     expert_states=expert_states,
-    #     num_seeds=num_seeds,
-    # )
+    import cProfile
+    import pstats
+    profiler = cProfile.Profile()
+    profiler.enable()
+
+    MCMC(
+        Program(3),
+        available_operands,
+        available_instructions,
+        50,
+        expert_states=expert_states,
+        num_seeds=num_seeds,
+        num_block=3,
+    )
+
+    profiler.disable()
+    stats = pstats.Stats(profiler).sort_stats("cumulative")
+    stats.print_stats(100)
 
     exit()
 

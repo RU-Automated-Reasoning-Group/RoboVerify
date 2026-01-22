@@ -341,7 +341,7 @@ class Equal(Program):
         full_mapping = {**mapping, **input.get("constants", {})}
         obj1 = full_mapping[self.b1.id]
         obj2 = full_mapping[self.b2.id]
-        return (obj1.x == obj2.x and obj1.y == obj2.y and obj1.z == obj2.z)
+        return obj1.x == obj2.x and obj1.y == obj2.y and obj1.z == obj2.z
 
     def expand(self):
         return []
@@ -400,8 +400,8 @@ def topdown_synthesize(
 
         print(f"\n[{program_counter}, {added}] Checking program: {program}")
         # if program_counter == 14:
-            # import pdb
-            # pdb.set_trace()
+        # import pdb
+        # pdb.set_trace()
 
         if program.is_complete():
             acc = check_program(all_inputs, program)
@@ -423,7 +423,7 @@ def topdown_synthesize(
     return None
 
 
-if __name__ == "__main__":
+def run_stack_hardcoded_dataset():
     all_inputs = []
     # scene 1
     b1 = Box("1")
@@ -454,7 +454,6 @@ if __name__ == "__main__":
             "result": False,
         }
     )
-
 
     # scene 2
     b1 = Box("1")
@@ -561,6 +560,431 @@ if __name__ == "__main__":
             "result": False,
         }
     )
+    return all_inputs
+
+
+def run_unstack_hardcoded_dataset():
+    all_inputs = []
+    # scene 1
+    b1 = Box("1")
+    b1.set_attribute(0.0, 0.0, 0.2)
+
+    b2 = Box("2")
+    b2.set_attribute(0.0, 0.0, 0.15)
+
+    b3 = Box("3")
+    b3.set_attribute(0.0, 0.0, 0.1)
+
+    b4 = Box("4")
+    b4.set_attribute(0.0, 0.0, 0.05)
+
+    all_inputs.append(
+        {
+            "target": b1,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": True,
+        }
+    )
+    all_inputs.append(
+        {
+            "target": b2,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": False,
+        }
+    )
+    all_inputs.append(
+        {
+            "target": b3,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": False,
+        }
+    )
+    all_inputs.append(
+        {
+            "target": b4,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": False,
+        }
+    )
+
+    # scene 2
+    b1 = Box("1")
+    b1.set_attribute(2.0, 0.0, 0.05)
+
+    b2 = Box("2")
+    b2.set_attribute(0.0, 0.0, 0.15)
+
+    b3 = Box("3")
+    b3.set_attribute(0.0, 0.0, 0.1)
+
+    b4 = Box("4")
+    b4.set_attribute(0.0, 0.0, 0.05)
+
+    all_inputs.append(
+        {
+            "target": b2,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": True,
+        }
+    )
+    all_inputs.append(
+        {
+            "target": b1,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": False,
+        }
+    )
+    all_inputs.append(
+        {
+            "target": b3,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": False,
+        }
+    )
+    all_inputs.append(
+        {
+            "target": b4,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": False,
+        }
+    )
+
+    # scene 3
+    b1 = Box("1")
+    b1.set_attribute(2.0, 0.0, 0.05)
+
+    b2 = Box("2")
+    b2.set_attribute(4.0, 0.0, 0.05)
+
+    b3 = Box("3")
+    b3.set_attribute(0.0, 0.0, 0.1)
+
+    b4 = Box("4")
+    b4.set_attribute(0.0, 0.0, 0.05)
+
+    all_inputs.append(
+        {
+            "target": b3,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": True,
+        }
+    )
+    all_inputs.append(
+        {
+            "target": b1,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": False,
+        }
+    )
+    all_inputs.append(
+        {
+            "target": b2,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": False,
+        }
+    )
+    all_inputs.append(
+        {
+            "target": b4,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": False,
+        }
+    )
+
+    # scene 4
+    b1 = Box("1")
+    b1.set_attribute(2.0, 0.0, 0.05)
+
+    b2 = Box("2")
+    b2.set_attribute(4.0, 0.0, 0.05)
+
+    b3 = Box("3")
+    b3.set_attribute(6.0, 0.0, 0.05)
+
+    b4 = Box("4")
+    b4.set_attribute(0.0, 0.0, 0.05)
+
+    all_inputs.append(
+        {
+            "target": b1,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": False,
+        }
+    )
+    all_inputs.append(
+        {
+            "target": b2,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": False,
+        }
+    )
+    all_inputs.append(
+        {
+            "target": b3,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": False,
+        }
+    )
+    all_inputs.append(
+        {
+            "target": b4,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": False,
+        }
+    )
+    return all_inputs
+
+
+def run_reverse_hardcoded_dataset():
+    all_inputs = []
+    # scene 1
+    b1 = Box("1")
+    b1.set_attribute(0.0, 0.0, 0.2)
+
+    b2 = Box("2")
+    b2.set_attribute(0.0, 0.0, 0.15)
+
+    b3 = Box("3")
+    b3.set_attribute(0.0, 0.0, 0.1)
+
+    b4 = Box("4")
+    b4.set_attribute(0.0, 0.0, 0.05)
+
+    all_inputs.append(
+        {
+            "target": b1,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": True,
+        }
+    )
+    all_inputs.append(
+        {
+            "target": b2,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": False,
+        }
+    )
+    all_inputs.append(
+        {
+            "target": b3,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": False,
+        }
+    )
+    all_inputs.append(
+        {
+            "target": b4,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": False,
+        }
+    )
+
+    # scene 2
+    b1 = Box("1")
+    b1.set_attribute(2.0, 0.0, 0.05)
+
+    b2 = Box("2")
+    b2.set_attribute(0.0, 0.0, 0.15)
+
+    b3 = Box("3")
+    b3.set_attribute(0.0, 0.0, 0.1)
+
+    b4 = Box("4")
+    b4.set_attribute(0.0, 0.0, 0.05)
+
+    all_inputs.append(
+        {
+            "target": b1,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": False,
+        }
+    )
+    all_inputs.append(
+        {
+            "target": b2,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": True,
+        }
+    )
+    all_inputs.append(
+        {
+            "target": b3,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": False,
+        }
+    )
+    all_inputs.append(
+        {
+            "target": b4,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": False,
+        }
+    )
+
+    # scene 3
+    b1 = Box("1")
+    b1.set_attribute(2.0, 0.0, 0.05)
+
+    b2 = Box("2")
+    b2.set_attribute(2.0, 0.0, 0.1)
+
+    b3 = Box("3")
+    b3.set_attribute(0.0, 0.0, 0.1)
+
+    b4 = Box("4")
+    b4.set_attribute(0.0, 0.0, 0.05)
+
+    all_inputs.append(
+        {
+            "target": b1,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": False,
+        }
+    )
+    all_inputs.append(
+        {
+            "target": b2,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": False,
+        }
+    )
+    all_inputs.append(
+        {
+            "target": b3,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": True,
+        }
+    )
+    all_inputs.append(
+        {
+            "target": b4,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": False,
+        }
+    )
+
+    # scene 4
+    b1 = Box("1")
+    b1.set_attribute(2.0, 0.0, 0.05)
+
+    b2 = Box("2")
+    b2.set_attribute(2.0, 0.0, 0.1)
+
+    b3 = Box("3")
+    b3.set_attribute(2.0, 0.0, 0.15)
+
+    b4 = Box("4")
+    b4.set_attribute(0.0, 0.0, 0.05)
+
+    all_inputs.append(
+        {
+            "target": b1,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": False,
+        }
+    )
+    all_inputs.append(
+        {
+            "target": b2,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": False,
+        }
+    )
+    all_inputs.append(
+        {
+            "target": b3,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": False,
+        }
+    )
+    all_inputs.append(
+        {
+            "target": b4,
+            "all_box": [b1, b2, b3, b4],
+            "constants": {"b_const": b4},
+            "result": False,
+        }
+    )
+
+    # scene 5
+    # b1 = Box("1")
+    # b1.set_attribute(2.0, 0.0, 0.05)
+
+    # b2 = Box("2")
+    # b2.set_attribute(2.0, 0.0, 0.1)
+
+    # b3 = Box("3")
+    # b3.set_attribute(2.0, 0.0, 0.15)
+
+    # b4 = Box("4")
+    # b4.set_attribute(2.0, 0.0, 0.2)
+
+    # all_inputs.append(
+    #     {
+    #         "target": b1,
+    #         "all_box": [b1, b2, b3, b4],
+    #         "constants": {"b_const": b4},
+    #         "result": False,
+    #     }
+    # )
+    # all_inputs.append(
+    #     {
+    #         "target": b2,
+    #         "all_box": [b1, b2, b3, b4],
+    #         "constants": {"b_const": b4},
+    #         "result": False,
+    #     }
+    # )
+    # all_inputs.append(
+    #     {
+    #         "target": b3,
+    #         "all_box": [b1, b2, b3, b4],
+    #         "constants": {"b_const": b4},
+    #         "result": False,
+    #     }
+    # )
+    # all_inputs.append(
+    #     {
+    #         "target": b4,
+    #         "all_box": [b1, b2, b3, b4],
+    #         "constants": {"b_const": b4},
+    #         "result": False,
+    #     }
+    # )
+    return all_inputs
+
+if __name__ == "__main__":
 
     # import cProfile
     # import pstats
@@ -568,8 +992,10 @@ if __name__ == "__main__":
     # profiler = cProfile.Profile()
     # profiler.enable()
 
+    all_inputs = run_reverse_hardcoded_dataset()
+
     best_program = topdown_synthesize(
-        all_inputs, max_programs=15_000_000, target_accuracy=0.95, time_limit_sec=120
+        all_inputs, max_programs=15_000_000, target_accuracy=0.99, time_limit_sec=120
     )
 
     # profiler.disable()

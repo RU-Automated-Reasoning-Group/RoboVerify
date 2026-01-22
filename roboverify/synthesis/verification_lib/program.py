@@ -473,4 +473,4 @@ if __name__ == "__main__":
     # print(program.register_trainable_parameter())
 
     # pdb.set_trace()
-    run_stack_example()
+    run_stack_example_with_only_ON_star()
