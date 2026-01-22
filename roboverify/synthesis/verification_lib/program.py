@@ -423,8 +423,8 @@ def VC_aux(seq_instruction, Q) -> List:
     assert False, "Unrecognized seq instruction for VC_aux"
 
 
-def run_stack_example():
-    inferred_invariant = synthesis.inference_lib.inference.run_proposal_example()
+def run_stack_example_with_only_ON_star():
+    inferred_invariant, candidate_lists = synthesis.inference_lib.inference.run_proposal_example()
     b_prime, b, n, b0, a = Consts("b_prime b n b0 a", BoxSort)
     instructions = [
         Assign("b", "b0"),
@@ -444,6 +444,7 @@ def run_stack_example():
             ),
             body=[Put("b_prime", "b"), Assign("b", "b_prime")],
             invariant=inferred_invariant,
+            # invariant=And(*candidate_lists)
         ),
     ]
     p = Program(2, instructions=instructions)
@@ -456,6 +457,10 @@ def run_stack_example():
 
     # print(p.VC_gen(precondition, postcondition))
     p.highlevel_verification(precondition, postcondition)
+
+
+def run_unstack_example():
+    pass
 
 
 if __name__ == "__main__":
