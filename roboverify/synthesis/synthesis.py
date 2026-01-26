@@ -1,8 +1,12 @@
 import math
 import os
+import pickle
 import random
+from copy import deepcopy
+from typing import Any
 
 import cem
+import decision_tree
 import ffmpeg
 import imageio
 import numpy as np
@@ -10,15 +14,8 @@ from cost_func import *
 from environment.cee_us_env.fpp_construction_env import FetchPickAndPlaceConstruction
 from environment.data.collect_demos import CollectDemos
 from environment.general_env import GymToGymnasium
-from verification_lib.program import *
-
-from typing import Any
-from copy import deepcopy
-import random
-import decision_tree
-import pickle
 from PIL import Image  # for saving images as PNG
-from copy import deepcopy
+from verification_lib.program import *
 
 BLOCK_LENGTH = (
     0.025 * 2
@@ -217,9 +214,9 @@ def mutate_program(
     return new_program, True
 
 
+import math
 import os
 import pickle
-import math
 import random
 from copy import deepcopy
 
@@ -312,7 +309,9 @@ def MCMC(
         os.makedirs(frames_dir, exist_ok=True)
 
         # Evaluate new_program and get images
-        _, _, imgs = evaluate_program(saved_new_program, n=num_seeds, num_block=num_block, return_img=True)
+        _, _, imgs = evaluate_program(
+            saved_new_program, n=num_seeds, num_block=num_block, return_img=True
+        )
 
         # Save each image as PNG
         for idx, img in enumerate(imgs):
@@ -626,6 +625,7 @@ if __name__ == "__main__":
 
     import cProfile
     import pstats
+
     profiler = cProfile.Profile()
     profiler.enable()
 

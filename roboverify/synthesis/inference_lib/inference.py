@@ -518,11 +518,11 @@ def run_proposal_example():
     ]
     k = 2
     relations = [ON_star, "equality"]
-    b0, b, b_prime = get_consts("b0"), get_consts("b"), get_consts("b_prime")
-    constants = [b0, b, b_prime]
+    b0, b = get_consts("b0"), get_consts("b")
+    constants = [b0, b]
     constants_mappings = [
-        {b0: "x1", b: "x3", b_prime: "x4"},
-        {b0: "x1", b: "x1", b_prime: "x2"},
+        {b0: "x1", b: "x3"},
+        {b0: "x1", b: "x1"},
     ]
 
     return loop_inference(states, k, relations, constants, constants_mappings)
