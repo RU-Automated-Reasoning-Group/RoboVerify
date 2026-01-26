@@ -4,8 +4,6 @@ from copy import deepcopy
 from typing import List, Union
 
 import numpy as np
-import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
-from synthesis.verification_lib.highlevel_verification_lib import BoxSort, ON_star, higher
 from z3 import (
     Z3_OP_UNINTERPRETED,
     And,
@@ -22,6 +20,12 @@ from z3 import (
 )
 
 import synthesis.inference_lib.inference
+import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
+from synthesis.verification_lib.highlevel_verification_lib import (
+    BoxSort,
+    ON_star,
+    higher,
+)
 
 
 class Parameter:
@@ -424,7 +428,9 @@ def VC_aux(seq_instruction, Q) -> List:
 
 
 def run_stack_example_with_only_ON_star():
-    inferred_invariant, candidate_lists = synthesis.inference_lib.inference.run_proposal_example()
+    inferred_invariant, candidate_lists = (
+        synthesis.inference_lib.inference.run_proposal_example()
+    )
     b_prime, b, n, b0, a = Consts("b_prime b n b0 a", BoxSort)
     instructions = [
         Assign("b", "b0"),
@@ -461,16 +467,3 @@ def run_stack_example_with_only_ON_star():
 
 def run_unstack_example():
     pass
-
-
-if __name__ == "__main__":
-    # program = Program(3)
-    # program.instructions = [PickPlace(0), PickPlace(0), PickPlace(0)]
-    # trainable_parameters = program.register_trainable_parameter()
-    # print(trainable_parameters)
-    # updated_paremters = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
-    # program.update_trainable_parameter(updated_paremters)
-    # print(program.register_trainable_parameter())
-
-    # pdb.set_trace()
-    run_stack_example_with_only_ON_star()

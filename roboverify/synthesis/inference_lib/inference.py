@@ -514,7 +514,7 @@ def run_proposal_example():
             "x4": [5.0, 5.0, 0.0],
             "x5": [10.0, 10.0, 0.0],
         },
-        {"x1": [0.0, 0.0, 0.0], "x2": [5.0, 5.0, 0.0], "x3": [10.0, 10.0, 0.0]}
+        {"x1": [0.0, 0.0, 0.0], "x2": [5.0, 5.0, 0.0], "x3": [10.0, 10.0, 0.0]},
     ]
     k = 2
     relations = [ON_star, "equality"]
@@ -526,8 +526,3 @@ def run_proposal_example():
     ]
 
     return loop_inference(states, k, relations, constants, constants_mappings)
-
-
-if __name__ == "__main__":
-    # try the example from the ara proposal
-    run_proposal_example()

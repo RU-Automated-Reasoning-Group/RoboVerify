@@ -3,6 +3,7 @@ from z3 import (
     BoolSort,
     Consts,
     DeclareSort,
+    EnumSort,
     ForAll,
     Function,
     Implies,
@@ -11,7 +12,6 @@ from z3 import (
     Solver,
     sat,
     unsat,
-    EnumSort
 )
 
 # BoxSort, (b9, b10, b11) = EnumSort("Box", ["b9", "b10", "b11"])
@@ -82,14 +82,17 @@ class highlevel_z3_solver:
             )
         )
 
+
 def top(a):
     n = get_consts("n")
     return ForAll([n], Or(n == a, Not(ON_star(n, a))))
+
 
 def on_table(a):
     n = get_consts("n")
     return And(ForAll([n], higher(n, a)))
     return ForAll([n], Not(ON_star(a, n)))
+
 
 if __name__ == "__main__":
     s = Solver()
@@ -105,12 +108,14 @@ if __name__ == "__main__":
 
     s.add(Not(on_table(b0)))
     s.add(Implies(And(on_table(a), on_table(b)), And(higher(a, b), higher(b, a))))
-    print(s.check()) 
+    print(s.check())
     print(s.model())
 
     for name1, box1 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
         for name2, box2 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
-            print(f"ON_star({name1}, {name2}): {s.model().evaluate(ON_star(box1, box2))}")
+            print(
+                f"ON_star({name1}, {name2}): {s.model().evaluate(ON_star(box1, box2))}"
+            )
 
     for name1, box1 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
         for name2, box2 in zip(["b9", "b10", "b11"], [b9, b10, b11]):

@@ -1,5 +1,6 @@
-import numpy as np
 import multiprocess as mp
+import numpy as np
+
 
 def cem_optimize(
     f, dim, iterations=50, N=100, K=10, init_mu=None, init_std=0.1, num_workers=None

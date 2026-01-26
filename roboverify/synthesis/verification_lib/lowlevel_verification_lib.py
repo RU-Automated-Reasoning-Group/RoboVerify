@@ -1,15 +1,14 @@
 from z3 import (
     And,
+    DeclareSort,
+    Function,
+    Implies,
+    Not,
+    Or,
+    RealSort,
+    Solver,
     sat,
     unsat,
-    Solver,
-    And,
-    Or,
-    Not,
-    Implies,
-    Function,
-    DeclareSort,
-    RealSort
 )
 
 BoxSort = DeclareSort("Box")

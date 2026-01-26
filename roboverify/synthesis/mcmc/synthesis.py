@@ -5,111 +5,18 @@ import random
 from copy import deepcopy
 from typing import Any
 
+import api.program as program
 import cem
 import decision_tree
 import ffmpeg
 import imageio
 import numpy as np
+import util.on
 from cost_func import *
 from environment.cee_us_env.fpp_construction_env import FetchPickAndPlaceConstruction
 from environment.data.collect_demos import CollectDemos
 from environment.general_env import GymToGymnasium
 from PIL import Image  # for saving images as PNG
-from verification_lib.program import *
-
-BLOCK_LENGTH = (
-    0.025 * 2
-)  # (0.025, 0.025, 0.025) in the xml file of the gym env is half length
-# def learn(
-#     demos: list[list[Any]],
-#     predicates: list[Callable[[Any], bool]],
-#     success_threshold: float,
-#     mcmc_iters: int,
-#     num_seeds: int,
-#     cem_N: int = 16,
-#     cem_K: int = 4,
-# ) -> Tuple[Any, Callable[[Any], bool], int]:
-#     """
-#     Learn a program from demonstrations using MCMC. If the program
-#     fails to achieve a success rate above `success_threshold`, extract
-#     positive/negative examples and learn a decision tree labeling function.
-
-#     Parameters
-#     ----------
-#     demos : list[list[Any]]
-#         Expert demonstration sequences (list of states per demo).
-#     predicates : list[Callable[[Any], bool]]
-#         Predicates used to build the decision tree labeling function.
-#     success_threshold : float
-#         Minimum acceptable success rate for the best program.
-#     mcmc_iters : int
-#         Number of MCMC iterations.
-#     num_seeds : int
-#         Number of seeds for program evaluation or CEM optimization.
-#     cem_N : int
-#         CEM parameter N (population size).
-#     cem_K : int
-#         CEM parameter K (top-K selection).
-
-#     Returns
-#     -------
-#     best_model_or_program : Either the best decision tree (if threshold not met) or the best program.
-#     label_fn : Callable[[Any], bool]
-#         Either the decision tree labeling function or a wrapper around the program.
-#     best_idx : int
-#         Index of best tree if tree learned, otherwise 0.
-#     """
-#     # 1️⃣ Run MCMC to propose programs
-#     initial_program = (
-#         Program()
-#     )  # assuming Program class exists and has a default constructor
-#     samples, costs = MCMC(
-#         current_program=initial_program,
-#         iters=mcmc_iters,
-#         expert_states=demos,
-#         num_seeds=num_seeds,
-#         cem_N=cem_N,
-#         cem_K=cem_K,
-#     )
-
-#     # 2️⃣ Pick the best program (lowest cost)
-#     best_idx_prog = costs.index(min(costs))
-#     best_program = samples[best_idx_prog]
-
-#     # 3️⃣ Evaluate best program
-#     success_rate, states = evaluate(
-#         best_program
-#     )  # should return success rate and states visited
-
-#     if success_rate >= success_threshold:
-#         # Program is good enough: return it directly
-#         def program_label_fn(state: Any) -> bool:
-#             # Wrap the program's decision as a labeling function
-#             return best_program.apply(state)  # assuming apply(state) returns True/False
-
-#         return best_program, program_label_fn, 0
-
-#     # 4️⃣ Collect positive/negative examples from evaluation
-#     neg_examples: list[Any] = states  # all visited states
-#     pos_examples: list[Any] = []
-#     for state_seq in states:
-#         if len(state_seq) >= 2:
-#             pos_examples.append(state_seq[-2])  # state immediately before last
-#         else:
-#             pos_examples.append(state_seq[0])
-
-#     # 5️⃣ Learn decision tree labeling function
-#     best_tree, label_fn, tree_idx = decision_tree.select_best_tree(
-#         pos_examples=pos_examples,
-#         neg_examples=neg_examples,
-#         predicates=predicates,
-#         demos=demos,
-#         n_trees=10,  # fixed number of trees
-#         base_tree_config={"max_depth": 3, "criterion": "entropy"},
-#         visualize_dir=None,  # can optionally provide a directory
-#     )
-
-#     return best_tree, label_fn, tree_idx
 
 
 def sample_proportional(values):
@@ -149,10 +56,10 @@ def swap_two_elements_maybe_same(lst):
 
 
 def mutate_program(
-    current_program: Program,
+    current_program: program.Program,
     available_operands: dict,
     available_instructions: list,
-) -> tuple[Program, bool]:
+) -> tuple[program.Program, bool]:
     pc = 0  # opcode
     po = 1  # operand
     ps = 1  # swap
@@ -195,10 +102,10 @@ def mutate_program(
         index = random.randint(0, len(new_program.instructions) - 1)
         pu = 0.25  # probability the SKIP token is proposed
         if random.random() < pu:
-            if type(new_program.instructions[index]) == Skip:
+            if type(new_program.instructions[index]) == program.Skip:
                 print("chaning skip to skip")
                 return new_program, False
-            new_program.instructions[index] = Skip()
+            new_program.instructions[index] = program.Skip()
         else:
             new_instruction = random.choice(available_instructions)()
             operands = new_instruction.get_operand()
@@ -214,15 +121,8 @@ def mutate_program(
     return new_program, True
 
 
-import math
-import os
-import pickle
-import random
-from copy import deepcopy
-
-
 def MCMC(
-    current_program: Program,
+    current_program: program.Program,
     available_operands: dict,
     available_instructions: list,
     iters: int,
@@ -239,7 +139,13 @@ def MCMC(
 
     print("=== initial program ===\n", current_program)
     current_cost, current_program = optimize_program(
-        current_program, expert_states, num_seeds, cem_N, cem_K, cem_iterations
+        current_program,
+        expert_states,
+        num_seeds,
+        num_block,
+        cem_N,
+        cem_K,
+        cem_iterations,
     )
     print("evaluated with cost", current_cost)
 
@@ -255,8 +161,8 @@ def MCMC(
         )
         print(f"=== iter {i} program ===\n", new_program)
 
-        ins1 = [x for x in current_program.instructions if type(x) != Skip]
-        ins2 = [x for x in new_program.instructions if type(x) != Skip]
+        ins1 = [x for x in current_program.instructions if type(x) != program.Skip]
+        ins2 = [x for x in new_program.instructions if type(x) != program.Skip]
         equivalence = ins1 == ins2
         print("program equivalence", equivalence)
 
@@ -267,7 +173,13 @@ def MCMC(
         if changed and not equivalence:
             # Optimize new_program, which may modify it
             new_cost, new_program = optimize_program(
-                new_program, expert_states, num_seeds, cem_N, cem_K, cem_iterations
+                new_program,
+                expert_states,
+                num_seeds,
+                num_block,
+                cem_N,
+                cem_K,
+                cem_iterations,
             )
             print("evaluated with cost", new_cost)
         else:
@@ -332,13 +244,14 @@ def MCMC(
 
 
 def optimize_program(
-    p: Program,
+    p: program.Program,
     expert_states,
     num_seeds: int,
+    num_block: int,
     cem_N: int,
     cem_K: int,
     cem_iterations: int,
-) -> tuple[float, Program]:
+) -> tuple[float, program.Program]:
     f = Runner(p, expert_states, num_seeds, num_block)
     initial_parameters = p.register_trainable_parameter()
     iterations = cem_iterations if initial_parameters else 0
@@ -398,29 +311,6 @@ def save_numpy_arrays_as_images(arrays, output_dir="images"):
         imageio.imwrite(filepath, arr)
 
 
-def on(block1, block2):
-    """define the numerical interpretation of the on(block1, block2) between two blocks"""
-    x1, y1, z1 = block1
-    x2, y2, z2 = block2
-    return (
-        abs(x1 - x2) < BLOCK_LENGTH / 2
-        and abs(y1 - y2) < BLOCK_LENGTH / 2
-        and 0 <= z1 - z2 < 1.5 * BLOCK_LENGTH
-    )
-
-
-def get_block_pos(obs, block_id):
-    start_idx = 10 + 12 * block_id
-    end_idx = start_idx + 3
-    return np.array(obs[start_idx:end_idx])
-
-
-def print_block_layout(obs):
-    for i in range(0, 3):
-        for j in range(0, 3):
-            print(f"on({i}, {j})", on(get_block_pos(obs, i), get_block_pos(obs, j)))
-
-
 def collect_trajectories(num_block: int, env_name: str, n: int, save_imgs=False):
     states = []
     imgs = []
@@ -442,10 +332,10 @@ def collect_trajectories(num_block: int, env_name: str, n: int, save_imgs=False)
         # pdb.set_trace()
         collector.env.close()
         print("initial layout")
-        print_block_layout(obs_seq[0]["obs"][0])
+        util.on.print_block_layout(obs_seq[0]["obs"][0], num_block)
         print("final layout")
         # pdb.set_trace()
-        print_block_layout(obs_seq[0]["obs"][-1])
+        util.on.print_block_layout(obs_seq[0]["obs"][-1], num_block)
         del collector
         traj = []
         for state in obs_seq[0]["obs"]:
@@ -460,7 +350,7 @@ def collect_trajectories(num_block: int, env_name: str, n: int, save_imgs=False)
     return states, individual_traj
 
 
-def evaluate_program(p: Program, n: int, num_block: int, return_img=False):
+def evaluate_program(p: program.Program, n: int, num_block: int, return_img=False):
     states = []
     imgs = []
     individual_traj = []
@@ -498,43 +388,10 @@ def evaluate_program(p: Program, n: int, num_block: int, return_img=False):
     return states, individual_traj, []
 
 
-# set_np_seed(10)
-# env_name = "pickmulti1"
-# env1 = GymToGymnasium(
-#     FetchPickAndPlaceConstruction(
-#         name=env_name,
-#         sparse=False,
-#         shaped_reward=False,
-#         num_blocks=int(env_name[-1]),
-#         reward_type="sparse",
-#         case="PickAndPlace",
-#         visualize_mocap=False,
-#         simple=True,
-#     ),
-#     render_mode="human"
-# )
-# obs1, _ = env1.reset()
-
-# set_np_seed(10)
-# env2 = GymToGymnasium(
-#     FetchPickAndPlaceConstruction(
-#         name=env_name,
-#         sparse=False,
-#         shaped_reward=False,
-#         num_blocks=int(env_name[-1]),
-#         reward_type="sparse",
-#         case="PickAndPlace",
-#         visualize_mocap=False,
-#         simple=True,
-#     ),
-#     render_mode="human"
-# )
-# obs2, _ = env2.reset()
-# pdb.set_trace()
-
-
 class Runner:
-    def __init__(self, program: Program, expert_states, num_seeds: int, num_block: int):
+    def __init__(
+        self, program: program.Program, expert_states, num_seeds: int, num_block: int
+    ):
         self.p = program
         self.expert_states = np.array(expert_states)
         self.slices: list[Any] = [slice(None)] * self.expert_states.ndim
@@ -551,163 +408,3 @@ class Runner:
         policy_states = np.array(policy_states)[self.tuple_slices]
         kl_value = kl_divergence_kde(policy_states, self.expert_states)
         return -kl_value
-
-
-if __name__ == "__main__":
-    available_operands = {
-        "Box": [0, 1],
-    }
-
-    ############## 3BLOCK TEST ##############
-    available_instructions = [PickPlace]
-    num_seeds = 15
-    num_block = 3
-    expert_states, positive_trajs = collect_trajectories(
-        num_block, "pickmulti3", num_seeds, save_imgs=True
-    )
-    images_to_video("images", "groundtruth.mp4")
-
-    # p = Program(3)
-    # p.instructions = [
-    #     PickPlace(grab_box_id=0, target_box_id=0),  # move up with respect to box 0
-    #     PickPlace(
-    #         grab_box_id=0, target_box_id=1
-    #     ),  # move horizontally to the top of box 1
-    #     PickPlace(grab_box_id=0, target_box_id=0),  # move down to place on box 1
-    # ]
-    # p.register_trainable_parameter()
-    # p.update_trainable_parameter(
-    #     [
-    #         -0.055,
-    #         -0.0318,
-    #         0.145,
-    #         -0.0448,
-    #         -0.0214,
-    #         0.116,
-    #         0.0179,
-    #         -0.00182,
-    #         0.0428,
-    #     ]
-    # )
-
-    # iter_folder = "tmp_testing_3block"
-    # frames_dir = os.path.join(iter_folder, "frames")
-    # os.makedirs(frames_dir, exist_ok=True)
-
-    # # Evaluate new_program and get images
-    # _, negative_trajs, imgs = evaluate_program(
-    #     p, n=num_seeds, num_block=num_block, return_img=True
-    # )
-
-    # # Save each image as PNG
-    # for idx, img in enumerate(imgs):
-    #     img_path = os.path.join(frames_dir, f"img{idx:04d}.png")
-    #     if isinstance(img, Image.Image):
-    #         img.save(img_path)
-    #     else:  # assume numpy array
-    #         Image.fromarray(img).save(img_path)
-
-    # # Generate video
-    # output_video_path = os.path.join(iter_folder, "program_video.mp4")
-    # images_to_video(frames_dir, output_video_path=output_video_path)
-
-    # # learn the features
-    # goal_idxs = [len(traj) for traj in positive_trajs]
-    # features = []
-    # for b1 in range(0, 3):
-    #     for b2 in range(0, 3):
-    #         features.append(decision_tree.ON_feature(b1, b2))
-    # print(features)
-    # decision_tree.learn_features(
-    #     num_block, negative_trajs, positive_trajs, goal_idxs, features, num_trees=3
-    # )
-    ############## END OF 3BLOCK TEST ##############
-
-    import cProfile
-    import pstats
-
-    profiler = cProfile.Profile()
-    profiler.enable()
-
-    MCMC(
-        Program(3),
-        available_operands,
-        available_instructions,
-        50,
-        expert_states=expert_states,
-        num_seeds=num_seeds,
-        num_block=3,
-    )
-
-    profiler.disable()
-    stats = pstats.Stats(profiler).sort_stats("cumulative")
-    stats.print_stats(100)
-
-    exit()
-
-    # num_seeds = 15
-
-    # expert_states = collect_trajectories("pickmulti1", num_seeds, save_imgs=True)
-    # exit()
-    p = Program(3)
-    p.instructions = [
-        PickPlace(grab_box_id=1, target_box_id=1),  # move up with respect to box 0
-        PickPlace(
-            grab_box_id=1, target_box_id=0
-        ),  # move horizontally to the top of box 1
-        PickPlace(grab_box_id=1, target_box_id=0),  # move down to place on box 1
-    ]
-    p.register_trainable_parameter()
-    p.update_trainable_parameter(
-        [
-            0.0279608,
-            0.04278932,
-            0.13399421,
-            0.02289095,
-            -0.04434892,
-            0.13288633,
-            -0.01862492,
-            0.00964001,
-            0.05832452,
-        ]
-    )
-    # # p.instructions[0].target_offset = [Parameter(0.), Parameter(0.), Parameter(0.2)]
-    # # p.instructions[1].target_offset = [Parameter(0), Parameter(0), Parameter(0.2)]
-    # # p.instructions[2].target_offset = [Parameter(0), Parameter(0), Parameter(0.05)]
-    # # for _ in range(50):
-    # #     print(mutate_program(p))
-    # pdb.set_trace()
-    iter_folder = "tmp_testing1"
-    frames_dir = os.path.join(iter_folder, "frames")
-    os.makedirs(frames_dir, exist_ok=True)
-
-    # Evaluate new_program and get images
-    _, imgs = evaluate_program(p, n=num_seeds, return_img=True)
-
-    # Save each image as PNG
-    for idx, img in enumerate(imgs):
-        img_path = os.path.join(frames_dir, f"img{idx:04d}.png")
-        if isinstance(img, Image.Image):
-            img.save(img_path)
-        else:  # assume numpy array
-            Image.fromarray(img).save(img_path)
-
-    # Generate video
-    output_video_path = os.path.join(iter_folder, "program_video.mp4")
-    images_to_video(frames_dir, output_video_path=output_video_path)
-    # states, imgs = evaluate_program(p, 15, True)
-    # pdb.set_trace()
-
-    # f = Runner(p, expert_states, num_seeds)
-    # initial_parameters = p.register_trainable_parameter()
-    # cem.cem_optimize(f, len(initial_parameters), N=16, K=4, init_mu=initial_parameters)
-
-# expert_states = np.array(expert_states)[:,:3]
-# pdb.set_trace()
-# policy_states = np.array(policy_states)[:,:3]
-
-# kl_value = kl_divergence_kde(policy_states, expert_states)
-# print(kl_value)
-
-# kl_value = kl_divergence_kde(expert_states, expert_states)
-# print(kl_value)

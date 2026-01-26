@@ -1,6 +1,7 @@
 from program import *
 from z3 import *
 
+
 def stack_program():
     b_prime, b, n, b0, a = Consts("b_prime b n b0 a", BoxSort)
     instructions = [
@@ -46,6 +47,7 @@ def stack_program():
 
     # print(p.VC_gen(precondition, postcondition))
     p.highlevel_verification(precondition, postcondition)
+
 
 if __name__ == "__main__":
     stack_program()

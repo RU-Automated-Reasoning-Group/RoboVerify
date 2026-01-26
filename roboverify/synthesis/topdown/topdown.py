@@ -1,31 +1,11 @@
-# from dsl import Exists, Program
-from collections import deque
-import time
-
-import copy
 import string
-from typing import List
-from collections import deque
 import time
+from collections import deque
+from typing import List
+
+import util.on
 
 MAX_QUANTIFIERS = 2
-
-
-BLOCK_LENGTH = (
-    0.025 * 2
-)  # (0.025, 0.025, 0.025) in the xml file of the gym env is half length
-
-
-def on_star_eval(block1, block2):
-    """define the numerical interpretation of the on(block1, block2) between two blocks"""
-    x1, y1, z1 = block1
-    x2, y2, z2 = block2
-    return (
-        abs(x1 - x2) < BLOCK_LENGTH / 2
-        and abs(y1 - y2) < BLOCK_LENGTH / 2
-        and 0 <= z1 - z2
-    )
-
 
 # --------------------------------------------------
 # Utilities
@@ -317,7 +297,7 @@ class ON_star(Program):
         full_mapping = {**mapping, **input.get("constants", {})}
         obj1 = full_mapping[self.b1.id]
         obj2 = full_mapping[self.b2.id]
-        return on_star_eval((obj1.x, obj1.y, obj1.z), (obj2.x, obj2.y, obj2.z))
+        return util.on.on_star_eval((obj1.x, obj1.y, obj1.z), (obj2.x, obj2.y, obj2.z))
 
     def expand(self):
         return []
@@ -983,24 +963,3 @@ def run_reverse_hardcoded_dataset():
     #     }
     # )
     return all_inputs
-
-if __name__ == "__main__":
-
-    # import cProfile
-    # import pstats
-
-    # profiler = cProfile.Profile()
-    # profiler.enable()
-
-    all_inputs = run_reverse_hardcoded_dataset()
-
-    best_program = topdown_synthesize(
-        all_inputs, max_programs=15_000_000, target_accuracy=0.99, time_limit_sec=120
-    )
-
-    # profiler.disable()
-    # stats = pstats.Stats(profiler).sort_stats("cumulative")
-    # stats.print_stats(100)
-
-    print("\nBest program:")
-    print(best_program)
