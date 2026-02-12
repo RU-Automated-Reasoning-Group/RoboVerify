@@ -1,5 +1,5 @@
-from environment.fetch_custom.customfetch.custom_fetch import WallsDemoStackEnv, PickPlaceEnv, WallsDemoSingleStackEnv
-from environment.fetch_custom.customfetch_wrapper import ConvertGoalEnvWrapper, NormObsWrapper, ClipObsWrapper, GymWrapper, OneHotAction, NormalizeAction
+from synthesis.environment.fetch_custom.customfetch.custom_fetch import WallsDemoStackEnv, PickPlaceEnv, WallsDemoSingleStackEnv
+from synthesis.environment.fetch_custom.customfetch_wrapper import ConvertGoalEnvWrapper, NormObsWrapper, ClipObsWrapper, GymWrapper, OneHotAction, NormalizeAction
 # from customfetch.custom_fetch import WallsDemoStackEnv, PickPlaceEnv, WallsDemoSingleStackEnv
 # from customfetch_wrapper import ConvertGoalEnvWrapper, NormObsWrapper, ClipObsWrapper, GymWrapper, OneHotAction, NormalizeAction
 import numpy as np

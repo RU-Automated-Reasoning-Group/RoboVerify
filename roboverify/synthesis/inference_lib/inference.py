@@ -6,7 +6,7 @@ from typing import Dict, List, Set, Tuple
 import sympy
 import z3
 
-from synthesis.decision_tree import on_star_implentation
+from synthesis.util import on
 from synthesis.verification_lib.highlevel_verification_lib import (
     BoxSort,
     ON_star,
@@ -91,7 +91,7 @@ def compute_data(
             )
             assert isinstance(block1_name, str) and isinstance(block2_name, str)
             data.append(
-                on_star_implentation(
+                on.on_star_implementation(
                     state[block1_name],
                     state[block2_name],
                 )

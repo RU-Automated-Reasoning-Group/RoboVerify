@@ -5,18 +5,19 @@ import random
 from copy import deepcopy
 from typing import Any
 
-import api.program as program
-import cem
-import decision_tree
 import ffmpeg
 import imageio
 import numpy as np
-import util.on
-from cost_func import *
-from environment.cee_us_env.fpp_construction_env import FetchPickAndPlaceConstruction
-from environment.data.collect_demos import CollectDemos
-from environment.general_env import GymToGymnasium
 from PIL import Image  # for saving images as PNG
+
+from synthesis.api import program
+from synthesis.environment.cee_us_env.fpp_construction_env import (
+    FetchPickAndPlaceConstruction,
+)
+from synthesis.environment.data.collect_demos import CollectDemos
+from synthesis.environment.general_env import GymToGymnasium
+from synthesis.mcmc import cem, cost_func, decision_tree
+from synthesis.util import on
 
 
 def sample_proportional(values):
@@ -332,10 +333,10 @@ def collect_trajectories(num_block: int, env_name: str, n: int, save_imgs=False)
         # pdb.set_trace()
         collector.env.close()
         print("initial layout")
-        util.on.print_block_layout(obs_seq[0]["obs"][0], num_block)
+        on.print_block_layout(obs_seq[0]["obs"][0], num_block)
         print("final layout")
         # pdb.set_trace()
-        util.on.print_block_layout(obs_seq[0]["obs"][-1], num_block)
+        on.print_block_layout(obs_seq[0]["obs"][-1], num_block)
         del collector
         traj = []
         for state in obs_seq[0]["obs"]:
@@ -404,7 +405,9 @@ class Runner:
     def __call__(self, new_parameters):
         p = deepcopy(self.p)
         p.update_trainable_parameter(new_parameters)
-        policy_states = evaluate_program(p, self.num_seeds, self.num_block)
+        policy_states, _individual_trajs, _imgs = evaluate_program(
+            p, self.num_seeds, self.num_block
+        )
         policy_states = np.array(policy_states)[self.tuple_slices]
-        kl_value = kl_divergence_kde(policy_states, self.expert_states)
+        kl_value = cost_func.kl_divergence_kde(policy_states, self.expert_states)
         return -kl_value

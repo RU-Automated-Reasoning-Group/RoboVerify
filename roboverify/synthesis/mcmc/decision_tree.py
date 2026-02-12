@@ -2,8 +2,9 @@ from copy import deepcopy
 
 import matplotlib.pyplot as plt
 import numpy as np
-import util.on
 from sklearn import tree
+
+from synthesis.util import on
 
 
 class Feature:
@@ -18,9 +19,7 @@ class ON_feature(Feature):
         self.b2 = b2
 
     def __call__(self, obs):
-        return util.on.on(
-            util.on.get_block_pos(obs, self.b1), util.on.get_block_pos(obs, self.b2)
-        )
+        return on.on(on.get_block_pos(obs, self.b1), on.get_block_pos(obs, self.b2))
 
     def __str__(self) -> str:
         return f"ON({self.b1}, {self.b2})"

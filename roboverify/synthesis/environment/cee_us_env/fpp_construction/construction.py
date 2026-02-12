@@ -66,7 +66,7 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
             )
         else:
             distance_threshold = 0.05
-            from environment.cee_us_env.fpp_construction.xml_gen import generate_xml
+            from synthesis.environment.cee_us_env.fpp_construction.xml_gen import generate_xml
 
         with tempfile.NamedTemporaryFile(
             mode="wt",

@@ -1,19 +1,19 @@
 
 import argparse
 import numpy as np
-from environment.Entity_Factored_RL_Env.fetch_push_multi import FetchNPushEnv, FetchNPushObsWrapper
-from environment.data.push_controller import get_push_control
-from environment.data.pick_and_place_controller import get_pick_and_place_control
-from environment.data.block_controller import get_block_control
-from environment.data.custom_block_controller import get_custom_block_control
-from environment.data.pickplacemulti_controller import get_pickmulti_control
+from synthesis.environment.Entity_Factored_RL_Env.fetch_push_multi import FetchNPushEnv, FetchNPushObsWrapper
+from synthesis.environment.data.push_controller import get_push_control
+from synthesis.environment.data.pick_and_place_controller import get_pick_and_place_control
+from synthesis.environment.data.block_controller import get_block_control
+from synthesis.environment.data.custom_block_controller import get_custom_block_control
+from synthesis.environment.data.pickplacemulti_controller import get_pickmulti_control
 # from environment.data.pickplacemulti_controller_v0 import get_pickmulti_control
-from environment.data.pushmulti_controller import get_pushmulti_control
-from environment.data.pickplace_dest import get_pickdest_control
-from environment.utils.general_utils import AttrDict
-from environment.general_env import GeneralEnv, GymToGymnasium
-from environment.fetch_custom.get_fetch_env import get_env, get_pickplace_env, episode_render_fn
-from environment.cee_us_env.fpp_construction_env import FetchPickAndPlaceConstruction
+from synthesis.environment.data.pushmulti_controller import get_pushmulti_control
+from synthesis.environment.data.pickplace_dest import get_pickdest_control
+from synthesis.environment.utils.general_utils import AttrDict
+from synthesis.environment.general_env import GeneralEnv, GymToGymnasium
+from synthesis.environment.fetch_custom.get_fetch_env import get_env, get_pickplace_env, episode_render_fn
+from synthesis.environment.cee_us_env.fpp_construction_env import FetchPickAndPlaceConstruction
 # import gym
 import gymnasium as gym
 from tqdm import tqdm

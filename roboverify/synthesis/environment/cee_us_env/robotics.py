@@ -16,8 +16,8 @@ from gym.utils import EzPickle
 #     MaskedGoalSpaceEnvironmentInterface,
 # )
 
-import environment.cee_us_env.torch_helpers as torch_helpers
-from environment.cee_us_env.abstract_environments import GroundTruthSupportEnv, MaskedGoalSpaceEnvironmentInterface
+import synthesis.environment.cee_us_env.torch_helpers as torch_helpers
+from synthesis.environment.cee_us_env.abstract_environments import GroundTruthSupportEnv, MaskedGoalSpaceEnvironmentInterface
 
 
 class GymRoboticsGroundTruthSupportEnv(GroundTruthSupportEnv, RobotEnv, ABC):

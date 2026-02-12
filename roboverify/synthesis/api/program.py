@@ -112,7 +112,7 @@ class PickPlace(Instruction):
 
     def eval(self, env, traj, return_img=False):
         # call the neural controller here
-        from environment.data.pickplace_naive import get_pick_control_naive
+        from synthesis.environment.data.pickplace_naive import get_pick_control_naive
 
         imgs = []
         success = False

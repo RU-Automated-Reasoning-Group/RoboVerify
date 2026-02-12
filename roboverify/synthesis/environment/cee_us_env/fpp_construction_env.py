@@ -8,10 +8,10 @@ from gym import spaces
 from gym.envs.robotics.rotations import euler2quat
 from gym.utils import EzPickle
 
-import environment.cee_us_env.torch_helpers as torch_helpers
-from environment.cee_us_env.abstract_environments import MaskedGoalSpaceEnvironmentInterface
-from environment.cee_us_env.fpp_construction.construction import FetchBlockConstructionEnv
-from environment.cee_us_env.robotics import GymRoboticsGroundTruthSupportEnv
+import synthesis.environment.cee_us_env.torch_helpers as torch_helpers
+from synthesis.environment.cee_us_env.abstract_environments import MaskedGoalSpaceEnvironmentInterface
+from synthesis.environment.cee_us_env.fpp_construction.construction import FetchBlockConstructionEnv
+from synthesis.environment.cee_us_env.robotics import GymRoboticsGroundTruthSupportEnv
 
 import pdb
 
