@@ -3,8 +3,7 @@ import os
 from PIL import Image
 
 from synthesis.api import program
-from synthesis.mcmc import synthesis, cem
-
+from synthesis.mcmc import cem, synthesis
 
 if __name__ == "__main__":
     available_operands = {
@@ -23,16 +22,20 @@ if __name__ == "__main__":
 
     p = program.Program(3)
     p.instructions = [
-        program.PickPlace(grab_box_id=0, target_box_id=0),  # move up with respect to box 0
+        program.PickPlace(
+            grab_box_id=0, target_box_id=0
+        ),  # move up with respect to box 0
         program.PickPlace(
             grab_box_id=0, target_box_id=1
         ),  # move horizontally to the top of box 1
-        program.PickPlace(grab_box_id=0, target_box_id=1),  # move down to place on box 1
+        program.PickPlace(
+            grab_box_id=0, target_box_id=1
+        ),  # move down to place on box 1
     ]
     f = synthesis.Runner(p, expert_states, num_seeds, num_block)
     initial_parameters = p.register_trainable_parameter()
     cem.cem_optimize(f, len(initial_parameters), N=16, K=4, init_mu=initial_parameters)
-    
+
     # p.update_trainable_parameter(
     #     [
     #         -0.055,

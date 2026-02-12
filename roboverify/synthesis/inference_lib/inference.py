@@ -10,6 +10,7 @@ from synthesis.util import on
 from synthesis.verification_lib.highlevel_verification_lib import (
     BoxSort,
     ON_star,
+    ON_star_zero,
     get_consts,
     highlevel_z3_solver,
 )
@@ -22,6 +23,8 @@ def add_all_pairs(vocabulary, r, all_vars):
                 if isinstance(r, str) and r == "equality":
                     vocabulary.append(v1 == v2)
                 elif r == ON_star:
+                    vocabulary.append(r(v1, v2))
+                elif r == ON_star_zero:
                     vocabulary.append(r(v1, v2))
                 else:
                     assert False, f"unknown relation r: {r}"
@@ -42,6 +45,7 @@ def compute_omega_k(k: int, relations: List, constants: List) -> Tuple[List, Lis
 
 
 def compute_dataset(
+    states_zero: List[Dict],
     states: List[Dict],
     omega_k: List,
     universal_quantified_vars: List,
@@ -52,16 +56,18 @@ def compute_dataset(
     Each universally quantified variable needs to be bind into one of the existing blocks in the states
     """
     dataset = set()
-    for state, mapping in zip(states, constants_mappings):
+    for state_zero, state, mapping in zip(states_zero, states, constants_mappings):
         all_objects = list(state.keys())
         for assignment in itertools.product(
             all_objects, repeat=len(universal_quantified_vars)
         ):
+            # var_mapping maps universal quantified variables to its corresponding real block
             var_mapping = {
                 var: assignment[idx]
                 for idx, var in enumerate(universal_quantified_vars)
             }
             d = compute_data(
+                state_zero,
                 state,
                 omega_k,
                 var_mapping,
@@ -74,6 +80,7 @@ def compute_dataset(
 
 
 def compute_data(
+    state_zero,
     state,
     omega_k: List,
     var_mapping: Dict,
@@ -81,7 +88,7 @@ def compute_data(
 ) -> Tuple:
     data = []
     for predicate in omega_k:
-        if "ON_star" in str(predicate):
+        if str(predicate) == "ON_star":
             arg0, arg1 = predicate.arg(0), predicate.arg(1)
             block1_name = (
                 var_mapping[arg0] if arg0 in var_mapping else constants_mapping[arg0]
@@ -94,6 +101,21 @@ def compute_data(
                 on.on_star_implementation(
                     state[block1_name],
                     state[block2_name],
+                )
+            )
+        elif str(predicate) == "ON_star_zero":
+            arg0, arg1 = predicate.arg(0), predicate.arg(1)
+            block1_name = (
+                var_mapping[arg0] if arg0 in var_mapping else constants_mapping[arg0]
+            )
+            block2_name = (
+                var_mapping[arg1] if arg1 in var_mapping else constants_mapping[arg1]
+            )
+            assert isinstance(block1_name, str) and isinstance(block2_name, str)
+            data.append(
+                on.on_star_implementation(
+                    state_zero[block1_name],
+                    state_zero[block2_name],
                 )
             )
         else:
@@ -367,6 +389,7 @@ def check_tautology(clause) -> bool:
 
 
 def loop_inference_by_index(
+    states_zero: List,
     states: List,
     constants: List,
     constants_mappings: List[Dict],
@@ -379,7 +402,7 @@ def loop_inference_by_index(
     )
 
     dataset = compute_dataset(
-        states, omega_inv, universal_quantified_vars, constants, constants_mappings
+        states_zero, states, omega_inv, universal_quantified_vars, constants, constants_mappings
     )
     full_S, full_U, target, reduced_omega = compute_S_U(dataset, omega_inv, index)
 
@@ -441,6 +464,7 @@ def loop_inference_by_index(
 
 
 def loop_inference(
+    states_zero: List,
     states: List,
     k: int,
     relations: List,
@@ -461,6 +485,7 @@ def loop_inference(
     for i in range(len(omega_inv)):
         inferred_invariants.extend(
             loop_inference_by_index(
+                states_zero,
                 states,
                 constants,
                 constants_mappings,
@@ -506,6 +531,7 @@ def check_redundancy(candidates: List) -> List:
 
 
 def run_proposal_example():
+    states_zero: List[Dict] = []
     states: List[Dict] = [
         {
             "x1": [0.0, 0.0, 0.0],
@@ -525,4 +551,30 @@ def run_proposal_example():
         {b0: "x1", b: "x1"},
     ]
 
-    return loop_inference(states, k, relations, constants, constants_mappings)
+    return loop_inference(states_zero, states, k, relations, constants, constants_mappings)
+
+
+def run_reverse_example():
+    states_zero: List[Dict] = [
+        
+    ]
+    states: List[Dict] = [
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [0.0, 0.0, 0.05],
+            "x3": [0.0, 0.0, 0.1],
+            "x4": [5.0, 5.0, 0.0],
+            "x5": [10.0, 10.0, 0.0],
+        },
+        {"x1": [0.0, 0.0, 0.0], "x2": [5.0, 5.0, 0.0], "x3": [10.0, 10.0, 0.0]},
+    ]
+    k = 2
+    relations = [ON_star, ON_star_zero, "equality"]
+    b0, b = get_consts("b0"), get_consts("b")
+    constants = [b0, b]
+    constants_mappings = [
+        {b0: "x1", b: "x3"},
+        {b0: "x1", b: "x1"},
+    ]
+
+    return loop_inference(states_zero, states, k, relations, constants, constants_mappings)

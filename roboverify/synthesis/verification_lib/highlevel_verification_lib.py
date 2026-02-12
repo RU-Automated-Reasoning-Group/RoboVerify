@@ -19,6 +19,7 @@ BoxSort = DeclareSort("Box")
 Variable_pools = {}
 
 ON_star = Function("ON_star", BoxSort, BoxSort, BoolSort())
+ON_star_zero = Function("ON_star_zero", BoxSort, BoxSort, BoolSort())
 higher = Function("higher", BoxSort, BoxSort, BoolSort())
 scattered = Function("scattered", BoxSort, BoxSort, BoolSort())
 

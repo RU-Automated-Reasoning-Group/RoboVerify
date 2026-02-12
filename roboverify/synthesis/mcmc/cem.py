@@ -1,4 +1,5 @@
-import multiprocess as mp
+import multiprocessing as mp
+
 import numpy as np
 
 
