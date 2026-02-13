@@ -74,6 +74,7 @@ def compute_dataset(
                 mapping,
             )
             print("var_mapping", var_mapping)
+            print("omega_k", omega_k)
             print("data", d)
             dataset.add(d)
     return dataset
@@ -88,7 +89,8 @@ def compute_data(
 ) -> Tuple:
     data = []
     for predicate in omega_k:
-        if str(predicate) == "ON_star":
+        print("predicate:", predicate)
+        if str(predicate).startswith("ON_star") and not str(predicate).startswith("ON_star_zero"):
             arg0, arg1 = predicate.arg(0), predicate.arg(1)
             block1_name = (
                 var_mapping[arg0] if arg0 in var_mapping else constants_mapping[arg0]
@@ -103,7 +105,7 @@ def compute_data(
                     state[block2_name],
                 )
             )
-        elif str(predicate) == "ON_star_zero":
+        elif str(predicate).startswith("ON_star_zero"):
             arg0, arg1 = predicate.arg(0), predicate.arg(1)
             block1_name = (
                 var_mapping[arg0] if arg0 in var_mapping else constants_mapping[arg0]
@@ -376,6 +378,7 @@ def check_tautology(clause) -> bool:
     # add all axioms
     highlevel_verification = highlevel_z3_solver()
     highlevel_verification.add_axiom(solver)
+    highlevel_verification.add_axiom_on_star_zero(solver)
 
     solver.add(z3.Not(clause))
     result = solver.check()
@@ -406,8 +409,14 @@ def loop_inference_by_index(
     )
     full_S, full_U, target, reduced_omega = compute_S_U(dataset, omega_inv, index)
 
+    print("S", full_S)
+    print("U", full_U)
     reduced_S = full_S - full_U
     reduced_U = full_U - full_S
+    print("full_S", len(full_S))
+    print("full_U", len(full_U))
+    print("reduced_S", len(reduced_S))
+    print("reduced_U", len(reduced_U))
 
     # learn phi in phi => target
     phi_selected_idxs = learn_from_partition(reduced_S, full_U)
@@ -474,9 +483,9 @@ def loop_inference(
     omega_inv, universal_quantified_vars = compute_omega_k(k, relations, constants)
 
     ############### ! temp shortcut starts
-    # a, y = universal_quantified_vars
-    # b0, b, b_prime = constants
-    # omega_inv = [ON_star(a, b0), ON_star(y, a), ON_star(a, b), a == y, b == a]
+    x, y = universal_quantified_vars
+    b0, b = constants
+    omega_inv = [ON_star(x, b0), ON_star(x, y), ON_star_zero(x, y), ON_star(b, x), ON_star_zero(y, x)]
     ############## ! temp shortcut end
 
     print("omega_inv", omega_inv)
@@ -556,25 +565,89 @@ def run_proposal_example():
 
 def run_reverse_example():
     states_zero: List[Dict] = [
-        
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [0.0, 0.0, 0.05],
+            "x3": [0.0, 0.0, 0.1],
+            "x4": [0.0, 0.0, 0.15],
+            "x5": [0.0, 0.0, 0.20],
+        },
+        # {
+        #     "x1": [0.0, 0.0, 0.0],
+        #     "x2": [0.0, 0.0, 0.05],
+        #     "x3": [0.0, 0.0, 0.1],
+        #     "x4": [0.0, 0.0, 0.15],
+        #     "x5": [0.0, 0.0, 0.20],
+        # },
+        # {
+        #     "x1": [0.0, 0.0, 0.0],
+        #     "x2": [0.0, 0.0, 0.05],
+        #     "x3": [0.0, 0.0, 0.1],
+        #     "x4": [0.0, 0.0, 0.15],
+        #     "x5": [0.0, 0.0, 0.20],
+        # },
+        # {
+        #     "x1": [0.0, 0.0, 0.0],
+        #     "x2": [0.0, 0.0, 0.05],
+        #     "x3": [0.0, 0.0, 0.1],
+        #     "x4": [0.0, 0.0, 0.15],
+        #     "x5": [0.0, 0.0, 0.20],
+        # },
+        # {
+        #     "x1": [0.0, 0.0, 0.0],
+        #     "x2": [0.0, 0.0, 0.05],
+        #     "x3": [0.0, 0.0, 0.1],
+        #     "x4": [0.0, 0.0, 0.15],
+        #     "x5": [0.0, 0.0, 0.20],
+        # },
     ]
     states: List[Dict] = [
         {
             "x1": [0.0, 0.0, 0.0],
             "x2": [0.0, 0.0, 0.05],
             "x3": [0.0, 0.0, 0.1],
-            "x4": [5.0, 5.0, 0.0],
-            "x5": [10.0, 10.0, 0.0],
+            "x4": [0.0, 0.0, 0.15],
+            "x5": [5.0, 0.0, 0.0],
         },
-        {"x1": [0.0, 0.0, 0.0], "x2": [5.0, 5.0, 0.0], "x3": [10.0, 10.0, 0.0]},
+        # {
+        #     "x1": [0.0, 0.0, 0.0],
+        #     "x2": [0.0, 0.0, 0.05],
+        #     "x3": [0.0, 0.0, 0.1],
+        #     "x4": [5.0, 0.0, 0.05],
+        #     "x5": [5.0, 0.0, 0.0],
+        # },
+        # {
+        #     "x1": [0.0, 0.0, 0.0],
+        #     "x2": [0.0, 0.0, 0.05],
+        #     "x3": [5.0, 0.0, 0.1],
+        #     "x4": [5.0, 0.0, 0.05],
+        #     "x5": [5.0, 0.0, 0.0],
+        # },
+        # {
+        #     "x1": [0.0, 0.0, 0.0],
+        #     "x2": [5.0, 0.0, 0.15],
+        #     "x3": [5.0, 0.0, 0.1],
+        #     "x4": [5.0, 0.0, 0.05],
+        #     "x5": [5.0, 0.0, 0.0],
+        # },
+        # {
+        #     "x1": [5.0, 0.0, 0.2],
+        #     "x2": [5.0, 0.0, 0.15],
+        #     "x3": [5.0, 0.0, 0.1],
+        #     "x4": [5.0, 0.0, 0.05],
+        #     "x5": [5.0, 0.0, 0.0],
+        # },
     ]
     k = 2
     relations = [ON_star, ON_star_zero, "equality"]
     b0, b = get_consts("b0"), get_consts("b")
     constants = [b0, b]
     constants_mappings = [
+        {b0: "x1", b: "x5"},
+        {b0: "x1", b: "x4"},
         {b0: "x1", b: "x3"},
-        {b0: "x1", b: "x1"},
+        {b0: "x1", b: "x2"},
+        # {b0: "x1", b: "x1"},
     ]
 
     return loop_inference(states_zero, states, k, relations, constants, constants_mappings)
