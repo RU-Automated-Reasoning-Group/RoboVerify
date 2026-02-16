@@ -1,9 +1,9 @@
+import itertools
+
+from sympy import And, Equivalent, Implies, Not, Or, symbols, to_cnf
+
 from synthesis.inference_lib import inference
 
-from sympy import to_cnf, symbols
-from sympy import And, Or, Not, Implies, Equivalent, to_cnf
-
-import itertools
 
 def generate_truth_table(expression, var_names):
     """
@@ -15,9 +15,9 @@ def generate_truth_table(expression, var_names):
     """
     # Define symbols
     syms = symbols(var_names)
-    if isinstance(syms, str): # Handle single variable case
+    if isinstance(syms, str):  # Handle single variable case
         syms = [syms]
-    
+
     # Header
     header = " | ".join(var_names) + " || Result"
     separator = "-" * len(header)
@@ -28,13 +28,14 @@ def generate_truth_table(expression, var_names):
     for combo in itertools.product([True, False], repeat=len(syms)):
         # Create a dictionary mapping symbols to their current values
         model = dict(zip(syms, combo))
-        
+
         # Evaluate the expression using subs
         result = expression.subs(model)
-        
+
         # Print the row
         row = " | ".join(f"{val!s:^5}" for val in combo) + f" || {result!s:^6}"
         print(row)
+
 
 # Example Usage:
 # Define variables
@@ -46,10 +47,9 @@ def generate_truth_table(expression, var_names):
 # generate_truth_table(expr, ['A', 'B', 'C'])
 
 if __name__ == "__main__":
-    inference.check_redundancy
     # x_on_n0, x_on_y, x_on0_y, b_on_x, y_on0_x = symbols("x_on_n0, x_on_y, x_on0_y, b_on_x, y_on0_x")
 
-    # formula = ((x_on_n0 & Equivalent(x_on_y, x_on0_y)) | (Not(x_on_n0) & b_on_x & Equivalent(x_on_y, y_on0_x))) 
+    # formula = ((x_on_n0 & Equivalent(x_on_y, x_on0_y)) | (Not(x_on_n0) & b_on_x & Equivalent(x_on_y, y_on0_x)))
     # cnf_formula = to_cnf(formula, simplify=True)
     # print(cnf_formula)
     # generate_truth_table(cnf_formula, ["x_on_n0", "x_on_y", "x_on0_y", "b_on_x", "y_on0_x"])
@@ -63,3 +63,6 @@ if __name__ == "__main__":
     # import pdb; pdb.set_trace()
     # generate_truth_table(inferred, ["x_on_n0", "x_on_y", "x_on0_y", "b_on_x", "y_on0_x"])
     inference.run_reverse_example()
+
+    inferred_invariant, candidate_lists = inference.run_reverse_example()
+    

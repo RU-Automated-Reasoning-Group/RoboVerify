@@ -14,7 +14,7 @@ from z3 import (
     unsat,
 )
 
-# BoxSort, (b9, b10, b11) = EnumSort("Box", ["b9", "b10", "b11"])
+# BoxSort, (b9, b10, b11, b12) = EnumSort("Box", ["b9", "b10", "b11", "b12"])
 BoxSort = DeclareSort("Box")
 Variable_pools = {}
 
@@ -33,6 +33,7 @@ class highlevel_z3_solver:
     def start_verification(self, vc=None):
         s = Solver()
         self.add_axiom(s)
+        self.add_axiom_on_star_zero(s)
         if vc is not None:
             s.add(Not(vc))
         if s.check() == sat:
@@ -50,27 +51,29 @@ class highlevel_z3_solver:
 
     def add_axiom(self, s: Solver):
         x, y, c = Consts("x y c", BoxSort)
-        s.add(
-            ForAll([x, y, c], Implies(And(ON_star(x, y), ON_star(y, c)), ON_star(x, c)))
+        s.assert_and_track(
+            ForAll([x, y, c], Implies(And(ON_star(x, y), ON_star(y, c)), ON_star(x, c))), "on1" 
         )
-        s.add(ForAll([x], ON_star(x, x)))
-        s.add(
+        s.assert_and_track(ForAll([x], ON_star(x, x)), "on2")
+        s.assert_and_track(
             ForAll(
                 [x, y, c],
                 Implies(
                     And(ON_star(x, y), ON_star(x, c)), Or(ON_star(y, c), ON_star(c, y))
                 ),
-            )
+            ),
+            "on3"
         )
-        s.add(
+        s.assert_and_track(
             ForAll(
                 [x, y, c],
                 Implies(
                     And(ON_star(x, c), ON_star(y, c)), Or(ON_star(x, y), ON_star(y, x))
                 ),
-            )
+            ),
+            "on4"
         )
-        s.add(ForAll([x, y], Implies(ON_star(x, y), Implies(ON_star(y, x), x == y))))
+        s.assert_and_track(ForAll([x, y], Implies(ON_star(x, y), Implies(ON_star(y, x), x == y))), "on5")
 
         s.add(ForAll([x, y, c], Implies(And(higher(x, y), higher(y, c)), higher(x, c))))
         s.add(ForAll([x], higher(x, x)))
@@ -81,6 +84,73 @@ class highlevel_z3_solver:
                     And(higher(x, y), higher(x, c)), Or(higher(y, c), higher(c, y))
                 ),
             )
+        )
+
+    def add_axiom_on_star_zero(self, s: Solver):
+        x, y, c = Consts("x y c", BoxSort)
+        s.assert_and_track(
+            ForAll(
+                [x, y, c],
+                Implies(
+                    And(ON_star_zero(x, y), ON_star_zero(y, c)), ON_star_zero(x, c)
+                ),
+            ),
+            "on_zero_1"
+        )
+        s.assert_and_track(ForAll([x], ON_star_zero(x, x)), "on_zero_2")
+        s.assert_and_track(
+            ForAll(
+                [x, y, c],
+                Implies(
+                    And(ON_star_zero(x, y), ON_star_zero(x, c)),
+                    Or(ON_star_zero(y, c), ON_star_zero(c, y)),
+                ),
+            ),
+            "on_zero_3"
+        )
+        s.assert_and_track(
+            ForAll(
+                [x, y, c],
+                Implies(
+                    And(ON_star_zero(x, c), ON_star_zero(y, c)),
+                    Or(ON_star_zero(x, y), ON_star_zero(y, x)),
+                ),
+            ),
+            "on_zero_4"
+        )
+        s.assert_and_track(
+            ForAll(
+                [x, y], Implies(ON_star_zero(x, y), Implies(ON_star_zero(y, x), x == y))
+            ),
+            "on_zero_5"
+        )
+
+        # s.add(ForAll([x, y, c], Implies(And(higher(x, y), higher(y, c)), higher(x, c))))
+        # s.add(ForAll([x], higher(x, x)))
+        # s.add(
+        #     ForAll(
+        #         [x, y, c],
+        #         Implies(
+        #             And(higher(x, y), higher(x, c)), Or(higher(y, c), higher(c, y))
+        #         ),
+        #     )
+        # )
+
+    def add_reverse_loop_invariant(self, s: Solver, b0, b):
+        x, y = Consts("x y", BoxSort)
+        s.assert_and_track(
+            Not(ForAll(
+                [x, y],
+                Or(
+                    And(ON_star(x, b0), ON_star(x, y) == ON_star_zero(x, y)),
+                    And(
+                        Not(ON_star(x, b0)),
+                        ON_star(b, x),
+                        ON_star(x, y) == ON_star_zero(y, x),
+                    ),
+                ),
+            )),
+            "not_original_invariant"
         )
 
 

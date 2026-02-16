@@ -11,10 +11,15 @@ from synthesis.verification_lib.highlevel_verification_lib import (
     BoxSort,
     ON_star,
     ON_star_zero,
+    # b9,
+    # b10,
+    # b11,
+    # b12,
     get_consts,
     highlevel_z3_solver,
 )
 
+z3.set_option("smt.core.minimize", "true")
 
 def add_all_pairs(vocabulary, r, all_vars):
     for v1 in all_vars:
@@ -90,7 +95,9 @@ def compute_data(
     data = []
     for predicate in omega_k:
         print("predicate:", predicate)
-        if str(predicate).startswith("ON_star") and not str(predicate).startswith("ON_star_zero"):
+        if str(predicate).startswith("ON_star") and not str(predicate).startswith(
+            "ON_star_zero"
+        ):
             arg0, arg1 = predicate.arg(0), predicate.arg(1)
             block1_name = (
                 var_mapping[arg0] if arg0 in var_mapping else constants_mapping[arg0]
@@ -405,7 +412,12 @@ def loop_inference_by_index(
     )
 
     dataset = compute_dataset(
-        states_zero, states, omega_inv, universal_quantified_vars, constants, constants_mappings
+        states_zero,
+        states,
+        omega_inv,
+        universal_quantified_vars,
+        constants,
+        constants_mappings,
     )
     full_S, full_U, target, reduced_omega = compute_S_U(dataset, omega_inv, index)
 
@@ -485,7 +497,13 @@ def loop_inference(
     ############### ! temp shortcut starts
     x, y = universal_quantified_vars
     b0, b = constants
-    omega_inv = [ON_star(x, b0), ON_star(x, y), ON_star_zero(x, y), ON_star(b, x), ON_star_zero(y, x)]
+    omega_inv = [
+        ON_star(x, b0),
+        ON_star(x, y),
+        ON_star_zero(x, y),
+        ON_star(b, x),
+        ON_star_zero(y, x),
+    ]
     ############## ! temp shortcut end
 
     print("omega_inv", omega_inv)
@@ -503,7 +521,7 @@ def loop_inference(
                 universal_quantified_vars,
             )
         )
-    print("inferred_invariants", len(inferred_invariants))
+    print("inferred_invariants count", len(inferred_invariants))
 
     filtered_invariants = check_redundancy(inferred_invariants)
     print("filtered candidates", len(filtered_invariants))
@@ -511,6 +529,56 @@ def loop_inference(
 
     final_result = z3.And(*filtered_invariants)
     print("final result", final_result)
+
+    print("checking equivalent with ground truth")
+    solver = z3.Solver()
+    solver.set(unsat_core=True)
+
+    highlevel_verification = highlevel_z3_solver()
+    highlevel_verification.add_axiom(solver)
+    highlevel_verification.add_axiom_on_star_zero(solver)
+    highlevel_verification.add_reverse_loop_invariant(solver, b0, b) # not
+    # solver.assert_and_track(ON_star(x, b0), "on_b0")
+    # solver.assert_and_track(z3.Not(z3.Implies(z3.And(ON_star(x, b0), ON_star(x, y)), ON_star_zero(x, y))), "original_1")
+
+    # solver.assert_and_track(z3.Not(z3.Implies(z3.And(ON_star(x, b0), ON_star_zero(x, y)), ON_star(x, y))), "original_2")
+
+    # solver.assert_and_track(ON_star(b, x), "b_on_x")
+    # solver.assert_and_track(z3.Not(z3.Implies(z3.And(ON_star(b, x), ON_star(x, y)), ON_star_zero(y, x))), "original_3")
+    # solver.assert_and_track(z3.Not(z3.Implies(z3.And(ON_star(b, x), ON_star_zero(y, x)), ON_star(x, y))), "original_4")
+
+    for idx, candidate in enumerate(filtered_invariants):
+        solver.assert_and_track(candidate, f"term{idx}")
+        print(f"term{idx}:", candidate)
+    print(solver.check())
+    print("Unsat Core:", solver.unsat_core())
+
+    # solver.add(ON_star(x, b0))
+    # solver.add(z3.Not(z3.Implies(z3.And(ON_star(x, b0), ON_star_zero(x, y)), ON_star(x, y))))
+    # solver.add(z3.Not(z3.Implies(z3.And(ON_star(x, b0), ON_star(x, y)), ON_star_zero(x, y))))
+    # solver.add(ON_star(b, x))
+    # solver.add(z3.Not(z3.Implies(z3.And(ON_star(b, x), ON_star(x, y)), ON_star_zero(y, x))))
+    # solver.add(z3.Not(z3.Implies(z3.And(ON_star(b, x), ON_star_zero(y, x)), ON_star(x, y))))
+    # print(solver.check())
+    # print(solver.check())
+    # print(solver.check())
+    # print(solver.model())
+    # for name1, box1 in zip(["b9", "b10", "b11", "b12"], [b9, b10, b11, b12]):
+    #     for name2, box2 in zip(["b9", "b10", "b11", "b12"], [b9, b10, b11, b12]):
+    #         print(f"ON({name1}, {name2}): {solver.model().evaluate(ON_star(box1, box2))}")
+
+    # for name1, box1 in zip(["b9", "b10", "b11", "b12"], [b9, b10, b11, b12]):
+    #     for name2, box2 in zip(["b9", "b10", "b11", "b12"], [b9, b10, b11, b12]):
+    #         print(f"ON_zero({name1}, {name2}): {solver.model().evaluate(ON_star_zero(box1, box2))}")
+    # for i in range(len(filtered_invariants)):
+    # print(f"learned {i}", filtered_invariants[i])
+    # solver.push()
+    # solver.add(z3.Not(filtered_invariants[i]))
+    # print(solver.check())
+    # if solver.check() == z3.sat:
+    # print(solver.model())
+    # solver.pop()
+
     return final_result, filtered_invariants
 
 
@@ -521,6 +589,7 @@ def check_redundancy(candidates: List) -> List:
         solver = z3.Solver()
         highlevel_verification = highlevel_z3_solver()
         highlevel_verification.add_axiom(solver)
+        highlevel_verification.add_axiom_on_star_zero(solver)
 
         for existing in filtered_invariants:
             solver.add(existing)
@@ -560,7 +629,9 @@ def run_proposal_example():
         {b0: "x1", b: "x1"},
     ]
 
-    return loop_inference(states_zero, states, k, relations, constants, constants_mappings)
+    return loop_inference(
+        states_zero, states, k, relations, constants, constants_mappings
+    )
 
 
 def run_reverse_example():
@@ -572,34 +643,34 @@ def run_reverse_example():
             "x4": [0.0, 0.0, 0.15],
             "x5": [0.0, 0.0, 0.20],
         },
-        # {
-        #     "x1": [0.0, 0.0, 0.0],
-        #     "x2": [0.0, 0.0, 0.05],
-        #     "x3": [0.0, 0.0, 0.1],
-        #     "x4": [0.0, 0.0, 0.15],
-        #     "x5": [0.0, 0.0, 0.20],
-        # },
-        # {
-        #     "x1": [0.0, 0.0, 0.0],
-        #     "x2": [0.0, 0.0, 0.05],
-        #     "x3": [0.0, 0.0, 0.1],
-        #     "x4": [0.0, 0.0, 0.15],
-        #     "x5": [0.0, 0.0, 0.20],
-        # },
-        # {
-        #     "x1": [0.0, 0.0, 0.0],
-        #     "x2": [0.0, 0.0, 0.05],
-        #     "x3": [0.0, 0.0, 0.1],
-        #     "x4": [0.0, 0.0, 0.15],
-        #     "x5": [0.0, 0.0, 0.20],
-        # },
-        # {
-        #     "x1": [0.0, 0.0, 0.0],
-        #     "x2": [0.0, 0.0, 0.05],
-        #     "x3": [0.0, 0.0, 0.1],
-        #     "x4": [0.0, 0.0, 0.15],
-        #     "x5": [0.0, 0.0, 0.20],
-        # },
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [0.0, 0.0, 0.05],
+            "x3": [0.0, 0.0, 0.1],
+            "x4": [0.0, 0.0, 0.15],
+            "x5": [0.0, 0.0, 0.20],
+        },
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [0.0, 0.0, 0.05],
+            "x3": [0.0, 0.0, 0.1],
+            "x4": [0.0, 0.0, 0.15],
+            "x5": [0.0, 0.0, 0.20],
+        },
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [0.0, 0.0, 0.05],
+            "x3": [0.0, 0.0, 0.1],
+            "x4": [0.0, 0.0, 0.15],
+            "x5": [0.0, 0.0, 0.20],
+        },
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [0.0, 0.0, 0.05],
+            "x3": [0.0, 0.0, 0.1],
+            "x4": [0.0, 0.0, 0.15],
+            "x5": [0.0, 0.0, 0.20],
+        },
     ]
     states: List[Dict] = [
         {
@@ -609,34 +680,34 @@ def run_reverse_example():
             "x4": [0.0, 0.0, 0.15],
             "x5": [5.0, 0.0, 0.0],
         },
-        # {
-        #     "x1": [0.0, 0.0, 0.0],
-        #     "x2": [0.0, 0.0, 0.05],
-        #     "x3": [0.0, 0.0, 0.1],
-        #     "x4": [5.0, 0.0, 0.05],
-        #     "x5": [5.0, 0.0, 0.0],
-        # },
-        # {
-        #     "x1": [0.0, 0.0, 0.0],
-        #     "x2": [0.0, 0.0, 0.05],
-        #     "x3": [5.0, 0.0, 0.1],
-        #     "x4": [5.0, 0.0, 0.05],
-        #     "x5": [5.0, 0.0, 0.0],
-        # },
-        # {
-        #     "x1": [0.0, 0.0, 0.0],
-        #     "x2": [5.0, 0.0, 0.15],
-        #     "x3": [5.0, 0.0, 0.1],
-        #     "x4": [5.0, 0.0, 0.05],
-        #     "x5": [5.0, 0.0, 0.0],
-        # },
-        # {
-        #     "x1": [5.0, 0.0, 0.2],
-        #     "x2": [5.0, 0.0, 0.15],
-        #     "x3": [5.0, 0.0, 0.1],
-        #     "x4": [5.0, 0.0, 0.05],
-        #     "x5": [5.0, 0.0, 0.0],
-        # },
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [0.0, 0.0, 0.05],
+            "x3": [0.0, 0.0, 0.1],
+            "x4": [5.0, 0.0, 0.05],
+            "x5": [5.0, 0.0, 0.0],
+        },
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [0.0, 0.0, 0.05],
+            "x3": [5.0, 0.0, 0.1],
+            "x4": [5.0, 0.0, 0.05],
+            "x5": [5.0, 0.0, 0.0],
+        },
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [5.0, 0.0, 0.15],
+            "x3": [5.0, 0.0, 0.1],
+            "x4": [5.0, 0.0, 0.05],
+            "x5": [5.0, 0.0, 0.0],
+        },
+        {
+            "x1": [5.0, 0.0, 0.2],
+            "x2": [5.0, 0.0, 0.15],
+            "x3": [5.0, 0.0, 0.1],
+            "x4": [5.0, 0.0, 0.05],
+            "x5": [5.0, 0.0, 0.0],
+        },
     ]
     k = 2
     relations = [ON_star, ON_star_zero, "equality"]
@@ -650,4 +721,6 @@ def run_reverse_example():
         # {b0: "x1", b: "x1"},
     ]
 
-    return loop_inference(states_zero, states, k, relations, constants, constants_mappings)
+    return loop_inference(
+        states_zero, states, k, relations, constants, constants_mappings
+    )
