@@ -663,6 +663,8 @@ def loop_inference(
     #         )
     #     ), "original_2")
 
+    # solver.assert_and_track(x != tbl, "x_neq_tbl")
+    # solver.assert_and_track(y != tbl, "y_neq_tbl")
     # solver.assert_and_track(ON_star(b, x), "b_on_x")
     # solver.assert_and_track(
     #     z3.Not(
