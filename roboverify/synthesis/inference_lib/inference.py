@@ -103,6 +103,8 @@ def compute_data(
                 var_mapping[arg1] if arg1 in var_mapping else constants_mapping[arg1]
             )
             assert isinstance(block1_name, str) and isinstance(block2_name, str)
+            # if block1_name == "tbl" or block2_name == "tbl":
+                # pdb.set_trace()
             data.append(
                 on.on_star_implementation(
                     state[block1_name],
@@ -493,8 +495,10 @@ def loop_inference(
 
     ############### ! temp shortcut starts
     x, y = universal_quantified_vars
-    b0, b = constants
+    b0, b, tbl = constants
     omega_inv = [
+        x == tbl,
+        y == tbl,
         ON_star(x, b0),
         ON_star(x, y),
         ON_star_zero(x, y),
@@ -535,6 +539,7 @@ def loop_inference(
     highlevel_verification.add_axiom(solver)
     highlevel_verification.add_axiom_on_star_zero(solver)
     highlevel_verification.add_reverse_loop_invariant(solver, b0, b)  # not
+    # solver.assert_and_track(z3.Not(z3.ForAll([x], z3.Implies(ON_star(x, b0), x != b))), "not_b_neq_b0")
     # solver.assert_and_track(ON_star(x, b0), "on_b0")
     # solver.assert_and_track(
     #     z3.Not(
@@ -765,6 +770,7 @@ def run_reverse_example():
             "x3": [0.0, 0.0, 0.1],
             "x4": [0.0, 0.0, 0.15],
             "x5": [0.0, 0.0, 0.20],
+            "tbl": [-100.0, -100.0, -100.0],
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -772,6 +778,7 @@ def run_reverse_example():
             "x3": [0.0, 0.0, 0.1],
             "x4": [0.0, 0.0, 0.15],
             "x5": [0.0, 0.0, 0.20],
+            "tbl": [-100.0, -100.0, -100.0],
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -779,6 +786,7 @@ def run_reverse_example():
             "x3": [0.0, 0.0, 0.1],
             "x4": [0.0, 0.0, 0.15],
             "x5": [0.0, 0.0, 0.20],
+            "tbl": [-100.0, -100.0, -100.0],
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -786,6 +794,7 @@ def run_reverse_example():
             "x3": [0.0, 0.0, 0.1],
             "x4": [0.0, 0.0, 0.15],
             "x5": [0.0, 0.0, 0.20],
+            "tbl": [-100.0, -100.0, -100.0],
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -793,6 +802,7 @@ def run_reverse_example():
             "x3": [0.0, 0.0, 0.1],
             "x4": [0.0, 0.0, 0.15],
             "x5": [0.0, 0.0, 0.20],
+            "tbl": [-100.0, -100.0, -100.0],
         },
     ]
     states: List[Dict] = [
@@ -801,7 +811,16 @@ def run_reverse_example():
             "x2": [0.0, 0.0, 0.05],
             "x3": [0.0, 0.0, 0.1],
             "x4": [0.0, 0.0, 0.15],
+            "x5": [0.0, 0.0, 0.20],
+            "tbl": [-100.0, -100.0, -100.0],
+        },
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [0.0, 0.0, 0.05],
+            "x3": [0.0, 0.0, 0.1],
+            "x4": [0.0, 0.0, 0.15],
             "x5": [5.0, 0.0, 0.0],
+            "tbl": [-100.0, -100.0, -100.0],
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -809,6 +828,7 @@ def run_reverse_example():
             "x3": [0.0, 0.0, 0.1],
             "x4": [5.0, 0.0, 0.05],
             "x5": [5.0, 0.0, 0.0],
+            "tbl": [-100.0, -100.0, -100.0],
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -816,6 +836,7 @@ def run_reverse_example():
             "x3": [5.0, 0.0, 0.1],
             "x4": [5.0, 0.0, 0.05],
             "x5": [5.0, 0.0, 0.0],
+            "tbl": [-100.0, -100.0, -100.0],
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -823,25 +844,20 @@ def run_reverse_example():
             "x3": [5.0, 0.0, 0.1],
             "x4": [5.0, 0.0, 0.05],
             "x5": [5.0, 0.0, 0.0],
-        },
-        {
-            "x1": [5.0, 0.0, 0.2],
-            "x2": [5.0, 0.0, 0.15],
-            "x3": [5.0, 0.0, 0.1],
-            "x4": [5.0, 0.0, 0.05],
-            "x5": [5.0, 0.0, 0.0],
+            "tbl": [-100.0, -100.0, -100.0],
         },
     ]
     k = 2
     relations = [ON_star, ON_star_zero, "equality"]
     b0, b = get_consts("b0"), get_consts("b")
-    constants = [b0, b]
+    tbl = get_consts("tbl")
+    constants = [b0, b, tbl]
     constants_mappings = [
-        {b0: "x1", b: "x5"},
-        {b0: "x1", b: "x4"},
-        {b0: "x1", b: "x3"},
-        {b0: "x1", b: "x2"},
-        # {b0: "x1", b: "x1"},
+        {b0: "x1", b: "tbl", tbl: "tbl"},
+        {b0: "x1", b: "x5", tbl: "tbl"},
+        {b0: "x1", b: "x4", tbl: "tbl"},
+        {b0: "x1", b: "x3", tbl: "tbl"},
+        {b0: "x1", b: "x2", tbl: "tbl"},
     ]
 
     return loop_inference(
