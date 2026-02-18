@@ -52,7 +52,10 @@ class highlevel_z3_solver:
     def add_axiom(self, s: Solver):
         x, y, c = Consts("x y c", BoxSort)
         s.assert_and_track(
-            ForAll([x, y, c], Implies(And(ON_star(x, y), ON_star(y, c)), ON_star(x, c))), "on1" 
+            ForAll(
+                [x, y, c], Implies(And(ON_star(x, y), ON_star(y, c)), ON_star(x, c))
+            ),
+            "on1",
         )
         s.assert_and_track(ForAll([x], ON_star(x, x)), "on2")
         s.assert_and_track(
@@ -62,7 +65,7 @@ class highlevel_z3_solver:
                     And(ON_star(x, y), ON_star(x, c)), Or(ON_star(y, c), ON_star(c, y))
                 ),
             ),
-            "on3"
+            "on3",
         )
         s.assert_and_track(
             ForAll(
@@ -71,9 +74,12 @@ class highlevel_z3_solver:
                     And(ON_star(x, c), ON_star(y, c)), Or(ON_star(x, y), ON_star(y, x))
                 ),
             ),
-            "on4"
+            "on4",
         )
-        s.assert_and_track(ForAll([x, y], Implies(ON_star(x, y), Implies(ON_star(y, x), x == y))), "on5")
+        s.assert_and_track(
+            ForAll([x, y], Implies(ON_star(x, y), Implies(ON_star(y, x), x == y))),
+            "on5",
+        )
 
         s.add(ForAll([x, y, c], Implies(And(higher(x, y), higher(y, c)), higher(x, c))))
         s.add(ForAll([x], higher(x, x)))
@@ -95,7 +101,7 @@ class highlevel_z3_solver:
                     And(ON_star_zero(x, y), ON_star_zero(y, c)), ON_star_zero(x, c)
                 ),
             ),
-            "on_zero_1"
+            "on_zero_1",
         )
         s.assert_and_track(ForAll([x], ON_star_zero(x, x)), "on_zero_2")
         s.assert_and_track(
@@ -106,7 +112,7 @@ class highlevel_z3_solver:
                     Or(ON_star_zero(y, c), ON_star_zero(c, y)),
                 ),
             ),
-            "on_zero_3"
+            "on_zero_3",
         )
         s.assert_and_track(
             ForAll(
@@ -116,13 +122,13 @@ class highlevel_z3_solver:
                     Or(ON_star_zero(x, y), ON_star_zero(y, x)),
                 ),
             ),
-            "on_zero_4"
+            "on_zero_4",
         )
         s.assert_and_track(
             ForAll(
                 [x, y], Implies(ON_star_zero(x, y), Implies(ON_star_zero(y, x), x == y))
             ),
-            "on_zero_5"
+            "on_zero_5",
         )
 
         # s.add(ForAll([x, y, c], Implies(And(higher(x, y), higher(y, c)), higher(x, c))))
@@ -139,18 +145,20 @@ class highlevel_z3_solver:
     def add_reverse_loop_invariant(self, s: Solver, b0, b):
         x, y = Consts("x y", BoxSort)
         s.assert_and_track(
-            Not(ForAll(
-                [x, y],
-                Or(
-                    And(ON_star(x, b0), ON_star(x, y) == ON_star_zero(x, y)),
-                    And(
-                        Not(ON_star(x, b0)),
-                        ON_star(b, x),
-                        ON_star(x, y) == ON_star_zero(y, x),
+            Not(
+                ForAll(
+                    [x, y],
+                    Or(
+                        And(ON_star(x, b0), ON_star(x, y) == ON_star_zero(x, y)),
+                        And(
+                            Not(ON_star(x, b0)),
+                            ON_star(b, x),
+                            ON_star(x, y) == ON_star_zero(y, x),
+                        ),
                     ),
-                ),
-            )),
-            "not_original_invariant"
+                )
+            ),
+            "not_original_invariant",
         )
 
 

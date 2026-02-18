@@ -7,19 +7,16 @@ import sympy
 import z3
 
 from synthesis.util import on
-from synthesis.verification_lib.highlevel_verification_lib import (
+from synthesis.verification_lib.highlevel_verification_lib import (  # b9,; b10,; b11,; b12,
     BoxSort,
     ON_star,
     ON_star_zero,
-    # b9,
-    # b10,
-    # b11,
-    # b12,
     get_consts,
     highlevel_z3_solver,
 )
 
 z3.set_option("smt.core.minimize", "true")
+
 
 def add_all_pairs(vocabulary, r, all_vars):
     for v1 in all_vars:
@@ -537,47 +534,173 @@ def loop_inference(
     highlevel_verification = highlevel_z3_solver()
     highlevel_verification.add_axiom(solver)
     highlevel_verification.add_axiom_on_star_zero(solver)
-    highlevel_verification.add_reverse_loop_invariant(solver, b0, b) # not
+    highlevel_verification.add_reverse_loop_invariant(solver, b0, b)  # not
     # solver.assert_and_track(ON_star(x, b0), "on_b0")
-    # solver.assert_and_track(z3.Not(z3.Implies(z3.And(ON_star(x, b0), ON_star(x, y)), ON_star_zero(x, y))), "original_1")
+    # solver.assert_and_track(
+    #     z3.Not(
+    #         z3.And(
+    #             ON_star(x, b0),
+    #             z3.Implies(ON_star(x, y), ON_star_zero(x, y))
+    #         )
+    #     ), "original_1"
+    # )
 
-    # solver.assert_and_track(z3.Not(z3.Implies(z3.And(ON_star(x, b0), ON_star_zero(x, y)), ON_star(x, y))), "original_2")
+    def extract_direct_on(model, blocks, names, ON_star):
+        direct_on = {n: "table" for n in names}
+
+        for i, (a_name, a) in enumerate(zip(names, blocks)):
+            for j, (b_name, b) in enumerate(zip(names, blocks)):
+
+                if a_name == b_name:
+                    continue
+
+                if not model.evaluate(ON_star(a, b)):
+                    continue
+
+                # check if there exists an intermediate block
+                has_middle = False
+
+                for k, (c_name, c) in enumerate(zip(names, blocks)):
+                    if c_name in [a_name, b_name]:
+                        continue
+
+                    if model.evaluate(ON_star(a, c)) and model.evaluate(ON_star(c, b)):
+                        has_middle = True
+                        break
+
+                if not has_middle:
+                    direct_on[a_name] = b_name
+
+        return direct_on
+
+    def build_stacks(direct_on):
+        stacks = []
+        visited = set()
+
+        blocks = list(direct_on.keys())
+
+        bases = [b for b, v in direct_on.items() if v == "table"]
+
+        for base in bases:
+            if base in visited:
+                continue
+
+            stack = [base]
+            visited.add(base)
+            top = base
+
+            while True:
+                above = None
+                for b, v in direct_on.items():
+                    if v == top and b not in visited:
+                        above = b
+                        break
+
+                if above:
+                    stack.append(above)
+                    visited.add(above)
+                    top = above
+                else:
+                    break
+
+            stacks.append(stack)
+
+        return stacks
+
+    def print_stacks(stacks, title):
+        print("\n" + title)
+
+        for stack in stacks:
+            for block in reversed(stack):
+                print(f"   [{block}]")
+            print("  --------")
+            print("   table\n")
+
+    from PIL import Image, ImageDraw, ImageFont
+
+    def draw_stacks(stacks, filename, title):
+        width, height = 800, 400
+        img = Image.new("RGB", (width, height), "white")
+        draw = ImageDraw.Draw(img)
+
+        try:
+            font = ImageFont.truetype("DejaVuSans-Bold.ttf", 16)
+        except:
+            font = ImageFont.load_default()
+
+        block_w = 70
+        block_h = 30
+        gap = 60
+
+        draw.text((10, 10), title, fill="black", font=font)
+
+        x = 50
+        for stack in stacks:
+            y = 350
+
+            for block in stack:
+                draw.rectangle(
+                    [x, y - block_h, x + block_w, y], outline="black", width=2
+                )
+                draw.text((x + 15, y - block_h + 5), block, fill="black", font=font)
+                y -= block_h + 5
+
+            draw.line([x, y + 5, x + block_w, y + 5], fill="black", width=3)
+            x += block_w + gap
+
+        img.save(filename)
+
+    # solver.assert_and_track(
+    #     z3.Not(
+    #         z3.And(
+    #             ON_star(x, b0),
+    #             z3.Implies(ON_star_zero(x, y), ON_star(x, y))
+    #         )
+    #     ), "original_2")
 
     # solver.assert_and_track(ON_star(b, x), "b_on_x")
-    # solver.assert_and_track(z3.Not(z3.Implies(z3.And(ON_star(b, x), ON_star(x, y)), ON_star_zero(y, x))), "original_3")
-    # solver.assert_and_track(z3.Not(z3.Implies(z3.And(ON_star(b, x), ON_star_zero(y, x)), ON_star(x, y))), "original_4")
+    # solver.assert_and_track(
+    #     z3.Not(
+    #         z3.And(
+    #             ON_star(b, x),
+    #             z3.Implies(ON_star(x, y), ON_star_zero(y, x))
+    #         )
+    #     ),
+    #     "original_3"
+    # )
+    # solver.assert_and_track(
+    #     z3.Not(
+    #         z3.And(
+    #             ON_star(b, x),
+    #             z3.Implies(ON_star_zero(y, x), ON_star(x, y))
+    #         )
+    #     ),
+    #     "original_4"
+    # )
 
     for idx, candidate in enumerate(filtered_invariants):
         solver.assert_and_track(candidate, f"term{idx}")
         print(f"term{idx}:", candidate)
     print(solver.check())
     print("Unsat Core:", solver.unsat_core())
+    if solver.check() == z3.sat:
+        print("constraints satisfiable")
+        print("model is")
+        print(solver.model())
+        blocks = [b9, b10, b11, b12]
+        names = ["b9", "b10", "b11", "b12"]
 
-    # solver.add(ON_star(x, b0))
-    # solver.add(z3.Not(z3.Implies(z3.And(ON_star(x, b0), ON_star_zero(x, y)), ON_star(x, y))))
-    # solver.add(z3.Not(z3.Implies(z3.And(ON_star(x, b0), ON_star(x, y)), ON_star_zero(x, y))))
-    # solver.add(ON_star(b, x))
-    # solver.add(z3.Not(z3.Implies(z3.And(ON_star(b, x), ON_star(x, y)), ON_star_zero(y, x))))
-    # solver.add(z3.Not(z3.Implies(z3.And(ON_star(b, x), ON_star_zero(y, x)), ON_star(x, y))))
-    # print(solver.check())
-    # print(solver.check())
-    # print(solver.check())
-    # print(solver.model())
-    # for name1, box1 in zip(["b9", "b10", "b11", "b12"], [b9, b10, b11, b12]):
-    #     for name2, box2 in zip(["b9", "b10", "b11", "b12"], [b9, b10, b11, b12]):
-    #         print(f"ON({name1}, {name2}): {solver.model().evaluate(ON_star(box1, box2))}")
+        start_state = extract_direct_on(solver.model(), blocks, names, ON_star_zero)
+        current_state = extract_direct_on(solver.model(), blocks, names, ON_star)
 
-    # for name1, box1 in zip(["b9", "b10", "b11", "b12"], [b9, b10, b11, b12]):
-    #     for name2, box2 in zip(["b9", "b10", "b11", "b12"], [b9, b10, b11, b12]):
-    #         print(f"ON_zero({name1}, {name2}): {solver.model().evaluate(ON_star_zero(box1, box2))}")
-    # for i in range(len(filtered_invariants)):
-    # print(f"learned {i}", filtered_invariants[i])
-    # solver.push()
-    # solver.add(z3.Not(filtered_invariants[i]))
-    # print(solver.check())
-    # if solver.check() == z3.sat:
-    # print(solver.model())
-    # solver.pop()
+        start_stacks = build_stacks(start_state)
+        current_stacks = build_stacks(current_state)
+
+        print_stacks(start_stacks, "START STATE")
+        print_stacks(current_stacks, "CURRENT STATE")
+
+        draw_stacks(start_stacks, "start_state.png", "Start State")
+        draw_stacks(current_stacks, "current_state.png", "Current State")
 
     return final_result, filtered_invariants
 

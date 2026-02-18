@@ -3,7 +3,7 @@ import time
 from collections import deque
 from typing import List
 
-import util.on
+from synthesis.util import on
 
 MAX_QUANTIFIERS = 2
 
@@ -297,7 +297,7 @@ class ON_star(Program):
         full_mapping = {**mapping, **input.get("constants", {})}
         obj1 = full_mapping[self.b1.id]
         obj2 = full_mapping[self.b2.id]
-        return util.on.on_star_eval((obj1.x, obj1.y, obj1.z), (obj2.x, obj2.y, obj2.z))
+        return on.on_star_eval((obj1.x, obj1.y, obj1.z), (obj2.x, obj2.y, obj2.z))
 
     def expand(self):
         return []
