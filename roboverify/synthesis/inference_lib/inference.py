@@ -11,6 +11,7 @@ from synthesis.verification_lib.highlevel_verification_lib import (  # b9,; b10,
     BoxSort,
     ON_star,
     ON_star_zero,
+    Top,
     get_consts,
     highlevel_z3_solver,
 )
@@ -32,7 +33,12 @@ def add_all_pairs(vocabulary, r, all_vars):
                     assert False, f"unknown relation r: {r}"
 
 
-def compute_omega(
+def add_univariable_predicate(vocabulary, r, all_vars):
+    for v in all_vars:
+        vocabulary.append(r(v))
+
+
+def forall_exists_compute_omega(
     universally_quantified_vars: List,
     existential_quantified_vars: int,
     relations: List,
@@ -41,7 +47,10 @@ def compute_omega(
     all_vars = universally_quantified_vars + existential_quantified_vars + constants
     omega_inv = []
     for r in relations:
-        add_all_pairs(omega_inv, r, all_vars)
+        if str(r) == "Top":
+            add_univariable_predicate(omega_inv, r, all_vars)
+        else:
+            add_all_pairs(omega_inv, r, all_vars)
     return omega_inv
 
 
@@ -94,14 +103,12 @@ def forall_exists_compute_dataset(
                 for idx, var in enumerate(universal_quantified_vars)
             }
             var_mapping = {**universal_var_mapping, **existential_var_mapping}
-            d = compute_data(
-                state_zero, state, omega_k, var_mapping, mapping
-            )
+            d = compute_data(state_zero, state, omega_k, var_mapping, mapping)
             print("var_mapping", var_mapping)
             print("omega_k", omega_k)
             print("data", d)
             dataset.add(d)
-        
+
         all_datasets.append(dataset)
     return all_datasets
 
@@ -152,7 +159,21 @@ def compute_data(
     data = []
     for predicate in omega_k:
         print("predicate:", predicate)
-        if str(predicate).startswith("ON_star") and not str(predicate).startswith(
+        if str(predicate).startswith("Top"):
+            arg0 = predicate.arg(0)
+            block1_name = (
+                var_mapping[arg0] if arg0 in var_mapping else constants_mapping[arg0]
+            )
+            top_flag = True
+            for other_block_name in state:
+                if block1_name != other_block_name:
+                    if on.on_star_implementation(
+                        state[other_block_name], state[block1_name]
+                    ):
+                        top_flag = False
+                        break
+            data.append(top_flag)
+        elif str(predicate).startswith("ON_star") and not str(predicate).startswith(
             "ON_star_zero"
         ):
             arg0, arg1 = predicate.arg(0), predicate.arg(1)
@@ -162,6 +183,8 @@ def compute_data(
             block2_name = (
                 var_mapping[arg1] if arg1 in var_mapping else constants_mapping[arg1]
             )
+            if not (isinstance(block1_name, str) and isinstance(block2_name, str)):
+                pdb.set_trace()
             assert isinstance(block1_name, str) and isinstance(block2_name, str)
             # if block1_name == "tbl" or block2_name == "tbl":
             # pdb.set_trace()
@@ -427,11 +450,27 @@ def implication_sop_to_clauses_z3(M, N):
     return clauses
 
 
-def add_universal_quantifiers(clauses: List, universal_quantified_vars: List):
+def add_universal_quantifiers(clauses: List, universal_quantified_vars: List) -> List:
     """Adding universal quantifiers for all vars in universal_quantified_vars"""
     result = []
     for clause in clauses:
         result.append(z3.ForAll([*universal_quantified_vars], clause))
+    return result
+
+
+def add_universal_and_existential_quantifiers(
+    clauses: List, universal_quantified_vars: List, existential_quantified_vars: List
+) -> List:
+    """Adding universal quantifiers for all vars in universal_quantified_vars,
+    and adding existential quantifiers for all vars in existential_quantified_vars"""
+    result = []
+    for clause in clauses:
+        result.append(
+            z3.ForAll(
+                [*universal_quantified_vars],
+                z3.Exists([*existential_quantified_vars], clause),
+            )
+        )
     return result
 
 
@@ -490,64 +529,77 @@ def forall_exists_loop_inference_by_index(
         all_full_U.append(full_U)
         all_target.append(target)
         all_reduced_omega.append(reduced_omega)
-        
+
         reduced_S = full_S - full_U
         reduced_U = full_U - full_S
         all_reduced_S.append(reduced_S)
         all_reduced_U.append(reduced_U)
 
-   # learn phi in phi => target
-    # phi_selected_idxs = learn_from_partition(reduced_S, full_U)
-    # selected_phi_omega = [reduced_omega[i] for i in phi_selected_idxs]
-    # phi, phi_sympy_vars = construct_truth_table_and_extract_expression_for_phi(
-    #     current_S=project_to_selected(reduced_S, phi_selected_idxs),
-    #     current_U=project_to_selected(full_U, phi_selected_idxs),
-    #     num_selected=len(phi_selected_idxs),
-    # )
-    # print("phi", phi)
-    # z3_phi = sympy_to_z3(phi, z3_terms=selected_phi_omega)
-    # print("z3_phi", z3_phi)
-    # phi_clauses = implication_sop_to_clauses_z3(z3_phi, target)
-    # universal_quantified_phi_clauses = add_universal_quantifiers(
-    #     phi_clauses, universal_quantified_vars
-    # )
-    # print("universal quantified phi clauses", universal_quantified_phi_clauses)
-    # useful_invariant_with_phi = [
-    #     z3.simplify(x)
-    #     for x in universal_quantified_phi_clauses
-    #     if not check_tautology(x)
-    # ]
-    # print("useful invariant using phi", useful_invariant_with_phi)
-    # print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
-    # # learn phi_prime in target => phi_prime
-    # phi_prime_selected_idxs = learn_from_partition(full_S, reduced_U)
-    # selected_phi_prime_omega = [reduced_omega[i] for i in phi_prime_selected_idxs]
-    # phi_prime, phi_prime_sympy_vars = (
-    #     construct_truth_table_and_extract_expression_for_phi_prime(
-    #         current_S=project_to_selected(full_S, phi_prime_selected_idxs),
-    #         current_U=project_to_selected(reduced_U, phi_prime_selected_idxs),
-    #         num_selected=len(phi_prime_selected_idxs),
-    #     )
-    # )
-    # print("phi_prime", phi_prime)
-    # z3_phi_prime = sympy_to_z3(phi_prime, z3_terms=selected_phi_prime_omega)
-    # print("z3_phi_prime", z3_phi_prime)
-    # phi_prime_clauses = implication_pos_to_clauses_z3(target, z3_phi_prime)
-    # universal_quantified_phi_prime_clauses = add_universal_quantifiers(
-    #     phi_prime_clauses, universal_quantified_vars
-    # )
-    # print(
-    #     "universal quantified phi prime clauses", universal_quantified_phi_prime_clauses
-    # )
-    # useful_invariant_with_phi_prime = [
-    #     z3.simplify(x)
-    #     for x in universal_quantified_phi_prime_clauses
-    #     if not check_tautology(x)
-    # ]
-    # print("useful invariant using phi prime", useful_invariant_with_phi_prime)
-    # all_invariant = useful_invariant_with_phi + useful_invariant_with_phi_prime
-    # print("total length", len(all_invariant))
-    # return all_invariant
+    iter = 0
+    for full_S, full_U, reduced_S, reduced_U, reduced_omega in zip(
+        all_full_S, all_full_U, all_reduced_S, all_reduced_U, all_reduced_omega
+    ):
+        print("learn with dataset index", iter)
+        iter += 1
+        # learn phi in phi => target
+        phi_selected_idxs = learn_from_partition(reduced_S, full_U)
+        selected_phi_omega = [reduced_omega[i] for i in phi_selected_idxs]
+        phi, phi_sympy_vars = construct_truth_table_and_extract_expression_for_phi(
+            current_S=project_to_selected(reduced_S, phi_selected_idxs),
+            current_U=project_to_selected(full_U, phi_selected_idxs),
+            num_selected=len(phi_selected_idxs),
+        )
+        print("phi", phi)
+        z3_phi = sympy_to_z3(phi, z3_terms=selected_phi_omega)
+        print("z3_phi", z3_phi)
+        phi_clauses = implication_sop_to_clauses_z3(z3_phi, target)
+        forall_exists_quantified_phi_clauses = (
+            add_universal_and_existential_quantifiers(
+                phi_clauses, universal_quantified_vars, existential_quantified_vars
+            )
+        )
+        print("forall_exists phi clauses", forall_exists_quantified_phi_clauses)
+        useful_invariant_with_phi = [
+            z3.simplify(x)
+            for x in forall_exists_quantified_phi_clauses
+            if not check_tautology(x)
+        ]
+        print("useful invariant using phi", useful_invariant_with_phi)
+        print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+        # learn phi_prime in target => phi_prime
+        phi_prime_selected_idxs = learn_from_partition(full_S, reduced_U)
+        selected_phi_prime_omega = [reduced_omega[i] for i in phi_prime_selected_idxs]
+        phi_prime, phi_prime_sympy_vars = (
+            construct_truth_table_and_extract_expression_for_phi_prime(
+                current_S=project_to_selected(full_S, phi_prime_selected_idxs),
+                current_U=project_to_selected(reduced_U, phi_prime_selected_idxs),
+                num_selected=len(phi_prime_selected_idxs),
+            )
+        )
+        print("phi_prime", phi_prime)
+        z3_phi_prime = sympy_to_z3(phi_prime, z3_terms=selected_phi_prime_omega)
+        print("z3_phi_prime", z3_phi_prime)
+        phi_prime_clauses = implication_pos_to_clauses_z3(target, z3_phi_prime)
+        forall_exists_quantified_phi_prime_clauses = (
+            add_universal_and_existential_quantifiers(
+                phi_prime_clauses,
+                universal_quantified_vars,
+                existential_quantified_vars,
+            )
+        )
+        print(
+            "forall_exists quantified phi prime clauses",
+            forall_exists_quantified_phi_prime_clauses,
+        )
+        useful_invariant_with_phi_prime = [
+            z3.simplify(x)
+            for x in forall_exists_quantified_phi_prime_clauses
+            if not check_tautology(x)
+        ]
+        print("useful invariant using phi prime", useful_invariant_with_phi_prime)
+        all_invariant = useful_invariant_with_phi + useful_invariant_with_phi_prime
+        print("total length", len(all_invariant))
+    return all_invariant
 
 
 def loop_inference_by_index(
@@ -671,13 +723,19 @@ def forall_exists_loop_inference(
 ):
     universally_quantified_vars = get_universal_quantified_vars(n_forall)
     existential_quantified_vars = get_existential_quantified_vars(n_exists)
+    all_objects = list(states[0].keys())
     all_witness_permuatations = compute_all_possible_witness_permutations(
-        n_exists, existential_quantified_vars
+        n_exists, all_objects
     )
 
-    omega_inv = compute_omega(
+    omega_inv = forall_exists_compute_omega(
         universally_quantified_vars, existential_quantified_vars, relations, constants
     )
+
+    # (ux1,) = universally_quantified_vars
+    # (ex1,) = existential_quantified_vars
+    # b0, b = constants
+    # omega_inv = [ON_star(ex1, b0), Top(ex1)]
     print("omega_inv", omega_inv)
 
     inferred_invariants = []
@@ -1080,4 +1138,35 @@ def run_reverse_example():
 
     return loop_inference(
         states_zero, states, k, relations, constants, constants_mappings
+    )
+
+
+def run_forall_exists_example():
+    states_zero: List[Dict] = [[]]
+    states: List[Dict] = [
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [0.0, 0.0, 0.05],
+            "x3": [0.0, 0.0, 0.1],
+            "x4": [5.0, 5.0, 0.0],
+            "x5": [10.0, 10.0, 0.0],
+        }
+    ]
+    n_forall = 1
+    n_exists = 1
+    relations = [ON_star, "equality", Top]
+    b0, b = get_consts("b0"), get_consts("b")
+    constants = [b0, b]
+    constants_mappings = [
+        {b0: "x1", b: "x3"},
+    ]
+
+    return forall_exists_loop_inference(
+        states_zero,
+        states,
+        n_forall,
+        n_exists,
+        relations,
+        constants,
+        constants_mappings,
     )
