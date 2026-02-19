@@ -32,6 +32,19 @@ def add_all_pairs(vocabulary, r, all_vars):
                     assert False, f"unknown relation r: {r}"
 
 
+def compute_omega(
+    universally_quantified_vars: List,
+    existential_quantified_vars: int,
+    relations: List,
+    constants: List,
+):
+    all_vars = universally_quantified_vars + existential_quantified_vars + constants
+    omega_inv = []
+    for r in relations:
+        add_all_pairs(omega_inv, r, all_vars)
+    return omega_inv
+
+
 def compute_omega_k(k: int, relations: List, constants: List) -> Tuple[List, List]:
     """compute the finite vocabulary Omage(k)
     k is the number of nested forall quantifiers
@@ -44,6 +57,53 @@ def compute_omega_k(k: int, relations: List, constants: List) -> Tuple[List, Lis
     for r in relations:
         add_all_pairs(omega_inv, r, all_vars)
     return omega_inv, universally_quantified_vars
+
+
+def forall_exists_compute_dataset(
+    states_zero: List[dict],
+    states: List[Dict],
+    omega_k: List,
+    universal_quantified_vars: List,
+    existential_quantified_vars: List,
+    constatns: List,
+    constants_mappings: List[Dict],
+    all_witness_permutations: List,
+) -> List[Set]:
+    """assuming there is only a single state for now. For each witness permutation, we can
+    obtain one dataset. In the future, when we have multiple state, we need to consider
+    different state might have different witness permutations as well
+    """
+
+    all_datasets = []
+    for witness_assignment in all_witness_permutations:
+        dataset = set()
+        state, state_zero, mapping = states[0], states_zero[0], constants_mappings[0]
+
+        existential_var_mapping = {
+            var: witness_assignment[idx]
+            for idx, var in enumerate(existential_quantified_vars)
+        }
+
+        all_objects = list(state.keys())
+        for universal_assignment in itertools.product(
+            all_objects, repeat=len(universal_quantified_vars)
+        ):
+            # universal_var_mapping maps universal quantified variables to its corresponding real block
+            universal_var_mapping = {
+                var: universal_assignment[idx]
+                for idx, var in enumerate(universal_quantified_vars)
+            }
+            var_mapping = {**universal_var_mapping, **existential_var_mapping}
+            d = compute_data(
+                state_zero, state, omega_k, var_mapping, mapping
+            )
+            print("var_mapping", var_mapping)
+            print("omega_k", omega_k)
+            print("data", d)
+            dataset.add(d)
+        
+        all_datasets.append(dataset)
+    return all_datasets
 
 
 def compute_dataset(
@@ -104,7 +164,7 @@ def compute_data(
             )
             assert isinstance(block1_name, str) and isinstance(block2_name, str)
             # if block1_name == "tbl" or block2_name == "tbl":
-                # pdb.set_trace()
+            # pdb.set_trace()
             data.append(
                 on.on_star_implementation(
                     state[block1_name],
@@ -397,6 +457,99 @@ def check_tautology(clause) -> bool:
         assert False, f"unknown z3 result {result}"
 
 
+def forall_exists_loop_inference_by_index(
+    states_zero: List,
+    states: List,
+    constants: List,
+    constants_mappings: List[Dict],
+    index: int,
+    omega_inv: List,
+    universal_quantified_vars: List,
+    existential_quantified_vars: List,
+    all_witness_permutations: List,
+):
+    print(
+        f"=========== learning with index = {index} with target predicate {omega_inv[index]}"
+    )
+
+    all_datasets: List = forall_exists_compute_dataset(
+        states_zero,
+        states,
+        omega_inv,
+        universal_quantified_vars,
+        existential_quantified_vars,
+        constants,
+        constants_mappings,
+        all_witness_permutations,
+    )
+    all_full_S, all_full_U, all_target, all_reduced_omega = [], [], [], []
+    all_reduced_S, all_reduced_U = [], []
+    for dataset in all_datasets:
+        full_S, full_U, target, reduced_omega = compute_S_U(dataset, omega_inv, index)
+        all_full_S.append(full_S)
+        all_full_U.append(full_U)
+        all_target.append(target)
+        all_reduced_omega.append(reduced_omega)
+        
+        reduced_S = full_S - full_U
+        reduced_U = full_U - full_S
+        all_reduced_S.append(reduced_S)
+        all_reduced_U.append(reduced_U)
+
+   # learn phi in phi => target
+    # phi_selected_idxs = learn_from_partition(reduced_S, full_U)
+    # selected_phi_omega = [reduced_omega[i] for i in phi_selected_idxs]
+    # phi, phi_sympy_vars = construct_truth_table_and_extract_expression_for_phi(
+    #     current_S=project_to_selected(reduced_S, phi_selected_idxs),
+    #     current_U=project_to_selected(full_U, phi_selected_idxs),
+    #     num_selected=len(phi_selected_idxs),
+    # )
+    # print("phi", phi)
+    # z3_phi = sympy_to_z3(phi, z3_terms=selected_phi_omega)
+    # print("z3_phi", z3_phi)
+    # phi_clauses = implication_sop_to_clauses_z3(z3_phi, target)
+    # universal_quantified_phi_clauses = add_universal_quantifiers(
+    #     phi_clauses, universal_quantified_vars
+    # )
+    # print("universal quantified phi clauses", universal_quantified_phi_clauses)
+    # useful_invariant_with_phi = [
+    #     z3.simplify(x)
+    #     for x in universal_quantified_phi_clauses
+    #     if not check_tautology(x)
+    # ]
+    # print("useful invariant using phi", useful_invariant_with_phi)
+    # print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+    # # learn phi_prime in target => phi_prime
+    # phi_prime_selected_idxs = learn_from_partition(full_S, reduced_U)
+    # selected_phi_prime_omega = [reduced_omega[i] for i in phi_prime_selected_idxs]
+    # phi_prime, phi_prime_sympy_vars = (
+    #     construct_truth_table_and_extract_expression_for_phi_prime(
+    #         current_S=project_to_selected(full_S, phi_prime_selected_idxs),
+    #         current_U=project_to_selected(reduced_U, phi_prime_selected_idxs),
+    #         num_selected=len(phi_prime_selected_idxs),
+    #     )
+    # )
+    # print("phi_prime", phi_prime)
+    # z3_phi_prime = sympy_to_z3(phi_prime, z3_terms=selected_phi_prime_omega)
+    # print("z3_phi_prime", z3_phi_prime)
+    # phi_prime_clauses = implication_pos_to_clauses_z3(target, z3_phi_prime)
+    # universal_quantified_phi_prime_clauses = add_universal_quantifiers(
+    #     phi_prime_clauses, universal_quantified_vars
+    # )
+    # print(
+    #     "universal quantified phi prime clauses", universal_quantified_phi_prime_clauses
+    # )
+    # useful_invariant_with_phi_prime = [
+    #     z3.simplify(x)
+    #     for x in universal_quantified_phi_prime_clauses
+    #     if not check_tautology(x)
+    # ]
+    # print("useful invariant using phi prime", useful_invariant_with_phi_prime)
+    # all_invariant = useful_invariant_with_phi + useful_invariant_with_phi_prime
+    # print("total length", len(all_invariant))
+    # return all_invariant
+
+
 def loop_inference_by_index(
     states_zero: List,
     states: List,
@@ -483,6 +636,69 @@ def loop_inference_by_index(
     return all_invariant
 
 
+def get_universal_quantified_vars(n_forall: int) -> List:
+    return [get_consts(f"ux{i}") for i in range(1, n_forall + 1)]
+
+
+def get_existential_quantified_vars(n_exists: int) -> List:
+    return [get_consts(f"ex{i}") for i in range(1, n_exists + 1)]
+
+
+def compute_all_possible_witness_permutations(
+    n_exists: int, candidate_witness: List
+) -> List[List]:
+    """For each universally quantified variable, assign one constant from the input candidate_witness as the witness.
+    Return all possible witness permutations.
+    """
+    if n_exists < 0:
+        raise ValueError("n_forall must be non-negative")
+    # If there are zero universal vars, there is one empty assignment
+    if n_exists == 0:
+        return [[]]
+    # Cartesian product: allow repetition of candidates across universal vars
+    return [list(p) for p in itertools.product(candidate_witness, repeat=n_exists)]
+
+
+# This function is used to learn forall-exists variants
+def forall_exists_loop_inference(
+    states_zero: List,
+    states: List,
+    n_forall: int,
+    n_exists: int,
+    relations: List,
+    constants: List,
+    constants_mappings: List[Dict],
+):
+    universally_quantified_vars = get_universal_quantified_vars(n_forall)
+    existential_quantified_vars = get_existential_quantified_vars(n_exists)
+    all_witness_permuatations = compute_all_possible_witness_permutations(
+        n_exists, existential_quantified_vars
+    )
+
+    omega_inv = compute_omega(
+        universally_quantified_vars, existential_quantified_vars, relations, constants
+    )
+    print("omega_inv", omega_inv)
+
+    inferred_invariants = []
+    for i in range(len(omega_inv)):
+        inferred_invariants.extend(
+            forall_exists_loop_inference_by_index(
+                states_zero,
+                states,
+                constants,
+                constants_mappings,
+                i,
+                omega_inv,
+                universally_quantified_vars,
+                existential_quantified_vars,
+                all_witness_permuatations,
+            )
+        )
+    print("inferred_invariants count", len(inferred_invariants))
+
+
+# This function is used to learn forall only invariants
 def loop_inference(
     states_zero: List,
     states: List,
