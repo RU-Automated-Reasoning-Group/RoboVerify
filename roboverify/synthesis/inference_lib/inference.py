@@ -536,6 +536,7 @@ def forall_exists_loop_inference_by_index(
         all_reduced_U.append(reduced_U)
 
     iter = 0
+    all_invariant = []
     for full_S, full_U, reduced_S, reduced_U, reduced_omega in zip(
         all_full_S, all_full_U, all_reduced_S, all_reduced_U, all_reduced_omega
     ):
@@ -562,7 +563,7 @@ def forall_exists_loop_inference_by_index(
         useful_invariant_with_phi = [
             z3.simplify(x)
             for x in forall_exists_quantified_phi_clauses
-            if not check_tautology(x)
+            # if not check_tautology(x)
         ]
         print("useful invariant using phi", useful_invariant_with_phi)
         print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
@@ -594,13 +595,33 @@ def forall_exists_loop_inference_by_index(
         useful_invariant_with_phi_prime = [
             z3.simplify(x)
             for x in forall_exists_quantified_phi_prime_clauses
-            if not check_tautology(x)
+            # if not check_tautology(x)
         ]
         print("useful invariant using phi prime", useful_invariant_with_phi_prime)
-        all_invariant = useful_invariant_with_phi + useful_invariant_with_phi_prime
+        all_invariant.extend(useful_invariant_with_phi + useful_invariant_with_phi_prime)
         print("total length", len(all_invariant))
-    return all_invariant
+    all_invariant_with_exists = filter_exists(all_invariant)
+    return all_invariant_with_exists
 
+def filter_exists(expressions):
+    return [e for e in expressions if contains_exists(e)]
+
+def contains_exists(expr: z3.ExprRef) -> bool:
+    # If this node itself is a quantifier
+    if z3.is_quantifier(expr):
+        # If it's an existential → keep it
+        if expr.is_exists():
+            return True
+
+        # Otherwise recurse into its body
+        return contains_exists(expr.body())
+
+    # Recurse through children of any other expression
+    for child in expr.children():
+        if contains_exists(child):
+            return True
+
+    return False
 
 def loop_inference_by_index(
     states_zero: List,
@@ -756,6 +777,12 @@ def forall_exists_loop_inference(
     print("inferred_invariants count", len(inferred_invariants))
 
 
+
+    # filtered_invariants = check_redundancy(inferred_invariants)
+    # print("filtered candidates", len(filtered_invariants))
+    # print(filtered_invariants)
+
+
 # This function is used to learn forall only invariants
 def loop_inference(
     states_zero: List,
@@ -768,17 +795,17 @@ def loop_inference(
     omega_inv, universal_quantified_vars = compute_omega_k(k, relations, constants)
 
     ############### ! temp shortcut starts
-    x, y = universal_quantified_vars
+    # x, y = universal_quantified_vars
     b0, b, tbl = constants
-    omega_inv = [
-        x == tbl,
-        y == tbl,
-        ON_star(x, b0),
-        ON_star(x, y),
-        ON_star_zero(x, y),
-        ON_star(b, x),
-        ON_star_zero(y, x),
-    ]
+    # omega_inv = [
+    #     x == tbl,
+    #     y == tbl,
+    #     ON_star(x, b0),
+    #     ON_star(x, y),
+    #     ON_star_zero(x, y),
+    #     ON_star(b, x),
+    #     ON_star_zero(y, x),
+    # ]
     ############## ! temp shortcut end
 
     print("omega_inv", omega_inv)
