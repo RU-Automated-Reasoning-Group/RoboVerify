@@ -23,6 +23,9 @@ ON_star_zero = Function("ON_star_zero", BoxSort, BoxSort, BoolSort())
 higher = Function("higher", BoxSort, BoxSort, BoolSort())
 scattered = Function("scattered", BoxSort, BoxSort, BoolSort())
 
+# top is only used in selected places
+Top = Function("Top", BoxSort, BoolSort())
+
 
 def get_consts(symbol: str):
     (c,) = Consts(f"{symbol}", BoxSort)
@@ -143,6 +146,22 @@ class highlevel_z3_solver:
             f"on_zero_tbl",
         )
 
+    def add_unstack_b0_bottom_loop_invarinat(self, s: Solver, b0):
+        x, y = Consts("x y", BoxSort)
+        s.assert_and_track(
+            Not(
+                ForAll(
+                    [x, y],
+                    Or(
+                        Not(ON_star(y, x)),
+                        x == y,
+                        ON_star(x, b0),
+                    ),
+                ),
+            ),
+            "not_original_invariant",
+        )
+
     def add_reverse_loop_invariant(self, s: Solver, b0, b):
         x, y = Consts("x y", BoxSort)
         # s.assert_and_track(
@@ -163,27 +182,27 @@ class highlevel_z3_solver:
         # )
         (tbl,) = Consts("tbl", BoxSort)
         s.assert_and_track(
-            Not(
-                ForAll(
-                    [x, y],
-                    Implies(
-                        And(x != tbl, y != tbl),
-                        Or(
-                            And(
-                                x != b,
-                                ON_star(x, b0),
-                                ON_star(x, y) == ON_star_zero(x, y),
-                            ),
-                            And(
-                                Not(ON_star(x, b0)),
-                                b != tbl,
-                                ON_star(b, x),
-                                ON_star(x, y) == ON_star_zero(y, x),
-                            ),
+            # Not(
+            ForAll(
+                [x, y],
+                Implies(
+                    And(x != tbl, y != tbl),
+                    Or(
+                        And(
+                            x != b,
+                            ON_star(x, b0),
+                            ON_star(x, y) == ON_star_zero(x, y),
+                        ),
+                        And(
+                            Not(ON_star(x, b0)),
+                            b != tbl,
+                            ON_star(b, x),
+                            ON_star(x, y) == ON_star_zero(y, x),
                         ),
                     ),
-                )
+                ),
             ),
+            # ),
             "not_original_invariant_with_tbl",
         )
 

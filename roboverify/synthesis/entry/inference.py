@@ -64,4 +64,5 @@ if __name__ == "__main__":
     # generate_truth_table(inferred, ["x_on_n0", "x_on_y", "x_on0_y", "b_on_x", "y_on0_x"])
     # inference.run_reverse_example()
 
-    inferred_invariant, candidate_lists = inference.run_reverse_example()
+    # inferred_invariant, candidate_lists = inference.run_reverse_example()
+    inferred_invariant, candidate_lists = inference.run_unstack_example()

@@ -6,6 +6,7 @@ from typing import Dict, List, Set, Tuple
 import sympy
 import z3
 
+from synthesis.inference_lib import quant_enum_merge
 from synthesis.util import on
 from synthesis.verification_lib.highlevel_verification_lib import (  # b9,; b10,; b11,; b12,
     BoxSort,
@@ -598,13 +599,17 @@ def forall_exists_loop_inference_by_index(
             # if not check_tautology(x)
         ]
         print("useful invariant using phi prime", useful_invariant_with_phi_prime)
-        all_invariant.extend(useful_invariant_with_phi + useful_invariant_with_phi_prime)
+        all_invariant.extend(
+            useful_invariant_with_phi + useful_invariant_with_phi_prime
+        )
         print("total length", len(all_invariant))
     all_invariant_with_exists = filter_exists(all_invariant)
     return all_invariant_with_exists
 
+
 def filter_exists(expressions):
     return [e for e in expressions if contains_exists(e)]
+
 
 def contains_exists(expr: z3.ExprRef) -> bool:
     # If this node itself is a quantifier
@@ -622,6 +627,7 @@ def contains_exists(expr: z3.ExprRef) -> bool:
             return True
 
     return False
+
 
 def loop_inference_by_index(
     states_zero: List,
@@ -776,8 +782,6 @@ def forall_exists_loop_inference(
         )
     print("inferred_invariants count", len(inferred_invariants))
 
-
-
     # filtered_invariants = check_redundancy(inferred_invariants)
     # print("filtered candidates", len(filtered_invariants))
     # print(filtered_invariants)
@@ -796,7 +800,7 @@ def loop_inference(
 
     ############### ! temp shortcut starts
     # x, y = universal_quantified_vars
-    b0, b, tbl = constants
+    # b0, b, tbl = constants
     # omega_inv = [
     #     x == tbl,
     #     y == tbl,
@@ -839,7 +843,8 @@ def loop_inference(
     highlevel_verification = highlevel_z3_solver()
     highlevel_verification.add_axiom(solver)
     highlevel_verification.add_axiom_on_star_zero(solver)
-    highlevel_verification.add_reverse_loop_invariant(solver, b0, b)  # not
+    (b0,) = constants
+    highlevel_verification.add_unstack_b0_bottom_loop_invarinat(solver, b0)  # not
     # solver.assert_and_track(z3.Not(z3.ForAll([x], z3.Implies(ON_star(x, b0), x != b))), "not_b_neq_b0")
     # solver.assert_and_track(ON_star(x, b0), "on_b0")
     # solver.assert_and_track(
@@ -1065,6 +1070,50 @@ def run_proposal_example():
     )
 
 
+def run_unstack_example():
+    states_zero: List[Dict] = [{}, {}, {}, {}]
+    states: List[Dict] = [
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [0.0, 0.0, 0.05],
+            "x3": [0.0, 0.0, 0.1],
+            "x4": [0.0, 0.0, 0.15],
+        },
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [0.0, 0.0, 0.05],
+            "x3": [0.0, 0.0, 0.1],
+            "x4": [5.0, 0.0, 0.0],
+        },
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [0.0, 0.0, 0.05],
+            "x3": [10.0, 0.0, 0.0],
+            "x4": [5.0, 0.0, 0.0],
+        },
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [15.0, 0.0, 0.0],
+            "x3": [10.0, 0.0, 0.0],
+            "x4": [5.0, 0.0, 0.0],
+        },
+    ]
+    n_forall = 2
+    relations = [ON_star, "equality"]
+    b0 = get_consts("b0")
+    constants = [b0]
+    constants_mappings = [
+        {b0: "x1"},
+        {b0: "x1"},
+        {b0: "x1"},
+        {b0: "x1"},
+    ]
+
+    return loop_inference(
+        states_zero, states, n_forall, relations, constants, constants_mappings
+    )
+
+
 def run_reverse_example():
     states_zero: List[Dict] = [
         {
@@ -1169,14 +1218,15 @@ def run_reverse_example():
 
 
 def run_forall_exists_example():
+
     states_zero: List[Dict] = [[]]
     states: List[Dict] = [
         {
-            "x1": [0.0, 0.0, 0.0],
-            "x2": [0.0, 0.0, 0.05],
-            "x3": [0.0, 0.0, 0.1],
-            "x4": [5.0, 5.0, 0.0],
-            "x5": [10.0, 10.0, 0.0],
+            "x1": (0.0, 0.0, 0.0),
+            "x2": (0.0, 0.0, 0.05),
+            "x3": (0.0, 0.0, 0.1),
+            "x4": (5.0, 5.0, 0.0),
+            "x5": (10.0, 10.0, 0.0),
         }
     ]
     n_forall = 1
@@ -1187,7 +1237,31 @@ def run_forall_exists_example():
     constants_mappings = [
         {b0: "x1", b: "x3"},
     ]
+    x, y = get_consts("x"), get_consts("y")
+    m, n = get_consts("m"), get_consts("n")
 
+    test_expr = z3.ForAll([x, y], z3.Exists([m, n], z3.And(ON_star(x, n), y == m)))
+    py_expr = quant_enum_merge.z3_to_python_expr(test_expr)
+    domain = [val for _, val in states[0].items()]
+    function_imples = {
+        "ON_star": on.on_star_implementation,
+        "ON_star_zer": on.on_star_implementation,
+    }
+    env = {"b0": [0.0, 0.0, 0.0], "b": [0.0, 0.0, 0.1]}
+    quant_enum_merge.eval_quantified_expr(py_expr, env, domain, function_imples)
+    print(py_expr)
+    py_rst = quant_enum_merge.eval_quantified_expr(
+        py_expr, env, domain, function_imples
+    )
+    print(py_rst)
+
+    test_expr_1 = z3.ForAll([x], z3.Exists([y], Top(y)))
+
+    py_witness = quant_enum_merge.compute_witness_map(
+        py_expr, env, domain, function_imples
+    )
+    print(py_witness)
+    exit()
     return forall_exists_loop_inference(
         states_zero,
         states,
