@@ -1245,7 +1245,8 @@ def run_forall_exists_example():
     domain = [val for _, val in states[0].items()]
     function_imples = {
         "ON_star": on.on_star_implementation,
-        "ON_star_zer": on.on_star_implementation,
+        "ON_star_zero": on.on_star_implementation,
+        "Top": on.top_implementation,
     }
     env = {"b0": [0.0, 0.0, 0.0], "b": [0.0, 0.0, 0.1]}
     quant_enum_merge.eval_quantified_expr(py_expr, env, domain, function_imples)
@@ -1255,12 +1256,67 @@ def run_forall_exists_example():
     )
     print(py_rst)
 
-    test_expr_1 = z3.ForAll([x], z3.Exists([y], Top(y)))
+    test_z3_expr_1 = z3.Exists([y], Top(y))
+    test_z3_expr_2 = z3.Exists([y], ON_star(y, b0))
 
-    py_witness = quant_enum_merge.compute_witness_map(
-        py_expr, env, domain, function_imples
+    test_expr_1 = quant_enum_merge.z3_to_python_expr(test_z3_expr_1)
+    test_expr_2 = quant_enum_merge.z3_to_python_expr(test_z3_expr_2)
+
+    print("test_expr_1", test_expr_1)
+    print("test_expr_2", test_expr_2)
+
+    py_witness_1 = quant_enum_merge.compute_witness_map(
+        test_expr_1, env, domain, function_imples
     )
-    print(py_witness)
+    print("witness map for test_expr_1:")
+    print(py_witness_1)
+
+    py_witness_2 = quant_enum_merge.compute_witness_map(
+        test_expr_2, env, domain, function_imples
+    )
+    print("witness map for test_expr_2:")
+    print(py_witness_2)
+
+    print("can merge", quant_enum_merge.can_merge(py_witness_1, py_witness_2))
+
+    merged_body = quant_enum_merge.merge_bodies(test_expr_1, test_expr_2)
+    print("merged body", merged_body)
+
+    merged_expr = quant_enum_merge.merge_once_multi_env(
+        [test_expr_1, test_expr_2], [env], domain, function_imples
+    )
+
+    print("merge once:", merged_expr[0])
+    print(
+        "merge once len",
+        len(
+            quant_enum_merge.merge_once_multi_env(
+                [test_expr_1, test_expr_2], [env], domain, function_imples
+            )
+        ),
+    )
+
+    print(
+        "fixed point merge:",
+        quant_enum_merge.fixpoint_merge_multi_env(
+            [test_expr_1, test_expr_2], [env], domain, function_imples
+        ),
+    )
+    print(
+        "fixed point merge len",
+        len(
+            quant_enum_merge.fixpoint_merge_multi_env(
+                [test_expr_1, test_expr_2], [env], domain, function_imples
+            )
+        ),
+    )
+
+    func_maps = {"ON_star": ON_star, "ON_star_zero": ON_star_zero, "Top": Top}
+    var_maps = {"b0": b0, "b": b}
+    quant_enum_merge_expr = quant_enum_merge.python_expr_to_z3(
+        merged_expr[0], var_maps, func_maps, BoxSort
+    )
+    print("quant_enum_merge_expr", quant_enum_merge_expr)
     exit()
     return forall_exists_loop_inference(
         states_zero,

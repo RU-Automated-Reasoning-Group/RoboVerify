@@ -1,4 +1,6 @@
 import itertools
+import pdb
+import re
 from typing import Any, Callable, Dict, List, Set, Tuple
 
 import z3
@@ -280,7 +282,7 @@ def compute_witness_map(
     body = inner["body"]
 
     # Prepare domain lists for bound variables
-    x_domains = [domain for v in x_vars] if x_vars else [()]
+    x_domains = [domain for v in x_vars] if x_vars else [[()]]
 
     witness_map: Dict[Tuple, Set[Tuple]] = {}
 
@@ -353,9 +355,9 @@ def merge_bodies(e1: Any, e2: Any) -> Any:
 # --------------------------
 def merge_once_multi_env(
     exprs: List[Any],
+    base_envs: List[Dict[str, Any]],
     domain: List,
     function_impls: Dict[str, Callable],
-    base_envs: List[Dict[str, Any]],
 ) -> List[Any]:
     """
     Attempt one round of merging expressions, considering multiple base_envs.
@@ -411,9 +413,9 @@ def merge_once_multi_env(
 # --------------------------
 def fixpoint_merge_multi_env(
     exprs: List[Any],
+    base_envs: List[Dict[str, Any]],
     domain: List,
     function_impls: Dict[str, Callable],
-    base_envs: List[Dict[str, Any]],
 ) -> List[Any]:
     """
     Repeatedly merge expressions until no more merges can happen.
@@ -423,116 +425,185 @@ def fixpoint_merge_multi_env(
     while prev_len != len(current_exprs):
         prev_len = len(current_exprs)
         current_exprs = merge_once_multi_env(
-            current_exprs, domain, function_impls, base_envs
+            current_exprs, base_envs, domain, function_impls
         )
     return current_exprs
 
 
+# Regex for De Bruijn variables like Var(0), Var(1), etc.
+VAR_RE = re.compile(r"Var\((\d+)\)")
+
+
+# Helper: fresh variable generators
+def fresh_univ(n, BoxSort, start):
+    names = [f"ux{i}" for i in range(start + 1, start + n + 1)]
+    vars_ = z3.Consts(" ".join(names), BoxSort)
+    return list(vars_), start + n
+
+
+def fresh_exist(n, BoxSort, start):
+    names = [f"ex{i}" for i in range(start + 1, start + n + 1)]
+    vars_ = z3.Consts(" ".join(names), BoxSort)
+    return list(vars_), start + n
+
+
+# Main function
 def python_expr_to_z3(
-    expr: Any, var_map: Dict[str, z3.ExprRef], func_map: Dict[str, z3.FuncDeclRef]
-) -> z3.ExprRef:
+    expr, var_map, func_map, BoxSort, bound_depth=0, ux_counter=0, ex_counter=0
+):
     """
-    Rebuild a Z3 expression from Python AST.
+    Convert AST to Z3 expression with De Bruijn indices and unique bound variable names.
 
-    Args:
-        expr: Python AST node
-        var_map: dictionary mapping variable names to Z3 variables
-        func_map: dictionary mapping function names to Z3 functions
-
-    Returns:
-        z3.ExprRef representing the expression
+    Returns: (z3.ExprRef, ux_counter, ex_counter)
     """
-
+    # Base cases
     if expr is True:
-        return z3.BoolVal(True)
+        return z3.BoolVal(True), ux_counter, ex_counter
     if expr is False:
-        return z3.BoolVal(False)
+        return z3.BoolVal(False), ux_counter, ex_counter
 
-    op = expr.get("op") if isinstance(expr, dict) and "op" in expr else None
+    op = expr.get("op") if isinstance(expr, dict) else None
 
     # ---------- Variable ----------
     if op == "Var":
         name = expr["name"]
-        if name.startswith("Var("):
-            # Should not appear here; use var_map
-            raise ValueError(f"Unexpected De Bruijn var in AST: {name}")
-        return var_map[name]
-
-    # ---------- Constant ----------
-    if op == "Const":
-        return z3.IntVal(expr["value"])
+        m = VAR_RE.fullmatch(name)
+        if m:
+            idx = int(m.group(1))
+            if idx >= bound_depth:
+                raise ValueError(f"De Bruijn index {idx} out of scope")
+            return z3.Var(idx, BoxSort), ux_counter, ex_counter
+        # free variable
+        return var_map[name], ux_counter, ex_counter
 
     # ---------- Function ----------
     if op == "Func":
-        args = [python_expr_to_z3(a, var_map, func_map) for a in expr["args"]]
-        return func_map[expr["name"]](*args)
+        args = []
+        for a in expr["args"]:
+            arg_z3, ux_counter, ex_counter = python_expr_to_z3(
+                a, var_map, func_map, BoxSort, bound_depth, ux_counter, ex_counter
+            )
+            args.append(arg_z3)
+        return func_map[expr["name"]](*args), ux_counter, ex_counter
 
     # ---------- Boolean ----------
     if op == "And":
-        return z3.And([python_expr_to_z3(a, var_map, func_map) for a in expr["args"]])
+        args = []
+        for a in expr["args"]:
+            arg_z3, ux_counter, ex_counter = python_expr_to_z3(
+                a, var_map, func_map, BoxSort, bound_depth, ux_counter, ex_counter
+            )
+            args.append(arg_z3)
+        return z3.And(args), ux_counter, ex_counter
+
     if op == "Or":
-        return z3.Or([python_expr_to_z3(a, var_map, func_map) for a in expr["args"]])
+        args = []
+        for a in expr["args"]:
+            arg_z3, ux_counter, ex_counter = python_expr_to_z3(
+                a, var_map, func_map, BoxSort, bound_depth, ux_counter, ex_counter
+            )
+            args.append(arg_z3)
+        return z3.Or(args), ux_counter, ex_counter
+
     if op == "Not":
-        return z3.Not(python_expr_to_z3(expr["args"][0], var_map, func_map))
+        body_z3, ux_counter, ex_counter = python_expr_to_z3(
+            expr["args"][0],
+            var_map,
+            func_map,
+            BoxSort,
+            bound_depth,
+            ux_counter,
+            ex_counter,
+        )
+        return z3.Not(body_z3), ux_counter, ex_counter
 
     # ---------- Comparisons ----------
-    if op == "Eq":
-        return python_expr_to_z3(
-            expr["args"][0], var_map, func_map
-        ) == python_expr_to_z3(expr["args"][1], var_map, func_map)
-    if op == "Gt":
-        return python_expr_to_z3(
-            expr["args"][0], var_map, func_map
-        ) > python_expr_to_z3(expr["args"][1], var_map, func_map)
-    if op == "Lt":
-        return python_expr_to_z3(
-            expr["args"][0], var_map, func_map
-        ) < python_expr_to_z3(expr["args"][1], var_map, func_map)
-    if op == "Ge":
-        return python_expr_to_z3(
-            expr["args"][0], var_map, func_map
-        ) >= python_expr_to_z3(expr["args"][1], var_map, func_map)
-    if op == "Le":
-        return python_expr_to_z3(
-            expr["args"][0], var_map, func_map
-        ) <= python_expr_to_z3(expr["args"][1], var_map, func_map)
+    if op in ("Eq", "Gt", "Lt", "Ge", "Le"):
+        a0, a1 = expr["args"]
+        left, ux_counter, ex_counter = python_expr_to_z3(
+            a0, var_map, func_map, BoxSort, bound_depth, ux_counter, ex_counter
+        )
+        right, ux_counter, ex_counter = python_expr_to_z3(
+            a1, var_map, func_map, BoxSort, bound_depth, ux_counter, ex_counter
+        )
+        if op == "Eq":
+            return left == right, ux_counter, ex_counter
+        if op == "Gt":
+            return left > right, ux_counter, ex_counter
+        if op == "Lt":
+            return left < right, ux_counter, ex_counter
+        if op == "Ge":
+            return left >= right, ux_counter, ex_counter
+        if op == "Le":
+            return left <= right, ux_counter, ex_counter
 
     # ---------- Arithmetic ----------
     if op == "Add":
-        return sum([python_expr_to_z3(a, var_map, func_map) for a in expr["args"]])
+        args = []
+        for a in expr["args"]:
+            arg_z3, ux_counter, ex_counter = python_expr_to_z3(
+                a, var_map, func_map, BoxSort, bound_depth, ux_counter, ex_counter
+            )
+            args.append(arg_z3)
+        return sum(args), ux_counter, ex_counter
+
     if op == "Sub":
-        a0 = python_expr_to_z3(expr["args"][0], var_map, func_map)
-        a1 = python_expr_to_z3(expr["args"][1], var_map, func_map)
-        return a0 - a1
+        a0, a1 = expr["args"]
+        left, ux_counter, ex_counter = python_expr_to_z3(
+            a0, var_map, func_map, BoxSort, bound_depth, ux_counter, ex_counter
+        )
+        right, ux_counter, ex_counter = python_expr_to_z3(
+            a1, var_map, func_map, BoxSort, bound_depth, ux_counter, ex_counter
+        )
+        return left - right, ux_counter, ex_counter
+
     if op == "Mul":
-        res = python_expr_to_z3(expr["args"][0], var_map, func_map)
-        for a in expr["args"][1:]:
-            res *= python_expr_to_z3(a, var_map, func_map)
-        return res
+        args = expr["args"]
+        res, ux_counter, ex_counter = python_expr_to_z3(
+            args[0], var_map, func_map, BoxSort, bound_depth, ux_counter, ex_counter
+        )
+        for a in args[1:]:
+            a_z3, ux_counter, ex_counter = python_expr_to_z3(
+                a, var_map, func_map, BoxSort, bound_depth, ux_counter, ex_counter
+            )
+            res *= a_z3
+        return res, ux_counter, ex_counter
+
     if op == "Div":
-        a0 = python_expr_to_z3(expr["args"][0], var_map, func_map)
-        a1 = python_expr_to_z3(expr["args"][1], var_map, func_map)
-        return a0 / a1
+        a0, a1 = expr["args"]
+        left, ux_counter, ex_counter = python_expr_to_z3(
+            a0, var_map, func_map, BoxSort, bound_depth, ux_counter, ex_counter
+        )
+        right, ux_counter, ex_counter = python_expr_to_z3(
+            a1, var_map, func_map, BoxSort, bound_depth, ux_counter, ex_counter
+        )
+        return left / right, ux_counter, ex_counter
 
     # ---------- Quantifiers ----------
-    if op == "ForAll":
-        x_vars = expr["vars"]
-        body = expr["body"]
-        # Create Z3 bound variables
-        z3_vars = [z3.Int(v) for v in x_vars]
-        # Update variable map for body
-        new_var_map = var_map.copy()
-        for v, z in zip(x_vars, z3_vars):
-            new_var_map[v] = z
-        return z3.ForAll(z3_vars, python_expr_to_z3(body, new_var_map, func_map))
+    if op in ("ForAll", "Exists"):
+        vars_ = expr["vars"]
+        n = len(vars_)
 
-    if op == "Exists":
-        y_vars = expr["vars"]
-        body = expr["body"]
-        z3_vars = [z3.Int(v) for v in y_vars]
-        new_var_map = var_map.copy()
-        for v, z in zip(y_vars, z3_vars):
-            new_var_map[v] = z
-        return z3.Exists(z3_vars, python_expr_to_z3(body, new_var_map, func_map))
+        # generate fresh bound variables
+        if op == "ForAll":
+            bound_vars, ux_counter = fresh_univ(n, BoxSort, ux_counter)
+        else:
+            bound_vars, ex_counter = fresh_exist(n, BoxSort, ex_counter)
+
+        # build body recursively
+        body_z3, ux_counter, ex_counter = python_expr_to_z3(
+            expr["body"],
+            var_map,
+            func_map,
+            BoxSort,
+            bound_depth + n,
+            ux_counter,
+            ex_counter,
+        )
+
+        if op == "ForAll":
+            return z3.ForAll(bound_vars, body_z3), ux_counter, ex_counter
+        else:
+            return z3.Exists(bound_vars, body_z3), ux_counter, ex_counter
 
     raise ValueError(f"Unknown op: {op}")
