@@ -1045,7 +1045,7 @@ def check_redundancy(candidates: List) -> List:
 
 
 def run_proposal_example():
-    states_zero: List[Dict] = []
+    states_zero: List[Dict] = [{}, {}, {}, {}]
     states: List[Dict] = [
         {
             "x1": [0.0, 0.0, 0.0],
@@ -1218,7 +1218,6 @@ def run_reverse_example():
 
 
 def run_forall_exists_example():
-
     states_zero: List[Dict] = [[]]
     states: List[Dict] = [
         {
@@ -1237,6 +1236,30 @@ def run_forall_exists_example():
     constants_mappings = [
         {b0: "x1", b: "x3"},
     ]
+    return forall_exists_loop_inference(
+        states_zero,
+        states,
+        n_forall,
+        n_exists,
+        relations,
+        constants,
+        constants_mappings,
+    )
+
+
+def quant_enum_merge_test():
+    states_zero: List[Dict] = [[]]
+    states: List[Dict] = [
+        {
+            "x1": (0.0, 0.0, 0.0),
+            "x2": (0.0, 0.0, 0.05),
+            "x3": (0.0, 0.0, 0.1),
+            "x4": (5.0, 5.0, 0.0),
+            "x5": (10.0, 10.0, 0.0),
+        }
+    ]
+    relations = [ON_star, "equality", Top]
+    b0, b = get_consts("b0"), get_consts("b")
     x, y = get_consts("x"), get_consts("y")
     m, n = get_consts("m"), get_consts("n")
 
@@ -1317,13 +1340,20 @@ def run_forall_exists_example():
         merged_expr[0], var_maps, func_maps, BoxSort
     )
     print("quant_enum_merge_expr", quant_enum_merge_expr)
-    exit()
-    return forall_exists_loop_inference(
-        states_zero,
-        states,
-        n_forall,
-        n_exists,
-        relations,
-        constants,
-        constants_mappings,
+
+    candidate = z3.Exists(
+        [x, y], z3.And(ON_star(x, b0), z3.Or(y == x, z3.Not(ON_star(y, x))))
     )
+    promoted = quant_enum_merge.promote_exists_to_forall_right_z3(
+        candidate, [env], domain, function_imples
+    )
+    print(promoted)
+
+    candidate2 = z3.ForAll(
+        [m],
+        z3.Exists([x, y], z3.And(ON_star(x, b0), z3.Or(y == x, z3.Not(ON_star(y, x))))),
+    )
+    promoted2 = quant_enum_merge.promote_exists_to_forall_right_z3(
+        candidate2, [env], domain, function_imples
+    )
+    print(promoted2)

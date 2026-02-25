@@ -607,3 +607,151 @@ def python_expr_to_z3(
             return z3.Exists(bound_vars, body_z3), ux_counter, ex_counter
 
     raise ValueError(f"Unknown op: {op}")
+
+
+#################### forall exists forall promotion code ##################
+def promote_exists_to_forall_right_z3(
+    expr: z3.ExprRef,
+    base_envs: List[Dict[str, Any]],
+    domain: List[Any],
+    function_impls: Dict[str, Callable],
+    ux_prefix: str = "ux",
+    ex_prefix: str = "ex",
+) -> z3.ExprRef:
+    """
+    Promote one existential variable on the right (∃Y -> ∃Y_except_j ∀Yj),
+    only if it is promotable under all provided base_envs.
+    Assign systematic names:
+      - universals: ux1, ux2, …
+      - existentials: ex1, ex2, …
+    """
+
+    # Convert Z3 formula to AST for compute_witness_map
+    ast = z3_to_python_expr(expr)
+
+    # Count number of existential variables
+    num_existentials = count_existentials(ast)
+
+    # Test each existential individually
+    for candidate_index in range(num_existentials):
+        promotable_in_all_states = all(
+            promotable_right_single(
+                compute_witness_map(
+                    ast, base_env=env, domain=domain, function_impls=function_impls
+                ),
+                domain,
+                candidate_index,
+            )
+            for env in base_envs
+        )
+
+        if promotable_in_all_states:
+            # Promote the first candidate safe across all states
+            print("promote succeed with index", candidate_index)
+            return rebuild_exists_forall_right(
+                expr, candidate_index, ux_prefix, ex_prefix
+            )
+
+    # No promotion possible
+    print("promote fail")
+    return expr
+
+
+def count_existentials(ast: Dict) -> int:
+    if ast.get("op") == "ForAll":
+        inner = ast["body"]
+    else:
+        inner = ast
+    assert inner.get("op") == "Exists"
+    return len(inner["vars"])
+
+
+def promotable_right_single(
+    witness_map: Dict[Tuple, Set[Tuple]], domain: List[Any], existential_index: int
+) -> bool:
+    """
+    Check if a single existential variable can be promoted to the right ∀.
+    """
+    domain_set = set(domain)
+
+    for witnesses in witness_map.values():
+        num_existentials = len(next(iter(witnesses))) if witnesses else 0
+        buckets = {}
+        for w in witnesses:
+            key = tuple(w[i] for i in range(num_existentials) if i != existential_index)
+            buckets.setdefault(key, set()).add(w[existential_index])
+
+        if not any(domain_set.issubset(vals) for vals in buckets.values()):
+            return False
+
+    return True
+
+
+import z3
+
+
+def rebuild_exists_forall_right(
+    expr, promote_index, ux_prefix="ux", ex_prefix="ex", outer_ux_offset=0
+):
+    """
+    Promote a single existential to a rightmost universal, preserving outer ForAll,
+    and avoiding name collisions.
+
+    Args:
+        expr: Z3 expression (Exists or ForAll->Exists)
+        promote_index: index of existential to promote
+        ux_prefix: universal prefix
+        ex_prefix: existential prefix
+        outer_ux_offset: counter for existing outer universals
+    """
+    # Case: outer ForAll
+    if z3.is_quantifier(expr) and expr.is_forall():
+        num_x = expr.num_vars()
+        x_sorts = [expr.var_sort(i) for i in range(num_x)]
+        # Recurse into body, shift offset for outer universals
+        inner = rebuild_exists_forall_right(
+            expr.body(),
+            promote_index,
+            ux_prefix,
+            ex_prefix,
+            outer_ux_offset=outer_ux_offset + num_x,
+        )
+        xs_consts = [
+            z3.Const(f"{ux_prefix}{i+1+outer_ux_offset}", s)
+            for i, s in enumerate(x_sorts)
+        ]
+        return z3.ForAll(xs_consts, inner)
+
+    # Must be Exists
+    assert z3.is_quantifier(expr) and expr.is_exists()
+    num_y = expr.num_vars()
+    phi = expr.body()
+
+    # Build constants for existentials
+    y_consts = [z3.Const(f"{ex_prefix}{i+1}", expr.var_sort(i)) for i in range(num_y)]
+
+    # Promoted variable: next available universal index
+    promoted_const = z3.Const(
+        f"{ux_prefix}{outer_ux_offset + 1}", expr.var_sort(promote_index)
+    )
+
+    # Build replacement list for substitute_vars
+    replace_list = []
+    for i in range(num_y):
+        if i == promote_index:
+            replace_list.append(promoted_const)
+        else:
+            replace_list.append(y_consts[i])
+
+    # Substitute variables by De Bruijn index (reverse order for substitute_vars)
+    new_phi = z3.substitute_vars(phi, *replace_list[::-1])
+
+    # Wrap promoted variable first (innermost ForAll)
+    new_phi = z3.ForAll([promoted_const], new_phi)
+
+    # Wrap remaining existentials outside
+    remaining = [y_consts[i] for i in range(num_y) if i != promote_index]
+    if remaining:
+        new_phi = z3.Exists(remaining, new_phi)
+
+    return new_phi
