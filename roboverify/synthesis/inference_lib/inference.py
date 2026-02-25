@@ -41,7 +41,7 @@ def add_univariable_predicate(vocabulary, r, all_vars):
 
 def forall_exists_compute_omega(
     universally_quantified_vars: List,
-    existential_quantified_vars: int,
+    existential_quantified_vars: List,
     relations: List,
     constants: List,
 ):
@@ -87,28 +87,33 @@ def forall_exists_compute_dataset(
     all_datasets = []
     for witness_assignment in all_witness_permutations:
         dataset = set()
-        state, state_zero, mapping = states[0], states_zero[0], constants_mappings[0]
-
-        existential_var_mapping = {
-            var: witness_assignment[idx]
-            for idx, var in enumerate(existential_quantified_vars)
-        }
-
-        all_objects = list(state.keys())
-        for universal_assignment in itertools.product(
-            all_objects, repeat=len(universal_quantified_vars)
+        for state_idx, (state, state_zero, mapping) in enumerate(
+            zip(states, states_zero, constants_mappings)
         ):
-            # universal_var_mapping maps universal quantified variables to its corresponding real block
-            universal_var_mapping = {
-                var: universal_assignment[idx]
-                for idx, var in enumerate(universal_quantified_vars)
+            # state, state_zero, mapping = states[0], states_zero[0], constants_mappings[0]
+
+            existential_var_mapping = {
+                var: witness_assignment[
+                    state_idx * len(existential_quantified_vars) + var_idx
+                ]
+                for var_idx, var in enumerate(existential_quantified_vars)
             }
-            var_mapping = {**universal_var_mapping, **existential_var_mapping}
-            d = compute_data(state_zero, state, omega_k, var_mapping, mapping)
-            print("var_mapping", var_mapping)
-            print("omega_k", omega_k)
-            print("data", d)
-            dataset.add(d)
+
+            all_objects = list(state.keys())
+            for universal_assignment in itertools.product(
+                all_objects, repeat=len(universal_quantified_vars)
+            ):
+                # universal_var_mapping maps universal quantified variables to its corresponding real block
+                universal_var_mapping = {
+                    var: universal_assignment[idx]
+                    for idx, var in enumerate(universal_quantified_vars)
+                }
+                var_mapping = {**universal_var_mapping, **existential_var_mapping}
+                d = compute_data(state_zero, state, omega_k, var_mapping, mapping)
+                print("var_mapping", var_mapping)
+                print("omega_k", omega_k)
+                print("data", d)
+                dataset.add(d)
 
         all_datasets.append(dataset)
     return all_datasets
@@ -507,21 +512,12 @@ def forall_exists_loop_inference_by_index(
     universal_quantified_vars: List,
     existential_quantified_vars: List,
     all_witness_permutations: List,
+    all_datasets: List,
 ):
     print(
         f"=========== learning with index = {index} with target predicate {omega_inv[index]}"
     )
 
-    all_datasets: List = forall_exists_compute_dataset(
-        states_zero,
-        states,
-        omega_inv,
-        universal_quantified_vars,
-        existential_quantified_vars,
-        constants,
-        constants_mappings,
-        all_witness_permutations,
-    )
     all_full_S, all_full_U, all_target, all_reduced_omega = [], [], [], []
     all_reduced_S, all_reduced_U = [], []
     for dataset in all_datasets:
@@ -637,19 +633,12 @@ def loop_inference_by_index(
     index: int,
     omega_inv: List,
     universal_quantified_vars: List,
+    dataset: Set,
 ):
     print(
         f"=========== learning with index = {index} with target predicate {omega_inv[index]}"
     )
 
-    dataset = compute_dataset(
-        states_zero,
-        states,
-        omega_inv,
-        universal_quantified_vars,
-        constants,
-        constants_mappings,
-    )
     full_S, full_U, target, reduced_omega = compute_S_U(dataset, omega_inv, index)
 
     print("S", full_S)
@@ -750,9 +739,11 @@ def forall_exists_loop_inference(
 ):
     universally_quantified_vars = get_universal_quantified_vars(n_forall)
     existential_quantified_vars = get_existential_quantified_vars(n_exists)
+
     all_objects = list(states[0].keys())
-    all_witness_permuatations = compute_all_possible_witness_permutations(
-        n_exists, all_objects
+    n_states = len(states)
+    all_witness_permutations = compute_all_possible_witness_permutations(
+        n_exists * n_states, all_objects
     )
 
     omega_inv = forall_exists_compute_omega(
@@ -764,6 +755,17 @@ def forall_exists_loop_inference(
     # b0, b = constants
     # omega_inv = [ON_star(ex1, b0), Top(ex1)]
     print("omega_inv", omega_inv)
+
+    all_datasets: List = forall_exists_compute_dataset(
+        states_zero,
+        states,
+        omega_inv,
+        universally_quantified_vars,
+        existential_quantified_vars,
+        constants,
+        constants_mappings,
+        all_witness_permutations,
+    )
 
     inferred_invariants = []
     for i in range(len(omega_inv)):
@@ -777,7 +779,8 @@ def forall_exists_loop_inference(
                 omega_inv,
                 universally_quantified_vars,
                 existential_quantified_vars,
-                all_witness_permuatations,
+                all_witness_permutations,
+                all_datasets,
             )
         )
     print("inferred_invariants count", len(inferred_invariants))
@@ -814,6 +817,15 @@ def loop_inference(
 
     print("omega_inv", omega_inv)
 
+    dataset = compute_dataset(
+        states_zero,
+        states,
+        omega_inv,
+        universal_quantified_vars,
+        constants,
+        constants_mappings,
+    )
+
     inferred_invariants = []
     for i in range(len(omega_inv)):
         inferred_invariants.extend(
@@ -825,6 +837,7 @@ def loop_inference(
                 i,
                 omega_inv,
                 universal_quantified_vars,
+                dataset,
             )
         )
     print("inferred_invariants count", len(inferred_invariants))
@@ -1218,7 +1231,7 @@ def run_reverse_example():
 
 
 def run_forall_exists_example():
-    states_zero: List[Dict] = [[]]
+    states_zero: List[Dict] = [{}, {}]
     states: List[Dict] = [
         {
             "x1": (0.0, 0.0, 0.0),
@@ -1226,7 +1239,14 @@ def run_forall_exists_example():
             "x3": (0.0, 0.0, 0.1),
             "x4": (5.0, 5.0, 0.0),
             "x5": (10.0, 10.0, 0.0),
-        }
+        },
+        {
+            "x1": (0.0, 0.0, 0.0),
+            "x2": (0.0, 0.0, 0.05),
+            "x3": (0.0, 0.0, 0.1),
+            "x4": (5.0, 5.0, 0.0),
+            "x5": (10.0, 10.0, 0.0),
+        },
     ]
     n_forall = 1
     n_exists = 1
@@ -1234,6 +1254,7 @@ def run_forall_exists_example():
     b0, b = get_consts("b0"), get_consts("b")
     constants = [b0, b]
     constants_mappings = [
+        {b0: "x1", b: "x3"},
         {b0: "x1", b: "x3"},
     ]
     return forall_exists_loop_inference(
@@ -1248,7 +1269,7 @@ def run_forall_exists_example():
 
 
 def quant_enum_merge_test():
-    states_zero: List[Dict] = [[]]
+    states_zero: List[Dict] = [{}]
     states: List[Dict] = [
         {
             "x1": (0.0, 0.0, 0.0),
