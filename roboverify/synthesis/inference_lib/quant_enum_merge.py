@@ -648,8 +648,8 @@ def promote_exists_to_forall_right_z3(
         if promotable_in_all_states:
             # Promote the first candidate safe across all states
             print("promote succeed with index", candidate_index)
-            return rebuild_exists_forall_right(
-                expr, candidate_index, ux_prefix, ex_prefix
+            print(
+                rebuild_exists_forall_right(expr, candidate_index, ux_prefix, ex_prefix)
             )
 
     # No promotion possible

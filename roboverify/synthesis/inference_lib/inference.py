@@ -85,7 +85,10 @@ def forall_exists_compute_dataset(
     """
 
     all_datasets = []
-    for witness_assignment in all_witness_permutations:
+    for assignment_idx, witness_assignment in enumerate(all_witness_permutations):
+        print(
+            f"============== compute data set for assignment idx {assignment_idx} at {witness_assignment}"
+        )
         dataset = set()
         for state_idx, (state, state_zero, mapping) in enumerate(
             zip(states, states_zero, constants_mappings)
@@ -279,7 +282,7 @@ def learn_from_partition(S: Set, U: Set):
                     disj.append(sel[i] == 1)
                 # otherwise this predicate can't distinguish s and u
             opt.add(z3.Or(*disj))
-    # opt.add(sel[1] == 0)
+
     # Objective φc: minimize Σ_i sel_i
     opt.minimize(z3.Sum(sel))
 
@@ -502,6 +505,79 @@ def check_tautology(clause) -> bool:
         assert False, f"unknown z3 result {result}"
 
 
+def forall_exists_learn_from_partition(all_S: List[Set], all_U: List[Set]):
+
+    n = None
+
+    # --- infer tuple dimension ---
+    for S in all_S:
+        for d in S:
+            n = len(d)
+            break
+        if n is not None:
+            break
+
+    if n is None:
+        for U in all_U:
+            for d in U:
+                n = len(d)
+                break
+            if n is not None:
+                break
+
+    assert n is not None, "Could not infer tuple dimension"
+
+    # sel_i ∈ {0,1}
+    sel = [z3.Int(f"sel_{i}") for i in range(n)]
+
+    opt = z3.Optimize()
+
+    # --- Constraint φ2: binary selectors ---
+    for i in range(n):
+        opt.add(z3.Or(sel[i] == 0, sel[i] == 1))
+
+    # --- Partition OR encoding ---
+    partition_constraints = []
+
+    for k in range(len(all_S)):
+        S = all_S[k]
+        U = all_U[k]
+
+        su_constraints = []
+
+        for s_data in S:
+            for u_data in U:
+                disj = []
+
+                for i in range(n):
+                    if s_data[i] != u_data[i]:
+                        disj.append(sel[i] == 1)
+
+                # If empty → this pair cannot be separated
+                su_constraints.append(z3.Or(*disj))
+
+        # φ_k = AND over all (s,u)
+        partition_constraints.append(z3.And(*su_constraints))
+
+    # ∃k φ_k
+    opt.add(z3.Or(*partition_constraints))
+
+    # --- Minimize number of selected predicates ---
+    opt.minimize(z3.Sum(sel))
+
+    # --- Solve ---
+    result = opt.check()
+
+    if result == z3.sat:
+        model = opt.model()
+        print("model is", model)
+
+        chosen = [i for i in range(n) if model[sel[i]].as_long() == 1]
+        return chosen
+    else:
+        pdb.set_trace()
+
+
 def forall_exists_loop_inference_by_index(
     states_zero: List,
     states: List,
@@ -531,6 +607,66 @@ def forall_exists_loop_inference_by_index(
         reduced_U = full_U - full_S
         all_reduced_S.append(reduced_S)
         all_reduced_U.append(reduced_U)
+
+    phi_selected_idxs = forall_exists_learn_from_partition(all_reduced_S, all_full_U)
+    selected_phi_omega = [reduced_omega[i] for i in phi_selected_idxs]
+    phi, phi_sympy_vars = construct_truth_table_and_extract_expression_for_phi(
+        current_S=project_to_selected(reduced_S, phi_selected_idxs),
+        current_U=project_to_selected(full_U, phi_selected_idxs),
+        num_selected=len(phi_selected_idxs),
+    )
+    print("phi", phi)
+    z3_phi = sympy_to_z3(phi, z3_terms=selected_phi_omega)
+    print("z3_phi", z3_phi)
+    phi_clauses = implication_sop_to_clauses_z3(z3_phi, target)
+    forall_exists_quantified_phi_clauses = add_universal_and_existential_quantifiers(
+        phi_clauses, universal_quantified_vars, existential_quantified_vars
+    )
+    print("forall_exists phi clauses", forall_exists_quantified_phi_clauses)
+    useful_invariant_with_phi = [
+        z3.simplify(x)
+        for x in forall_exists_quantified_phi_clauses
+        # if not check_tautology(x)
+    ]
+    print("useful invariant using phi", useful_invariant_with_phi)
+    print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+    # learn phi_prime in target => phi_prime
+    phi_prime_selected_idxs = forall_exists_learn_from_partition(
+        all_full_S, all_reduced_U
+    )
+    selected_phi_prime_omega = [reduced_omega[i] for i in phi_prime_selected_idxs]
+    phi_prime, phi_prime_sympy_vars = (
+        construct_truth_table_and_extract_expression_for_phi_prime(
+            current_S=project_to_selected(full_S, phi_prime_selected_idxs),
+            current_U=project_to_selected(reduced_U, phi_prime_selected_idxs),
+            num_selected=len(phi_prime_selected_idxs),
+        )
+    )
+    print("phi_prime", phi_prime)
+    z3_phi_prime = sympy_to_z3(phi_prime, z3_terms=selected_phi_prime_omega)
+    print("z3_phi_prime", z3_phi_prime)
+    phi_prime_clauses = implication_pos_to_clauses_z3(target, z3_phi_prime)
+    forall_exists_quantified_phi_prime_clauses = (
+        add_universal_and_existential_quantifiers(
+            phi_prime_clauses,
+            universal_quantified_vars,
+            existential_quantified_vars,
+        )
+    )
+    print(
+        "forall_exists quantified phi prime clauses",
+        forall_exists_quantified_phi_prime_clauses,
+    )
+    useful_invariant_with_phi_prime = [
+        z3.simplify(x)
+        for x in forall_exists_quantified_phi_prime_clauses
+        # if not check_tautology(x)
+    ]
+    print("useful invariant using phi prime", useful_invariant_with_phi_prime)
+    all_invariant = useful_invariant_with_phi + useful_invariant_with_phi_prime
+    print("total length", len(all_invariant))
+    all_invariant_with_exists = filter_exists(all_invariant)
+    return all_invariant_with_exists
 
     iter = 0
     all_invariant = []
@@ -745,6 +881,7 @@ def forall_exists_loop_inference(
     all_witness_permutations = compute_all_possible_witness_permutations(
         n_exists * n_states, all_objects
     )
+    print("len(all_witness_permutations)", len(all_witness_permutations))
 
     omega_inv = forall_exists_compute_omega(
         universally_quantified_vars, existential_quantified_vars, relations, constants
@@ -1244,18 +1381,18 @@ def run_forall_exists_example():
             "x1": (0.0, 0.0, 0.0),
             "x2": (0.0, 0.0, 0.05),
             "x3": (0.0, 0.0, 0.1),
-            "x4": (5.0, 5.0, 0.0),
+            "x4": (0.0, 0.0, 0.15),
             "x5": (10.0, 10.0, 0.0),
         },
     ]
     n_forall = 1
-    n_exists = 1
-    relations = [ON_star, "equality", Top]
+    n_exists = 2
+    relations = [ON_star, "equality"]
     b0, b = get_consts("b0"), get_consts("b")
     constants = [b0, b]
     constants_mappings = [
         {b0: "x1", b: "x3"},
-        {b0: "x1", b: "x3"},
+        {b0: "x1", b: "x4"},
     ]
     return forall_exists_loop_inference(
         states_zero,
@@ -1266,6 +1403,53 @@ def run_forall_exists_example():
         constants,
         constants_mappings,
     )
+
+
+def run_promote_example():
+    states_zero: List[Dict] = [{}, {}]
+    states: List[Dict] = [
+        {
+            "x1": (0.0, 0.0, 0.0),
+            "x2": (0.0, 0.0, 0.05),
+            "x3": (0.0, 0.0, 0.1),
+            "x4": (5.0, 5.0, 0.0),
+            "x5": (10.0, 10.0, 0.0),
+        },
+        {
+            "x1": (0.0, 0.0, 0.0),
+            "x2": (0.0, 0.0, 0.05),
+            "x3": (0.0, 0.0, 0.1),
+            "x4": (0.0, 0.0, 0.15),
+            "x5": (10.0, 10.0, 0.0),
+        },
+    ]
+    n_forall = 1
+    n_exists = 2
+    relations = [ON_star, "equality"]
+    b0, b = get_consts("b0"), get_consts("b")
+    constants = [b0, b]
+    constants_mappings = [
+        {b0: "x1", b: "x3"},
+        {b0: "x1", b: "x4"},
+    ]
+
+    domain = [val for _, val in states[0].items()]
+    base_envs = [
+        {"b0": (0.0, 0.0, 0.0), "b": (0.0, 0.0, 0.1)},
+        {"b0": (0.0, 0.0, 0.0), "b": [0.0, 0.0, 0.15]},
+    ]
+
+    x, y = get_consts("x"), get_consts("y")
+    candidate = z3.Exists([x, y], z3.Or(z3.Not(ON_star(y, x)), x == y))
+    function_imples = {
+        "ON_star": on.on_star_implementation,
+        "ON_star_zero": on.on_star_implementation,
+        "Top": on.top_implementation,
+    }
+    promoted = quant_enum_merge.promote_exists_to_forall_right_z3(
+        candidate, base_envs, domain, function_imples
+    )
+    print(promoted)
 
 
 def quant_enum_merge_test():
