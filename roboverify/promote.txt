@@ -1,0 +1,8 @@
+promote succeed with index 0
+Exists(ex2,
+       ForAll(ux1, Or(Not(ON_star(ex2, ux1)), ux1 == ex2)))
+promote succeed with index 1
+Exists(ex1,
+       ForAll(ux1, Or(Not(ON_star(ux1, ex1)), ex1 == ux1)))
+promote fail
+Exists([x, y], Or(Not(ON_star(y, x)), x == y))

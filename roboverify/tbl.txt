@@ -1,0 +1,1767 @@
+omega_inv [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+=========== learning with index = 0 with target predicate ux1 == tbl
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x1', ux2: 'x1'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x1', ux2: 'x2'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x1', ux2: 'x3'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x1', ux2: 'x4'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x1', ux2: 'x5'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x1', ux2: 'tbl'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, True, True, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x2', ux2: 'x1'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x2', ux2: 'x2'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x2', ux2: 'x3'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x2', ux2: 'x4'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x2', ux2: 'x5'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x2', ux2: 'tbl'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, True, True, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x3', ux2: 'x1'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x3', ux2: 'x2'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x3', ux2: 'x3'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x3', ux2: 'x4'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x3', ux2: 'x5'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x3', ux2: 'tbl'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, True, True, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x4', ux2: 'x1'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x4', ux2: 'x2'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x4', ux2: 'x3'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x4', ux2: 'x4'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x4', ux2: 'x5'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x4', ux2: 'tbl'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, True, True, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x5', ux2: 'x1'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x5', ux2: 'x2'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x5', ux2: 'x3'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x5', ux2: 'x4'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x5', ux2: 'x5'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x5', ux2: 'tbl'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, True, True, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'tbl', ux2: 'x1'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (True, False, False, False, False, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'tbl', ux2: 'x2'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (True, False, False, False, False, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'tbl', ux2: 'x3'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (True, False, False, False, False, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'tbl', ux2: 'x4'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (True, False, False, False, False, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'tbl', ux2: 'x5'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (True, False, False, False, False, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'tbl', ux2: 'tbl'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (True, True, False, True, True, True, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x1', ux2: 'x1'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x1', ux2: 'x2'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x1', ux2: 'x3'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x1', ux2: 'x4'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x1', ux2: 'x5'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x1', ux2: 'tbl'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, True, True, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x2', ux2: 'x1'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x2', ux2: 'x2'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x2', ux2: 'x3'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x2', ux2: 'x4'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x2', ux2: 'x5'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x2', ux2: 'tbl'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, True, True, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x3', ux2: 'x1'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x3', ux2: 'x2'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x3', ux2: 'x3'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x3', ux2: 'x4'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x3', ux2: 'x5'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x3', ux2: 'tbl'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, True, True, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x4', ux2: 'x1'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x4', ux2: 'x2'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x4', ux2: 'x3'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x4', ux2: 'x4'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x4', ux2: 'x5'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x4', ux2: 'tbl'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, True, True, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x5', ux2: 'x1'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, False, True, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x5', ux2: 'x2'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, False, True, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x5', ux2: 'x3'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, False, True, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x5', ux2: 'x4'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, False, True, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x5', ux2: 'x5'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, True, True, True, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x5', ux2: 'tbl'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, True, False, False, False, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'tbl', ux2: 'x1'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (True, False, False, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'tbl', ux2: 'x2'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (True, False, False, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'tbl', ux2: 'x3'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (True, False, False, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'tbl', ux2: 'x4'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (True, False, False, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'tbl', ux2: 'x5'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (True, False, False, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'tbl', ux2: 'tbl'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (True, True, False, True, True, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x1', ux2: 'x1'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x1', ux2: 'x2'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x1', ux2: 'x3'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x1', ux2: 'x4'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x1', ux2: 'x5'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x1', ux2: 'tbl'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, True, True, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x2', ux2: 'x1'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x2', ux2: 'x2'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x2', ux2: 'x3'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x2', ux2: 'x4'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x2', ux2: 'x5'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x2', ux2: 'tbl'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, True, True, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x3', ux2: 'x1'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x3', ux2: 'x2'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x3', ux2: 'x3'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x3', ux2: 'x4'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x3', ux2: 'x5'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x3', ux2: 'tbl'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, True, True, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x4', ux2: 'x1'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, False, True, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x4', ux2: 'x2'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, False, True, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x4', ux2: 'x3'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, False, True, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x4', ux2: 'x4'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, True, True, True, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x4', ux2: 'x5'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, True, False, True, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x4', ux2: 'tbl'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, True, False, False, False, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x5', ux2: 'x1'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, False, True, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x5', ux2: 'x2'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, False, True, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x5', ux2: 'x3'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, False, True, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x5', ux2: 'x4'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, False, True, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x5', ux2: 'x5'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, True, True, True, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x5', ux2: 'tbl'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, True, False, False, False, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'tbl', ux2: 'x1'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (True, False, False, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'tbl', ux2: 'x2'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (True, False, False, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'tbl', ux2: 'x3'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (True, False, False, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'tbl', ux2: 'x4'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (True, False, False, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'tbl', ux2: 'x5'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (True, False, False, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'tbl', ux2: 'tbl'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (True, True, False, True, True, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x1', ux2: 'x1'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x1', ux2: 'x2'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x1', ux2: 'x3'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x1', ux2: 'x4'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x1', ux2: 'x5'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x1', ux2: 'tbl'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, True, True, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x2', ux2: 'x1'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x2', ux2: 'x2'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x2', ux2: 'x3'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x2', ux2: 'x4'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x2', ux2: 'x5'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x2', ux2: 'tbl'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, True, True, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x3', ux2: 'x1'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, False, True, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x3', ux2: 'x2'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, False, True, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x3', ux2: 'x3'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, True, True, True, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x3', ux2: 'x4'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, True, False, True, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x3', ux2: 'x5'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, True, False, True, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x3', ux2: 'tbl'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, True, False, False, False, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x4', ux2: 'x1'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, False, True, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x4', ux2: 'x2'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, False, True, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x4', ux2: 'x3'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, False, True, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x4', ux2: 'x4'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, True, True, True, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x4', ux2: 'x5'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, True, False, True, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x4', ux2: 'tbl'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, True, False, False, False, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x5', ux2: 'x1'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, False, True, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x5', ux2: 'x2'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, False, True, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x5', ux2: 'x3'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, False, True, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x5', ux2: 'x4'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, False, True, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x5', ux2: 'x5'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, True, True, True, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x5', ux2: 'tbl'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, True, False, False, False, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'tbl', ux2: 'x1'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (True, False, False, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'tbl', ux2: 'x2'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (True, False, False, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'tbl', ux2: 'x3'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (True, False, False, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'tbl', ux2: 'x4'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (True, False, False, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'tbl', ux2: 'x5'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (True, False, False, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'tbl', ux2: 'tbl'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (True, True, False, True, True, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x1', ux2: 'x1'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, True, True, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x1', ux2: 'x2'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x1', ux2: 'x3'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x1', ux2: 'x4'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x1', ux2: 'x5'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, True, False, False, False, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x1', ux2: 'tbl'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, True, True, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x2', ux2: 'x1'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, False, True, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x2', ux2: 'x2'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, True, True, True, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x2', ux2: 'x3'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, True, False, True, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x2', ux2: 'x4'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, True, False, True, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x2', ux2: 'x5'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, True, False, True, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x2', ux2: 'tbl'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, True, False, False, False, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x3', ux2: 'x1'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, False, True, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x3', ux2: 'x2'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, False, True, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x3', ux2: 'x3'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, True, True, True, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x3', ux2: 'x4'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, True, False, True, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x3', ux2: 'x5'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, True, False, True, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x3', ux2: 'tbl'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, True, False, False, False, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x4', ux2: 'x1'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, False, True, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x4', ux2: 'x2'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, False, True, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x4', ux2: 'x3'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, False, True, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x4', ux2: 'x4'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, True, True, True, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x4', ux2: 'x5'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, True, False, True, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x4', ux2: 'tbl'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, True, False, False, False, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x5', ux2: 'x1'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, False, True, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x5', ux2: 'x2'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, False, True, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x5', ux2: 'x3'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, False, True, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x5', ux2: 'x4'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, False, True, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x5', ux2: 'x5'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, False, False, True, True, True, True)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'x5', ux2: 'tbl'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (False, True, False, False, False, True, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'tbl', ux2: 'x1'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (True, False, False, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)
+predicate: ON_star(b, ux1)
+predicate: ON_star_zero(ux2, ux1)
+var_mapping {ux1: 'tbl', ux2: 'x2'}
+omega_k [ux1 == tbl, ux2 == tbl, ON_star(ux1, b0), ON_star(ux1, ux2), ON_star_zero(ux1, ux2), ON_star(b, ux1), ON_star_zero(ux2, ux1)]
+data (True, False, False, False, False, False, False)
+predicate: ux1 == tbl
+predicate: ux2 == tbl
+predicate: ON_star(ux1, b0)
+predicate: ON_star(ux1, ux2)
+predicate: ON_star_zero(ux1, ux2)

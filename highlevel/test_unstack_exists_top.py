@@ -6,7 +6,7 @@ solver = Solver()
 solver.set(unsat_core=True)
 
 Box = DeclareSort("Box")
-# Box, (b9, b10, b11, b12, b13, b14, b15, b16, b17, b18) = EnumSort('Box', ['b9', 'b10', 'b11', 'b12', 'b13', 'b14', 'b15', 'b16', 'b17', 'b18'])
+# Box, (b9, b10, b11, b12, b13) = EnumSort('Box', ['b9', 'b10', 'b11', 'b12', 'b13'])
 # Box, (b9, b10, b11) = EnumSort("Box", ["b9", "b10", "b11"])
 x, y, c, n0, t, next_box, x1 = Consts("x y c n0 t next_box x1", Box)
 

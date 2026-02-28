@@ -52,8 +52,9 @@ solver.add(
     )
 )
 
-# solver.add(
-#     ForAll([x, y], Implies(And(ON_star(x, y), Not(ON_star(y, x))), And(higher(x, y), Not(higher(y, x)))))
+# # scattered = Function("scattered", Box, Box, BoolSort())
+# # solver.add(
+    
 # )
 
 
@@ -82,16 +83,31 @@ def on_table(x):
 
 
 def top(x):
-    return Not(Exists([y], And(Not(y == x), ON_star(y, x))))
+    return And(
+        Not(Exists([y], And(Not(y == x), ON_star(y, x)))),
+        ForAll([y, c], Implies(And(ON_star(y, c), ON_star(x, c)), higher(x, y)))
+    )
 
 
 def substituted_top(x, b_prime, b):
-    return Not(
-        Exists(
-            [y],
-            And(
-                Not(y == x), Or(ON_star(y, x), And(ON_star(y, b_prime), ON_star(b, x)))
-            ),
+    return And(
+        Not(
+            Exists(
+                [y],
+                And(
+                    Not(y == x), Or(ON_star(y, x), And(ON_star(y, b_prime), ON_star(b, x)))
+                ),
+            )
+        ),
+        ForAll(
+            [y, c], 
+            Implies(
+                And(
+                    Or(ON_star(y, c), And(ON_star(y, b_prime), ON_star(b, c))),
+                    Or(ON_star(x, c), And(ON_star(x, b_prime), ON_star(b, c)))
+                ),
+                Or(higher(x, y), And(higher(x, b_prime), higher(b, y)))
+            )
         )
     )
 
