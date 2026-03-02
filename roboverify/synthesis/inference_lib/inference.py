@@ -509,7 +509,7 @@ def forall_exists_learn_from_partition(all_S: List[Set], all_U: List[Set]):
 
     n = None
 
-    # --- infer tuple dimension ---
+    # --- infer tuple length ---
     for S in all_S:
         for d in S:
             n = len(d)
@@ -527,55 +527,110 @@ def forall_exists_learn_from_partition(all_S: List[Set], all_U: List[Set]):
 
     assert n is not None, "Could not infer tuple dimension"
 
-    # sel_i ∈ {0,1}
     sel = [z3.Int(f"sel_{i}") for i in range(n)]
 
     opt = z3.Optimize()
 
-    # --- Constraint φ2: binary selectors ---
+    # --- binary selectors ---
     for i in range(n):
         opt.add(z3.Or(sel[i] == 0, sel[i] == 1))
 
-    # --- Partition OR encoding ---
     partition_constraints = []
+
+    # store diff info for reuse later
+    diff_cache = []
 
     for k in range(len(all_S)):
         S = all_S[k]
         U = all_U[k]
 
         su_constraints = []
+        pair_diffs = []
+        partition_possible = True
 
-        for s_data in S:
-            for u_data in U:
-                disj = []
+        for s in S:
+            for u in U:
+                diff_positions = [i for i in range(n) if s[i] != u[i]]
 
-                for i in range(n):
-                    if s_data[i] != u_data[i]:
-                        disj.append(sel[i] == 1)
+                if not diff_positions:
+                    partition_possible = False
+                    break
 
-                # If empty → this pair cannot be separated
-                su_constraints.append(z3.Or(*disj))
+                pair_diffs.append(diff_positions)
+                su_constraints.append(z3.Or([sel[i] == 1 for i in diff_positions]))
 
-        # φ_k = AND over all (s,u)
-        partition_constraints.append(z3.And(*su_constraints))
+            if not partition_possible:
+                break
 
-    # ∃k φ_k
-    opt.add(z3.Or(*partition_constraints))
+        diff_cache.append(pair_diffs if partition_possible else None)
 
-    # --- Minimize number of selected predicates ---
+        if partition_possible:
+            partition_constraints.append(z3.And(*su_constraints))
+        else:
+            partition_constraints.append(None)
+
+    valid_partitions = [
+        partition_constraints[k]
+        for k in range(len(partition_constraints))
+        if partition_constraints[k] is not None
+    ]
+
+    if not valid_partitions:
+        pdb.set_trace()
+
+    opt.add(z3.Or(*valid_partitions))
+
+    # --- minimize selected predicates ---
     opt.minimize(z3.Sum(sel))
 
-    # --- Solve ---
     result = opt.check()
 
-    if result == z3.sat:
-        model = opt.model()
-        print("model is", model)
-
-        chosen = [i for i in range(n) if model[sel[i]].as_long() == 1]
-        return chosen
-    else:
+    if result != z3.sat:
         pdb.set_trace()
+        # return None
+
+    model = opt.model()
+
+    chosen_features = [i for i in range(n) if model[sel[i]].as_long() == 1]
+
+    print("model is", model)
+    print("chosen features:", chosen_features)
+
+    # --- Phase 2: recover all working partitions ---
+
+    working_partitions = []
+
+    for k in range(len(all_S)):
+        pair_diffs = diff_cache[k]
+
+        if pair_diffs is None:
+            continue
+
+        partition_works = True
+
+        for diff_positions in pair_diffs:
+            if not any(i in chosen_features for i in diff_positions):
+                partition_works = False
+                break
+
+        if partition_works:
+            working_partitions.append(k)
+
+    print("all valid partitions:", working_partitions)
+
+    return chosen_features, working_partitions
+
+
+# Helper: remove duplicate Z3 expressions
+def deduplicate_z3_exprs(expr_list):
+    seen = set()
+    unique_exprs = []
+    for expr in expr_list:
+        key = expr.sexpr()
+        if key not in seen:
+            seen.add(key)
+            unique_exprs.append(expr)
+    return unique_exprs
 
 
 def forall_exists_loop_inference_by_index(
@@ -608,64 +663,91 @@ def forall_exists_loop_inference_by_index(
         all_reduced_S.append(reduced_S)
         all_reduced_U.append(reduced_U)
 
-    phi_selected_idxs = forall_exists_learn_from_partition(all_reduced_S, all_full_U)
-    selected_phi_omega = [reduced_omega[i] for i in phi_selected_idxs]
-    phi, phi_sympy_vars = construct_truth_table_and_extract_expression_for_phi(
-        current_S=project_to_selected(reduced_S, phi_selected_idxs),
-        current_U=project_to_selected(full_U, phi_selected_idxs),
-        num_selected=len(phi_selected_idxs),
+    phi_selected_idxs, phi_working_partitions = forall_exists_learn_from_partition(
+        all_reduced_S, all_full_U
     )
-    print("phi", phi)
-    z3_phi = sympy_to_z3(phi, z3_terms=selected_phi_omega)
-    print("z3_phi", z3_phi)
-    phi_clauses = implication_sop_to_clauses_z3(z3_phi, target)
-    forall_exists_quantified_phi_clauses = add_universal_and_existential_quantifiers(
-        phi_clauses, universal_quantified_vars, existential_quantified_vars
-    )
-    print("forall_exists phi clauses", forall_exists_quantified_phi_clauses)
-    useful_invariant_with_phi = [
-        z3.simplify(x)
-        for x in forall_exists_quantified_phi_clauses
-        # if not check_tautology(x)
-    ]
+    useful_invariant_with_phi = []
+
+    for k in phi_working_partitions:
+        print(f"=== working partition {k} ===")
+        S_part = all_reduced_S[k]
+        U_part = all_full_U[k]
+
+        selected_phi_omega = [reduced_omega[i] for i in phi_selected_idxs]
+        phi, phi_sympy_vars = construct_truth_table_and_extract_expression_for_phi(
+            current_S=project_to_selected(S_part, phi_selected_idxs),
+            current_U=project_to_selected(U_part, phi_selected_idxs),
+            num_selected=len(phi_selected_idxs),
+        )
+        print("phi", phi)
+        z3_phi = sympy_to_z3(phi, z3_terms=selected_phi_omega)
+        print("z3_phi", z3_phi)
+        phi_clauses = implication_sop_to_clauses_z3(z3_phi, target)
+        forall_exists_quantified_phi_clauses = (
+            add_universal_and_existential_quantifiers(
+                phi_clauses, universal_quantified_vars, existential_quantified_vars
+            )
+        )
+        print("forall_exists phi clauses", forall_exists_quantified_phi_clauses)
+        useful_invariant_with_phi.extend(
+            [
+                z3.simplify(x)
+                for x in forall_exists_quantified_phi_clauses
+                # if not check_tautology(x)
+            ]
+        )
+    useful_invariant_with_phi = deduplicate_z3_exprs(useful_invariant_with_phi)
     print("useful invariant using phi", useful_invariant_with_phi)
     print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
     # learn phi_prime in target => phi_prime
-    phi_prime_selected_idxs = forall_exists_learn_from_partition(
-        all_full_S, all_reduced_U
+    phi_prime_selected_idxs, phi_prime_working_partitions = (
+        forall_exists_learn_from_partition(all_full_S, all_reduced_U)
     )
-    selected_phi_prime_omega = [reduced_omega[i] for i in phi_prime_selected_idxs]
-    phi_prime, phi_prime_sympy_vars = (
-        construct_truth_table_and_extract_expression_for_phi_prime(
-            current_S=project_to_selected(full_S, phi_prime_selected_idxs),
-            current_U=project_to_selected(reduced_U, phi_prime_selected_idxs),
-            num_selected=len(phi_prime_selected_idxs),
+    useful_invariant_with_phi_prime = []
+
+    for k in phi_prime_working_partitions:
+        print(f"=== working partition {k} ===")
+        S_part = all_full_S[k]
+        U_part = all_reduced_U[k]
+
+        selected_phi_prime_omega = [reduced_omega[i] for i in phi_prime_selected_idxs]
+        phi_prime, phi_prime_sympy_vars = (
+            construct_truth_table_and_extract_expression_for_phi_prime(
+                current_S=project_to_selected(S_part, phi_prime_selected_idxs),
+                current_U=project_to_selected(U_part, phi_prime_selected_idxs),
+                num_selected=len(phi_prime_selected_idxs),
+            )
         )
-    )
-    print("phi_prime", phi_prime)
-    z3_phi_prime = sympy_to_z3(phi_prime, z3_terms=selected_phi_prime_omega)
-    print("z3_phi_prime", z3_phi_prime)
-    phi_prime_clauses = implication_pos_to_clauses_z3(target, z3_phi_prime)
-    forall_exists_quantified_phi_prime_clauses = (
-        add_universal_and_existential_quantifiers(
-            phi_prime_clauses,
-            universal_quantified_vars,
-            existential_quantified_vars,
+        print("phi_prime", phi_prime)
+        z3_phi_prime = sympy_to_z3(phi_prime, z3_terms=selected_phi_prime_omega)
+        print("z3_phi_prime", z3_phi_prime)
+        phi_prime_clauses = implication_pos_to_clauses_z3(target, z3_phi_prime)
+
+        forall_exists_quantified_phi_prime_clauses = (
+            add_universal_and_existential_quantifiers(
+                phi_prime_clauses,
+                universal_quantified_vars,
+                existential_quantified_vars,
+            )
         )
+        print(
+            "forall_exists quantified phi prime clauses",
+            forall_exists_quantified_phi_prime_clauses,
+        )
+        useful_invariant_with_phi_prime.extend(
+            [
+                z3.simplify(x)
+                for x in forall_exists_quantified_phi_prime_clauses
+                # if not check_tautology(x)
+            ]
+        )
+    useful_invariant_with_phi_prime = deduplicate_z3_exprs(
+        useful_invariant_with_phi_prime
     )
-    print(
-        "forall_exists quantified phi prime clauses",
-        forall_exists_quantified_phi_prime_clauses,
-    )
-    useful_invariant_with_phi_prime = [
-        z3.simplify(x)
-        for x in forall_exists_quantified_phi_prime_clauses
-        # if not check_tautology(x)
-    ]
     print("useful invariant using phi prime", useful_invariant_with_phi_prime)
     all_invariant = useful_invariant_with_phi + useful_invariant_with_phi_prime
+    all_invariant_with_exists = deduplicate_z3_exprs(filter_exists(all_invariant))
     print("total length", len(all_invariant))
-    all_invariant_with_exists = filter_exists(all_invariant)
     return all_invariant_with_exists
 
     iter = 0
