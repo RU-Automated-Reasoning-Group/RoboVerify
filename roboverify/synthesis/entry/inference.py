@@ -67,3 +67,5 @@ if __name__ == "__main__":
     # inferred_invariant, candidate_lists = inference.run_reverse_example()
     # inferred_invariant, candidate_lists = inference.run_unstack_example()
     inferred_invariant, candidate_lists = inference.run_proposal_example()
+    # inferred_invariant, candidate_lists = inference.run_proposal_example()
+    # inferred_invariant, candidate_lists = inference.run_partial_stack_example()

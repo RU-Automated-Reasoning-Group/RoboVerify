@@ -148,7 +148,7 @@ def loop_invariant():
                 Or(And(top(t, ON_star), on_table(t, ON_star)), ON_star(t, n0)),
             ),
         ),
-        Exists([t], And(top(t, ON_star), ON_star(t, n0))),
+        # Exists([t], And(top(t, ON_star), ON_star(t, n0))),
     )
 
 

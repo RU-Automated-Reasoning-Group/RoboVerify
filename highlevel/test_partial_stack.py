@@ -1,4 +1,5 @@
 from z3 import *
+from PIL import Image, ImageDraw, ImageFont
 
 # set_option("smt.mbqi", False)
 # set_option("sat.euf", True)
@@ -12,7 +13,7 @@ solver = Solver()
 # Box, (b9, b10, b11, b12, b13, b14, b15, b16) = EnumSort(
     # "Box", ["b9", "b10", "b11", "b12", "b13", "b14", "b15", "b16"]
 # )
-# Box, (b9, b10, b11) = EnumSort("Box", ["b9", "b10", "b11"])
+Box, (b9, b10, b11, b12) = EnumSort("Box", ["b9", "b10", "b11", "b12"])
 x, y, c, a, b_prime, b, b0 = Consts("x y c a b_prime b b0", Box)
 
 # define ON_star
@@ -66,12 +67,126 @@ solver.add(
 # solver.add(ON_star_zero(b10, b9))
 # solver.add(b0 == b9)
 
+def extract_direct_on(model, blocks, names, ON_star):
+    direct_on = {n: "table" for n in names}
+
+    for i, (a_name, a) in enumerate(zip(names, blocks)):
+        for j, (b_name, b) in enumerate(zip(names, blocks)):
+
+            if a_name == b_name:
+                continue
+
+            if not model.evaluate(ON_star(a,b)):
+                continue
+
+            # check if there exists an intermediate block
+            has_middle = False
+
+            for k, (c_name, c) in enumerate(zip(names, blocks)):
+                if c_name in [a_name, b_name]:
+                    continue
+
+                if model.evaluate(ON_star(a,c)) and model.evaluate(ON_star(c,b)):
+                    has_middle = True
+                    break
+
+            if not has_middle:
+                direct_on[a_name] = b_name
+
+    return direct_on
+
+def build_stacks(direct_on):
+    stacks = []
+    visited = set()
+
+    blocks = list(direct_on.keys())
+
+    bases = [b for b,v in direct_on.items() if v == "table"]
+
+    for base in bases:
+        if base in visited:
+            continue
+
+        stack = [base]
+        visited.add(base)
+        top = base
+
+        while True:
+            above = None
+            for b,v in direct_on.items():
+                if v == top and b not in visited:
+                    above = b
+                    break
+
+            if above:
+                stack.append(above)
+                visited.add(above)
+                top = above
+            else:
+                break
+
+        stacks.append(stack)
+
+    return stacks
+
+def print_stacks(stacks, title):
+    print("\n" + title)
+
+    for stack in stacks:
+        for block in reversed(stack):
+            print(f"   [{block}]")
+        print("  --------")
+        print("   table\n")
+
+def draw_stacks(stacks, filename, title):
+    width, height = 800, 400
+    img = Image.new("RGB", (width, height), "white")
+    draw = ImageDraw.Draw(img)
+
+    try:
+        font = ImageFont.truetype("DejaVuSans-Bold.ttf", 16)
+    except:
+        font = ImageFont.load_default()
+
+    block_w = 70
+    block_h = 30
+    gap = 60
+
+    draw.text((10,10), title, fill="black", font=font)
+
+    x = 50
+    for stack in stacks:
+        y = 350
+
+        for block in stack:
+            draw.rectangle([x, y-block_h, x+block_w, y], outline="black", width=2)
+            draw.text((x+15, y-block_h+5), block, fill="black", font=font)
+            y -= block_h + 5
+
+        draw.line([x, y+5, x+block_w, y+5], fill="black", width=3)
+        x += block_w + gap
+
+    img.save(filename)
 
 def check_solver(x):
     if x.check() == sat:
         print("constraints satisfiable")
         print("model is")
         print(x.model())
+        blocks = [b9, b10, b11, b12]
+        names  = ["b9", "b10", "b11", "b12"]
+
+        start_state   = extract_direct_on(solver.model(), blocks, names, ON_star_zero)
+        current_state = extract_direct_on(solver.model(), blocks, names, ON_star)
+
+        start_stacks   = build_stacks(start_state)
+        current_stacks = build_stacks(current_state)
+
+        print_stacks(start_stacks, "START STATE")
+        print_stacks(current_stacks, "CURRENT STATE")
+
+        draw_stacks(start_stacks, "start_state_partial.png", "Start State")
+        draw_stacks(current_stacks, "current_state_partial.png", "Current State")
         # for name1, box1 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
         #     for name2, box2 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
         #         print(
@@ -189,11 +304,11 @@ def loop_invariant_substituted(next_box):
     )
 
 
-print("testing precondition")
-solver.push()
-solver.add(Not(precondition()))
-check_solver(solver)
-solver.pop()
+# print("testing precondition")
+# solver.push()
+# solver.add(Not(precondition()))
+# check_solver(solver)
+# solver.pop()
 
 # print("verifying precondition")
 # solver.push()
@@ -203,13 +318,13 @@ solver.pop()
 # check_solver(solver)
 # solver.pop()
 
-# print("verifying loop invariant")
-# solver.push()
-# solver.add(while_cond_instantized(x))
-# solver.add(loop_invariant())
-# solver.add(Not(loop_invariant_substituted(x)))
-# check_solver(solver)
-# solver.pop()
+print("verifying loop invariant")
+solver.push()
+solver.add(while_cond_instantized(x))
+solver.add(loop_invariant())
+solver.add(Not(loop_invariant_substituted(x)))
+check_solver(solver)
+solver.pop()
 
 # print("verifying postcondition", flush=True)
 # solver.push()

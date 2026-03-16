@@ -20,7 +20,7 @@ Variable_pools = {}
 
 ON_star = Function("ON_star", BoxSort, BoxSort, BoolSort())
 ON_star_zero = Function("ON_star_zero", BoxSort, BoxSort, BoolSort())
-higher = Function("higher", BoxSort, BoxSort, BoolSort())
+Higher = Function("Higher", BoxSort, BoxSort, BoolSort())
 scattered = Function("scattered", BoxSort, BoxSort, BoolSort())
 
 # top is only used in selected places
@@ -37,6 +37,7 @@ class highlevel_z3_solver:
         s = Solver()
         self.add_axiom(s)
         self.add_axiom_on_star_zero(s)
+        self.add_axiom_higher(s)
         if vc is not None:
             s.add(Not(vc))
         if s.check() == sat:
@@ -51,6 +52,21 @@ class highlevel_z3_solver:
             #         print(f"higher({name1}, {name2}): {s.model().evaluate(higher(box1, box2))}")
         elif s.check() == unsat:
             print("VC is unsatisfiable")
+
+    def add_axiom_higher(self, s: Solver):
+        x, y, c = Consts("x y c", BoxSort)
+        s.assert_and_track(
+            ForAll([x, y, c], Implies(And(Higher(x, y), Higher(y, c)), Higher(x, c))),
+            "higher1"
+        )
+        s.assert_and_track(ForAll([x], Higher(x, x)), "higher2")
+        s.assert_and_track(
+            ForAll(
+                [x, y, c],
+                Implies(And(Higher(x, y), Higher(x, c)), Or(Higher(y, c), Higher(c, y))),
+            ),
+            "higher3"
+        )
 
     def add_axiom(self, s: Solver):
         x, y, c = Consts("x y c", BoxSort)

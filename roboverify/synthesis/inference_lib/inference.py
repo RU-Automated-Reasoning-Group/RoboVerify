@@ -12,6 +12,7 @@ from synthesis.verification_lib.highlevel_verification_lib import (  # b9,; b10,
     BoxSort,
     ON_star,
     ON_star_zero,
+    Higher,
     Top,
     get_consts,
     highlevel_z3_solver,
@@ -26,6 +27,8 @@ def add_all_pairs(vocabulary, r, all_vars):
             if str(v1) != str(v2):
                 if isinstance(r, str) and r == "equality":
                     vocabulary.append(v1 == v2)
+                elif r == Higher:
+                    vocabulary.append(r(v1, v2))
                 elif r == ON_star:
                     vocabulary.append(r(v1, v2))
                 elif r == ON_star_zero:
@@ -216,6 +219,25 @@ def compute_data(
                 on.on_star_implementation(
                     state_zero[block1_name],
                     state_zero[block2_name],
+                )
+            )
+        elif str(predicate).startswith("Higher"):
+            arg0, arg1 = predicate.arg(0), predicate.arg(1)
+            block1_name = (
+                var_mapping[arg0] if arg0 in var_mapping else constants_mapping[arg0]
+            )
+            block2_name = (
+                var_mapping[arg1] if arg1 in var_mapping else constants_mapping[arg1]
+            )
+            if not (isinstance(block1_name, str) and isinstance(block2_name, str)):
+                pdb.set_trace()
+            assert isinstance(block1_name, str) and isinstance(block2_name, str)
+            # if block1_name == "tbl" or block2_name == "tbl":
+            # pdb.set_trace()
+            data.append(
+                on.higher_implementation(
+                    state[block1_name],
+                    state[block2_name],
                 )
             )
         else:
@@ -493,6 +515,7 @@ def check_tautology(clause) -> bool:
     highlevel_verification = highlevel_z3_solver()
     highlevel_verification.add_axiom(solver)
     highlevel_verification.add_axiom_on_star_zero(solver)
+    highlevel_verification.add_axiom_higher(solver)
 
     solver.add(z3.Not(clause))
     result = solver.check()
@@ -1075,6 +1098,7 @@ def loop_inference(
     highlevel_verification = highlevel_z3_solver()
     highlevel_verification.add_axiom(solver)
     highlevel_verification.add_axiom_on_star_zero(solver)
+    highlevel_verification.add_axiom_higher(solver)
     (b0,) = constants
     highlevel_verification.add_unstack_b0_bottom_loop_invarinat(solver, b0)  # not
     # solver.assert_and_track(z3.Not(z3.ForAll([x], z3.Implies(ON_star(x, b0), x != b))), "not_b_neq_b0")
@@ -1258,6 +1282,7 @@ def check_redundancy(candidates: List) -> List:
         highlevel_verification = highlevel_z3_solver()
         highlevel_verification.add_axiom(solver)
         highlevel_verification.add_axiom_on_star_zero(solver)
+        highlevel_verification.add_axiom_higher(solver)
 
         for existing in filtered_invariants:
             solver.add(existing)
@@ -1289,7 +1314,7 @@ def run_proposal_example():
         {"x1": [0.0, 0.0, 0.0], "x2": [5.0, 5.0, 0.0], "x3": [10.0, 10.0, 0.0]},
     ]
     k = 2
-    relations = [ON_star, "equality"]
+    relations = [ON_star, Higher, "equality"]
     b0, b = get_consts("b0"), get_consts("b")
     constants = [b0, b]
     constants_mappings = [
@@ -1448,6 +1473,60 @@ def run_reverse_example():
         states_zero, states, k, relations, constants, constants_mappings
     )
 
+def run_partial_stack_example():
+    states_zero: List[Dict] = [{}, {}, {}, {}]
+    states: List[Dict] = [
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [5.0, 0.0, 0.0],
+            "x3": [5.0, 0.0, 0.05],
+            "x4": [10.0, 0.0, 0.0],
+            "x5": [10.0, 0.0, 0.05],
+        },
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [5.0, 0.0, 0.0],
+            "x3": [0.0, 0.0, 0.05],
+            "x4": [10.0, 0.0, 0.0],
+            "x5": [10.0, 0.0, 0.05],
+        },
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [5.0, 0.0, 0.0],
+            "x3": [0.0, 0.0, 0.05],
+            "x4": [10.0, 0.0, 0.0],
+            "x5": [0.0, 0.0, 0.1],
+        },
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [0.0, 0.0, 0.15],
+            "x3": [0.0, 0.0, 0.05],
+            "x4": [10.0, 0.0, 0.0],
+            "x5": [0.0, 0.0, 0.1],
+        },
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [0.0, 0.0, 0.15],
+            "x3": [0.0, 0.0, 0.05],
+            "x4": [0.0, 0.0, 0.20],
+            "x5": [0.0, 0.0, 0.1],
+        },
+    ]
+    k = 2
+    relations = [ON_star, "equality"]
+    b0, b = get_consts("b0"), get_consts("b")
+    constants = [b0, b]
+    constants_mappings = [
+        {b0: "x1", b: "x1"},
+        {b0: "x1", b: "x3"},
+        {b0: "x1", b: "x5"},
+        {b0: "x1", b: "x2"},
+        {b0: "x1", b: "x4"},
+    ]
+
+    return loop_inference(
+        states_zero, states, k, relations, constants, constants_mappings
+    )
 
 def run_forall_exists_example():
     states_zero: List[Dict] = [{}, {}]

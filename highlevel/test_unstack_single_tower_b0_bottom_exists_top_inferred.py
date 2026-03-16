@@ -5,9 +5,9 @@ from z3 import *
 solver = Solver()
 solver.set(unsat_core=True)
 
-# BoxSort = DeclareSort("Box")
+BoxSort = DeclareSort("Box")
 # Box, (b9, b10, b11, b12, b13, b14, b15, b16, b17, b18) = EnumSort('Box', ['b9', 'b10', 'b11', 'b12', 'b13', 'b14', 'b15', 'b16', 'b17', 'b18'])
-BoxSort, (b9, b10, b11, b12) = EnumSort("Box", ["b9", "b10", "b11", "b12"])
+# BoxSort, (b9, b10, b11, b12) = EnumSort("Box", ["b9", "b10", "b11", "b12"])
 x, y, c, n0, t, next_box, x1, fresh = Consts("x y c n0 t next_box x1 fresh", BoxSort)
 
 # define ON_star
@@ -29,7 +29,12 @@ solver.assert_and_track(
     "on4"
 )
 solver.assert_and_track(ForAll([x, y], Implies(ON_star(x, y), Implies(ON_star(y, x), x == y))), "on5")
-
+solver.assert_and_track(
+    ForAll(
+        [x], Exists([y], And(ForAll([c], Implies(ON_star(c, y), c == y)), ON_star(y, x)))
+    ),
+    "on_exists_top"
+)
 
 ########################## rewriting ########
 
@@ -286,10 +291,7 @@ def while_cond_instance(x):
     # return And(top(x), ON_star(x, n0), x != n0)
 
 def loop_invariant():
-    return And(
-        ForAll([x, y], Implies(And(ON_star(y, x), Not(ON_star(x, n0))), ON_star(x, y))),
-        Exists([t], And(top(t), ON_star(t, n0)))
-    )
+    return ForAll([x, y], Implies(And(ON_star(y, x), Not(ON_star(x, n0))), ON_star(x, y)))
 
 def loop_invariant_substituted(next_box):
     # # return ForAll(
@@ -308,10 +310,7 @@ def loop_invariant_substituted(next_box):
     #     [x],
     #     And(Not(top_substituted(x, next_box)), Not(ON_func_substituted(x, n0, next_box)))
     # )
-    return And(
-        wp_for_put_on_tbl(next_box, ForAll([x, y], Implies(And(ON_star(y, x), Not(ON_star(x, n0))), ON_star(x, y)))),
-        Exists([t], And(top_substituted(t, next_box), ON_func_substituted(t, n0, next_box)))
-    )
+    return wp_for_put_on_tbl(next_box, ForAll([x, y], Implies(And(ON_star(y, x), Not(ON_star(x, n0))), ON_star(x, y))))
 
 def not_loop_invar_instance(next_box):
     return And(Not(top_substituted(b11, next_box)), Not(ON_func_substituted(b11, n0, next_box)))
@@ -328,20 +327,20 @@ def top_substituted(x, next_box, ON_func=ON_star):
         )
     )
 
-def exists_next():
-    return ForAll(
-        [x],
-        Or(
-            Exists(
-                [y],
-                And(
-                    (y != x),
-                    ForAll([x1], Implies(And(x1 != x, ON_star(x, x1)), ON_star(y, x1)))
-                ) 
-            ),
-            on_table(x)
-        )
-    )
+# def exists_next():
+#     return ForAll(
+#         [x],
+#         Or(
+#             Exists(
+#                 [y],
+#                 And(
+#                     (y != x),
+#                     ForAll([x1], Implies(And(x1 != x, ON_star(x, x1)), ON_star(y, x1)))
+#                 ) 
+#             ),
+#             on_table(x)
+#         )
+#     )
 
 # print("testing")
 # solver.push()
@@ -352,10 +351,10 @@ def exists_next():
 # solver.add(Not(exists_next()))
 # check_solver(solver)
 # solver.pop()
-solver.assert_and_track(
-    exists_next(),
-    "exist_next"
-)
+# solver.assert_and_track(
+#     exists_next(),
+#     "exist_next"
+# )
 
 print("verifying precondition")
 solver.push()

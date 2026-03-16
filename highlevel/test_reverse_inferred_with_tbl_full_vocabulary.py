@@ -6,9 +6,9 @@ set_option("smt.core.minimize", "true")
 solver = Solver()
 solver.set(unsat_core=True)
 
-# BoxSort = DeclareSort("Box")
+BoxSort = DeclareSort("Box")
 # BoxSort, (b9, b10, b11, b12) = EnumSort("Box", ["b9", "b10", "b11", "b12"])
-BoxSort, (b9, b10, b11, b12, b13) = EnumSort("Box", ["b9", "b10", "b11", "b12", "b13"])
+# BoxSort, (b9, b10, b11, b12, b13) = EnumSort("Box", ["b9", "b10", "b11", "b12", "b13"])
 # BoxSort, (b9, b10, b11, b12, b13, b14, b15) = EnumSort("Box", ["b9", "b10", "b11", "b12", "b13", "b14", "b15"])
 ON_star = Function("ON_star", BoxSort, BoxSort, BoolSort())
 ON_star_zero = Function("ON_star_zero", BoxSort, BoxSort, BoolSort())
@@ -281,6 +281,12 @@ def add_axiom(s: Solver):
         ),
         f"on_tbl",
     )
+    s.assert_and_track(
+        ForAll(
+            [x], Exists([y], And(ForAll([c], Implies(ON_star(c, y), c == y)), ON_star(y, x)))
+        ),
+        "on_exists_top"
+    )
 
 
 def add_axiom_on_star_zero(s: Solver):
@@ -325,6 +331,12 @@ def add_axiom_on_star_zero(s: Solver):
             [x], Implies(Or(ON_star_zero(x, tbl), ON_star_zero(tbl, x)), x == tbl)
         ),
         f"on_zero_tbl",
+    )
+    s.assert_and_track(
+        ForAll(
+            [x], Exists([y], And(ForAll([c], Implies(ON_star_zero(c, y), c == y)), ON_star_zero(y, x)))
+        ),
+        "on_zero_exists_top"
     )
 
 
@@ -695,7 +707,7 @@ solver.pop()
 print("verifying postcondition")
 solver.push()
 x, y = Consts("x y", BoxSort)
-solver.assert_and_track(Exists([x], And(ForAll([y], Implies(ON_star(y, x), x == y)), ON_star(x, b0))), "exists_top")
+# solver.assert_and_track(Exists([x], And(ForAll([y], Implies(ON_star(y, x), x == y)), ON_star(x, b0))), "exists_top")
 
 solver.assert_and_track(loop_invariant_combined(b), "loop_invariant_combined")
 solver.assert_and_track(Not(while_cond()), "not_while_cond")
