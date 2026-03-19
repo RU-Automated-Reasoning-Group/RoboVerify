@@ -8,11 +8,12 @@ import z3
 
 from synthesis.inference_lib import quant_enum_merge
 from synthesis.util import on
-from synthesis.verification_lib.highlevel_verification_lib import (  # b9,; b10,; b11,; b12,
+from synthesis.verification_lib.highlevel_verification_lib import (  # b9,b10,b11,b12,
     BoxSort,
+    Higher,
     ON_star,
     ON_star_zero,
-    Higher,
+    Scattered,
     Top,
     get_consts,
     highlevel_z3_solver,
@@ -29,6 +30,13 @@ def add_all_pairs(vocabulary, r, all_vars):
                     vocabulary.append(v1 == v2)
                 elif r == Higher:
                     vocabulary.append(r(v1, v2))
+                elif r == Scattered:
+                    if (
+                        str(v1).startswith("ux")
+                        and str(v2).startswith("ux")
+                        and str(v1) < str(v2)
+                    ):
+                        vocabulary.append(r(v1, v2))
                 elif r == ON_star:
                     vocabulary.append(r(v1, v2))
                 elif r == ON_star_zero:
@@ -236,6 +244,25 @@ def compute_data(
             # pdb.set_trace()
             data.append(
                 on.higher_implementation(
+                    state[block1_name],
+                    state[block2_name],
+                )
+            )
+        elif str(predicate).startswith("Scattered"):
+            arg0, arg1 = predicate.arg(0), predicate.arg(1)
+            block1_name = (
+                var_mapping[arg0] if arg0 in var_mapping else constants_mapping[arg0]
+            )
+            block2_name = (
+                var_mapping[arg1] if arg1 in var_mapping else constants_mapping[arg1]
+            )
+            if not (isinstance(block1_name, str) and isinstance(block2_name, str)):
+                pdb.set_trace()
+            assert isinstance(block1_name, str) and isinstance(block2_name, str)
+            # if block1_name == "tbl" or block2_name == "tbl":
+            # pdb.set_trace()
+            data.append(
+                on.scattered_implementation(
                     state[block1_name],
                     state[block2_name],
                 )
@@ -516,6 +543,7 @@ def check_tautology(clause) -> bool:
     highlevel_verification.add_axiom(solver)
     highlevel_verification.add_axiom_on_star_zero(solver)
     highlevel_verification.add_axiom_higher(solver)
+    highlevel_verification.add_axiom_scattered(solver)
 
     solver.add(z3.Not(clause))
     result = solver.check()
@@ -1099,8 +1127,25 @@ def loop_inference(
     highlevel_verification.add_axiom(solver)
     highlevel_verification.add_axiom_on_star_zero(solver)
     highlevel_verification.add_axiom_higher(solver)
-    (b0,) = constants
-    highlevel_verification.add_unstack_b0_bottom_loop_invarinat(solver, b0)  # not
+    highlevel_verification.add_axiom_scattered(solver)
+    # (b0,) = constants
+    x, y, z = z3.Consts("x y z", BoxSort)
+
+    def on_table(x):
+        (fresh,) = z3.Consts("fresh", BoxSort)
+        return z3.ForAll([fresh], Higher(fresh, x))
+
+    desired = z3.Not(
+        z3.Implies(z3.And(on_table(x), on_table(y), x != y), Scattered(x, y))
+    )
+    solver.assert_and_track(desired, "desired")
+    # solver.check()
+    # print("model is")
+    # print(solver.model())
+    # print("Unsat Core:", solver.unsat_core())
+    # import pdb
+    # pdb.set_trace()
+    # highlevel_verification.add_unstack_b0_bottom_loop_invarinat(solver, b0)  # not
     # solver.assert_and_track(z3.Not(z3.ForAll([x], z3.Implies(ON_star(x, b0), x != b))), "not_b_neq_b0")
     # solver.assert_and_track(ON_star(x, b0), "on_b0")
     # solver.assert_and_track(
@@ -1283,6 +1328,7 @@ def check_redundancy(candidates: List) -> List:
         highlevel_verification.add_axiom(solver)
         highlevel_verification.add_axiom_on_star_zero(solver)
         highlevel_verification.add_axiom_higher(solver)
+        highlevel_verification.add_axiom_scattered(solver)
 
         for existing in filtered_invariants:
             solver.add(existing)
@@ -1314,7 +1360,7 @@ def run_proposal_example():
         {"x1": [0.0, 0.0, 0.0], "x2": [5.0, 5.0, 0.0], "x3": [10.0, 10.0, 0.0]},
     ]
     k = 2
-    relations = [ON_star, Higher, "equality"]
+    relations = [ON_star, Higher, Scattered, "equality"]
     b0, b = get_consts("b0"), get_consts("b")
     constants = [b0, b]
     constants_mappings = [
@@ -1473,6 +1519,7 @@ def run_reverse_example():
         states_zero, states, k, relations, constants, constants_mappings
     )
 
+
 def run_partial_stack_example():
     states_zero: List[Dict] = [{}, {}, {}, {}]
     states: List[Dict] = [
@@ -1527,6 +1574,7 @@ def run_partial_stack_example():
     return loop_inference(
         states_zero, states, k, relations, constants, constants_mappings
     )
+
 
 def run_forall_exists_example():
     states_zero: List[Dict] = [{}, {}]

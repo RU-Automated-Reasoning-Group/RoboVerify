@@ -21,7 +21,7 @@ Variable_pools = {}
 ON_star = Function("ON_star", BoxSort, BoxSort, BoolSort())
 ON_star_zero = Function("ON_star_zero", BoxSort, BoxSort, BoolSort())
 Higher = Function("Higher", BoxSort, BoxSort, BoolSort())
-scattered = Function("scattered", BoxSort, BoxSort, BoolSort())
+Scattered = Function("Scattered", BoxSort, BoxSort, BoolSort())
 
 # top is only used in selected places
 Top = Function("Top", BoxSort, BoolSort())
@@ -33,11 +33,15 @@ def get_consts(symbol: str):
 
 
 class highlevel_z3_solver:
+    def __init__(self, use_tbl: bool = False):
+        self.use_tbl = use_tbl
+
     def start_verification(self, vc=None):
         s = Solver()
         self.add_axiom(s)
         self.add_axiom_on_star_zero(s)
         self.add_axiom_higher(s)
+        self.add_axiom_scattered(s)
         if vc is not None:
             s.add(Not(vc))
         if s.check() == sat:
@@ -57,15 +61,35 @@ class highlevel_z3_solver:
         x, y, c = Consts("x y c", BoxSort)
         s.assert_and_track(
             ForAll([x, y, c], Implies(And(Higher(x, y), Higher(y, c)), Higher(x, c))),
-            "higher1"
+            "higher1",
         )
         s.assert_and_track(ForAll([x], Higher(x, x)), "higher2")
         s.assert_and_track(
             ForAll(
                 [x, y, c],
-                Implies(And(Higher(x, y), Higher(x, c)), Or(Higher(y, c), Higher(c, y))),
+                Implies(
+                    And(Higher(x, y), Higher(x, c)), Or(Higher(y, c), Higher(c, y))
+                ),
             ),
-            "higher3"
+            "higher3",
+        )
+
+    def add_axiom_scattered(self, s: Solver):
+        x, y, c = Consts("x y c", BoxSort)
+        s.assert_and_track(
+            ForAll([x, y], Scattered(x, y) == Scattered(y, x)),
+            "scattered1",
+        )
+        s.assert_and_track(ForAll([x], Not(Scattered(x, x))), "scattered2")
+        s.assert_and_track(
+            ForAll(
+                [x, y, c],
+                Implies(
+                    ON_star(x, y),
+                    Scattered(x, c) == Scattered(y, c),
+                ),
+            ),
+            "scattered3",
         )
 
     def add_axiom(self, s: Solver):
@@ -99,22 +123,12 @@ class highlevel_z3_solver:
             ForAll([x, y], Implies(ON_star(x, y), Implies(ON_star(y, x), x == y))),
             "on5",
         )
-        (tbl,) = Consts("tbl", BoxSort)
-        s.assert_and_track(
-            ForAll([x], Implies(Or(ON_star(x, tbl), ON_star(tbl, x)), x == tbl)),
-            f"on_tbl",
-        )
-
-        # s.add(ForAll([x, y, c], Implies(And(higher(x, y), higher(y, c)), higher(x, c))))
-        # s.add(ForAll([x], higher(x, x)))
-        # s.add(
-        # ForAll(
-        # [x, y, c],
-        # Implies(
-        # And(higher(x, y), higher(x, c)), Or(higher(y, c), higher(c, y))
-        # ),
-        # )
-        # )
+        if self.use_tbl:
+            (tbl,) = Consts("tbl", BoxSort)
+            s.assert_and_track(
+                ForAll([x], Implies(Or(ON_star(x, tbl), ON_star(tbl, x)), x == tbl)),
+                "on_tbl",
+            )
 
     def add_axiom_on_star_zero(self, s: Solver):
         x, y, c = Consts("x y c", BoxSort)
@@ -154,13 +168,15 @@ class highlevel_z3_solver:
             ),
             "on_zero_5",
         )
-        (tbl,) = Consts("tbl", BoxSort)
-        s.assert_and_track(
-            ForAll(
-                [x], Implies(Or(ON_star_zero(x, tbl), ON_star_zero(tbl, x)), x == tbl)
-            ),
-            f"on_zero_tbl",
-        )
+        if self.use_tbl:
+            (tbl,) = Consts("tbl", BoxSort)
+            s.assert_and_track(
+                ForAll(
+                    [x],
+                    Implies(Or(ON_star_zero(x, tbl), ON_star_zero(tbl, x)), x == tbl),
+                ),
+                "on_zero_tbl",
+            )
 
     def add_unstack_b0_bottom_loop_invarinat(self, s: Solver, b0):
         x, y = Consts("x y", BoxSort)

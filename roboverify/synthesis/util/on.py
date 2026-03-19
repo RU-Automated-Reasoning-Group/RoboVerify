@@ -37,11 +37,19 @@ def on_star_implementation(block1, block2) -> bool:
         and 0 <= z1 - z2
     )
 
+
 def higher_implementation(block1, block2) -> bool:
     """define the numerical interpretation of the on(block1, block2) between two blocks"""
     x1, y1, z1 = block1
     x2, y2, z2 = block2
     return 0 <= z1 - z2
+
+
+def scattered_implementation(block1, block2) -> bool:
+    """define the numerical interpretation of the scattered(block1, block2) between two blocks"""
+    x1, y1, z1 = block1
+    x2, y2, z2 = block2
+    return abs(x1 - x2) >= 2 * BLOCK_LENGTH or abs(y1 - y2) >= 2 * BLOCK_LENGTH
 
 
 def top_implementation(block, all_blocks) -> bool:

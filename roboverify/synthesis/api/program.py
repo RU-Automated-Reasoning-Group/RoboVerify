@@ -168,11 +168,20 @@ class PickPlace(Instruction):
 
 
 class While:
-    def __init__(self, cond, instantiated_cond, body, invariant):
-        self.cond = cond
-        self.instantiated_cond = instantiated_cond
+    def __init__(
+        self,
+        instantiated_cond,
+        guard_exists_vars,
+        body,
+        invariant,
+    ):
+        if guard_exists_vars is None:
+            raise ValueError("guard_exists_vars must be provided for While.")
         self.body = body
         self.invariant = invariant
+        self.guard_exists_vars = guard_exists_vars
+        self.instantiated_cond = instantiated_cond
+        self.cond = Exists(guard_exists_vars, instantiated_cond)
 
 
 class Put(Instruction):
@@ -435,19 +444,11 @@ def run_stack_example_with_only_ON_star():
     instructions = [
         Assign("b", "b0"),
         While(
-            cond=(
-                Exists(
-                    [b_prime],
-                    And(
-                        ForAll([n], Or(b_prime == n, Not(ON_star(n, b_prime)))),
-                        b_prime != b,
-                    ),
-                )
-            ),
             instantiated_cond=And(
                 ForAll([n], Or(b_prime == n, Not(ON_star(n, b_prime)))),
                 b_prime != b,
             ),
+            guard_exists_vars=[b_prime],
             body=[Put("b_prime", "b"), Assign("b", "b_prime")],
             invariant=inferred_invariant,
             # invariant=And(*candidate_lists)
