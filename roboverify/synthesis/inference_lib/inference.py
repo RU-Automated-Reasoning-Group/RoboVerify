@@ -1,25 +1,38 @@
 import itertools
 import pdb
 from copy import deepcopy
-from typing import Dict, List, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import sympy
 import z3
 
 from synthesis.inference_lib import quant_enum_merge
 from synthesis.util import on
-from synthesis.verification_lib.highlevel_verification_lib import (  # b9,b10,b11,b12,
-    BoxSort,
-    Higher,
-    ON_star,
-    ON_star_zero,
-    Scattered,
-    Top,
-    get_consts,
-    highlevel_z3_solver,
-)
+import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
 
 z3.set_option("smt.core.minimize", "true")
+
+
+def _ensure_context(
+    context: Optional[highlevel_verification_lib.HighLevelContext],
+) -> highlevel_verification_lib.HighLevelContext:
+    if context is None:
+        raise ValueError("Explicit HighLevelContext is required.")
+    return context
+
+
+def serialize_invariant(
+    expr: z3.ExprRef, context: highlevel_verification_lib.HighLevelContext
+) -> highlevel_verification_lib.InvariantSpec:
+    return _ensure_context(context).expr_to_spec(expr)
+
+
+def instantiate_invariant(
+    spec: highlevel_verification_lib.InvariantSpec,
+    context: highlevel_verification_lib.HighLevelContext,
+    known_const_names: Optional[List[str]] = None,
+) -> z3.ExprRef:
+    return context.spec_to_expr(spec, known_const_names=known_const_names)
 
 
 def add_all_pairs(vocabulary, r, all_vars):
@@ -28,18 +41,18 @@ def add_all_pairs(vocabulary, r, all_vars):
             if str(v1) != str(v2):
                 if isinstance(r, str) and r == "equality":
                     vocabulary.append(v1 == v2)
-                elif r == Higher:
+                elif str(r) == "Higher":
                     vocabulary.append(r(v1, v2))
-                elif r == Scattered:
+                elif str(r) == "Scattered":
                     if (
                         str(v1).startswith("ux")
                         and str(v2).startswith("ux")
                         and str(v1) < str(v2)
                     ):
                         vocabulary.append(r(v1, v2))
-                elif r == ON_star:
+                elif str(r) == "ON_star":
                     vocabulary.append(r(v1, v2))
-                elif r == ON_star_zero:
+                elif str(r) == "ON_star_zero":
                     vocabulary.append(r(v1, v2))
                 else:
                     assert False, f"unknown relation r: {r}"
@@ -66,13 +79,19 @@ def forall_exists_compute_omega(
     return omega_inv
 
 
-def compute_omega_k(k: int, relations: List, constants: List) -> Tuple[List, List]:
+def compute_omega_k(
+    k: int,
+    relations: List[Any],
+    constants: List[z3.ExprRef],
+    context: highlevel_verification_lib.HighLevelContext,
+) -> Tuple[List[z3.ExprRef], List[z3.ExprRef]]:
     """compute the finite vocabulary Omage(k)
     k is the number of nested forall quantifiers
     relations is the list of binary relation to consider
     constants is the list of constants in the existing program
     """
-    universally_quantified_vars = [get_consts(f"ux{i}") for i in range(1, k + 1)]
+    context = _ensure_context(context)
+    universally_quantified_vars = [context.get_consts(f"ux{i}") for i in range(1, k + 1)]
     all_vars = universally_quantified_vars + constants
     omega_inv = []
     for r in relations:
@@ -532,18 +551,20 @@ def add_universal_and_existential_quantifiers(
     return result
 
 
-def check_tautology(clause) -> bool:
+def check_tautology(
+    clause: z3.ExprRef, context: highlevel_verification_lib.HighLevelContext
+) -> bool:
     """Check whether clause can be directly derived from the axioms we already have
     Returns True if the caluse is a tautology
     """
     solver = z3.Solver()
 
     # add all axioms
-    highlevel_verification = highlevel_z3_solver()
-    highlevel_verification.add_axiom(solver)
-    highlevel_verification.add_axiom_on_star_zero(solver)
-    highlevel_verification.add_axiom_higher(solver)
-    highlevel_verification.add_axiom_scattered(solver)
+    active_context = _ensure_context(context)
+    active_context.add_axiom(solver)
+    active_context.add_axiom_on_star_zero(solver)
+    active_context.add_axiom_higher(solver)
+    active_context.add_axiom_scattered(solver)
 
     solver.add(z3.Not(clause))
     result = solver.check()
@@ -903,6 +924,7 @@ def loop_inference_by_index(
     omega_inv: List,
     universal_quantified_vars: List,
     dataset: Set,
+    context: highlevel_verification_lib.HighLevelContext,
 ):
     print(
         f"=========== learning with index = {index} with target predicate {omega_inv[index]}"
@@ -938,7 +960,7 @@ def loop_inference_by_index(
     useful_invariant_with_phi = [
         z3.simplify(x)
         for x in universal_quantified_phi_clauses
-        if not check_tautology(x)
+        if not check_tautology(x, context)
     ]
     print("useful invariant using phi", useful_invariant_with_phi)
     print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
@@ -965,7 +987,7 @@ def loop_inference_by_index(
     useful_invariant_with_phi_prime = [
         z3.simplify(x)
         for x in universal_quantified_phi_prime_clauses
-        if not check_tautology(x)
+        if not check_tautology(x, context)
     ]
     print("useful invariant using phi prime", useful_invariant_with_phi_prime)
     all_invariant = useful_invariant_with_phi + useful_invariant_with_phi_prime
@@ -973,12 +995,18 @@ def loop_inference_by_index(
     return all_invariant
 
 
-def get_universal_quantified_vars(n_forall: int) -> List:
-    return [get_consts(f"ux{i}") for i in range(1, n_forall + 1)]
+def get_universal_quantified_vars(
+    n_forall: int, context: highlevel_verification_lib.HighLevelContext
+) -> List[z3.ExprRef]:
+    context = _ensure_context(context)
+    return [context.get_consts(f"ux{i}") for i in range(1, n_forall + 1)]
 
 
-def get_existential_quantified_vars(n_exists: int) -> List:
-    return [get_consts(f"ex{i}") for i in range(1, n_exists + 1)]
+def get_existential_quantified_vars(
+    n_exists: int, context: highlevel_verification_lib.HighLevelContext
+) -> List[z3.ExprRef]:
+    context = _ensure_context(context)
+    return [context.get_consts(f"ex{i}") for i in range(1, n_exists + 1)]
 
 
 def compute_all_possible_witness_permutations(
@@ -1005,9 +1033,11 @@ def forall_exists_loop_inference(
     relations: List,
     constants: List,
     constants_mappings: List[Dict],
+    context: highlevel_verification_lib.HighLevelContext,
 ):
-    universally_quantified_vars = get_universal_quantified_vars(n_forall)
-    existential_quantified_vars = get_existential_quantified_vars(n_exists)
+    context = _ensure_context(context)
+    universally_quantified_vars = get_universal_quantified_vars(n_forall, context)
+    existential_quantified_vars = get_existential_quantified_vars(n_exists, context)
 
     all_objects = list(states[0].keys())
     n_states = len(states)
@@ -1068,8 +1098,12 @@ def loop_inference(
     relations: List,
     constants: List,
     constants_mappings: List[Dict],
+    context: highlevel_verification_lib.HighLevelContext,
 ):
-    omega_inv, universal_quantified_vars = compute_omega_k(k, relations, constants)
+    active_context = _ensure_context(context)
+    omega_inv, universal_quantified_vars = compute_omega_k(
+        k, relations, constants, active_context
+    )
 
     ############### ! temp shortcut starts
     # x, y = universal_quantified_vars
@@ -1108,11 +1142,12 @@ def loop_inference(
                 omega_inv,
                 universal_quantified_vars,
                 dataset,
+                active_context,
             )
         )
     print("inferred_invariants count", len(inferred_invariants))
 
-    filtered_invariants = check_redundancy(inferred_invariants)
+    filtered_invariants = check_redundancy(inferred_invariants, context=active_context)
     print("filtered candidates", len(filtered_invariants))
     print(filtered_invariants)
 
@@ -1123,20 +1158,21 @@ def loop_inference(
     solver = z3.Solver()
     solver.set(unsat_core=True)
 
-    highlevel_verification = highlevel_z3_solver()
-    highlevel_verification.add_axiom(solver)
-    highlevel_verification.add_axiom_on_star_zero(solver)
-    highlevel_verification.add_axiom_higher(solver)
-    highlevel_verification.add_axiom_scattered(solver)
+    active_context.add_axiom(solver)
+    active_context.add_axiom_on_star_zero(solver)
+    active_context.add_axiom_higher(solver)
+    active_context.add_axiom_scattered(solver)
     # (b0,) = constants
-    x, y, z = z3.Consts("x y z", BoxSort)
+    x, y, z = z3.Consts("x y z", active_context.BoxSort)
 
     def on_table(x):
-        (fresh,) = z3.Consts("fresh", BoxSort)
-        return z3.ForAll([fresh], Higher(fresh, x))
+        (fresh,) = z3.Consts("fresh", active_context.BoxSort)
+        return z3.ForAll([fresh], active_context.Higher(fresh, x))
 
     desired = z3.Not(
-        z3.Implies(z3.And(on_table(x), on_table(y), x != y), Scattered(x, y))
+        z3.Implies(
+            z3.And(on_table(x), on_table(y), x != y), active_context.Scattered(x, y)
+        )
     )
     solver.assert_and_track(desired, "desired")
     # solver.check()
@@ -1304,8 +1340,12 @@ def loop_inference(
         blocks = [b9, b10, b11, b12]
         names = ["b9", "b10", "b11", "b12"]
 
-        start_state = extract_direct_on(solver.model(), blocks, names, ON_star_zero)
-        current_state = extract_direct_on(solver.model(), blocks, names, ON_star)
+        start_state = extract_direct_on(
+            solver.model(), blocks, names, active_context.ON_star_zero
+        )
+        current_state = extract_direct_on(
+            solver.model(), blocks, names, active_context.ON_star
+        )
 
         start_stacks = build_stacks(start_state)
         current_stacks = build_stacks(current_state)
@@ -1319,16 +1359,18 @@ def loop_inference(
     return final_result, filtered_invariants
 
 
-def check_redundancy(candidates: List) -> List:
+def check_redundancy(
+    candidates: List[z3.ExprRef], context: highlevel_verification_lib.HighLevelContext
+) -> List[z3.ExprRef]:
     print("======= starting check redundancy =======")
+    active_context = _ensure_context(context)
     filtered_invariants = []
     for candidate in candidates:
         solver = z3.Solver()
-        highlevel_verification = highlevel_z3_solver()
-        highlevel_verification.add_axiom(solver)
-        highlevel_verification.add_axiom_on_star_zero(solver)
-        highlevel_verification.add_axiom_higher(solver)
-        highlevel_verification.add_axiom_scattered(solver)
+        active_context.add_axiom(solver)
+        active_context.add_axiom_on_star_zero(solver)
+        active_context.add_axiom_higher(solver)
+        active_context.add_axiom_scattered(solver)
 
         for existing in filtered_invariants:
             solver.add(existing)
@@ -1347,7 +1389,10 @@ def check_redundancy(candidates: List) -> List:
     return filtered_invariants
 
 
-def run_proposal_example():
+def run_proposal_example(
+    context: highlevel_verification_lib.HighLevelContext,
+) -> Tuple[z3.ExprRef, List[z3.ExprRef]]:
+    context = _ensure_context(context)
     states_zero: List[Dict] = [{}, {}, {}, {}]
     states: List[Dict] = [
         {
@@ -1360,8 +1405,8 @@ def run_proposal_example():
         {"x1": [0.0, 0.0, 0.0], "x2": [5.0, 5.0, 0.0], "x3": [10.0, 10.0, 0.0]},
     ]
     k = 2
-    relations = [ON_star, Higher, Scattered, "equality"]
-    b0, b = get_consts("b0"), get_consts("b")
+    relations = [context.ON_star, context.Higher, context.Scattered, "equality"]
+    b0, b = context.get_consts("b0"), context.get_consts("b")
     constants = [b0, b]
     constants_mappings = [
         {b0: "x1", b: "x3"},
@@ -1369,11 +1414,20 @@ def run_proposal_example():
     ]
 
     return loop_inference(
-        states_zero, states, k, relations, constants, constants_mappings
+        states_zero,
+        states,
+        k,
+        relations,
+        constants,
+        constants_mappings,
+        context=context,
     )
 
 
-def run_unstack_example():
+def run_unstack_example(
+    context: highlevel_verification_lib.HighLevelContext,
+) -> Tuple[z3.ExprRef, List[z3.ExprRef]]:
+    context = _ensure_context(context)
     states_zero: List[Dict] = [{}, {}, {}, {}]
     states: List[Dict] = [
         {
@@ -1402,8 +1456,8 @@ def run_unstack_example():
         },
     ]
     n_forall = 2
-    relations = [ON_star, "equality"]
-    b0 = get_consts("b0")
+    relations = [context.ON_star, "equality"]
+    b0 = context.get_consts("b0")
     constants = [b0]
     constants_mappings = [
         {b0: "x1"},
@@ -1413,11 +1467,20 @@ def run_unstack_example():
     ]
 
     return loop_inference(
-        states_zero, states, n_forall, relations, constants, constants_mappings
+        states_zero,
+        states,
+        n_forall,
+        relations,
+        constants,
+        constants_mappings,
+        context=context,
     )
 
 
-def run_reverse_example():
+def run_reverse_example(
+    context: highlevel_verification_lib.HighLevelContext,
+) -> Tuple[z3.ExprRef, List[z3.ExprRef]]:
+    context = _ensure_context(context)
     states_zero: List[Dict] = [
         {
             "x1": [0.0, 0.0, 0.0],
@@ -1503,9 +1566,9 @@ def run_reverse_example():
         },
     ]
     k = 2
-    relations = [ON_star, ON_star_zero, "equality"]
-    b0, b = get_consts("b0"), get_consts("b")
-    tbl = get_consts("tbl")
+    relations = [context.ON_star, context.ON_star_zero, "equality"]
+    b0, b = context.get_consts("b0"), context.get_consts("b")
+    tbl = context.get_consts("tbl")
     constants = [b0, b, tbl]
     constants_mappings = [
         {b0: "x1", b: "tbl", tbl: "tbl"},
@@ -1516,11 +1579,14 @@ def run_reverse_example():
     ]
 
     return loop_inference(
-        states_zero, states, k, relations, constants, constants_mappings
+        states_zero, states, k, relations, constants, constants_mappings, context=context
     )
 
 
-def run_partial_stack_example():
+def run_partial_stack_example(
+    context: highlevel_verification_lib.HighLevelContext,
+) -> Tuple[z3.ExprRef, List[z3.ExprRef]]:
+    context = _ensure_context(context)
     states_zero: List[Dict] = [{}, {}, {}, {}]
     states: List[Dict] = [
         {
@@ -1560,8 +1626,8 @@ def run_partial_stack_example():
         },
     ]
     k = 2
-    relations = [ON_star, "equality"]
-    b0, b = get_consts("b0"), get_consts("b")
+    relations = [context.ON_star, "equality"]
+    b0, b = context.get_consts("b0"), context.get_consts("b")
     constants = [b0, b]
     constants_mappings = [
         {b0: "x1", b: "x1"},
@@ -1572,11 +1638,14 @@ def run_partial_stack_example():
     ]
 
     return loop_inference(
-        states_zero, states, k, relations, constants, constants_mappings
+        states_zero, states, k, relations, constants, constants_mappings, context=context
     )
 
 
-def run_forall_exists_example():
+def run_forall_exists_example(
+    context: highlevel_verification_lib.HighLevelContext,
+) -> Tuple[List[z3.ExprRef], List[z3.ExprRef]]:
+    context = _ensure_context(context)
     states_zero: List[Dict] = [{}, {}]
     states: List[Dict] = [
         {
@@ -1596,8 +1665,8 @@ def run_forall_exists_example():
     ]
     n_forall = 1
     n_exists = 2
-    relations = [ON_star, "equality"]
-    b0, b = get_consts("b0"), get_consts("b")
+    relations = [context.ON_star, "equality"]
+    b0, b = context.get_consts("b0"), context.get_consts("b")
     constants = [b0, b]
     constants_mappings = [
         {b0: "x1", b: "x3"},
@@ -1611,10 +1680,14 @@ def run_forall_exists_example():
         relations,
         constants,
         constants_mappings,
+        context,
     )
 
 
-def run_promote_example():
+def run_promote_example(
+    context: highlevel_verification_lib.HighLevelContext,
+) -> None:
+    context = _ensure_context(context)
     states_zero: List[Dict] = [{}, {}]
     states: List[Dict] = [
         {
@@ -1634,8 +1707,8 @@ def run_promote_example():
     ]
     n_forall = 1
     n_exists = 2
-    relations = [ON_star, "equality"]
-    b0, b = get_consts("b0"), get_consts("b")
+    relations = [context.ON_star, "equality"]
+    b0, b = context.get_consts("b0"), context.get_consts("b")
     constants = [b0, b]
     constants_mappings = [
         {b0: "x1", b: "x3"},
@@ -1648,8 +1721,8 @@ def run_promote_example():
         {"b0": (0.0, 0.0, 0.0), "b": [0.0, 0.0, 0.15]},
     ]
 
-    x, y = get_consts("x"), get_consts("y")
-    candidate = z3.Exists([x, y], z3.Or(z3.Not(ON_star(y, x)), x == y))
+    x, y = context.get_consts("x"), context.get_consts("y")
+    candidate = z3.Exists([x, y], z3.Or(z3.Not(context.ON_star(y, x)), x == y))
     function_imples = {
         "ON_star": on.on_star_implementation,
         "ON_star_zero": on.on_star_implementation,
@@ -1661,7 +1734,10 @@ def run_promote_example():
     print(promoted)
 
 
-def quant_enum_merge_test():
+def quant_enum_merge_test(
+    context: highlevel_verification_lib.HighLevelContext,
+) -> None:
+    context = _ensure_context(context)
     states_zero: List[Dict] = [{}]
     states: List[Dict] = [
         {
@@ -1672,12 +1748,14 @@ def quant_enum_merge_test():
             "x5": (10.0, 10.0, 0.0),
         }
     ]
-    relations = [ON_star, "equality", Top]
-    b0, b = get_consts("b0"), get_consts("b")
-    x, y = get_consts("x"), get_consts("y")
-    m, n = get_consts("m"), get_consts("n")
+    relations = [context.ON_star, "equality", context.Top]
+    b0, b = context.get_consts("b0"), context.get_consts("b")
+    x, y = context.get_consts("x"), context.get_consts("y")
+    m, n = context.get_consts("m"), context.get_consts("n")
 
-    test_expr = z3.ForAll([x, y], z3.Exists([m, n], z3.And(ON_star(x, n), y == m)))
+    test_expr = z3.ForAll(
+        [x, y], z3.Exists([m, n], z3.And(context.ON_star(x, n), y == m))
+    )
     py_expr = quant_enum_merge.z3_to_python_expr(test_expr)
     domain = [val for _, val in states[0].items()]
     function_imples = {
@@ -1693,8 +1771,8 @@ def quant_enum_merge_test():
     )
     print(py_rst)
 
-    test_z3_expr_1 = z3.Exists([y], Top(y))
-    test_z3_expr_2 = z3.Exists([y], ON_star(y, b0))
+    test_z3_expr_1 = z3.Exists([y], context.Top(y))
+    test_z3_expr_2 = z3.Exists([y], context.ON_star(y, b0))
 
     test_expr_1 = quant_enum_merge.z3_to_python_expr(test_z3_expr_1)
     test_expr_2 = quant_enum_merge.z3_to_python_expr(test_z3_expr_2)
@@ -1748,15 +1826,23 @@ def quant_enum_merge_test():
         ),
     )
 
-    func_maps = {"ON_star": ON_star, "ON_star_zero": ON_star_zero, "Top": Top}
+    func_maps = {
+        "ON_star": context.ON_star,
+        "ON_star_zero": context.ON_star_zero,
+        "Top": context.Top,
+    }
     var_maps = {"b0": b0, "b": b}
     quant_enum_merge_expr = quant_enum_merge.python_expr_to_z3(
-        merged_expr[0], var_maps, func_maps, BoxSort
+        merged_expr[0], var_maps, func_maps, context.BoxSort
     )
     print("quant_enum_merge_expr", quant_enum_merge_expr)
 
     candidate = z3.Exists(
-        [x, y], z3.And(ON_star(x, b0), z3.Or(y == x, z3.Not(ON_star(y, x))))
+        [x, y],
+        z3.And(
+            context.ON_star(x, b0),
+            z3.Or(y == x, z3.Not(context.ON_star(y, x))),
+        ),
     )
     promoted = quant_enum_merge.promote_exists_to_forall_right_z3(
         candidate, [env], domain, function_imples
@@ -1765,7 +1851,13 @@ def quant_enum_merge_test():
 
     candidate2 = z3.ForAll(
         [m],
-        z3.Exists([x, y], z3.And(ON_star(x, b0), z3.Or(y == x, z3.Not(ON_star(y, x))))),
+        z3.Exists(
+            [x, y],
+            z3.And(
+                context.ON_star(x, b0),
+                z3.Or(y == x, z3.Not(context.ON_star(y, x))),
+            ),
+        ),
     )
     promoted2 = quant_enum_merge.promote_exists_to_forall_right_z3(
         candidate2, [env], domain, function_imples

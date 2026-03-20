@@ -1,21 +1,48 @@
+import argparse
+
 from z3 import And, Consts, ForAll, Not, Or
 
 from synthesis.api.program import Assign, Program, Put, While
-from synthesis.inference_lib.inference import run_proposal_example
-from synthesis.verification_lib.highlevel_verification_lib import BoxSort, ON_star
+from synthesis.inference_lib.inference import (
+    instantiate_invariant,
+    run_proposal_example,
+    serialize_invariant,
+)
+import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
 
 
-def verify_stack_program_with_learned_invariant():
+def verify_stack_program_with_learned_invariant(
+    verification_mode: str = "infinite", num_blocks: int = 4
+):
     """Infer invariant from examples and verify the stack program."""
-    learned_invariant, candidate_lists = run_proposal_example()
+    # Inference is always done in the infinite-block (DeclareSort) setting.
+    inference_context = highlevel_verification_lib.HighLevelContext(mode="declare")
+    learned_invariant, candidate_lists = run_proposal_example(context=inference_context)
     _ = candidate_lists
 
-    b_prime, b, n, b0 = Consts("b_prime b n b0", BoxSort)
+    if verification_mode == "finite":
+        context = highlevel_verification_lib.HighLevelContext(
+            mode="enum", num_blocks=num_blocks
+        )
+        learned_spec = serialize_invariant(learned_invariant, inference_context)
+        learned_invariant = instantiate_invariant(
+            learned_spec, context, known_const_names=["b0", "b"]
+        )
+    else:
+        context = highlevel_verification_lib.HighLevelContext(mode="declare")
+
+    b_prime, b, n, b0 = Consts("b_prime b n b0", context.BoxSort)
     instructions = [
         Assign("b", "b0"),
         While(
             instantiated_cond=And(
-                ForAll([n], Or(b_prime == n, Not(ON_star(n, b_prime)))),
+                ForAll(
+                    [n],
+                    Or(
+                        b_prime == n,
+                        Not(context.ON_star(n, b_prime)),
+                    ),
+                ),
                 b_prime != b,
             ),
             guard_exists_vars=[b_prime],
@@ -25,14 +52,38 @@ def verify_stack_program_with_learned_invariant():
     ]
     program = Program(2, instructions=instructions)
 
-    m, n = Consts("m n", BoxSort)
-    precondition = ForAll([m], ForAll([n], Or(m == n, Not(ON_star(n, m)))))
+    m, n = Consts("m n", context.BoxSort)
+    precondition = And(
+        ForAll(
+            [m],
+            ForAll([n], Or(m == n, Not(context.ON_star(n, m)))),
+        ),
+        ForAll([m, n], context.Scattered(m, n)),
+    )
 
-    m, b0 = Consts("m b0", BoxSort)
-    postcondition = ForAll([m], ON_star(m, b0))
+    m, b0 = Consts("m b0", context.BoxSort)
+    postcondition = ForAll([m], context.ON_star(m, b0))
 
-    program.highlevel_verification(precondition, postcondition)
+    program.highlevel_verification(precondition, postcondition, context=context)
 
 
 if __name__ == "__main__":
-    verify_stack_program_with_learned_invariant()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--verification-mode",
+        choices=["infinite", "finite"],
+        default="infinite",
+        help="Use infinite (DeclareSort) or finite (EnumSort) verification.",
+    )
+    parser.add_argument(
+        "--num-blocks",
+        type=int,
+        default=4,
+        help="Number of blocks when verification mode is finite.",
+    )
+    args = parser.parse_args()
+
+    verify_stack_program_with_learned_invariant(
+        verification_mode=args.verification_mode,
+        num_blocks=args.num_blocks,
+    )

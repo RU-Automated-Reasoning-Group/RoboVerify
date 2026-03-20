@@ -21,11 +21,6 @@ from z3 import (
 
 import synthesis.inference_lib.inference
 import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
-from synthesis.verification_lib.highlevel_verification_lib import (
-    BoxSort,
-    ON_star,
-    higher,
-)
 
 
 class Parameter:
@@ -196,7 +191,7 @@ class Put(Instruction):
         pass
 
 
-def rewrite_for_put_for_ON_star(expr, b_prime, b):
+def rewrite_for_put_for_ON_star(expr, b_prime, b, context):
     """Rewrite every possible occurrence of alpha<on*> beta to
     Or(alpha<on*>beta, And(alpha<on*>b_prime, b<on*>beta))
     """
@@ -209,7 +204,7 @@ def rewrite_for_put_for_ON_star(expr, b_prime, b):
 
         # Extract and rewrite the body
         body = expr.body()
-        rewritten_body = rewrite_for_put_for_ON_star(body, b_prime, b)
+        rewritten_body = rewrite_for_put_for_ON_star(body, b_prime, b, context)
 
         # Rebuild the quantifier (keep same type)
         if expr.is_forall():
@@ -231,12 +226,16 @@ def rewrite_for_put_for_ON_star(expr, b_prime, b):
         if decl.kind() == Z3_OP_UNINTERPRETED and decl.name() == "ON_star":
             alpha, beta = expr.children()
             return Or(
-                ON_star(alpha, beta), And(ON_star(alpha, b_prime), ON_star(b, beta))
+                context.ON_star(alpha, beta),
+                And(
+                    context.ON_star(alpha, b_prime),
+                    context.ON_star(b, beta),
+                ),
             )
 
         # Otherwise rebuild recursively
         new_children = [
-            rewrite_for_put_for_ON_star(c, b_prime, b) for c in expr.children()
+            rewrite_for_put_for_ON_star(c, b_prime, b, context) for c in expr.children()
         ]
         return decl(*new_children)
 
@@ -245,7 +244,7 @@ def rewrite_for_put_for_ON_star(expr, b_prime, b):
         return expr
 
 
-def rewrite_for_put_for_higher(expr, b_prime, b):
+def rewrite_for_put_for_higher(expr, b_prime, b, context):
     """Rewrite every possible occurrence of alpha<higher> beta to
     Or(alpha<higher>beta, And(alpha<higher>b_prime, b<higher>beta))
     """
@@ -258,7 +257,7 @@ def rewrite_for_put_for_higher(expr, b_prime, b):
 
         # Extract and rewrite the body
         body = expr.body()
-        rewritten_body = rewrite_for_put_for_higher(body, b_prime, b)
+        rewritten_body = rewrite_for_put_for_higher(body, b_prime, b, context)
 
         # Rebuild the quantifier (keep same type)
         if expr.is_forall():
@@ -277,13 +276,19 @@ def rewrite_for_put_for_higher(expr, b_prime, b):
         decl = expr.decl()
 
         # Match ON_star(a,b)
-        if decl.kind() == Z3_OP_UNINTERPRETED and decl.name() == "higher":
+        if decl.kind() == Z3_OP_UNINTERPRETED and decl.name() == "Higher":
             alpha, beta = expr.children()
-            return Or(higher(alpha, beta), And(higher(alpha, b_prime), higher(b, beta)))
+            return Or(
+                context.Higher(alpha, beta),
+                And(
+                    context.Higher(alpha, b_prime),
+                    context.Higher(b, beta),
+                ),
+            )
 
         # Otherwise rebuild recursively
         new_children = [
-            rewrite_for_put_for_higher(c, b_prime, b) for c in expr.children()
+            rewrite_for_put_for_higher(c, b_prime, b, context) for c in expr.children()
         ]
         return decl(*new_children)
 
@@ -334,25 +339,47 @@ class Program:
         instruction_str = [f"\t{inst}" for inst in self.instructions]
         return "\n".join(["begin", *instruction_str, "end"])
 
-    def VC_gen(self, P, Q):
+    def VC_gen(self, P, Q, context):
         # P, Q are z3 formula
         seq_instruction = to_seq(self.instructions)
-        return [Implies(P, self.wp(Q))] + VC_aux(seq_instruction, Q)
+        return [Implies(P, self.wp(Q, context))] + VC_aux(seq_instruction, Q, context)
 
-    def wp(self, Q):
+    def wp(self, Q, context):
         seq_instruction = to_seq(self.instructions)
-        return wp(seq_instruction, Q)
+        return wp(seq_instruction, Q, context)
 
-    def highlevel_verification(self, P, Q):
-        vcs = self.VC_gen(P, Q)
+    def highlevel_verification(
+        self,
+        P,
+        Q,
+        context: Union[highlevel_verification_lib.HighLevelContext, None] = None,
+        use_tbl: bool = False,
+        box_sort_mode: str = "declare",
+        num_blocks: Union[int, None] = None,
+        enum_names: Union[List[str], None] = None,
+        visualize_enum_scene: bool = False,
+        visualization_prefix: str = "highlevel_scene",
+    ):
+        solver = (
+            context
+            if context is not None
+            else highlevel_verification_lib.HighLevelContext(
+                mode=box_sort_mode,
+                num_blocks=num_blocks,
+                enum_names=enum_names,
+                use_tbl=use_tbl,
+                visualize_enum_scene=visualize_enum_scene,
+                visualization_prefix=visualization_prefix,
+            )
+        )
+        vcs = self.VC_gen(P, Q, solver)
         print("testing axioms")
-        solver = highlevel_verification_lib.highlevel_z3_solver()
         solver.start_verification()
         print("=====================")
 
+        print("total number of VCs:", len(vcs))
         for idx, vc in enumerate(vcs):
             print(f"verifying VC {idx}", vc)
-            solver = highlevel_verification_lib.highlevel_z3_solver()
             solver.start_verification(vc)
             print("=====================")
 
@@ -390,46 +417,49 @@ def to_seq(instructions):
         assert False, "unable to convert to seq for empty instructions"
 
 
-def wp(seq_instruction, Q):
+def wp(seq_instruction, Q, context):
     """calculate weakest precondition"""
     if isinstance(seq_instruction, Skip):
         return Q
     elif isinstance(seq_instruction, Seq):
-        return wp(seq_instruction.s1, wp(seq_instruction.s2, Q))
+        return wp(seq_instruction.s1, wp(seq_instruction.s2, Q, context), context)
     elif isinstance(seq_instruction, While):
         return seq_instruction.invariant
     elif isinstance(seq_instruction, Assign):
         return substitute(
             Q,
             (
-                highlevel_verification_lib.get_consts(seq_instruction.left),
-                highlevel_verification_lib.get_consts(seq_instruction.right),
+                context.get_consts(seq_instruction.left),
+                context.get_consts(seq_instruction.right),
             ),
         )
     elif isinstance(seq_instruction, Put):
-        b_prime = highlevel_verification_lib.get_consts(seq_instruction.upper_block)
-        b = highlevel_verification_lib.get_consts(seq_instruction.base_block)
-        Q = And(Not(ON_star(b, b_prime)), rewrite_for_put_for_ON_star(Q, b_prime, b))
+        b_prime = context.get_consts(seq_instruction.upper_block)
+        b = context.get_consts(seq_instruction.base_block)
+        Q = And(
+            Not(context.ON_star(b, b_prime)),
+            rewrite_for_put_for_ON_star(Q, b_prime, b, context),
+        )
         # return Q
-        return rewrite_for_put_for_higher(Q, b_prime, b)
+        return rewrite_for_put_for_higher(Q, b_prime, b, context)
     assert (
         False
     ), f"Unrecognized seq instruction {type(seq_instruction)} to calculate wp"
 
 
-def VC_aux(seq_instruction, Q) -> List:
+def VC_aux(seq_instruction, Q, context) -> List:
     """generate auxiliary verification conditions"""
     if isinstance(seq_instruction, Seq):
-        return VC_aux(seq_instruction.s1, wp(seq_instruction.s2, Q)) + VC_aux(
-            seq_instruction.s2, Q
+        return VC_aux(seq_instruction.s1, wp(seq_instruction.s2, Q, context), context) + VC_aux(
+            seq_instruction.s2, Q, context
         )
     elif isinstance(seq_instruction, Instruction):
         return []
     elif isinstance(seq_instruction, While):
-        return VC_aux(to_seq(seq_instruction.body), seq_instruction.invariant) + [
+        return VC_aux(to_seq(seq_instruction.body), seq_instruction.invariant, context) + [
             Implies(
                 And(seq_instruction.instantiated_cond, seq_instruction.invariant),
-                wp(to_seq(seq_instruction.body), seq_instruction.invariant),
+                wp(to_seq(seq_instruction.body), seq_instruction.invariant, context),
             ),
             Implies(And(Not(seq_instruction.cond), seq_instruction.invariant), Q),
         ]
@@ -437,15 +467,16 @@ def VC_aux(seq_instruction, Q) -> List:
 
 
 def run_stack_example_with_only_ON_star():
+    context = highlevel_verification_lib.HighLevelContext(mode="declare")
     inferred_invariant, candidate_lists = (
-        synthesis.inference_lib.inference.run_proposal_example()
+        synthesis.inference_lib.inference.run_proposal_example(context=context)
     )
-    b_prime, b, n, b0, a = Consts("b_prime b n b0 a", BoxSort)
+    b_prime, b, n, b0, a = Consts("b_prime b n b0 a", context.BoxSort)
     instructions = [
         Assign("b", "b0"),
         While(
             instantiated_cond=And(
-                ForAll([n], Or(b_prime == n, Not(ON_star(n, b_prime)))),
+                ForAll([n], Or(b_prime == n, Not(context.ON_star(n, b_prime)))),
                 b_prime != b,
             ),
             guard_exists_vars=[b_prime],
@@ -456,14 +487,17 @@ def run_stack_example_with_only_ON_star():
     ]
     p = Program(2, instructions=instructions)
 
-    m, n = Consts("m n", BoxSort)
-    precondition = ForAll([m], ForAll([n], Or(m == n, Not(ON_star(n, m)))))
+    m, n = Consts("m n", context.BoxSort)
+    precondition = ForAll(
+        [m],
+        ForAll([n], Or(m == n, Not(context.ON_star(n, m)))),
+    )
 
-    m, n, b0 = Consts("m n b0", BoxSort)
-    postcondition = ForAll([m], ON_star(m, b0))
+    m, n, b0 = Consts("m n b0", context.BoxSort)
+    postcondition = ForAll([m], context.ON_star(m, b0))
 
     # print(p.VC_gen(precondition, postcondition))
-    p.highlevel_verification(precondition, postcondition)
+    p.highlevel_verification(precondition, postcondition, context=context)
 
 
 def run_unstack_example():

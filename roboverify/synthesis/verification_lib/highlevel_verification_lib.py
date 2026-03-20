@@ -1,6 +1,10 @@
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
+
 from z3 import (
     And,
     BoolSort,
+    Const,
     Consts,
     DeclareSort,
     EnumSort,
@@ -10,102 +14,129 @@ from z3 import (
     Not,
     Or,
     Solver,
+    parse_smt2_string,
     sat,
     unsat,
 )
 
-# BoxSort, (b9, b10, b11, b12) = EnumSort("Box", ["b9", "b10", "b11", "b12"])
-BoxSort = DeclareSort("Box")
-Variable_pools = {}
-
-ON_star = Function("ON_star", BoxSort, BoxSort, BoolSort())
-ON_star_zero = Function("ON_star_zero", BoxSort, BoxSort, BoolSort())
-Higher = Function("Higher", BoxSort, BoxSort, BoolSort())
-Scattered = Function("Scattered", BoxSort, BoxSort, BoolSort())
-
-# top is only used in selected places
-Top = Function("Top", BoxSort, BoolSort())
+try:
+    from PIL import Image, ImageDraw, ImageFont
+except Exception:
+    Image = None
+    ImageDraw = None
+    ImageFont = None
 
 
-def get_consts(symbol: str):
-    (c,) = Consts(f"{symbol}", BoxSort)
-    return c
+@dataclass
+class InvariantSpec:
+    data: Dict[str, Any]
 
 
-class highlevel_z3_solver:
-    def __init__(self, use_tbl: bool = False):
+class HighLevelContext:
+    def __init__(
+        self,
+        mode: str = "declare",
+        num_blocks: Optional[int] = None,
+        enum_names: Optional[List[str]] = None,
+        use_tbl: bool = False,
+        visualize_enum_scene: bool = False,
+        visualization_prefix: str = "highlevel_scene",
+    ):
+        self.mode = mode
+        self.num_blocks = num_blocks
+        self.enum_names = enum_names
         self.use_tbl = use_tbl
+        self.visualize_enum_scene = visualize_enum_scene
+        self.visualization_prefix = visualization_prefix
+        self.enum_blocks: List[Any] = []
+        self._build_symbols()
 
-    def start_verification(self, vc=None):
-        s = Solver()
-        self.add_axiom(s)
-        self.add_axiom_on_star_zero(s)
-        self.add_axiom_higher(s)
-        self.add_axiom_scattered(s)
-        if vc is not None:
-            s.add(Not(vc))
-        if s.check() == sat:
-            print("VC is satisfiable")
-            print(s.model())
-            # for name1, box1 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
-            #     for name2, box2 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
-            #             print(f"ON_star({name1}, {name2}): {s.model().evaluate(ON_star(box1, box2))}")
+    def _build_symbols(self):
+        if self.mode == "declare":
+            self.BoxSort = DeclareSort("Box")
+            self.enum_blocks = []
+            self.enum_names_effective: List[str] = []
+        elif self.mode == "enum":
+            names = self.enum_names
+            if names is None:
+                if self.num_blocks is None:
+                    raise ValueError("enum mode requires enum_names or num_blocks.")
+                names = [f"b{9+i}" for i in range(self.num_blocks)]
+            self.BoxSort, enum_consts = EnumSort("Box", names)
+            self.enum_blocks = list(enum_consts)
+            self.enum_names_effective = list(names)
+        else:
+            raise ValueError(f"Unknown mode: {self.mode}")
 
-            # for name1, box1 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
-            #     for name2, box2 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
-            #         print(f"higher({name1}, {name2}): {s.model().evaluate(higher(box1, box2))}")
-        elif s.check() == unsat:
-            print("VC is unsatisfiable")
+        self.ON_star = Function("ON_star", self.BoxSort, self.BoxSort, BoolSort())
+        self.ON_star_zero = Function(
+            "ON_star_zero", self.BoxSort, self.BoxSort, BoolSort()
+        )
+        self.Higher = Function("Higher", self.BoxSort, self.BoxSort, BoolSort())
+        self.Scattered = Function("Scattered", self.BoxSort, self.BoxSort, BoolSort())
+        self.Top = Function("Top", self.BoxSort, BoolSort())
+
+    def get_consts(self, symbol: str):
+        (c,) = Consts(symbol, self.BoxSort)
+        return c
 
     def add_axiom_higher(self, s: Solver):
-        x, y, c = Consts("x y c", BoxSort)
+        x, y, c = Consts("x y c", self.BoxSort)
         s.assert_and_track(
-            ForAll([x, y, c], Implies(And(Higher(x, y), Higher(y, c)), Higher(x, c))),
+            ForAll(
+                [x, y, c],
+                Implies(And(self.Higher(x, y), self.Higher(y, c)), self.Higher(x, c)),
+            ),
             "higher1",
         )
-        s.assert_and_track(ForAll([x], Higher(x, x)), "higher2")
+        s.assert_and_track(ForAll([x], self.Higher(x, x)), "higher2")
         s.assert_and_track(
             ForAll(
                 [x, y, c],
                 Implies(
-                    And(Higher(x, y), Higher(x, c)), Or(Higher(y, c), Higher(c, y))
+                    And(self.Higher(x, y), self.Higher(x, c)),
+                    Or(self.Higher(y, c), self.Higher(c, y)),
                 ),
             ),
             "higher3",
         )
 
     def add_axiom_scattered(self, s: Solver):
-        x, y, c = Consts("x y c", BoxSort)
+        x, y, c = Consts("x y c", self.BoxSort)
         s.assert_and_track(
-            ForAll([x, y], Scattered(x, y) == Scattered(y, x)),
-            "scattered1",
+            ForAll([x, y], self.Scattered(x, y) == self.Scattered(y, x)), "scattered1"
         )
-        s.assert_and_track(ForAll([x], Not(Scattered(x, x))), "scattered2")
+        s.assert_and_track(ForAll([x], Not(self.Scattered(x, x))), "scattered2")
         s.assert_and_track(
             ForAll(
                 [x, y, c],
                 Implies(
-                    ON_star(x, y),
-                    Scattered(x, c) == Scattered(y, c),
+                    self.ON_star(x, y),
+                    self.Scattered(x, c) == self.Scattered(y, c),
                 ),
             ),
             "scattered3",
         )
 
     def add_axiom(self, s: Solver):
-        x, y, c = Consts("x y c", BoxSort)
-        s.assert_and_track(
-            ForAll(
-                [x, y, c], Implies(And(ON_star(x, y), ON_star(y, c)), ON_star(x, c))
-            ),
-            "on1",
-        )
-        s.assert_and_track(ForAll([x], ON_star(x, x)), "on2")
+        x, y, c = Consts("x y c", self.BoxSort)
         s.assert_and_track(
             ForAll(
                 [x, y, c],
                 Implies(
-                    And(ON_star(x, y), ON_star(x, c)), Or(ON_star(y, c), ON_star(c, y))
+                    And(self.ON_star(x, y), self.ON_star(y, c)),
+                    self.ON_star(x, c),
+                ),
+            ),
+            "on1",
+        )
+        s.assert_and_track(ForAll([x], self.ON_star(x, x)), "on2")
+        s.assert_and_track(
+            ForAll(
+                [x, y, c],
+                Implies(
+                    And(self.ON_star(x, y), self.ON_star(x, c)),
+                    Or(self.ON_star(y, c), self.ON_star(c, y)),
                 ),
             ),
             "on3",
@@ -114,40 +145,48 @@ class highlevel_z3_solver:
             ForAll(
                 [x, y, c],
                 Implies(
-                    And(ON_star(x, c), ON_star(y, c)), Or(ON_star(x, y), ON_star(y, x))
+                    And(self.ON_star(x, c), self.ON_star(y, c)),
+                    Or(self.ON_star(x, y), self.ON_star(y, x)),
                 ),
             ),
             "on4",
         )
         s.assert_and_track(
-            ForAll([x, y], Implies(ON_star(x, y), Implies(ON_star(y, x), x == y))),
+            ForAll(
+                [x, y],
+                Implies(self.ON_star(x, y), Implies(self.ON_star(y, x), x == y)),
+            ),
             "on5",
         )
         if self.use_tbl:
-            (tbl,) = Consts("tbl", BoxSort)
+            tbl = self.get_consts("tbl")
             s.assert_and_track(
-                ForAll([x], Implies(Or(ON_star(x, tbl), ON_star(tbl, x)), x == tbl)),
+                ForAll(
+                    [x],
+                    Implies(Or(self.ON_star(x, tbl), self.ON_star(tbl, x)), x == tbl),
+                ),
                 "on_tbl",
             )
 
     def add_axiom_on_star_zero(self, s: Solver):
-        x, y, c = Consts("x y c", BoxSort)
+        x, y, c = Consts("x y c", self.BoxSort)
         s.assert_and_track(
             ForAll(
                 [x, y, c],
                 Implies(
-                    And(ON_star_zero(x, y), ON_star_zero(y, c)), ON_star_zero(x, c)
+                    And(self.ON_star_zero(x, y), self.ON_star_zero(y, c)),
+                    self.ON_star_zero(x, c),
                 ),
             ),
             "on_zero_1",
         )
-        s.assert_and_track(ForAll([x], ON_star_zero(x, x)), "on_zero_2")
+        s.assert_and_track(ForAll([x], self.ON_star_zero(x, x)), "on_zero_2")
         s.assert_and_track(
             ForAll(
                 [x, y, c],
                 Implies(
-                    And(ON_star_zero(x, y), ON_star_zero(x, c)),
-                    Or(ON_star_zero(y, c), ON_star_zero(c, y)),
+                    And(self.ON_star_zero(x, y), self.ON_star_zero(x, c)),
+                    Or(self.ON_star_zero(y, c), self.ON_star_zero(c, y)),
                 ),
             ),
             "on_zero_3",
@@ -156,123 +195,210 @@ class highlevel_z3_solver:
             ForAll(
                 [x, y, c],
                 Implies(
-                    And(ON_star_zero(x, c), ON_star_zero(y, c)),
-                    Or(ON_star_zero(x, y), ON_star_zero(y, x)),
+                    And(self.ON_star_zero(x, c), self.ON_star_zero(y, c)),
+                    Or(self.ON_star_zero(x, y), self.ON_star_zero(y, x)),
                 ),
             ),
             "on_zero_4",
         )
         s.assert_and_track(
             ForAll(
-                [x, y], Implies(ON_star_zero(x, y), Implies(ON_star_zero(y, x), x == y))
+                [x, y],
+                Implies(
+                    self.ON_star_zero(x, y), Implies(self.ON_star_zero(y, x), x == y)
+                ),
             ),
             "on_zero_5",
         )
         if self.use_tbl:
-            (tbl,) = Consts("tbl", BoxSort)
+            tbl = self.get_consts("tbl")
             s.assert_and_track(
                 ForAll(
                     [x],
-                    Implies(Or(ON_star_zero(x, tbl), ON_star_zero(tbl, x)), x == tbl),
+                    Implies(
+                        Or(self.ON_star_zero(x, tbl), self.ON_star_zero(tbl, x)),
+                        x == tbl,
+                    ),
                 ),
                 "on_zero_tbl",
             )
 
-    def add_unstack_b0_bottom_loop_invarinat(self, s: Solver, b0):
-        x, y = Consts("x y", BoxSort)
-        s.assert_and_track(
-            Not(
-                ForAll(
-                    [x, y],
-                    Or(
-                        Not(ON_star(y, x)),
-                        x == y,
-                        ON_star(x, b0),
-                    ),
-                ),
-            ),
-            "not_original_invariant",
-        )
+    def _print_relation_table(self, model, relation, relation_name: str):
+        if not self.enum_blocks:
+            return
+        print(f"\n{relation_name} table:")
+        print("      " + " ".join(f"{n:>6}" for n in self.enum_names_effective))
+        for name_i, box_i in zip(self.enum_names_effective, self.enum_blocks):
+            row = [f"{name_i:>6}"]
+            for box_j in self.enum_blocks:
+                val = model.evaluate(relation(box_i, box_j), model_completion=True)
+                row.append(f"{str(val):>6}")
+            print(" ".join(row))
 
-    def add_reverse_loop_invariant(self, s: Solver, b0, b):
-        x, y = Consts("x y", BoxSort)
-        # s.assert_and_track(
-        #     Not(
-        #         ForAll(
-        #             [x, y],
-        #             Or(
-        #                 And(ON_star(x, b0), ON_star(x, y) == ON_star_zero(x, y)),
-        #                 And(
-        #                     Not(ON_star(x, b0)),
-        #                     ON_star(b, x),
-        #                     ON_star(x, y) == ON_star_zero(y, x),
-        #                 ),
-        #             ),
-        #         )
-        #     ),
-        #     "not_original_invariant",
-        # )
-        (tbl,) = Consts("tbl", BoxSort)
-        s.assert_and_track(
-            # Not(
-            ForAll(
-                [x, y],
-                Implies(
-                    And(x != tbl, y != tbl),
-                    Or(
-                        And(
-                            x != b,
-                            ON_star(x, b0),
-                            ON_star(x, y) == ON_star_zero(x, y),
-                        ),
-                        And(
-                            Not(ON_star(x, b0)),
-                            b != tbl,
-                            ON_star(b, x),
-                            ON_star(x, y) == ON_star_zero(y, x),
-                        ),
-                    ),
-                ),
-            ),
-            # ),
-            "not_original_invariant_with_tbl",
-        )
+    def _extract_direct_on(self, model, relation) -> Dict[str, str]:
+        direct_on = {n: "table" for n in self.enum_names_effective}
+        for a_name, a in zip(self.enum_names_effective, self.enum_blocks):
+            for b_name, b in zip(self.enum_names_effective, self.enum_blocks):
+                if a_name == b_name:
+                    continue
+                if not model.evaluate(relation(a, b), model_completion=True):
+                    continue
+                has_middle = False
+                for c_name, c in zip(self.enum_names_effective, self.enum_blocks):
+                    if c_name in [a_name, b_name]:
+                        continue
+                    if model.evaluate(relation(a, c), model_completion=True) and model.evaluate(
+                        relation(c, b), model_completion=True
+                    ):
+                        has_middle = True
+                        break
+                if not has_middle:
+                    direct_on[a_name] = b_name
+        return direct_on
 
+    def _build_stacks(self, direct_on: Dict[str, str]) -> List[List[str]]:
+        stacks = []
+        visited = set()
+        bases = [b for b, v in direct_on.items() if v == "table"]
+        for base in bases:
+            if base in visited:
+                continue
+            stack = [base]
+            visited.add(base)
+            top = base
+            while True:
+                above = None
+                for b, v in direct_on.items():
+                    if v == top and b not in visited:
+                        above = b
+                        break
+                if above is None:
+                    break
+                stack.append(above)
+                visited.add(above)
+                top = above
+            stacks.append(stack)
+        return stacks
 
-def top(a):
-    n = get_consts("n")
-    return ForAll([n], Or(n == a, Not(ON_star(n, a))))
+    def _draw_stacks(self, stacks: List[List[str]], filename: str, title: str) -> None:
+        if Image is None:
+            return
+        img = Image.new("RGB", (800, 400), "white")
+        draw = ImageDraw.Draw(img)
+        try:
+            font = ImageFont.truetype("DejaVuSans-Bold.ttf", 16)
+        except Exception:
+            font = ImageFont.load_default()
+        draw.text((10, 10), title, fill="black", font=font)
+        block_w = 70
+        block_h = 30
+        gap = 60
+        x = 50
+        for stack in stacks:
+            y = 350
+            for block in stack:
+                draw.rectangle(
+                    [x, y - block_h, x + block_w, y], outline="black", width=2
+                )
+                draw.text((x + 15, y - block_h + 5), block, fill="black", font=font)
+                y -= block_h + 5
+            draw.line([x, y + 5, x + block_w, y + 5], fill="black", width=3)
+            x += block_w + gap
+        img.save(filename)
 
-
-def on_table(a):
-    n = get_consts("n")
-    return And(ForAll([n], higher(n, a)))
-    return ForAll([n], Not(ON_star(a, n)))
-
-
-if __name__ == "__main__":
-    s = Solver()
-    hsolver = highlevel_z3_solver()
-    hsolver.add_axiom(s)
-
-    b_prime, b, b0, a, b = Consts("b_prime b b0 a b", BoxSort)
-    s.add(b_prime != b)
-    s.add(top(b_prime))
-    s.add(ON_star(b, b0))
-    s.add(top(b))
-    s.add(ForAll([a], Or(ON_star(a, b0), And(top(a), on_table(a)))))
-
-    s.add(Not(on_table(b0)))
-    s.add(Implies(And(on_table(a), on_table(b)), And(higher(a, b), higher(b, a))))
-    print(s.check())
-    print(s.model())
-
-    for name1, box1 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
-        for name2, box2 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
-            print(
-                f"ON_star({name1}, {name2}): {s.model().evaluate(ON_star(box1, box2))}"
+    def _visualize_enum(self, model) -> None:
+        self._print_relation_table(model, self.ON_star, "ON_star")
+        self._print_relation_table(model, self.ON_star_zero, "ON_star_zero")
+        self._print_relation_table(model, self.Higher, "Higher")
+        self._print_relation_table(model, self.Scattered, "Scattered")
+        if self.visualize_enum_scene:
+            start_state = self._extract_direct_on(model, self.ON_star_zero)
+            current_state = self._extract_direct_on(model, self.ON_star)
+            self._draw_stacks(
+                self._build_stacks(start_state),
+                f"{self.visualization_prefix}_start_state.png",
+                "Start State",
+            )
+            self._draw_stacks(
+                self._build_stacks(current_state),
+                f"{self.visualization_prefix}_current_state.png",
+                "Current State",
             )
 
-    for name1, box1 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
-        for name2, box2 in zip(["b9", "b10", "b11"], [b9, b10, b11]):
-            print(f"higher({name1}, {name2}): {s.model().evaluate(higher(box1, box2))}")
+    def start_verification(self, vc=None) -> None:
+        s = Solver()
+        self.add_axiom(s)
+        self.add_axiom_on_star_zero(s)
+        self.add_axiom_higher(s)
+        self.add_axiom_scattered(s)
+        if vc is not None:
+            s.add(Not(vc))
+        result = s.check()
+        if result == sat:
+            print("VC is satisfiable")
+            model = s.model()
+            print(model)
+            if self.mode == "enum":
+                self._visualize_enum(model)
+        elif result == unsat:
+            print("VC is unsatisfiable")
+        else:
+            print(result)
+
+    def expr_to_spec(self, expr) -> InvariantSpec:
+        return InvariantSpec(data={"sexpr": expr.sexpr()})
+
+    def spec_to_expr(
+        self, spec: InvariantSpec, known_const_names: Optional[List[str]] = None
+    ):
+        sexpr = spec.data["sexpr"]
+        decls: Dict[str, Any] = {
+            "ON_star": self.ON_star,
+            "ON_star_zero": self.ON_star_zero,
+            "Higher": self.Higher,
+            "Scattered": self.Scattered,
+            "Top": self.Top,
+        }
+        for name in known_const_names or []:
+            decls[name] = Const(name, self.BoxSort)
+        parsed = parse_smt2_string(
+            f"(assert {sexpr})", sorts={"Box": self.BoxSort}, decls=decls
+        )
+        return parsed[0]
+
+Variable_pools = {}
+
+
+class highlevel_z3_solver:
+    def __init__(
+        self,
+        use_tbl: bool = False,
+        box_sort_mode: str = "declare",
+        num_blocks: Optional[int] = None,
+        enum_names: Optional[List[str]] = None,
+        visualize_enum_scene: bool = False,
+        visualization_prefix: str = "highlevel_scene",
+    ):
+        self.context = HighLevelContext(
+            mode=box_sort_mode,
+            num_blocks=num_blocks,
+            enum_names=enum_names,
+            use_tbl=use_tbl,
+            visualize_enum_scene=visualize_enum_scene,
+            visualization_prefix=visualization_prefix,
+        )
+
+    def start_verification(self, vc=None) -> None:
+        return self.context.start_verification(vc)
+
+    def add_axiom(self, s: Solver):
+        return self.context.add_axiom(s)
+
+    def add_axiom_on_star_zero(self, s: Solver):
+        return self.context.add_axiom_on_star_zero(s)
+
+    def add_axiom_higher(self, s: Solver):
+        return self.context.add_axiom_higher(s)
+
+    def add_axiom_scattered(self, s: Solver):
+        return self.context.add_axiom_scattered(s)
