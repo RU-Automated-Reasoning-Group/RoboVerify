@@ -12,7 +12,10 @@ import synthesis.verification_lib.highlevel_verification_lib as highlevel_verifi
 
 
 def verify_stack_program_with_learned_invariant(
-    verification_mode: str = "infinite", num_blocks: int = 4
+    verification_mode: str = "infinite",
+    num_blocks: int = 4,
+    visualize_finite_scene: bool = True,
+    visualization_prefix: str = "verify_stack",
 ):
     """Infer invariant from examples and verify the stack program."""
     # Inference is always done in the infinite-block (DeclareSort) setting.
@@ -22,7 +25,10 @@ def verify_stack_program_with_learned_invariant(
 
     if verification_mode == "finite":
         context = highlevel_verification_lib.HighLevelContext(
-            mode="enum", num_blocks=num_blocks
+            mode="enum",
+            num_blocks=num_blocks,
+            visualize_enum_scene=visualize_finite_scene,
+            visualization_prefix=visualization_prefix,
         )
         learned_spec = serialize_invariant(learned_invariant, inference_context)
         learned_invariant = instantiate_invariant(
@@ -81,9 +87,22 @@ if __name__ == "__main__":
         default=4,
         help="Number of blocks when verification mode is finite.",
     )
+    parser.add_argument(
+        "--disable-scene-viz",
+        action="store_true",
+        help="Disable image generation for finite-mode verification.",
+    )
+    parser.add_argument(
+        "--viz-prefix",
+        type=str,
+        default="verify_stack",
+        help="Output prefix for generated finite-mode scene images.",
+    )
     args = parser.parse_args()
 
     verify_stack_program_with_learned_invariant(
         verification_mode=args.verification_mode,
         num_blocks=args.num_blocks,
+        visualize_finite_scene=not args.disable_scene_viz,
+        visualization_prefix=args.viz_prefix,
     )

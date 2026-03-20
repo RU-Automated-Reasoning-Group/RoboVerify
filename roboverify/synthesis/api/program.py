@@ -297,6 +297,73 @@ def rewrite_for_put_for_higher(expr, b_prime, b, context):
         return expr
 
 
+def rewrite_for_put_for_scattered(expr, b_prime, b, context):
+    """Weakest-precondition rewrite for Scattered(m, n) after put(b', b).
+
+    Verbose DNF (user specification): only pairs involving b' or b change;
+    b' on b redirects scattered-with-b' to scattered-with-b.
+    """
+    if is_quantifier(expr):
+        num_vars = expr.num_vars()
+        var_sorts = [expr.var_sort(i) for i in range(num_vars)]
+        var_names = [expr.var_name(i) for i in range(num_vars)]
+        body = expr.body()
+        rewritten_body = rewrite_for_put_for_scattered(body, b_prime, b, context)
+        if expr.is_forall():
+            return ForAll(
+                list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
+                rewritten_body,
+            )
+        return Exists(
+            list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
+            rewritten_body,
+        )
+
+    if is_app(expr):
+        decl = expr.decl()
+        if decl.kind() == Z3_OP_UNINTERPRETED and decl.name() == "Scattered":
+            m, n = expr.children()
+            return Or(
+                And(
+                    m != b_prime,
+                    m != b,
+                    n != b_prime,
+                    n != b,
+                    context.Scattered(m, n),
+                ),
+                And(
+                    m != b_prime,
+                    m != b,
+                    n == b,
+                    context.Scattered(m, n),
+                ),
+                And(
+                    m != b_prime,
+                    m != b,
+                    n == b_prime,
+                    context.Scattered(m, b),
+                ),
+                And(
+                    m == b_prime,
+                    n != b_prime,
+                    n != b,
+                    context.Scattered(b, n),
+                ),
+                And(
+                    m == b,
+                    n != b_prime,
+                    n != b,
+                    context.Scattered(m, n),
+                ),
+            )
+        new_children = [
+            rewrite_for_put_for_scattered(c, b_prime, b, context) for c in expr.children()
+        ]
+        return decl(*new_children)
+
+    return expr
+
+
 Stmt = Union[Instruction, While]
 
 
@@ -440,8 +507,8 @@ def wp(seq_instruction, Q, context):
             Not(context.ON_star(b, b_prime)),
             rewrite_for_put_for_ON_star(Q, b_prime, b, context),
         )
-        # return Q
-        return rewrite_for_put_for_higher(Q, b_prime, b, context)
+        Q = rewrite_for_put_for_higher(Q, b_prime, b, context)
+        return rewrite_for_put_for_scattered(Q, b_prime, b, context)
     assert (
         False
     ), f"Unrecognized seq instruction {type(seq_instruction)} to calculate wp"
