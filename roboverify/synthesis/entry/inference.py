@@ -2,8 +2,8 @@ import itertools
 
 from sympy import And, Equivalent, Implies, Not, Or, symbols, to_cnf
 
-from synthesis.inference_lib import inference
 import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
+from synthesis.inference_lib import inference
 
 
 def generate_truth_table(expression, var_names):
@@ -68,6 +68,8 @@ if __name__ == "__main__":
     # inferred_invariant, candidate_lists = inference.run_reverse_example()
     # inferred_invariant, candidate_lists = inference.run_unstack_example()
     context = highlevel_verification_lib.HighLevelContext(mode="declare")
-    inferred_invariant, candidate_lists = inference.run_proposal_example(context=context)
+    inferred_invariant, candidate_lists = inference.run_proposal_example(
+        context=context
+    )
     # inferred_invariant, candidate_lists = inference.run_proposal_example()
     # inferred_invariant, candidate_lists = inference.run_partial_stack_example()

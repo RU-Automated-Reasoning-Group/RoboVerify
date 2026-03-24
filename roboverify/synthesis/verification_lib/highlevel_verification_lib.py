@@ -247,9 +247,9 @@ class HighLevelContext:
                 for c_name, c in zip(self.enum_names_effective, self.enum_blocks):
                     if c_name in [a_name, b_name]:
                         continue
-                    if model.evaluate(relation(a, c), model_completion=True) and model.evaluate(
-                        relation(c, b), model_completion=True
-                    ):
+                    if model.evaluate(
+                        relation(a, c), model_completion=True
+                    ) and model.evaluate(relation(c, b), model_completion=True):
                         has_middle = True
                         break
                 if not has_middle:
@@ -306,26 +306,29 @@ class HighLevelContext:
             x += block_w + gap
         img.save(filename)
 
-    def _visualize_enum(self, model) -> None:
+    def _visualize_enum(self, model, viz_tag: Optional[str] = None) -> None:
         self._print_relation_table(model, self.ON_star, "ON_star")
         self._print_relation_table(model, self.ON_star_zero, "ON_star_zero")
         self._print_relation_table(model, self.Higher, "Higher")
         self._print_relation_table(model, self.Scattered, "Scattered")
         if self.visualize_enum_scene:
+            prefix = self.visualization_prefix
+            if viz_tag:
+                prefix = f"{prefix}_{viz_tag}"
             start_state = self._extract_direct_on(model, self.ON_star_zero)
             current_state = self._extract_direct_on(model, self.ON_star)
             self._draw_stacks(
                 self._build_stacks(start_state),
-                f"{self.visualization_prefix}_start_state.png",
+                f"{prefix}_start_state.png",
                 "Start State",
             )
             self._draw_stacks(
                 self._build_stacks(current_state),
-                f"{self.visualization_prefix}_current_state.png",
+                f"{prefix}_current_state.png",
                 "Current State",
             )
 
-    def start_verification(self, vc=None) -> None:
+    def start_verification(self, vc=None, viz_tag: Optional[str] = None) -> None:
         s = Solver()
         self.add_axiom(s)
         self.add_axiom_on_star_zero(s)
@@ -339,11 +342,38 @@ class HighLevelContext:
             model = s.model()
             print(model)
             if self.mode == "enum":
-                self._visualize_enum(model)
+                self._visualize_enum(model, viz_tag=viz_tag)
         elif result == unsat:
             print("VC is unsatisfiable")
         else:
             print(result)
+
+    def check_satisfiable(
+        self,
+        formula=None,
+        visualize_model: bool = True,
+        viz_tag: Optional[str] = None,
+    ):
+        """Check satisfiability under axioms without negating formula."""
+        s = Solver()
+        self.add_axiom(s)
+        self.add_axiom_on_star_zero(s)
+        self.add_axiom_higher(s)
+        self.add_axiom_scattered(s)
+        if formula is not None:
+            s.add(formula)
+        result = s.check()
+        if result == sat:
+            print("satisfiable")
+            model = s.model()
+            print(model)
+            if visualize_model and self.mode == "enum":
+                self._visualize_enum(model, viz_tag=viz_tag)
+        elif result == unsat:
+            print("unsatisfiable")
+        else:
+            print(result)
+        return result
 
     def expr_to_spec(self, expr) -> InvariantSpec:
         return InvariantSpec(data={"sexpr": expr.sexpr()})
@@ -365,6 +395,7 @@ class HighLevelContext:
             f"(assert {sexpr})", sorts={"Box": self.BoxSort}, decls=decls
         )
         return parsed[0]
+
 
 Variable_pools = {}
 
@@ -388,8 +419,20 @@ class highlevel_z3_solver:
             visualization_prefix=visualization_prefix,
         )
 
-    def start_verification(self, vc=None) -> None:
-        return self.context.start_verification(vc)
+    def start_verification(self, vc=None, viz_tag: Optional[str] = None) -> None:
+        return self.context.start_verification(vc, viz_tag=viz_tag)
+
+    def check_satisfiable(
+        self,
+        formula=None,
+        visualize_model: bool = False,
+        viz_tag: Optional[str] = None,
+    ):
+        return self.context.check_satisfiable(
+            formula,
+            visualize_model=visualize_model,
+            viz_tag=viz_tag,
+        )
 
     def add_axiom(self, s: Solver):
         return self.context.add_axiom(s)

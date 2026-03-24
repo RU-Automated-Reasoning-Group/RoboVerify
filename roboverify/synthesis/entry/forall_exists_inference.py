@@ -1,5 +1,5 @@
-from synthesis.inference_lib import inference
 import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
+from synthesis.inference_lib import inference
 
 if __name__ == "__main__":
     context = highlevel_verification_lib.HighLevelContext(mode="declare")

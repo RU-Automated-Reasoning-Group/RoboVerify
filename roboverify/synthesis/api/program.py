@@ -15,6 +15,7 @@ from z3 import (
     Not,
     Or,
     is_app,
+    is_implies,
     is_quantifier,
     substitute,
 )
@@ -277,13 +278,41 @@ def rewrite_for_put_for_higher(expr, b_prime, b, context):
 
         # Match ON_star(a,b)
         if decl.kind() == Z3_OP_UNINTERPRETED and decl.name() == "Higher":
-            alpha, beta = expr.children()
+            m, n = expr.children()
+            t = Const("t", context.BoxSort)
             return Or(
-                context.Higher(alpha, beta),
+                And(m != b_prime, m != b, n != b_prime, n != b, context.Higher(m, n)),
                 And(
-                    context.Higher(alpha, b_prime),
-                    context.Higher(b, beta),
+                    m != b_prime,
+                    m != b,
+                    n == b_prime,
+                    Exists(
+                        [t], And(t != n, context.Higher(n, t), context.Higher(t, b))
+                    ),
                 ),
+                And(m != b_prime, m != b, n == b, context.Higher(m, n)),
+                And(m == b, n != b_prime, n != b, context.Higher(m, n)),
+                And(m == b, n == b),
+                And(
+                    m == b_prime,
+                    n != b_prime,
+                    n != b,
+                    Or(
+                        context.Higher(b, n),
+                        ForAll(
+                            [t],
+                            And(
+                                context.Higher(n, b),
+                                Implies(
+                                    And(t != n, context.Higher(n, t)),
+                                    context.Higher(b, t),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                And(m == b_prime, n == b),
+                And(m == b_prime, n == b_prime),
             )
 
         # Otherwise rebuild recursively
@@ -357,7 +386,8 @@ def rewrite_for_put_for_scattered(expr, b_prime, b, context):
                 ),
             )
         new_children = [
-            rewrite_for_put_for_scattered(c, b_prime, b, context) for c in expr.children()
+            rewrite_for_put_for_scattered(c, b_prime, b, context)
+            for c in expr.children()
         ]
         return decl(*new_children)
 
@@ -447,7 +477,25 @@ class Program:
         print("total number of VCs:", len(vcs))
         for idx, vc in enumerate(vcs):
             print(f"verifying VC {idx}", vc)
-            solver.start_verification(vc)
+            if is_implies(vc):
+                premise = vc.arg(0)
+                conclusion = vc.arg(1)
+                print("check 1: axioms + premise")
+                solver.check_satisfiable(
+                    premise,
+                    visualize_model=True,
+                    viz_tag=f"vc_{idx}_check1",
+                )
+                print("---------------------")
+                print("check 2: axioms + premise + not(conclusion)")
+                solver.check_satisfiable(
+                    And(premise, Not(conclusion)),
+                    visualize_model=True,
+                    viz_tag=f"vc_{idx}_check2",
+                )
+            else:
+                print("non-implication VC; fallback to original check axioms + not(VC)")
+                solver.start_verification(vc, viz_tag=f"vc_{idx}")
             print("=====================")
 
     def lowlevel_verification(self):
@@ -517,13 +565,15 @@ def wp(seq_instruction, Q, context):
 def VC_aux(seq_instruction, Q, context) -> List:
     """generate auxiliary verification conditions"""
     if isinstance(seq_instruction, Seq):
-        return VC_aux(seq_instruction.s1, wp(seq_instruction.s2, Q, context), context) + VC_aux(
-            seq_instruction.s2, Q, context
-        )
+        return VC_aux(
+            seq_instruction.s1, wp(seq_instruction.s2, Q, context), context
+        ) + VC_aux(seq_instruction.s2, Q, context)
     elif isinstance(seq_instruction, Instruction):
         return []
     elif isinstance(seq_instruction, While):
-        return VC_aux(to_seq(seq_instruction.body), seq_instruction.invariant, context) + [
+        return VC_aux(
+            to_seq(seq_instruction.body), seq_instruction.invariant, context
+        ) + [
             Implies(
                 And(seq_instruction.instantiated_cond, seq_instruction.invariant),
                 wp(to_seq(seq_instruction.body), seq_instruction.invariant, context),

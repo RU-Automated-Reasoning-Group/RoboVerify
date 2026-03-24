@@ -1,14 +1,14 @@
 import argparse
 
-from z3 import And, Consts, ForAll, Not, Or
+from z3 import And, Consts, ForAll, Implies, Not, Or
 
+import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
 from synthesis.api.program import Assign, Program, Put, While
 from synthesis.inference_lib.inference import (
     instantiate_invariant,
     run_proposal_example,
     serialize_invariant,
 )
-import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
 
 
 def verify_stack_program_with_learned_invariant(
@@ -64,7 +64,11 @@ def verify_stack_program_with_learned_invariant(
             [m],
             ForAll([n], Or(m == n, Not(context.ON_star(n, m)))),
         ),
-        ForAll([m, n], context.Scattered(m, n)),
+        ForAll(
+            [m],
+            ForAll([n], context.Higher(n, m)),
+        ),
+        ForAll([m, n], Implies(m != n, context.Scattered(m, n))),
     )
 
     m, b0 = Consts("m b0", context.BoxSort)

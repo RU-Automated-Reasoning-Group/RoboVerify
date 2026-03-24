@@ -6,9 +6,9 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 import sympy
 import z3
 
+import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
 from synthesis.inference_lib import quant_enum_merge
 from synthesis.util import on
-import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
 
 z3.set_option("smt.core.minimize", "true")
 
@@ -91,7 +91,9 @@ def compute_omega_k(
     constants is the list of constants in the existing program
     """
     context = _ensure_context(context)
-    universally_quantified_vars = [context.get_consts(f"ux{i}") for i in range(1, k + 1)]
+    universally_quantified_vars = [
+        context.get_consts(f"ux{i}") for i in range(1, k + 1)
+    ]
     all_vars = universally_quantified_vars + constants
     omega_inv = []
     for r in relations:
@@ -1579,7 +1581,13 @@ def run_reverse_example(
     ]
 
     return loop_inference(
-        states_zero, states, k, relations, constants, constants_mappings, context=context
+        states_zero,
+        states,
+        k,
+        relations,
+        constants,
+        constants_mappings,
+        context=context,
     )
 
 
@@ -1638,7 +1646,13 @@ def run_partial_stack_example(
     ]
 
     return loop_inference(
-        states_zero, states, k, relations, constants, constants_mappings, context=context
+        states_zero,
+        states,
+        k,
+        relations,
+        constants,
+        constants_mappings,
+        context=context,
     )
 
 
