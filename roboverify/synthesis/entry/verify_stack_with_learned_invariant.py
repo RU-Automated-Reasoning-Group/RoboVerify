@@ -75,6 +75,7 @@ def verify_stack_program_with_learned_invariant(
     postcondition = ForAll([m], context.ON_star(m, b0))
 
     program.highlevel_verification(precondition, postcondition, context=context)
+    program.lowlevel_verification()
 
 
 if __name__ == "__main__":
