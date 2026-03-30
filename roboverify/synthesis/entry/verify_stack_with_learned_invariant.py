@@ -1,8 +1,10 @@
 import argparse
+from copy import deepcopy
 
 from z3 import And, Consts, ForAll, Implies, Not, Or
 
 import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
+from synthesis.api.instructions import PickPlaceByName
 from synthesis.api.program import Assign, Program, Put, While
 from synthesis.inference_lib.inference import (
     instantiate_invariant,
@@ -20,8 +22,9 @@ def verify_stack_program_with_learned_invariant(
     """Infer invariant from examples and verify the stack program."""
     # Inference is always done in the infinite-block (DeclareSort) setting.
     inference_context = highlevel_verification_lib.HighLevelContext(mode="declare")
-    learned_invariant, candidate_lists = run_proposal_example(context=inference_context)
-    _ = candidate_lists
+    learned_invariant, learned_invariant_lists = run_proposal_example(
+        context=inference_context
+    )
 
     if verification_mode == "finite":
         context = highlevel_verification_lib.HighLevelContext(
@@ -58,6 +61,23 @@ def verify_stack_program_with_learned_invariant(
     ]
     program = Program(2, instructions=instructions)
 
+    ll_instruction = deepcopy(instructions)
+    ll_instruction[1].body = [
+        PickPlaceByName(
+            grab_box_name="b_prime",
+            target_box_name="b_prime",
+            target_offset=[0.0, 0.0, 2.0],
+        ),
+        PickPlaceByName(
+            grab_box_name="b_prime", target_box_name="b", target_offset=[0.0, 0.0, 2.0]
+        ),
+        PickPlaceByName(
+            grab_box_name="b_prime", target_box_name="b", target_offset=[0.0, 0.0, 1.0]
+        ),
+    ]
+    ll_instruction[1].invariant = learned_invariant_lists
+    ll_program = Program(2, instructions=ll_instruction)
+
     m, n = Consts("m n", context.BoxSort)
     precondition = And(
         ForAll(
@@ -75,7 +95,7 @@ def verify_stack_program_with_learned_invariant(
     postcondition = ForAll([m], context.ON_star(m, b0))
 
     program.highlevel_verification(precondition, postcondition, context=context)
-    program.lowlevel_verification()
+    ll_program.lowlevel_verification()
 
 
 if __name__ == "__main__":

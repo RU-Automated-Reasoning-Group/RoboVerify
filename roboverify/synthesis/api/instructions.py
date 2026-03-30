@@ -1,6 +1,6 @@
 import pdb
 from abc import ABC, abstractmethod
-from typing import List
+from typing import Dict, List, Optional
 
 import numpy as np
 from z3 import Exists
@@ -138,12 +138,86 @@ class PickPlace(Instruction):
         return f"PickPlace({self.grab_box_id}, {self.target_box_id}, {[str(x) for x in self.target_offset]})"
 
 
+class PickPlaceByName(Instruction):
+    def __init__(
+        self,
+        grab_box_name: str = "b0",
+        target_box_name: str = "b0",
+        limit: int = 50,
+        target_offset: Optional[List[float]] = None,
+    ):
+        self.limit = limit
+        self.grab_box_name = grab_box_name
+        self.target_box_name = target_box_name
+        self.types = ["BoxName", "BoxName"]
+        if target_offset is None:
+            self.target_offset = [Parameter(0.0) for _ in range(3)]
+        else:
+            if len(target_offset) != 3:
+                raise ValueError("target_offset must be a length-3 list of floats.")
+            self.target_offset = [Parameter(float(v)) for v in target_offset]
+
+    def _resolve(self, env) -> Dict[str, int]:
+        mapping = getattr(env, "symbolic_name_to_box_id", None)
+        if mapping is None:
+            raise ValueError(
+                "PickPlaceByName requires env.symbolic_name_to_box_id (e.g. {'b0': 1})."
+            )
+        if not isinstance(mapping, dict):
+            raise TypeError("env.symbolic_name_to_box_id must be a dict[str, int].")
+        return mapping
+
+    def eval(self, env, traj, return_img=False):
+        mapping = self._resolve(env)
+        grab_box_id = mapping[self.grab_box_name]
+        target_box_id = mapping[self.target_box_name]
+
+        concrete = PickPlace(
+            grab_box_id=grab_box_id, target_box_id=target_box_id, limit=self.limit
+        )
+        concrete.target_offset = self.target_offset
+        return concrete.eval(env, traj, return_img)
+
+    def register_trainable_parameter(self, parameter: List[float]):
+        for p in self.target_offset:
+            p.register(parameter)
+
+    def update_trainable_parameter(self, new_parameter: List[float]):
+        for p in self.target_offset:
+            p.update(new_parameter)
+
+    def get_operand(self):
+        return [
+            {"type": self.types[0], "val": self.grab_box_name},
+            {"type": self.types[1], "val": self.target_box_name},
+        ]
+
+    def set_operand(self, new_operands):
+        assert new_operands[0]["type"] == "BoxName"
+        assert new_operands[1]["type"] == "BoxName"
+        self.grab_box_name = new_operands[0]["val"]
+        self.target_box_name = new_operands[1]["val"]
+
+    def __eq__(self, other):
+        if not isinstance(other, PickPlaceByName):
+            return False
+        cond1 = self.get_operand() == other.get_operand()
+        cond2 = self.target_offset == other.target_offset
+        return cond1 and cond2
+
+    def __str__(self):
+        return (
+            f"PickPlaceByName({self.grab_box_name}, {self.target_box_name}, "
+            f"{[str(x) for x in self.target_offset]})"
+        )
+
+
 class While:
     def __init__(
         self,
         instantiated_cond,
         guard_exists_vars,
-        body,
+        body: List[Instruction],
         invariant,
     ):
         if guard_exists_vars is None:

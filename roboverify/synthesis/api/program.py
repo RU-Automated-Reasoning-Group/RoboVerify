@@ -20,7 +20,16 @@ from z3 import (
 import synthesis.inference_lib.inference
 import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
 import synthesis.verification_lib.lowlevel_verification_lib as lowlevel_verification_lib
-from synthesis.api.instructions import Assign, Instruction, Put, Seq, Skip, While
+from synthesis.api.instructions import (
+    Assign,
+    Instruction,
+    PickPlace,
+    PickPlaceByName,
+    Put,
+    Seq,
+    Skip,
+    While,
+)
 
 
 def rewrite_for_put_for_ON_star(expr, b_prime, b, context):
@@ -240,8 +249,16 @@ class Program:
         else:
             self.instructions = [Skip() for _ in range(self.length)]
 
-    def eval(self, env, return_img=False):
+    def eval(
+        self,
+        env,
+        return_img: bool = False,
+        symbolic_name_to_box_id: dict[str, int] | None = None,
+    ):
         """evaluate the program in the environment and return the trajectories"""
+        old_mapping = getattr(env, "symbolic_name_to_box_id", None)
+        if symbolic_name_to_box_id is not None:
+            env.symbolic_name_to_box_id = symbolic_name_to_box_id
         traj = [env.reset()[0]]
         if return_img:
             imgs = [env.render()]
@@ -249,6 +266,11 @@ class Program:
             line_imgs = line.eval(env, traj, return_img)
             if return_img:
                 imgs.extend(line_imgs)
+        if symbolic_name_to_box_id is not None:
+            if old_mapping is None:
+                delattr(env, "symbolic_name_to_box_id")
+            else:
+                env.symbolic_name_to_box_id = old_mapping
         if return_img:
             return traj, imgs
         return traj
@@ -346,7 +368,9 @@ class Program:
                 )
                 print(f"invariant: {inst.invariant}")
                 print(f"body: {inst.body}")
-                solver.start_verification(inst.invariant, inst.body)
+                solver.start_verification(
+                    inst.invariant, inst.body, constants=["b0", "b", "b_prime"]
+                )
 
 
 def to_seq(instructions):
