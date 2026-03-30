@@ -65,14 +65,24 @@ def verify_stack_program_with_learned_invariant(
     ll_instruction[1].body = [
         PickPlaceByName(
             grab_box_name="b_prime",
-            target_box_name="b_prime",
+            target_box_name_x="b_prime",
+            target_box_name_y="b_prime",
+            target_box_name_z="b",
             target_offset=[0.0, 0.0, 2.0],
         ),
         PickPlaceByName(
-            grab_box_name="b_prime", target_box_name="b", target_offset=[0.0, 0.0, 2.0]
+            grab_box_name="b_prime",
+            target_box_name_x="b",
+            target_box_name_y="b",
+            target_box_name_z="b",
+            target_offset=[0.0, 0.0, 2.0],
         ),
         PickPlaceByName(
-            grab_box_name="b_prime", target_box_name="b", target_offset=[0.0, 0.0, 1.0]
+            grab_box_name="b_prime",
+            target_box_name_x="b",
+            target_box_name_y="b",
+            target_box_name_z="b",
+            target_offset=[0.0, 0.0, 1.0],
         ),
     ]
     ll_instruction[1].invariant = learned_invariant_lists
@@ -94,8 +104,9 @@ def verify_stack_program_with_learned_invariant(
     m, b0 = Consts("m b0", context.BoxSort)
     postcondition = ForAll([m], context.ON_star(m, b0))
 
-    program.highlevel_verification(precondition, postcondition, context=context)
-    ll_program.lowlevel_verification()
+    hl_ok = program.highlevel_verification(precondition, postcondition, context=context)
+    ll_ok = ll_program.lowlevel_verification()
+    return bool(hl_ok and ll_ok)
 
 
 if __name__ == "__main__":

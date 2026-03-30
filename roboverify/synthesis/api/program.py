@@ -14,7 +14,9 @@ from z3 import (
     is_app,
     is_implies,
     is_quantifier,
+    sat,
     substitute,
+    unsat,
 )
 
 import synthesis.inference_lib.inference
@@ -323,8 +325,17 @@ class Program:
             )
         )
         vcs = self.VC_gen(P, Q, solver)
+        ok = True
+
         print("testing axioms")
-        solver.start_verification()
+        axiom_check = solver.check_satisfiable(
+            None, visualize_model=True, viz_tag="axioms_consistency"
+        )
+        if axiom_check != sat:
+            ok = False
+            print(
+                f"[FAIL] axioms consistency check returned {axiom_check}; expected sat"
+            )
         print("=====================")
 
         print("total number of VCs:", len(vcs))
@@ -334,22 +345,40 @@ class Program:
                 premise = vc.arg(0)
                 conclusion = vc.arg(1)
                 print("check 1: axioms + premise")
-                solver.check_satisfiable(
+                check1 = solver.check_satisfiable(
                     premise,
                     visualize_model=True,
                     viz_tag=f"vc_{idx}_check1",
                 )
+                if check1 != sat:
+                    ok = False
+                    print(f"[FAIL] VC {idx} check 1 returned {check1}; expected sat")
                 print("---------------------")
                 print("check 2: axioms + premise + not(conclusion)")
-                solver.check_satisfiable(
+                check2 = solver.check_satisfiable(
                     And(premise, Not(conclusion)),
                     visualize_model=True,
                     viz_tag=f"vc_{idx}_check2",
                 )
+                if check2 != unsat:
+                    ok = False
+                    print(f"[FAIL] VC {idx} check 2 returned {check2}; expected unsat")
             else:
-                print("non-implication VC; fallback to original check axioms + not(VC)")
-                solver.start_verification(vc, viz_tag=f"vc_{idx}")
+                print(
+                    "non-implication VC; using check 2 style: axioms + not(VC) should be unsat"
+                )
+                check = solver.check_satisfiable(
+                    Not(vc),
+                    visualize_model=True,
+                    viz_tag=f"vc_{idx}_not_vc",
+                )
+                if check != unsat:
+                    ok = False
+                    print(
+                        f"[FAIL] VC {idx} non-implication check returned {check}; expected unsat"
+                    )
             print("=====================")
+        return ok
 
     def lowlevel_verification(
         self,
@@ -361,16 +390,28 @@ class Program:
             if context is not None
             else lowlevel_verification_lib.LowLevelContext(sort_name=sort_name)
         )
+        ok = True
+        found_while = False
         for idx, inst in enumerate(self.instructions):
             if isinstance(inst, While):
+                found_while = True
                 print(
                     f"starting low-level verification for while loop with index {idx}"
                 )
                 print(f"invariant: {inst.invariant}")
                 print(f"body: {inst.body}")
-                solver.start_verification(
-                    inst.invariant, inst.body, constants=["b0", "b", "b_prime"]
+                print(f"instantiated_cond: {inst.instantiated_cond}")
+                loop_ok = solver.start_verification(
+                    [*inst.invariant, inst.instantiated_cond],
+                    inst.body,
+                    constants=["b0", "b", "b_prime"],
                 )
+                if not loop_ok:
+                    ok = False
+                    print(f"[FAIL] low-level verification failed for while index {idx}")
+        if not found_while:
+            print("[WARN] low-level verification found no while loops to check")
+        return ok
 
 
 def to_seq(instructions):

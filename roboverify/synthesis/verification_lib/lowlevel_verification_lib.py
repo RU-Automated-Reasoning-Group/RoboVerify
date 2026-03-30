@@ -2,10 +2,11 @@ from itertools import product
 from typing import List, Optional
 
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import numpy as np
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from scipy.spatial import ConvexHull
 from z3 import (
+    Z3_OP_DISTINCT,
     Z3_OP_EQ,
     Z3_OP_UNINTERPRETED,
     Abs,
@@ -15,6 +16,7 @@ from z3 import (
     DeclareSort,
     Function,
     If,
+    Not,
     Or,
     Real,
     Reals,
@@ -24,6 +26,7 @@ from z3 import (
     get_var_index,
     is_app,
     is_quantifier,
+    is_true,
     is_var,
     sat,
     unsat,
@@ -161,7 +164,9 @@ class LowLevelContext:
             Abs(self.Z(a) - cz) < self.L,
         )
 
-    def check_solver(self, s, blocks, save_path=None, encoded_tube=None, extra_blocks=None):
+    def check_solver(
+        self, s, blocks, save_path=None, encoded_tube=None, extra_blocks=None
+    ):
         """Check satisfiability; visualize the scene if SAT, print core if UNSAT."""
         result = s.check()
         print(f"Satisfiability: {result}")
@@ -182,7 +187,9 @@ class LowLevelContext:
             )
         return result
 
-    def visualize_scene(self, model, blocks, save_path=None, encoded_tube=None, extra_blocks=None):
+    def visualize_scene(
+        self, model, blocks, save_path=None, encoded_tube=None, extra_blocks=None
+    ):
         """Plot each block as a 3-D cube using coordinates from the Z3 model."""
         fig = plt.figure()
         ax = fig.add_subplot(111, projection="3d")
@@ -213,6 +220,33 @@ class LowLevelContext:
             min_z = min(min_z, cz - hz)
             max_z = max(max_z, cz + hz)
 
+        def print_relation_tables(objects, labels):
+            def eval_bool(expr):
+                return bool(is_true(model.eval(expr, model_completion=True)))
+
+            def print_table(title, rel_fn):
+                width = max(5, max(len(s) for s in labels) + 1)
+                print("\n" + title)
+                print("".ljust(width) + "".join(s.ljust(width) for s in labels))
+                for i, (oi, li) in enumerate(zip(objects, labels)):
+                    row = [li.ljust(width)]
+                    for j, oj in enumerate(objects):
+                        cell = "T" if eval_bool(rel_fn(oi, oj)) else "F"
+                        row.append(cell.ljust(width))
+                    print("".join(row))
+
+            # `ON_star`/`ON_star_zero` are translated to `lowlevel_on`.
+            print_table(
+                "Relation: ON_star (lowlevel_on)  [row ON col]", self.lowlevel_on
+            )
+            print_table(
+                "Relation: Higher (lowlevel_higher)  [row >= col]", self.lowlevel_higher
+            )
+            print_table(
+                "Relation: Scattered (lowlevel_scattered)  [row scattered-from col]",
+                self.lowlevel_scattered,
+            )
+
         for block, color in zip(blocks, colors[: len(blocks)]):
             cx = to_float(self.X(block))
             cy = to_float(self.Y(block))
@@ -221,6 +255,10 @@ class LowLevelContext:
             include_aabb(cx, cy, cz, half_side, half_side, half_side)
             print(str(block), cx, cy, cz)
             ax.text(cx, cy, cz, str(block), fontsize=12)
+
+        # Print relationships among all objects we are visualizing.
+        rel_objects = list(blocks)
+        rel_labels = [str(b) for b in blocks]
 
         if extra_blocks:
             for item in extra_blocks:
@@ -238,7 +276,13 @@ class LowLevelContext:
                 cz = to_float(self.Z(block))
                 draw_cube(ax, cx, cy, cz, L_val, color=color)
                 include_aabb(cx, cy, cz, half_side, half_side, half_side)
+                print(str(label), cx, cy, cz)
                 ax.text(cx, cy, cz, str(label), fontsize=12, color=color)
+                rel_objects.append(block)
+                rel_labels.append(str(label))
+
+        if rel_objects:
+            print_relation_tables(rel_objects, rel_labels)
 
         if encoded_tube is not None:
             (p0_expr, p1_expr, label) = encoded_tube
@@ -287,7 +331,7 @@ class LowLevelContext:
 
     def start_verification(
         self, initial_condition: List, pickplace_instructions: List, constants: List
-    ) -> None:
+    ) -> bool:
         s = Solver()
         s.set(unsat_core=True)
         # Default block side length.
@@ -297,7 +341,13 @@ class LowLevelContext:
         sym = self.get_consts("sym")
 
         print("checking condition satisfiability")
-        self.check_solver(s, blocks, extra_blocks=[(sym, "black", "sym")])
+        ok = True
+        cond_result = self.check_solver(s, blocks, extra_blocks=[(sym, "black", "sym")])
+        if cond_result != sat:
+            ok = False
+            print(
+                f"[FAIL] low-level axioms/initial-condition consistency returned {cond_result}; expected sat"
+            )
 
         grab_const = None
         handled_block_id = None
@@ -306,8 +356,10 @@ class LowLevelContext:
         for idx, instruction in enumerate(pickplace_instructions):
             print(f"\n=== verifying pickplace instruction {idx}: {instruction} ===")
 
-            target_key = instruction.target_box_name
-            ll_target = const_map[str(target_key)]
+            tx, ty, tz = instruction.target_box_names
+            ll_target_x = const_map[str(tx)]
+            ll_target_y = const_map[str(ty)]
+            ll_target_z = const_map[str(tz)]
 
             if idx == 0:
                 handled_block_id = instruction.grab_box_name
@@ -325,9 +377,9 @@ class LowLevelContext:
                 )
 
             end_pos = (
-                self.X(ll_target) + RealVal(instruction.target_offset[0].val),
-                self.Y(ll_target) + RealVal(instruction.target_offset[1].val),
-                self.Z(ll_target) + RealVal(instruction.target_offset[2].val),
+                self.X(ll_target_x) + RealVal(instruction.target_offset[0].val),
+                self.Y(ll_target_y) + RealVal(instruction.target_offset[1].val),
+                self.Z(ll_target_z) + RealVal(instruction.target_offset[2].val),
             )
 
             print(f"  checking tube_{idx}")
@@ -336,16 +388,25 @@ class LowLevelContext:
                 self.encode_collision(sym, current_pos, end_pos),
                 f"tube_{idx}",
             )
-            s.assert_and_track(sym != grab_const, f"sym_neq_grab_{idx}")
-            self.check_solver(
+            s.assert_and_track(
+                Not(self.lowlevel_box_equal(sym, grab_const)),
+                f"sym_neq_grab_{idx}",
+            )
+            tube_result = self.check_solver(
                 s,
                 blocks,
                 encoded_tube=(current_pos, end_pos, f"tube_{idx}"),
                 extra_blocks=[(sym, "black", "sym")],
             )
+            if tube_result != unsat:
+                ok = False
+                print(
+                    f"[FAIL] tube_{idx} satisfiability returned {tube_result}; expected unsat (tube should be false)"
+                )
             s.pop()
 
             current_pos = end_pos
+        return ok
 
     def _translate_expr(self, expr, lowlevel_constants, const_map, bindings):
         """Recursively translate a high-level z3 expression to low-level.
@@ -404,6 +465,27 @@ class LowLevelContext:
                     for c in expr.children()
                 ]
                 return self.lowlevel_box_equal(children[0], children[1])
+
+            if decl.kind() == Z3_OP_DISTINCT:
+                children = [
+                    self._translate_expr(c, lowlevel_constants, const_map, bindings)
+                    for c in expr.children()
+                ]
+                # Mirror the `==` translation: prefer "distinct position" for box terms.
+                # If the children are not box terms, constructing lowlevel_box_equal will
+                # raise a sort/type error; in that case, preserve the original Distinct.
+                try:
+                    if len(children) == 2:
+                        return Not(self.lowlevel_box_equal(children[0], children[1]))
+                    pairwise = []
+                    for i in range(len(children)):
+                        for j in range(i + 1, len(children)):
+                            pairwise.append(
+                                Not(self.lowlevel_box_equal(children[i], children[j]))
+                            )
+                    return And(*pairwise) if pairwise else BoolVal(True)
+                except Exception:
+                    return decl(*children)
 
             children = [
                 self._translate_expr(c, lowlevel_constants, const_map, bindings)

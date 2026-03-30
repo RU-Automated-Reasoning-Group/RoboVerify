@@ -141,15 +141,20 @@ class PickPlace(Instruction):
 class PickPlaceByName(Instruction):
     def __init__(
         self,
-        grab_box_name: str = "b0",
-        target_box_name: str = "b0",
+        *,
+        grab_box_name: str,
+        target_box_name_x: str,
+        target_box_name_y: str,
+        target_box_name_z: str,
         limit: int = 50,
         target_offset: Optional[List[float]] = None,
     ):
         self.limit = limit
         self.grab_box_name = grab_box_name
-        self.target_box_name = target_box_name
-        self.types = ["BoxName", "BoxName"]
+        self.target_box_name_x = target_box_name_x
+        self.target_box_name_y = target_box_name_y
+        self.target_box_name_z = target_box_name_z
+        self.types = ["BoxName", "BoxName", "BoxName", "BoxName"]
         if target_offset is None:
             self.target_offset = [Parameter(0.0) for _ in range(3)]
         else:
@@ -167,16 +172,50 @@ class PickPlaceByName(Instruction):
             raise TypeError("env.symbolic_name_to_box_id must be a dict[str, int].")
         return mapping
 
+    @property
+    def target_box_names(self) -> tuple[str, str, str]:
+        return (self.target_box_name_x, self.target_box_name_y, self.target_box_name_z)
+
+    def get_box_pos(self, box_id: int, obs):
+        block_num = (obs.shape[0] - 13) // 15
+        if 0 <= box_id < block_num:
+            return obs[10 + box_id * 12 : 10 + box_id * 12 + 3]
+        assert False, f"unknown box id {box_id}"
+
     def eval(self, env, traj, return_img=False):
+        from synthesis.environment.data.pickplace_naive import get_pick_control_naive
+
         mapping = self._resolve(env)
         grab_box_id = mapping[self.grab_box_name]
-        target_box_id = mapping[self.target_box_name]
+        target_x_id = mapping[self.target_box_name_x]
+        target_y_id = mapping[self.target_box_name_y]
+        target_z_id = mapping[self.target_box_name_z]
 
-        concrete = PickPlace(
-            grab_box_id=grab_box_id, target_box_id=target_box_id, limit=self.limit
+        imgs = []
+        success = False
+        obs0 = traj[-1]
+        gx, gy, gz = (
+            self.get_box_pos(target_x_id, obs0)[0],
+            self.get_box_pos(target_y_id, obs0)[1],
+            self.get_box_pos(target_z_id, obs0)[2],
         )
-        concrete.target_offset = self.target_offset
-        return concrete.eval(env, traj, return_img)
+        initial_goal = np.array([gx, gy, gz], dtype=float)
+
+        step = 0
+        while not success and step < self.limit:
+            obs = env.flatten_observation(env.env._get_obs())
+            action, success = get_pick_control_naive(
+                obs,
+                initial_goal + np.array([offset.val for offset in self.target_offset]),
+                block_id=grab_box_id,
+                last_block=True,
+            )
+            env.step(action)
+            step += 1
+            if return_img:
+                imgs.append(env.render())
+            traj.append(obs)
+        return imgs
 
     def register_trainable_parameter(self, parameter: List[float]):
         for p in self.target_offset:
@@ -189,14 +228,20 @@ class PickPlaceByName(Instruction):
     def get_operand(self):
         return [
             {"type": self.types[0], "val": self.grab_box_name},
-            {"type": self.types[1], "val": self.target_box_name},
+            {"type": self.types[1], "val": self.target_box_name_x},
+            {"type": self.types[2], "val": self.target_box_name_y},
+            {"type": self.types[3], "val": self.target_box_name_z},
         ]
 
     def set_operand(self, new_operands):
         assert new_operands[0]["type"] == "BoxName"
         assert new_operands[1]["type"] == "BoxName"
+        assert new_operands[2]["type"] == "BoxName"
+        assert new_operands[3]["type"] == "BoxName"
         self.grab_box_name = new_operands[0]["val"]
-        self.target_box_name = new_operands[1]["val"]
+        self.target_box_name_x = new_operands[1]["val"]
+        self.target_box_name_y = new_operands[2]["val"]
+        self.target_box_name_z = new_operands[3]["val"]
 
     def __eq__(self, other):
         if not isinstance(other, PickPlaceByName):
@@ -206,8 +251,9 @@ class PickPlaceByName(Instruction):
         return cond1 and cond2
 
     def __str__(self):
+        tx, ty, tz = self.target_box_names
         return (
-            f"PickPlaceByName({self.grab_box_name}, {self.target_box_name}, "
+            f"PickPlaceByName({self.grab_box_name}, ({tx}, {ty}, {tz}), "
             f"{[str(x) for x in self.target_offset]})"
         )
 
