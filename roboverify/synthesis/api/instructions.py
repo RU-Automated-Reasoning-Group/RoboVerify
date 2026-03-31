@@ -284,7 +284,18 @@ class Put(Instruction):
         return f"put({self.base_block}, {self.upper_block})"
 
     def eval(self, env, traj, return_image=False) -> List:
-        pass
+        # `Put` is a logical/table-level operation in the stack DSL.
+        # For physical execution, the program should typically replace
+        # `Put`/`Assign`/`While` with concrete pick-and-place instructions.
+        #
+        # We intentionally do not mutate `env.symbolic_name_to_box_id` here:
+        # symbolic aliases are established explicitly via `Assign`.
+        raise RuntimeError(
+            "Put.eval() was called, but `Put` is a verification-only logical "
+            "operation in the stack DSL. It cannot be evaluated at runtime. "
+            "Replace `Put`/`Assign`/`While` with concrete pick-and-place instructions "
+            "before execution."
+        )
 
 
 class Assign(Instruction):
@@ -296,7 +307,23 @@ class Assign(Instruction):
         return f"{self.left} <- {self.right}"
 
     def eval(self, env, traj, return_image=False) -> List:
-        pass
+        mapping = getattr(env, "symbolic_name_to_box_id", None)
+        if mapping is None:
+            raise ValueError(
+                "Assign.eval requires env.symbolic_name_to_box_id to exist."
+            )
+        if not isinstance(mapping, dict):
+            raise TypeError("env.symbolic_name_to_box_id must be a dict[str, int].")
+
+        if self.right not in mapping:
+            raise KeyError(
+                f"Assign.eval could not resolve RHS symbolic name {self.right!r}; "
+                f"available: {sorted(mapping.keys())}"
+            )
+
+        # Create/update the alias: env[left] = env[right].
+        mapping[self.left] = mapping[self.right]
+        return []
 
 
 class Seq:

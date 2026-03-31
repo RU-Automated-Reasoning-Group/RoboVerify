@@ -64,6 +64,10 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
             from environment.cee_us_env.fpp_construction.xml_gen_slide import (
                 generate_xml_slide as generate_xml,
             )
+        elif case == "RoboVerifyStack":
+            # Uses the same block XML/layout as other stacking-style tower cases.
+            distance_threshold = 0.05
+            from synthesis.environment.cee_us_env.fpp_construction.xml_gen import generate_xml
         else:
             distance_threshold = 0.05
             from synthesis.environment.cee_us_env.fpp_construction.xml_gen import generate_xml
@@ -334,7 +338,7 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
         return True
 
     def _sample_goal(self):
-        cases = ["Singletower", "Pyramid", "Multitower", "Slide", "PickAndPlace", "Flip"]
+        cases = ["Singletower", "Pyramid", "Multitower", "Slide", "PickAndPlace", "Flip", "RoboVerifyStack"]
         if self.case == "All":
             case_id = np.random.randint(0, len(cases))
             case = cases[case_id]
@@ -345,7 +349,11 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
 
         goals = []
 
-        if case == "Singletower":
+        if case == "RoboVerifyStack":
+            # Dummy desired goal. Reward/success for this case must be computed
+            # from achieved object positions (not from desired goals).
+            goals = [np.zeros(3, dtype=np.float32) for _ in range(self.num_blocks)]
+        elif case == "Singletower":
             target_offset = np.array([-0.05, 0.0, 0.0])
             goal_object0 = self.initial_gripper_xpos[:3] + np.random.uniform(
                 -self.target_range, self.target_range, size=3

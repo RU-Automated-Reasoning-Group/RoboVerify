@@ -251,16 +251,8 @@ class Program:
         else:
             self.instructions = [Skip() for _ in range(self.length)]
 
-    def eval(
-        self,
-        env,
-        return_img: bool = False,
-        symbolic_name_to_box_id: dict[str, int] | None = None,
-    ):
+    def eval(self, env, return_img: bool = False):
         """evaluate the program in the environment and return the trajectories"""
-        old_mapping = getattr(env, "symbolic_name_to_box_id", None)
-        if symbolic_name_to_box_id is not None:
-            env.symbolic_name_to_box_id = symbolic_name_to_box_id
         traj = [env.reset()[0]]
         if return_img:
             imgs = [env.render()]
@@ -268,11 +260,6 @@ class Program:
             line_imgs = line.eval(env, traj, return_img)
             if return_img:
                 imgs.extend(line_imgs)
-        if symbolic_name_to_box_id is not None:
-            if old_mapping is None:
-                delattr(env, "symbolic_name_to_box_id")
-            else:
-                env.symbolic_name_to_box_id = old_mapping
         if return_img:
             return traj, imgs
         return traj

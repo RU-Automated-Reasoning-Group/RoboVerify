@@ -12,6 +12,7 @@ import synthesis.environment.cee_us_env.torch_helpers as torch_helpers
 from synthesis.environment.cee_us_env.abstract_environments import MaskedGoalSpaceEnvironmentInterface
 from synthesis.environment.cee_us_env.fpp_construction.construction import FetchBlockConstructionEnv
 from synthesis.environment.cee_us_env.robotics import GymRoboticsGroundTruthSupportEnv
+from synthesis.util.on import BLOCK_LENGTH, on as on_relation
 
 import pdb
 
@@ -20,15 +21,52 @@ class FetchPickAndPlaceConstruction(
     GymRoboticsGroundTruthSupportEnv,
     FetchBlockConstructionEnv,
 ):
-    def __init__(self, *, name, sparse, shaped_reward, simple=False, **kwargs):
+    def __init__(
+        self,
+        *,
+        name,
+        sparse,
+        shaped_reward,
+        simple=False,
+        base_block_id=None,
+        **kwargs,
+    ):
         self.shaped_reward = shaped_reward
         self.sparse = sparse
         self.simple = simple
 
         FetchBlockConstructionEnv.__init__(self, **kwargs)
         GymRoboticsGroundTruthSupportEnv.__init__(self, name=name, **kwargs)
+
+        if self.case == "RoboVerifyStack":
+            if base_block_id is None:
+                raise ValueError("RoboVerifyStack requires base_block_id.")
+            if not isinstance(base_block_id, int):
+                raise TypeError("base_block_id must be an int for RoboVerifyStack.")
+            if not (0 <= base_block_id < self.num_blocks):
+                raise ValueError(
+                    f"base_block_id must be in [0, {self.num_blocks - 1}] for RoboVerifyStack; got {base_block_id}"
+                )
+            self.roboverify_base_block_id = int(base_block_id)
+            # Mapping used by PickPlaceByName and program execution.
+            # Requirement: `b0` must refer to the constructor-chosen base block, not
+            # necessarily physical index 0.
+            #
+            # User intent: initially only `b0` is known. Other symbolic names are
+            # created only during program execution (e.g. via `Assign(b, b0)`).
+            self.symbolic_name_to_box_id = {"b0": self.roboverify_base_block_id}
+        else:
+            self.roboverify_base_block_id = None
+
         self.store_init_arguments(locals())
-        EzPickle.__init__(self, name=name, sparse=sparse, shaped_reward=shaped_reward, **kwargs)
+        EzPickle.__init__(
+            self,
+            name=name,
+            sparse=sparse,
+            shaped_reward=shaped_reward,
+            base_block_id=base_block_id,
+            **kwargs,
+        )
 
         # These are the set attributes that will be used by the object-centric world models and controllers
         self.agent_dim = 10
@@ -58,7 +96,7 @@ class FetchPickAndPlaceConstruction(
         self.observation_space_size_preproc = self.obs_preproc(self.flatten_observation(self._get_obs())).shape[0]
         self.goal_space_size = goal_space_size  # Should we equal to num_objects * 3 + 3 for the gripper pos!
 
-        if "tower" in self.case or self.case == "Pyramid":
+        if "tower" in self.case or self.case == "Pyramid" or self.case == "RoboVerifyStack":
             self.threshold = 0.02
         elif self.case == "PickAndPlace":
             self.threshold = 0.025
@@ -327,6 +365,54 @@ class FetchPickAndPlaceConstruction(
 
         goals.append([0.0, 0.0, 0.0])
         return np.concatenate(goals, axis=0).copy()
+
+    def _reset_sim(self):
+        """
+        RoboVerifyStack init:
+        - Randomize all blocks on the tabletop.
+        - Enforce pairwise "scattered" separation in XY for every block pair.
+        """
+        if self.case != "RoboVerifyStack":
+            return super()._reset_sim()
+
+        self.sim.set_state(self.initial_state)
+
+        scattered_sep = 2.0 * BLOCK_LENGTH  # Must be large enough for lowlevel_scattered(m,n)
+        prev_obj_xypos = []
+
+        # Sample per-object XY independently and reject until all pairs satisfy scattered.
+        for obj_name in self.object_names:
+            while True:
+                object_xypos = self.initial_gripper_xpos[:2] + np.random.uniform(
+                    -self.obj_range, self.obj_range, size=2
+                )
+
+                # Keep the same "not too close to gripper" constraint used in the base env.
+                if np.linalg.norm(object_xypos - self.initial_gripper_xpos[:2]) < 0.1:
+                    continue
+
+                ok = True
+                for other_xypos in prev_obj_xypos:
+                    dx = abs(object_xypos[0] - other_xypos[0])
+                    dy = abs(object_xypos[1] - other_xypos[1])
+                    if not (dx >= scattered_sep or dy >= scattered_sep):
+                        ok = False
+                        break
+
+                if not ok:
+                    continue
+
+                object_qpos = self.sim.data.get_joint_qpos(f"{obj_name}:joint")
+                assert object_qpos.shape == (7,)
+                object_qpos[:2] = object_xypos
+                object_qpos[2] = self.height_offset
+                self.sim.data.set_joint_qpos(f"{obj_name}:joint", object_qpos)
+                self.sim.forward()
+
+                prev_obj_xypos.append(object_xypos)
+                break
+
+        return True
 
     def reset(self):
         # Attempt to reset the simulator.
@@ -648,12 +734,100 @@ class FetchPickAndPlaceConstruction(
             raise NotImplementedError
         return cost
 
+    def _roboverify_stack_tower_complete(self, positions: np.ndarray) -> bool:
+        """
+        Check whether blocks form a single tower above `base_block_id`.
+
+        Tower success:
+        1. base block is on the tabletop (z approx equals `self.height_offset`)
+         2. there exists a linear chain of blocks where each next block sits "on"
+           the current block according to `synthesis.util.on.on()`.
+        """
+        base_id = self.roboverify_base_block_id
+        if base_id is None:
+            raise ValueError("roboverify_base_block_id must be set for RoboVerifyStack.")
+
+        positions = np.asarray(positions, dtype=np.float32)
+        if positions.shape != (self.num_blocks, 3):
+            positions = positions.reshape(self.num_blocks, 3)
+
+        # Table tolerance: reuse the same threshold used for tower-like tasks.
+        table_epsilon = float(self.threshold)
+        if abs(float(positions[base_id, 2]) - float(self.height_offset)) > table_epsilon:
+            return False
+
+        remaining = set(range(self.num_blocks))
+        remaining.remove(base_id)
+        pos_current = positions[base_id]
+
+        while remaining:
+            candidates = [i for i in remaining if on_relation(positions[i], pos_current)]
+            if len(candidates) != 1:
+                return False
+            k = candidates[0]
+            remaining.remove(k)
+            pos_current = positions[k]
+
+        return True
+
+    def compute_reward(self, obs):
+        if self.case != "RoboVerifyStack":
+            return super().compute_reward(obs)
+
+        achieved_goal = obs["achieved_goal"]
+        achieved_goal = np.asarray(achieved_goal, dtype=np.float32)
+        # achieved_goal layout: [obj0(x,y,z), ..., objN-1(x,y,z), grip(x,y,z)]
+        block_positions = achieved_goal[:-3].reshape(self.num_blocks, 3)
+
+        return 1.0 if self._roboverify_stack_tower_complete(block_positions) else 0.0
+
     def _is_success(self, obs):
-        success_of_blocks = self.eval_success(obs)
-        is_success = success_of_blocks == self.num_blocks
-        return is_success
+        if self.case != "RoboVerifyStack":
+            success_of_blocks = self.eval_success(obs)
+            return success_of_blocks == self.num_blocks
+
+        achieved_goal = self.achieved_goal_from_observation(obs)
+        achieved_goal = np.asarray(achieved_goal, dtype=np.float32)
+
+        if achieved_goal.ndim == 1:
+            block_positions = achieved_goal[:-3].reshape(self.num_blocks, 3)
+            return self._roboverify_stack_tower_complete(block_positions)
+
+        # Batch case (rare for step()).
+        leading_shape = achieved_goal.shape[:-1]
+        flat = achieved_goal.reshape(-1, achieved_goal.shape[-1])
+        results = []
+        for row in flat:
+            block_positions = row[:-3].reshape(self.num_blocks, 3)
+            results.append(self._roboverify_stack_tower_complete(block_positions))
+        return np.asarray(results, dtype=np.bool_).reshape(leading_shape)
 
     def eval_success(self, observation):
+        if self.case == "RoboVerifyStack":
+            # Return format matches existing semantics: `num_blocks` when success else 0.
+            if torch.is_tensor(observation):
+                obs_np = observation.detach().cpu().numpy()
+            else:
+                obs_np = observation
+
+            achieved_goal = self.achieved_goal_from_observation(obs_np)
+            achieved_goal = np.asarray(achieved_goal, dtype=np.float32)
+
+            achieved_dim = achieved_goal.shape[-1]
+            if achieved_goal.ndim == 1:
+                positions = achieved_goal[:-3].reshape(self.num_blocks, 3)
+                ok = self._roboverify_stack_tower_complete(positions)
+                return float(self.num_blocks) if ok else 0.0
+
+            flat = achieved_goal.reshape(-1, achieved_dim)
+            results = []
+            for row in flat:
+                positions = row[:-3].reshape(self.num_blocks, 3)
+                results.append(self._roboverify_stack_tower_complete(positions))
+            success_rate = np.asarray(results, dtype=np.float32).reshape(achieved_goal.shape[:-1])
+            success_rate = success_rate * float(self.num_blocks)
+            return success_rate
+
         if torch.is_tensor(observation):
             assert len(observation.shape) < 3
 

@@ -106,6 +106,7 @@ def verify_stack_program_with_learned_invariant(
 
     hl_ok = program.highlevel_verification(precondition, postcondition, context=context)
     ll_ok = ll_program.lowlevel_verification()
+    print(f"hl_ok: {hl_ok}, ll_ok: {ll_ok}")
     return bool(hl_ok and ll_ok)
 
 
