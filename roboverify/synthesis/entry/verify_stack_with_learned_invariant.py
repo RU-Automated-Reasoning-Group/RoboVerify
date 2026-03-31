@@ -1,11 +1,21 @@
 import argparse
+import os
+import time
 from copy import deepcopy
+from pathlib import Path
 
+import ffmpeg
+import imageio
+import numpy as np
 from z3 import And, Consts, ForAll, Implies, Not, Or
 
 import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
 from synthesis.api.instructions import PickPlaceByName
 from synthesis.api.program import Assign, Program, Put, While
+from synthesis.environment.cee_us_env.fpp_construction_env import (
+    FetchPickAndPlaceConstruction,
+)
+from synthesis.environment.general_env import GymToGymnasium
 from synthesis.inference_lib.inference import (
     instantiate_invariant,
     run_proposal_example,
@@ -61,6 +71,7 @@ def verify_stack_program_with_learned_invariant(
     ]
     program = Program(2, instructions=instructions)
 
+    BOX_LENGTH = 0.05
     ll_instruction = deepcopy(instructions)
     ll_instruction[1].body = [
         PickPlaceByName(
@@ -68,26 +79,141 @@ def verify_stack_program_with_learned_invariant(
             target_box_name_x="b_prime",
             target_box_name_y="b_prime",
             target_box_name_z="b",
-            target_offset=[0.0, 0.0, 2.0],
+            target_offset=[0.0, 0.0, 2 * BOX_LENGTH],
+            release=False,
         ),
         PickPlaceByName(
             grab_box_name="b_prime",
             target_box_name_x="b",
             target_box_name_y="b",
             target_box_name_z="b",
-            target_offset=[0.0, 0.0, 2.0],
+            target_offset=[0.0, 0.0, 2 * BOX_LENGTH],
+            release=False,
         ),
         PickPlaceByName(
             grab_box_name="b_prime",
             target_box_name_x="b",
             target_box_name_y="b",
             target_box_name_z="b",
-            target_offset=[0.0, 0.0, 1.0],
+            target_offset=[0.0, 0.0, 1.5 * BOX_LENGTH],
+            release=True,
         ),
     ]
     ll_instruction[1].invariant = learned_invariant_lists
+    # ll_instruction[1].body.append(Assign("b", "b_prime"))
     ll_program = Program(2, instructions=ll_instruction)
 
+    def run_ll_program_on_roboverify_stack_env(
+        ll_program: Program,
+        *,
+        num_seeds: int,
+        num_blocks: int,
+        base_block_id: int = 0,
+        timesteps: int = 200,
+        return_img: bool = True,
+        save_dir: str = "roboverify_stack_rollouts",
+        fps: int = 20,
+        save_png_frames: bool = True,
+    ) -> dict:
+        """Run `ll_program` on the RoboVerify Stack env for `num_seeds` seeds."""
+
+        results = []
+        save_root = Path(save_dir)
+        save_root.mkdir(parents=True, exist_ok=True)
+        for seed in range(int(num_seeds)):
+            np.random.seed(int(seed))
+
+            env = GymToGymnasium(
+                FetchPickAndPlaceConstruction(
+                    name=f"roboverify_stack_{num_blocks}",
+                    sparse=False,
+                    shaped_reward=False,
+                    num_blocks=int(num_blocks),
+                    reward_type="sparse",
+                    case="RoboVerifyStack",
+                    visualize_mocap=False,
+                    simple=True,
+                    base_block_id=int(base_block_id),
+                )
+            )
+
+            # Best-effort: cap episode length if supported by the env.
+            if hasattr(env, "max_step"):
+                env.max_step = int(timesteps)
+            if hasattr(env.env, "max_step"):
+                env.env.max_step = int(timesteps)
+
+            seed_dir = save_root / f"seed_{seed:04d}"
+            seed_dir.mkdir(parents=True, exist_ok=True)
+
+            frame_idx = 0
+            # Name with a leading prefix so it sorts to the top in file explorers.
+            video_path = seed_dir / "000_trajectory.mp4"
+            timed_out = False
+
+            if return_img:
+                traj, imgs = ll_program.eval(env, return_img=True)
+                for frame in imgs:
+                    frame_arr = np.asarray(frame, dtype=np.uint8)
+                    if save_png_frames:
+                        imageio.imwrite(seed_dir / f"img{frame_idx:04d}.png", frame_arr)
+                    frame_idx += 1
+            else:
+                traj = ll_program.eval(env, return_img=False)
+                imgs = []
+
+            final_obs = traj[-1] if "traj" in locals() and traj else None
+            success = (
+                bool(env.env._is_success(final_obs)) if final_obs is not None else False
+            )
+
+            # Assemble MP4 after evaluation (non-streaming).
+            if return_img and save_png_frames and frame_idx > 0:
+                input_pattern = os.fspath(seed_dir / "img%04d.png")
+                try:
+                    (
+                        ffmpeg.input(input_pattern, framerate=int(fps))
+                        .output(
+                            os.fspath(video_path),
+                            vcodec="libx264",
+                            pix_fmt="yuv420p",
+                        )
+                        .overwrite_output()
+                        .run(quiet=True)
+                    )
+                except Exception as e:
+                    print(
+                        "[WARN] failed to assemble mp4 with ffmpeg; PNG frames are still saved.",
+                        repr(e),
+                    )
+
+            results.append(
+                {
+                    "seed": int(seed),
+                    "success": success,
+                    "timed_out": bool(timed_out),
+                    "dir": os.fspath(seed_dir),
+                    "frames": int(frame_idx),
+                }
+            )
+            env.close()
+
+        success_rate = sum(r["success"] for r in results) / max(1, len(results))
+        return {"results": results, "success_rate": success_rate}
+
+    # Run low-level `ll_program` in a concrete RoboVerify Stack environment.
+    ll_exec = run_ll_program_on_roboverify_stack_env(
+        ll_program,
+        num_seeds=10,
+        num_blocks=num_blocks,
+        base_block_id=0,
+        timesteps=200,
+        return_img=True,
+        save_dir="roboverify_stack_rollouts",
+        fps=20,
+    )
+    print("ll_program RoboVerifyStack success_rate:", ll_exec["success_rate"])
+    print("ll_program RoboVerifyStack per-seed:", ll_exec["results"])
     m, n = Consts("m n", context.BoxSort)
     precondition = And(
         ForAll(

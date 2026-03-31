@@ -240,7 +240,15 @@ class FetchPickAndPlaceConstruction(
     # rewrite sample goal for simple case
     def _sample_goal_simple(self):
         # get case
-        cases = ["Singletower", "Pyramid", "Multitower", "Slide", "PickAndPlace", "Flip"]
+        cases = [
+            "Singletower",
+            "Pyramid",
+            "Multitower",
+            "Slide",
+            "PickAndPlace",
+            "Flip",
+            "RoboVerifyStack",
+        ]
         if self.case == "All":
             case_id = np.random.randint(0, len(cases))
             case = cases[case_id]
@@ -360,6 +368,11 @@ class FetchPickAndPlaceConstruction(
                 goals[-1],
                 goals[0],
             )  # Switch first and last obj xy (last object should be lifted!)
+        elif case == "RoboVerifyStack":
+            # RoboVerifyStack success/reward ignores the sampled goal; it checks tower
+            # completion relative to `base_block_id`. Use the default goal sampler to
+            # ensure correct shape without introducing extra constraints here.
+            return self._sample_goal()
         else:
             return self._sample_goal()
 

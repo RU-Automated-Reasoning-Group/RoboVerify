@@ -3,7 +3,9 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Optional
 
 import numpy as np
-from z3 import Exists
+import z3
+
+from synthesis.util import on as on_util
 
 
 class Parameter:
@@ -57,11 +59,11 @@ class Skip(Instruction):
     def __init__(self, skip_steps: int = 20):
         self.skip_steps = skip_steps
 
-    def eval(self, env, traj, return_img=False):
+    def eval(self, env, traj, return_image=False):
         imgs = []
         for _ in range(self.skip_steps):
             obs = env.flatten_observation(env.env._get_obs())
-            if return_img:
+            if return_image:
                 imgs.append(env.render())
             traj.append(obs)
         return imgs
@@ -84,7 +86,7 @@ class PickPlace(Instruction):
             return obs[10 + box_id * 12 : 10 + box_id * 12 + 3]
         assert False, f"unknown box id {box_id}"
 
-    def eval(self, env, traj, return_img=False):
+    def eval(self, env, traj, return_image=False):
         from synthesis.environment.data.pickplace_naive import get_pick_control_naive
 
         imgs = []
@@ -102,7 +104,7 @@ class PickPlace(Instruction):
             )
             env.step(action)
             step += 1
-            if return_img:
+            if return_image:
                 imgs.append(env.render())
             traj.append(obs)
         return imgs
@@ -148,12 +150,14 @@ class PickPlaceByName(Instruction):
         target_box_name_z: str,
         limit: int = 50,
         target_offset: Optional[List[float]] = None,
+        release: bool = True,
     ):
         self.limit = limit
         self.grab_box_name = grab_box_name
         self.target_box_name_x = target_box_name_x
         self.target_box_name_y = target_box_name_y
         self.target_box_name_z = target_box_name_z
+        self.release = bool(release)
         self.types = ["BoxName", "BoxName", "BoxName", "BoxName"]
         if target_offset is None:
             self.target_offset = [Parameter(0.0) for _ in range(3)]
@@ -182,7 +186,7 @@ class PickPlaceByName(Instruction):
             return obs[10 + box_id * 12 : 10 + box_id * 12 + 3]
         assert False, f"unknown box id {box_id}"
 
-    def eval(self, env, traj, return_img=False):
+    def eval(self, env, traj, return_image=False):
         from synthesis.environment.data.pickplace_naive import get_pick_control_naive
 
         mapping = self._resolve(env)
@@ -193,26 +197,29 @@ class PickPlaceByName(Instruction):
 
         imgs = []
         success = False
-        obs0 = traj[-1]
-        gx, gy, gz = (
-            self.get_box_pos(target_x_id, obs0)[0],
-            self.get_box_pos(target_y_id, obs0)[1],
-            self.get_box_pos(target_z_id, obs0)[2],
-        )
-        initial_goal = np.array([gx, gy, gz], dtype=float)
 
         step = 0
         while not success and step < self.limit:
             obs = env.flatten_observation(env.env._get_obs())
+            # Compute the goal from the *current* observation, not only from the
+            # initial one. This prevents stale targets causing unnecessary re-grasps
+            # when the block is already correctly placed.
+            gx = float(self.get_box_pos(target_x_id, obs)[0])
+            gy = float(self.get_box_pos(target_y_id, obs)[1])
+            gz = float(self.get_box_pos(target_z_id, obs)[2])
+            goal = np.array([gx, gy, gz], dtype=float) + np.array(
+                [offset.val for offset in self.target_offset], dtype=float
+            )
             action, success = get_pick_control_naive(
                 obs,
-                initial_goal + np.array([offset.val for offset in self.target_offset]),
+                goal,
                 block_id=grab_box_id,
                 last_block=True,
+                release=self.release,
             )
             env.step(action)
             step += 1
-            if return_img:
+            if return_image:
                 imgs.append(env.render())
             traj.append(obs)
         return imgs
@@ -254,17 +261,18 @@ class PickPlaceByName(Instruction):
         tx, ty, tz = self.target_box_names
         return (
             f"PickPlaceByName({self.grab_box_name}, ({tx}, {ty}, {tz}), "
-            f"{[str(x) for x in self.target_offset]})"
+            f"{[str(x) for x in self.target_offset]}, release={self.release})"
         )
 
 
-class While:
+class While(Instruction):
     def __init__(
         self,
         instantiated_cond,
         guard_exists_vars,
         body: List[Instruction],
         invariant,
+        max_iters: int = 10,
     ):
         if guard_exists_vars is None:
             raise ValueError("guard_exists_vars must be provided for While.")
@@ -272,7 +280,235 @@ class While:
         self.invariant = invariant
         self.guard_exists_vars = guard_exists_vars
         self.instantiated_cond = instantiated_cond
-        self.cond = Exists(guard_exists_vars, instantiated_cond)
+        self.cond = z3.Exists(guard_exists_vars, instantiated_cond)
+        self.max_iters = int(max_iters)
+
+    def _get_num_blocks(self, env, obs) -> int:
+        # Prefer environment-provided counts when available.
+        num_blocks = getattr(getattr(env, "env", None), "num_blocks", None)
+        if num_blocks is None:
+            num_blocks = getattr(getattr(env, "unwrapped", None), "num_blocks", None)
+        if num_blocks is None:
+            num_blocks = getattr(env, "num_blocks", None)
+        if num_blocks is not None:
+            return int(num_blocks)
+
+        n_obj = getattr(env, "nObj", None)
+        if n_obj is None:
+            n_obj = getattr(getattr(env, "env", None), "nObj", None)
+        if n_obj is None:
+            n_obj = getattr(getattr(env, "unwrapped", None), "nObj", None)
+        if n_obj is not None:
+            return int(n_obj)
+
+        # Fallback: infer from observation layout used elsewhere in this repo.
+        # Observation packs agent dims then per-object dims; in this project we
+        # index object positions with `10 + 12*i : 10 + 12*i + 3`.
+        # Use the same heuristic as PickPlace.get_box_pos.
+        return max(0, (int(obs.shape[0]) - 13) // 15)
+
+    def _build_block_positions(self, obs, num_blocks: int):
+        return [on_util.get_block_pos(obs, i) for i in range(num_blocks)]
+
+    def _eval_z3_guard(self, z3_expr, bindings, all_block_pos):
+        """Evaluate a restricted subset of Z3 Bool formulas under concrete bindings.
+
+        - `bindings` maps variable names (str) -> block index (int)
+        - `all_block_pos` is a list of xyz arrays for each block id
+        """
+
+        def eval_term(term, bound_vals):
+            if z3.is_var(term):
+                return bound_vals[z3.get_var_index(term)]
+            if z3.is_app(term) and term.num_args() == 0:
+                # Free constant like `b0`, `b`, `b_prime`, `tbl` (if present).
+                name = term.decl().name()
+                if name in bindings:
+                    return bindings[name]
+                raise KeyError(
+                    f"While guard evaluation could not resolve symbol {name!r}; "
+                    f"available: {sorted(bindings.keys())}"
+                )
+            raise TypeError(f"Unsupported Z3 term in guard: {term}")
+
+        def eval_bool(expr, bound_vals):
+            if z3.is_true(expr):
+                return True
+            if z3.is_false(expr):
+                return False
+            if z3.is_quantifier(expr):
+                body = expr.body()
+                k = expr.num_vars()
+                # De Bruijn index 0 is the innermost variable; Z3 exposes it the same way.
+                all_ids = list(range(len(all_block_pos)))
+
+                def rec(i, cur):
+                    if i == k:
+                        return eval_bool(body, cur)
+                    if expr.is_forall():
+                        for bid in all_ids:
+                            if not rec(i + 1, cur + [bid]):
+                                return False
+                        return True
+                    # Exists
+                    for bid in all_ids:
+                        if rec(i + 1, cur + [bid]):
+                            return True
+                    return False
+
+                return rec(0, bound_vals)
+
+            if not z3.is_app(expr):
+                raise TypeError(f"Unsupported Z3 guard node: {expr}")
+
+            op = expr.decl().kind()
+            if op == z3.Z3_OP_NOT:
+                return not eval_bool(expr.arg(0), bound_vals)
+            if op == z3.Z3_OP_AND:
+                return all(
+                    eval_bool(expr.arg(i), bound_vals) for i in range(expr.num_args())
+                )
+            if op == z3.Z3_OP_OR:
+                return any(
+                    eval_bool(expr.arg(i), bound_vals) for i in range(expr.num_args())
+                )
+            if op == z3.Z3_OP_IMPLIES:
+                a = eval_bool(expr.arg(0), bound_vals)
+                b = eval_bool(expr.arg(1), bound_vals)
+                return (not a) or b
+            if op == z3.Z3_OP_IFF:
+                a = eval_bool(expr.arg(0), bound_vals)
+                b = eval_bool(expr.arg(1), bound_vals)
+                return a == b
+            if op == z3.Z3_OP_EQ:
+                return eval_term(expr.arg(0), bound_vals) == eval_term(
+                    expr.arg(1), bound_vals
+                )
+            if op == z3.Z3_OP_DISTINCT:
+                vals = [
+                    eval_term(expr.arg(i), bound_vals) for i in range(expr.num_args())
+                ]
+                return len(set(vals)) == len(vals)
+
+            # Uninterpreted predicates from our verification context.
+            name = expr.decl().name()
+            if name in {"ON_star", "ON_star_zero"}:
+                a = eval_term(expr.arg(0), bound_vals)
+                b = eval_term(expr.arg(1), bound_vals)
+                return on_util.on_star_implementation(
+                    all_block_pos[a], all_block_pos[b]
+                )
+            if name == "Higher":
+                a = eval_term(expr.arg(0), bound_vals)
+                b = eval_term(expr.arg(1), bound_vals)
+                return on_util.higher_implementation(all_block_pos[a], all_block_pos[b])
+            if name == "Scattered":
+                a = eval_term(expr.arg(0), bound_vals)
+                b = eval_term(expr.arg(1), bound_vals)
+                return on_util.scattered_implementation(
+                    all_block_pos[a], all_block_pos[b]
+                )
+            if name == "Top":
+                a = eval_term(expr.arg(0), bound_vals)
+                return on_util.top_implementation(all_block_pos[a], all_block_pos)
+
+            raise TypeError(
+                f"Unsupported Z3 operator/predicate in guard: {name} ({expr})"
+            )
+
+        return eval_bool(z3_expr, [])
+
+    def _find_and_bind_guard_exists(self, env, traj) -> bool:
+        """Try to satisfy `instantiated_cond` by choosing guard_exists_vars.
+
+        If satisfiable, mutate `env.symbolic_name_to_box_id` to bind the chosen
+        existential variables (by name) to concrete block IDs, and return True.
+        """
+        mapping = getattr(env, "symbolic_name_to_box_id", None)
+        if mapping is None or not isinstance(mapping, dict):
+            raise ValueError(
+                "While.eval requires env.symbolic_name_to_box_id to exist as a dict[str, int]."
+            )
+
+        obs = traj[-1]
+        num_blocks = self._get_num_blocks(env, obs)
+
+        all_block_pos = self._build_block_positions(obs, num_blocks)
+        all_ids = list(range(num_blocks))
+
+        # Base bindings come from current symbolic mapping.
+        base_bindings = {str(k): int(v) for k, v in mapping.items()}
+
+        # Support multiple existential vars by nested iteration.
+        guard_names = [
+            v.decl().name() if hasattr(v, "decl") else str(v)
+            for v in self.guard_exists_vars
+        ]
+
+        def rec(i, cur_bindings):
+            if i == len(guard_names):
+                return (
+                    cur_bindings
+                    if self._eval_z3_guard(
+                        self.instantiated_cond, cur_bindings, all_block_pos
+                    )
+                    else None
+                )
+            name_i = guard_names[i]
+            for bid in all_ids:
+                nxt = dict(cur_bindings)
+                nxt[name_i] = bid
+                sol = rec(i + 1, nxt)
+                if sol is not None:
+                    return sol
+            return None
+
+        sol = rec(0, base_bindings)
+        if sol is None:
+            return False
+        for name in guard_names:
+            mapping[name] = int(sol[name])
+        return True
+
+    def eval(self, env, traj, return_image=False) -> List:
+        # Runtime execution: evaluate the synthesized (Z3) guard by searching over
+        # concrete blocks, and bind the existential variable(s) into the env mapping.
+        imgs: List = []
+        iters = 0
+        while self._find_and_bind_guard_exists(env, traj):
+            iters += 1
+            if iters > self.max_iters:
+                break
+            for instr in self.body:
+                imgs.extend(instr.eval(env, traj, return_image=return_image))
+        return imgs
+
+    def register_trainable_parameter(self, parameters: List):
+        for instr in self.body:
+            instr.register_trainable_parameter(parameters)
+        return parameters
+
+    def update_trainable_parameter(self, new_parameter: List):
+        for instr in self.body:
+            instr.update_trainable_parameter(new_parameter)
+
+    def get_operand(self):
+        return []
+
+    def set_operand(self, new_operands):
+        pass
+
+    def __eq__(self, other):
+        if not isinstance(other, While):
+            return False
+        cond1 = self.instantiated_cond == other.instantiated_cond
+        cond2 = self.guard_exists_vars == other.guard_exists_vars
+        cond3 = self.body == other.body
+        cond4 = self.invariant == other.invariant
+        return cond1 and cond2 and cond3 and cond4
+
+    def __str__(self):
+        return f"while({self.instantiated_cond}, {self.guard_exists_vars}, {self.body}, {self.invariant})"
 
 
 class Put(Instruction):
@@ -330,3 +566,6 @@ class Seq:
     def __init__(self, s1, s2):
         self.s1 = s1
         self.s2 = s2
+
+    def __str__(self):
+        return f"Seq({self.s1}, {self.s2})"

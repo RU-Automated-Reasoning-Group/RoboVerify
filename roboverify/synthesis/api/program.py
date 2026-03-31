@@ -449,8 +449,6 @@ def VC_aux(seq_instruction, Q, context) -> List:
         return VC_aux(
             seq_instruction.s1, wp(seq_instruction.s2, Q, context), context
         ) + VC_aux(seq_instruction.s2, Q, context)
-    elif isinstance(seq_instruction, Instruction):
-        return []
     elif isinstance(seq_instruction, While):
         return VC_aux(
             to_seq(seq_instruction.body), seq_instruction.invariant, context
@@ -461,6 +459,8 @@ def VC_aux(seq_instruction, Q, context) -> List:
             ),
             Implies(And(Not(seq_instruction.cond), seq_instruction.invariant), Q),
         ]
+    elif isinstance(seq_instruction, Instruction):
+        return []
     assert False, "Unrecognized seq instruction for VC_aux"
 
 
