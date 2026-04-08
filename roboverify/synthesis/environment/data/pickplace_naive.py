@@ -58,7 +58,19 @@ def grippers_are_open(obs, atol=1e-3):
     # return gripper_state[0] > threshold + atol
     return np.sum(gripper_state) > 2 * threshold + atol
 
-def get_pick_control_naive(obs, place_position, relative_grasp_position=(0., 0., -0.02), workspace_height=0.1, dist_atol=3e-2, other_atol=1e-3, gain=10, block_id=0, last_block=False):
+def get_pick_control_naive(
+    obs,
+    place_position,
+    relative_grasp_position=(0.0, 0.0, -0.02),
+    workspace_height=0.1,
+    dist_atol=2e-2,
+    other_atol=1e-3,
+    gain=10,
+    block_id=0,
+    last_block=False,
+    *,
+    release: bool = True,
+):
     """
     Returns
     -------
@@ -98,36 +110,46 @@ def get_pick_control_naive(obs, place_position, relative_grasp_position=(0., 0.,
     
     # pdb.set_trace()
 
-    # If the block is already at the place position, do nothing except keep the gripper closed
-    if np.linalg.norm(block_position - place_position) < dist_atol and block_is_grasped(obs, relative_grasp_position, block_position, dist_atol=dist_atol, other_atol=other_atol):
+    # If the block is already at the place position, treat the subtask as complete.
+    # This avoids unnecessarily re-grasping / disturbing a correctly placed block.
+    if np.linalg.norm(block_position - place_position) < dist_atol:
         if DEBUG:
-            print("reach target")
-        return np.array([0., 0., 0., -1.0]), True
-        print("enter here")
-        import pdb; pdb.set_trace()
-        # open and move up
+            print("block already at target (no-op)")
+        # Prefer a no-op action; success=True stops PickPlaceByName immediately.
+        # Whether `release` is True/False is irrelevant if we are not holding the block.
+        return np.array([0.0, 0.0, 0.0, 0.0]), True
+
+    # If the block is already at the place position and currently grasped.
+    # - If `release` is False: consider the subtask complete while maintaining grasp.
+    # - If `release` is True: open gripper and lift up a bit to ensure the block is released.
+    if np.linalg.norm(block_position - place_position) < dist_atol and block_is_grasped(
+        obs,
+        relative_grasp_position,
+        block_position,
+        dist_atol=dist_atol,
+        other_atol=other_atol,
+    ):
+        if not release:
+            if DEBUG:
+                print("reach target (hold)")
+            return np.array([0.0, 0.0, 0.0, -1.0]), True
+
+        # Release sequence: open then move up.
         if not grippers_are_open(obs, atol=other_atol):
             if DEBUG:
-                print("Open the grippers To Leave")
-            return np.array([0., 0., 0., 1.]), False
-        
-        # move up to leave block
-        # target_position = np.add(block_position, relative_grasp_position)
+                print("reach target -> open gripper")
+            return np.array([0.0, 0.0, 0.0, 0.2]), False
+
         target_position = copy.deepcopy(block_position)
-        if last_block:
-            target_position[2] += workspace_height * 2    
-        else:
-            target_position[2] += workspace_height
-        if gripper_position[2] - target_position[2] < 0:
+        target_position[2] += workspace_height * (2 if last_block else 1)
+        if gripper_position[2] < target_position[2]:
             if DEBUG:
-                print("Move Up to Leave")
-            # return get_move_action(obs, target_position, atol=atol, gain=gain), False
-            return np.array([0., 0., 0.5, 0.]), False
+                print("reach target -> lift up")
+            return np.array([0.0, 0.0, 0.5, 0.0]), False
 
         if DEBUG:
-            print("The block is already at the place position; do nothing")
-
-        return np.array([0., 0., 0., .2]), True
+            print("released and lifted")
+        return np.array([0.0, 0.0, 0.0, 0.2]), True
 
     # If gripper is already above place position
     # target_position = place_position

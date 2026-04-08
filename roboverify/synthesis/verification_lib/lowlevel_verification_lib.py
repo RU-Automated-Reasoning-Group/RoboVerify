@@ -32,6 +32,8 @@ from z3 import (
     unsat,
 )
 
+import synthesis.api.instructions as instructions
+
 
 def abs_diff(u, v):
     return If(u - v >= 0, u - v, v - u)
@@ -354,6 +356,9 @@ class LowLevelContext:
         current_pos = None
 
         for idx, instruction in enumerate(pickplace_instructions):
+            if not isinstance(instruction, instructions.PickPlaceByName):
+                print(f"instruction {idx} is not an PickPlaceByName")
+                continue
             print(f"\n=== verifying pickplace instruction {idx}: {instruction} ===")
 
             tx, ty, tz = instruction.target_box_names
