@@ -24,7 +24,11 @@ import synthesis.verification_lib.highlevel_verification_lib as highlevel_verifi
 import synthesis.verification_lib.lowlevel_verification_lib as lowlevel_verification_lib
 from synthesis.api.instructions import (
     Assign,
+    GoalAssign,
     Instruction,
+    MarkGoal,
+    MoveDown,
+    MoveRight,
     PickPlace,
     PickPlaceByName,
     Put,
@@ -236,6 +240,35 @@ def rewrite_for_put_for_scattered(expr, b_prime, b, context):
     return expr
 
 
+def rewrite_for_mark_goal(expr, target, context):
+    """Rewrite every Mark(alpha) as Or(Mark(alpha), alpha == target)."""
+    if is_quantifier(expr):
+        num_vars = expr.num_vars()
+        var_sorts = [expr.var_sort(i) for i in range(num_vars)]
+        var_names = [expr.var_name(i) for i in range(num_vars)]
+        body = expr.body()
+        rewritten_body = rewrite_for_mark_goal(body, target, context)
+        if expr.is_forall():
+            return ForAll(
+                list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
+                rewritten_body,
+            )
+        return Exists(
+            list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
+            rewritten_body,
+        )
+
+    if is_app(expr):
+        decl = expr.decl()
+        if decl.kind() == Z3_OP_UNINTERPRETED and decl.name() == "Mark":
+            (alpha,) = expr.children()
+            return Or(context.Mark(alpha), alpha == target)
+        new_children = [rewrite_for_mark_goal(c, target, context) for c in expr.children()]
+        return decl(*new_children)
+
+    return expr
+
+
 Stmt = Union[Instruction, While]
 
 
@@ -428,6 +461,31 @@ def wp(seq_instruction, Q, context):
                 context.get_consts(seq_instruction.left),
                 context.get_consts(seq_instruction.right),
             ),
+        )
+    elif isinstance(seq_instruction, GoalAssign):
+        return substitute(
+            Q,
+            (
+                context.get_goal_consts(seq_instruction.left),
+                context.get_goal_consts(seq_instruction.right),
+            ),
+        )
+    elif isinstance(seq_instruction, MarkGoal):
+        target = context.get_goal_consts(seq_instruction.target)
+        return rewrite_for_mark_goal(Q, target, context)
+    elif isinstance(seq_instruction, MoveRight):
+        curr = context.get_goal_consts(seq_instruction.var_name)
+        z = Const(f"z_r_{seq_instruction.var_name}", context.GoalSort)
+        return And(
+            curr != context.null,
+            ForAll([z], Implies(context.rtot(curr, z), substitute(Q, (curr, z)))),
+        )
+    elif isinstance(seq_instruction, MoveDown):
+        curr = context.get_goal_consts(seq_instruction.var_name)
+        z = Const(f"z_d_{seq_instruction.var_name}", context.GoalSort)
+        return And(
+            curr != context.null,
+            ForAll([z], Implies(context.dtot(curr, z), substitute(Q, (curr, z)))),
         )
     elif isinstance(seq_instruction, Put):
         b_prime = context.get_consts(seq_instruction.upper_block)

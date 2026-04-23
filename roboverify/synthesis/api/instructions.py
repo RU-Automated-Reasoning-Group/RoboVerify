@@ -280,7 +280,11 @@ class While(Instruction):
         self.invariant = invariant
         self.guard_exists_vars = guard_exists_vars
         self.instantiated_cond = instantiated_cond
-        self.cond = z3.Exists(guard_exists_vars, instantiated_cond)
+        self.cond = (
+            instantiated_cond
+            if len(guard_exists_vars) == 0
+            else z3.Exists(guard_exists_vars, instantiated_cond)
+        )
         self.max_iters = int(max_iters)
 
     def _get_num_blocks(self, env, obs) -> int:
@@ -316,7 +320,6 @@ class While(Instruction):
         - `bindings` maps variable names (str) -> block index (int)
         - `all_block_pos` is a list of xyz arrays for each block id
         """
-
         def eval_term(term, bound_vals):
             if z3.is_var(term):
                 return bound_vals[z3.get_var_index(term)]
@@ -560,6 +563,71 @@ class Assign(Instruction):
         # Create/update the alias: env[left] = env[right].
         mapping[self.left] = mapping[self.right]
         return []
+
+
+class GoalAssign(Instruction):
+    """Verification-only assignment over GoalSort symbols."""
+
+    def __init__(self, left, right):
+        self.left = left
+        self.right = right
+
+    def __str__(self):
+        return f"{self.left} <- {self.right} (goal)"
+
+    def eval(self, env, traj, return_image=False) -> List:
+        raise RuntimeError(
+            "GoalAssign.eval() is verification-only. "
+            "Use concrete low-level instructions for execution."
+        )
+
+
+class MarkGoal(Instruction):
+    """Verification-only mark update Mark(x) := Mark(x) or x==target."""
+
+    def __init__(self, target):
+        self.target = target
+
+    def __str__(self):
+        return f"mark({self.target})"
+
+    def eval(self, env, traj, return_image=False) -> List:
+        raise RuntimeError(
+            "MarkGoal.eval() is verification-only. "
+            "Use concrete low-level instructions for execution."
+        )
+
+
+class MoveRight(Instruction):
+    """Verification-only nondeterministic update x := x.r."""
+
+    def __init__(self, var_name):
+        self.var_name = var_name
+
+    def __str__(self):
+        return f"{self.var_name} := {self.var_name}.r"
+
+    def eval(self, env, traj, return_image=False) -> List:
+        raise RuntimeError(
+            "MoveRight.eval() is verification-only. "
+            "Use concrete low-level instructions for execution."
+        )
+
+
+class MoveDown(Instruction):
+    """Verification-only nondeterministic update x := x.d."""
+
+    def __init__(self, var_name):
+        self.var_name = var_name
+
+    def __str__(self):
+        return f"{self.var_name} := {self.var_name}.d"
+
+    def eval(self, env, traj, return_image=False) -> List:
+        raise RuntimeError(
+            "MoveDown.eval() is verification-only. "
+            "Use concrete low-level instructions for execution."
+        )
 
 
 class Seq:

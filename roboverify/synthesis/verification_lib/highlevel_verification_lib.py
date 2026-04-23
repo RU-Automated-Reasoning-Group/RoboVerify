@@ -10,6 +10,7 @@ from z3 import (
     EnumSort,
     ForAll,
     Function,
+    If,
     Implies,
     Not,
     Or,
@@ -41,6 +42,7 @@ class HighLevelContext:
         use_tbl: bool = False,
         visualize_enum_scene: bool = False,
         visualization_prefix: str = "highlevel_scene",
+        verification_mode: str = "box",
     ):
         self.mode = mode
         self.num_blocks = num_blocks
@@ -48,6 +50,7 @@ class HighLevelContext:
         self.use_tbl = use_tbl
         self.visualize_enum_scene = visualize_enum_scene
         self.visualization_prefix = visualization_prefix
+        self.verification_mode = verification_mode
         self.enum_blocks: List[Any] = []
         self._build_symbols()
 
@@ -75,9 +78,35 @@ class HighLevelContext:
         self.Higher = Function("Higher", self.BoxSort, self.BoxSort, BoolSort())
         self.Scattered = Function("Scattered", self.BoxSort, self.BoxSort, BoolSort())
         self.Top = Function("Top", self.BoxSort, BoolSort())
+        self._build_goal_symbols()
+
+    def _build_goal_symbols(self):
+        self.GoalSort = None
+        self.null = None
+        self.d_star = None
+        self.r_star = None
+        self.l0 = None
+        self.Mark = None
+        if self.verification_mode != "goals":
+            return
+        self.GoalSort = DeclareSort("Goal")
+        self.null = Const("null", self.GoalSort)
+        self.d_star = Function("d_star", self.GoalSort, self.GoalSort, BoolSort())
+        self.r_star = Function("r_star", self.GoalSort, self.GoalSort, BoolSort())
+        self.l0 = Function("l0", self.GoalSort, self.GoalSort)
+        self.Mark = Function("Mark", self.GoalSort, BoolSort())
 
     def get_consts(self, symbol: str):
         (c,) = Consts(symbol, self.BoxSort)
+        return c
+
+    def get_goal_consts(self, symbol: str):
+        if self.GoalSort is None:
+            raise ValueError(
+                "GoalSort is not configured. Initialize HighLevelContext with "
+                "verification_mode='goals'."
+            )
+        (c,) = Consts(symbol, self.GoalSort)
         return c
 
     def add_axiom_higher(self, s: Solver):
@@ -117,6 +146,161 @@ class HighLevelContext:
             ),
             "scattered3",
         )
+
+    def add_axiom_goal_nested(self, s: Solver):
+        if self.GoalSort is None:
+            return
+
+        x, y, z = Consts("x y z", self.GoalSort)
+        # dtca on d_star
+        s.assert_and_track(ForAll([x], self.d_star(x, x)), "d_refl")
+        s.assert_and_track(
+            ForAll(
+                [x, y, z],
+                Implies(
+                    And(self.d_star(x, y), self.d_star(y, z)),
+                    self.d_star(x, z),
+                ),
+            ),
+            "d_trans",
+        )
+        s.assert_and_track(
+            ForAll(
+                [x, y, z],
+                Implies(
+                    And(self.d_star(x, y), self.d_star(x, z)),
+                    Or(self.d_star(y, z), self.d_star(z, y)),
+                ),
+            ),
+            "d_lin",
+        )
+        s.assert_and_track(
+            ForAll(
+                [x, y],
+                Implies(
+                    And(self.d_star(x, y), self.d_star(y, x)),
+                    x == y,
+                ),
+            ),
+            "d_antisymm",
+        )
+        s.assert_and_track(
+            ForAll(
+                [x],
+                Implies(
+                    Or(self.d_star(self.null, x), self.d_star(x, self.null)),
+                    self.null == x,
+                ),
+            ),
+            "d_refl_isolated_null",
+        )
+
+        # dtca on r_star
+        s.assert_and_track(ForAll([x], self.r_star(x, x)), "r_refl")
+        s.assert_and_track(
+            ForAll(
+                [x, y, z],
+                Implies(
+                    And(self.r_star(x, y), self.r_star(y, z)),
+                    self.r_star(x, z),
+                ),
+            ),
+            "r_trans",
+        )
+        s.assert_and_track(
+            ForAll(
+                [x, y, z],
+                Implies(
+                    And(self.r_star(x, y), self.r_star(x, z)),
+                    Or(self.r_star(y, z), self.r_star(z, y)),
+                ),
+            ),
+            "r_lin",
+        )
+        s.assert_and_track(
+            ForAll(
+                [x, y],
+                Implies(
+                    And(self.r_star(x, y), self.r_star(y, x)),
+                    x == y,
+                ),
+            ),
+            "r_antisymm",
+        )
+        s.assert_and_track(
+            ForAll(
+                [x],
+                Implies(
+                    Or(self.r_star(self.null, x), self.r_star(x, self.null)),
+                    self.null == x,
+                ),
+            ),
+            "r_refl_isolated_null",
+        )
+
+        # l0 + interaction axioms
+        s.assert_and_track(ForAll([x], self.r_star(self.l0(x), x)), "l0_1")
+        s.assert_and_track(
+            ForAll([x, y], Implies(self.r_star(x, y), self.r_star(self.l0(y), x))),
+            "l0_2",
+        )
+        s.assert_and_track(
+            ForAll(
+                [x, y, z],
+                Implies(
+                    And(self.r_star(x, y), self.d_star(z, y)),
+                    Or(x == y, z == y),
+                ),
+            ),
+            "nested_1",
+        )
+        s.assert_and_track(
+            ForAll(
+                [x, y],
+                Implies(And(self.d_star(x, y), x != y), self.l0(x) == x),
+            ),
+            "nested_2",
+        )
+
+    def _f_plus(self, rel, a, b):
+        return And(rel(a, b), a != b)
+
+    def f_(self, rel, a, b):
+        if self.GoalSort is None:
+            raise ValueError("Goal relational helpers require verification_mode='goals'.")
+        t = Const("t_f", self.GoalSort)
+        return And(
+            self._f_plus(rel, a, b),
+            ForAll([t], Implies(self._f_plus(rel, a, t), rel(b, t))),
+        )
+
+    def f_tot(self, rel, a, b):
+        if self.GoalSort is None:
+            raise ValueError("Goal relational helpers require verification_mode='goals'.")
+        t = Const("t_ft", self.GoalSort)
+        return Or(
+            self.f_(rel, a, b),
+            And(b == self.null, ForAll([t], Not(self._f_plus(rel, a, t)))),
+        )
+
+    def dtot(self, a, b):
+        return self.f_tot(self.d_star, a, b)
+
+    def rtot(self, a, b):
+        return self.f_tot(self.r_star, a, b)
+
+    def _dr_reach(self, x, y):
+        if self.GoalSort is None:
+            raise ValueError("Goal relational helpers require verification_mode='goals'.")
+        return self.d_star(x, self.l0(y))
+
+    def _flat_order(self, a, b):
+        if self.GoalSort is None:
+            raise ValueError("Goal relational helpers require verification_mode='goals'.")
+        return If(self.l0(a) == self.l0(b), self.r_star(a, b), self.d_star(self.l0(a), self.l0(b)))
+
+    def _flat_between(self, a, b, c):
+        return And(self._flat_order(a, b), self._flat_order(b, c))
 
     def add_axiom(self, s: Solver):
         x, y, c = Consts("x y c", self.BoxSort)
@@ -334,6 +518,7 @@ class HighLevelContext:
         self.add_axiom_on_star_zero(s)
         self.add_axiom_higher(s)
         self.add_axiom_scattered(s)
+        self.add_axiom_goal_nested(s)
         if vc is not None:
             s.add(Not(vc))
         result = s.check()
@@ -360,6 +545,7 @@ class HighLevelContext:
         self.add_axiom_on_star_zero(s)
         self.add_axiom_higher(s)
         self.add_axiom_scattered(s)
+        self.add_axiom_goal_nested(s)
         if formula is not None:
             s.add(formula)
         result = s.check()
@@ -409,6 +595,7 @@ class highlevel_z3_solver:
         enum_names: Optional[List[str]] = None,
         visualize_enum_scene: bool = False,
         visualization_prefix: str = "highlevel_scene",
+        verification_mode: str = "box",
     ):
         self.context = HighLevelContext(
             mode=box_sort_mode,
@@ -417,6 +604,7 @@ class highlevel_z3_solver:
             use_tbl=use_tbl,
             visualize_enum_scene=visualize_enum_scene,
             visualization_prefix=visualization_prefix,
+            verification_mode=verification_mode,
         )
 
     def start_verification(self, vc=None, viz_tag: Optional[str] = None) -> None:
@@ -445,3 +633,6 @@ class highlevel_z3_solver:
 
     def add_axiom_scattered(self, s: Solver):
         return self.context.add_axiom_scattered(s)
+
+    def add_axiom_goal_nested(self, s: Solver):
+        return self.context.add_axiom_goal_nested(s)
