@@ -36,26 +36,47 @@ def instantiate_invariant(
 
 
 def add_all_pairs(vocabulary, r, all_vars):
+
+    # unary relation
+    if str(r) == "Mark":
+        for v1 in all_vars:
+            vocabulary.append(r(v1))
+        return
+
+    # binary relation
     for v1 in all_vars:
         for v2 in all_vars:
-            if str(v1) != str(v2):
-                if isinstance(r, str) and r == "equality":
+            if isinstance(r, str) and r == "equality":
+                # Keep equality vocabulary non-trivial.
+                if str(v1) != str(v2):
                     vocabulary.append(v1 == v2)
-                elif str(r) == "Higher":
+            elif str(r) == "Higher":
+                if str(v1) != str(v2):
                     vocabulary.append(r(v1, v2))
-                elif str(r) == "Scattered":
-                    if (
-                        str(v1).startswith("ux")
-                        and str(v2).startswith("ux")
-                        and str(v1) < str(v2)
-                    ):
-                        vocabulary.append(r(v1, v2))
-                elif str(r) == "ON_star":
+            elif str(r) == "Scattered":
+                if (
+                    str(v1).startswith("ux")
+                    and str(v2).startswith("ux")
+                    and str(v1) < str(v2)
+                ):
                     vocabulary.append(r(v1, v2))
-                elif str(r) == "ON_star_zero":
+            elif str(r) == "ON_star":
+                if str(v1) != str(v2):
                     vocabulary.append(r(v1, v2))
-                else:
-                    assert False, f"unknown relation r: {r}"
+            elif str(r) == "ON_star_zero":
+                if str(v1) != str(v2):
+                    vocabulary.append(r(v1, v2))
+            elif str(r) == "d_star":
+                # Include reflexive atoms such as d_star(null, null), which are true
+                # in the goal axiomatization and useful for learned invariants.
+                vocabulary.append(r(v1, v2))
+            elif str(r) == "r_star":
+                # Include reflexive atoms such as r_star(null, null).
+                vocabulary.append(r(v1, v2))
+            elif str(r) in ["Mark"]:
+                continue
+            else:
+                assert False, f"unknown relation r: {r}"
 
 
 def add_univariable_predicate(vocabulary, r, all_vars):
@@ -91,13 +112,50 @@ def compute_omega_k(
     constants is the list of constants in the existing program
     """
     context = _ensure_context(context)
-    universally_quantified_vars = [
-        context.get_consts(f"ux{i}") for i in range(1, k + 1)
-    ]
+    if context.GoalSort is not None:
+        universally_quantified_vars = [
+            context.get_goal_consts(f"ux{i}") for i in range(1, k + 1)
+        ]
+    else:
+        universally_quantified_vars = [
+            context.get_consts(f"ux{i}") for i in range(1, k + 1)
+        ]
     all_vars = universally_quantified_vars + constants
     omega_inv = []
     for r in relations:
         add_all_pairs(omega_inv, r, all_vars)
+    return omega_inv, universally_quantified_vars
+
+
+def compute_omega_k_with_function(
+    k: int,
+    relations: List[Any],
+    constants: List[z3.ExprRef],
+    functions: List,
+    context: highlevel_verification_lib.HighLevelContext,
+) -> Tuple[List[z3.ExprRef], List[z3.ExprRef]]:
+    """compute the finite vocabulary Omage(k)
+    k is the number of nested forall quantifiers
+    relations is the list of binary relation to consider
+    constants is the list of constants in the existing program
+    """
+    context = _ensure_context(context)
+    if context.GoalSort is not None:
+        universally_quantified_vars = [
+            context.get_goal_consts(f"ux{i}") for i in range(1, k + 1)
+        ]
+    else:
+        universally_quantified_vars = [
+            context.get_consts(f"ux{i}") for i in range(1, k + 1)
+        ]
+    all_vars = universally_quantified_vars + constants
+    mapped_vars = []
+    for f in functions:
+        for var in all_vars:
+            mapped_vars.append(f(var))
+    omega_inv = []
+    for r in relations:
+        add_all_pairs(omega_inv, r, all_vars + mapped_vars)
     return omega_inv, universally_quantified_vars
 
 
@@ -182,6 +240,53 @@ def compute_dataset(
                 omega_k,
                 var_mapping,
                 mapping,
+            )
+            print("var_mapping", var_mapping)
+            print("omega_k", omega_k)
+            print("data", d)
+            dataset.add(d)
+    return dataset
+
+
+def compute_dataset_with_function(
+    states_zero: List[Dict],
+    states: List[Dict],
+    omega_k: List,
+    universal_quantified_vars: List,
+    constants: List,
+    constants_mappings: List[Dict],
+    functions: List,
+    functions_evaluation_cache: List[Dict],
+    mark_lookup_by_state: Optional[List[Dict[str, bool]]] = None,
+) -> Set:
+    """Compute the dataset for each state and for each relation in the vocabulary
+    Each universally quantified variable needs to be bind into one of the existing blocks in the states
+    """
+    dataset = set()
+    if mark_lookup_by_state is None:
+        mark_lookup_by_state = [{} for _ in states]
+
+    for state_zero, state, mapping, mark_lookup in zip(
+        states_zero, states, constants_mappings, mark_lookup_by_state
+    ):
+        all_objects = list(state.keys())
+        for assignment in itertools.product(
+            all_objects, repeat=len(universal_quantified_vars)
+        ):
+            # var_mapping maps universal quantified variables to its corresponding real block
+            var_mapping = {
+                var: assignment[idx]
+                for idx, var in enumerate(universal_quantified_vars)
+            }
+            d = compute_data_with_function(
+                state_zero,
+                state,
+                omega_k,
+                var_mapping,
+                mapping,
+                functions,
+                functions_evaluation_cache,
+                mark_lookup,
             )
             print("var_mapping", var_mapping)
             print("omega_k", omega_k)
@@ -297,6 +402,169 @@ def compute_data(
             block2_name = (
                 var_mapping[arg1] if arg1 in var_mapping else constants_mapping[arg1]
             )
+            assert isinstance(block1_name, str) and isinstance(block2_name, str)
+            data.append(block1_name == block2_name)
+    return tuple(data)
+
+
+def compute_data_with_function(
+    state_zero,
+    state,
+    omega_k: List,
+    var_mapping: Dict,
+    constants_mapping: Dict,
+    functions: List,
+    functions_evaluation_cache: List[Dict],
+    mark_lookup: Optional[Dict[str, bool]] = None,
+) -> Tuple:
+    """Current supported function terms are l0(x) and function evaluation is only
+    implemented for d_star, r_star, Mark, equality since only these are used in 2d
+    programs
+    """
+
+    def _resolve_term_to_object_name(term: z3.ExprRef) -> str:
+        if term in var_mapping:
+            return var_mapping[term]
+        if term in constants_mapping:
+            return constants_mapping[term]
+
+        if z3.is_app(term) and term.num_args() == 1:
+            inner_object_name = _resolve_term_to_object_name(term.arg(0))
+            term_decl = term.decl()
+
+            function_idx = None
+            for idx, fn in enumerate(functions):
+                if fn == term_decl:
+                    function_idx = idx
+                    break
+                fn_decl = fn.decl() if hasattr(fn, "decl") else None
+                if fn_decl == term_decl:
+                    function_idx = idx
+                    break
+
+            if function_idx is None:
+                raise KeyError(f"Unsupported function term: {term}")
+
+            cache = functions_evaluation_cache[function_idx]
+            if inner_object_name not in cache:
+                raise KeyError(
+                    f"Missing cached function evaluation for {term_decl}({inner_object_name})"
+                )
+            return cache[inner_object_name]
+
+        raise KeyError(f"Unable to resolve term: {term}")
+
+    def _eval_goal_rel_with_null(lhs_name: str, rhs_name: str, impl_fn) -> bool:
+        # Match goal axioms: relation with null is true iff both are null.
+        if lhs_name == "null" or rhs_name == "null":
+            return lhs_name == "null" and rhs_name == "null"
+        return impl_fn(state[lhs_name], state[rhs_name])
+
+    data = []
+    for predicate in omega_k:
+        print("predicate:", predicate)
+        if str(predicate).startswith("Top"):
+            arg0 = predicate.arg(0)
+            block1_name = _resolve_term_to_object_name(arg0)
+            top_flag = True
+            for other_block_name in state:
+                if block1_name != other_block_name:
+                    if on.on_star_implementation(
+                        state[other_block_name], state[block1_name]
+                    ):
+                        top_flag = False
+                        break
+            data.append(top_flag)
+        elif str(predicate).startswith("Mark"):
+            arg0 = predicate.arg(0)
+            block1_name = _resolve_term_to_object_name(arg0)
+            assert isinstance(block1_name, str)
+            if mark_lookup is None:
+                raise KeyError("Mark lookup is required to evaluate Mark predicates.")
+            data.append(mark_lookup.get(block1_name, False))
+        elif str(predicate).startswith("d_star"):
+            arg0, arg1 = predicate.arg(0), predicate.arg(1)
+            block1_name = _resolve_term_to_object_name(arg0)
+            block2_name = _resolve_term_to_object_name(arg1)
+            assert isinstance(block1_name, str) and isinstance(block2_name, str)
+            data.append(
+                _eval_goal_rel_with_null(
+                    block1_name, block2_name, on.d_star_implementation
+                )
+            )
+        elif str(predicate).startswith("r_star"):
+            arg0, arg1 = predicate.arg(0), predicate.arg(1)
+            block1_name = _resolve_term_to_object_name(arg0)
+            block2_name = _resolve_term_to_object_name(arg1)
+            assert isinstance(block1_name, str) and isinstance(block2_name, str)
+            data.append(
+                _eval_goal_rel_with_null(
+                    block1_name, block2_name, on.r_star_implementation
+                )
+            )
+        elif str(predicate).startswith("ON_star") and not str(predicate).startswith(
+            "ON_star_zero"
+        ):
+            arg0, arg1 = predicate.arg(0), predicate.arg(1)
+            block1_name = _resolve_term_to_object_name(arg0)
+            block2_name = _resolve_term_to_object_name(arg1)
+            if not (isinstance(block1_name, str) and isinstance(block2_name, str)):
+                pdb.set_trace()
+            assert isinstance(block1_name, str) and isinstance(block2_name, str)
+            # if block1_name == "tbl" or block2_name == "tbl":
+            # pdb.set_trace()
+            data.append(
+                on.on_star_implementation(
+                    state[block1_name],
+                    state[block2_name],
+                )
+            )
+        elif str(predicate).startswith("ON_star_zero"):
+            arg0, arg1 = predicate.arg(0), predicate.arg(1)
+            block1_name = _resolve_term_to_object_name(arg0)
+            block2_name = _resolve_term_to_object_name(arg1)
+            assert isinstance(block1_name, str) and isinstance(block2_name, str)
+            data.append(
+                on.on_star_implementation(
+                    state_zero[block1_name],
+                    state_zero[block2_name],
+                )
+            )
+        elif str(predicate).startswith("Higher"):
+            arg0, arg1 = predicate.arg(0), predicate.arg(1)
+            block1_name = _resolve_term_to_object_name(arg0)
+            block2_name = _resolve_term_to_object_name(arg1)
+            if not (isinstance(block1_name, str) and isinstance(block2_name, str)):
+                pdb.set_trace()
+            assert isinstance(block1_name, str) and isinstance(block2_name, str)
+            # if block1_name == "tbl" or block2_name == "tbl":
+            # pdb.set_trace()
+            data.append(
+                on.higher_implementation(
+                    state[block1_name],
+                    state[block2_name],
+                )
+            )
+        elif str(predicate).startswith("Scattered"):
+            arg0, arg1 = predicate.arg(0), predicate.arg(1)
+            block1_name = _resolve_term_to_object_name(arg0)
+            block2_name = _resolve_term_to_object_name(arg1)
+            if not (isinstance(block1_name, str) and isinstance(block2_name, str)):
+                pdb.set_trace()
+            assert isinstance(block1_name, str) and isinstance(block2_name, str)
+            # if block1_name == "tbl" or block2_name == "tbl":
+            # pdb.set_trace()
+            data.append(
+                on.scattered_implementation(
+                    state[block1_name],
+                    state[block2_name],
+                )
+            )
+        else:
+            # equality
+            arg0, arg1 = predicate.arg(0), predicate.arg(1)
+            block1_name = _resolve_term_to_object_name(arg0)
+            block2_name = _resolve_term_to_object_name(arg1)
             assert isinstance(block1_name, str) and isinstance(block2_name, str)
             data.append(block1_name == block2_name)
     return tuple(data)
@@ -1092,6 +1360,63 @@ def forall_exists_loop_inference(
     # print(filtered_invariants)
 
 
+# This function is used to learn forall only invariants for 2d programs with function terms
+def loop_inference_2d(
+    states_zero: List,
+    states: List,
+    k: int,
+    relations: List,
+    constants: List,
+    constants_mappings: List[Dict],
+    functions: List,
+    functions_evaluation_cache: List[Dict],
+    context: highlevel_verification_lib.HighLevelContext,
+    mark_lookup_by_state: Optional[List[Dict[str, bool]]] = None,
+):
+    active_context = _ensure_context(context)
+    omega_inv, universal_quantified_vars = compute_omega_k_with_function(
+        k, relations, constants, functions, active_context
+    )
+    print("omega_inv", omega_inv)
+
+    dataset = compute_dataset_with_function(
+        states_zero,
+        states,
+        omega_inv,
+        universal_quantified_vars,
+        constants,
+        constants_mappings,
+        functions,
+        functions_evaluation_cache,
+        mark_lookup_by_state,
+    )
+
+    inferred_invariants = []
+    for i in range(len(omega_inv)):
+        inferred_invariants.extend(
+            loop_inference_by_index(
+                states_zero,
+                states,
+                constants,
+                constants_mappings,
+                i,
+                omega_inv,
+                universal_quantified_vars,
+                dataset,
+                active_context,
+            )
+        )
+    print("inferred_invariants count", len(inferred_invariants))
+
+    filtered_invariants = check_redundancy(inferred_invariants, context=active_context)
+    print("filtered candidates", len(filtered_invariants))
+    print(filtered_invariants)
+
+    final_result = z3.And(*filtered_invariants)
+    print("final result", final_result)
+    return final_result, filtered_invariants
+
+
 # This function is used to learn forall only invariants
 def loop_inference(
     states_zero: List,
@@ -1373,6 +1698,7 @@ def check_redundancy(
         active_context.add_axiom_on_star_zero(solver)
         active_context.add_axiom_higher(solver)
         active_context.add_axiom_scattered(solver)
+        active_context.add_axiom_goal_nested(solver)
 
         for existing in filtered_invariants:
             solver.add(existing)
@@ -1386,9 +1712,237 @@ def check_redundancy(
         elif result == z3.unsat:
             print("redundant candidate", candidate)
         else:
-            assert False, f"unknown verification result = {result}"
+            reason = solver.reason_unknown()
+            print("unknown candidate (kept)", candidate)
+            print("z3 reason_unknown:", reason)
+            filtered_invariants.append(candidate)
 
     return filtered_invariants
+
+
+def run_2d_outer_loop_example(
+    context: highlevel_verification_lib.HighLevelContext,
+) -> Tuple[z3.ExprRef, List[z3.ExprRef]]:
+    """example setting:
+    x dimention points to right
+    y dimention points down
+    Top row:    x1  --r-->  x2  --r-->  x3
+                |
+                d|
+                v
+    Bottom row: x4  --r-->  x5  --r-->  x6
+    """
+    context = _ensure_context(context)
+    states_zero: List[Dict] = [{}, {}, {}]
+    states: List[Dict] = [
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [1.0, 0.0, 0.0],
+            "x3": [2.0, 0.0, 0.1],
+            "x4": [0.0, 1.0, 0.0],
+            "x5": [1.0, 1.0, 0.0],
+            "x6": [2.0, 1.0, 0.0],
+            "null": [-100.0, -100.0, -100.0],
+        },
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [1.0, 0.0, 0.0],
+            "x3": [2.0, 0.0, 0.1],
+            "x4": [0.0, 1.0, 0.0],
+            "x5": [1.0, 1.0, 0.0],
+            "x6": [2.0, 1.0, 0.0],
+            "null": [-100.0, -100.0, -100.0],
+        },
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [1.0, 0.0, 0.0],
+            "x3": [2.0, 0.0, 0.1],
+            "x4": [0.0, 1.0, 0.0],
+            "x5": [1.0, 1.0, 0.0],
+            "x6": [2.0, 1.0, 0.0],
+            "null": [-100.0, -100.0, -100.0],
+        },
+    ]
+    k = 1
+    relations = [context.Mark, context.d_star, context.r_star, "equality"]
+    h, i, null = [context.get_goal_consts(name) for name in ("h", "i", "null")]
+    constants = [h, i, null]
+    constants_mappings = [
+        {h: "x1", i: "x1", null: "null"},
+        {h: "x1", i: "x4", null: "null"},
+        {h: "x1", i: "null", null: "null"},
+    ]
+    functions = [context.l0]
+    functions_evaluation_cache = [
+        {
+            "x1": "x1",
+            "x2": "x1",
+            "x3": "x1",
+            "x4": "x4",
+            "x5": "x4",
+            "x6": "x4",
+            "null": "null",
+        }
+    ]
+    mark_lookup_by_state = [
+        {"x1": False, "x2": False, "x3": False, "x4": False, "x5": False, "x6": False},
+        {"x1": True, "x2": True, "x3": True, "x4": False, "x5": False, "x6": False},
+        {"x1": True, "x2": True, "x3": True, "x4": True, "x5": True, "x6": True},
+    ]
+    return loop_inference_2d(
+        states_zero,
+        states,
+        k,
+        relations,
+        constants,
+        constants_mappings,
+        functions,
+        functions_evaluation_cache,
+        context=context,
+        mark_lookup_by_state=mark_lookup_by_state,
+    )
+
+
+def run_2d_inner_loop_example(
+    context: highlevel_verification_lib.HighLevelContext,
+) -> Tuple[z3.ExprRef, List[z3.ExprRef]]:
+    """example setting:
+    x dimention points to right
+    y dimention points down
+    Top row:    x1  --r-->  x2  --r-->  x3
+                |
+                d|
+                v
+    Bottom row: x4  --r-->  x5  --r-->  x6
+    """
+    context = _ensure_context(context)
+    states_zero: List[Dict] = [{}, {}, {}, {}, {}, {}, {}, {}]
+    states: List[Dict] = [
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [1.0, 0.0, 0.0],
+            "x3": [2.0, 0.0, 0.1],
+            "x4": [0.0, 1.0, 0.0],
+            "x5": [1.0, 1.0, 0.0],
+            "x6": [2.0, 1.0, 0.0],
+            "null": [-100.0, -100.0, -100.0],
+        },
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [1.0, 0.0, 0.0],
+            "x3": [2.0, 0.0, 0.1],
+            "x4": [0.0, 1.0, 0.0],
+            "x5": [1.0, 1.0, 0.0],
+            "x6": [2.0, 1.0, 0.0],
+            "null": [-100.0, -100.0, -100.0],
+        },
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [1.0, 0.0, 0.0],
+            "x3": [2.0, 0.0, 0.1],
+            "x4": [0.0, 1.0, 0.0],
+            "x5": [1.0, 1.0, 0.0],
+            "x6": [2.0, 1.0, 0.0],
+            "null": [-100.0, -100.0, -100.0],
+        },
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [1.0, 0.0, 0.0],
+            "x3": [2.0, 0.0, 0.1],
+            "x4": [0.0, 1.0, 0.0],
+            "x5": [1.0, 1.0, 0.0],
+            "x6": [2.0, 1.0, 0.0],
+            "null": [-100.0, -100.0, -100.0],
+        },
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [1.0, 0.0, 0.0],
+            "x3": [2.0, 0.0, 0.1],
+            "x4": [0.0, 1.0, 0.0],
+            "x5": [1.0, 1.0, 0.0],
+            "x6": [2.0, 1.0, 0.0],
+            "null": [-100.0, -100.0, -100.0],
+        },
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [1.0, 0.0, 0.0],
+            "x3": [2.0, 0.0, 0.1],
+            "x4": [0.0, 1.0, 0.0],
+            "x5": [1.0, 1.0, 0.0],
+            "x6": [2.0, 1.0, 0.0],
+            "null": [-100.0, -100.0, -100.0],
+        },
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [1.0, 0.0, 0.0],
+            "x3": [2.0, 0.0, 0.1],
+            "x4": [0.0, 1.0, 0.0],
+            "x5": [1.0, 1.0, 0.0],
+            "x6": [2.0, 1.0, 0.0],
+            "null": [-100.0, -100.0, -100.0],
+        },
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [1.0, 0.0, 0.0],
+            "x3": [2.0, 0.0, 0.1],
+            "x4": [0.0, 1.0, 0.0],
+            "x5": [1.0, 1.0, 0.0],
+            "x6": [2.0, 1.0, 0.0],
+            "null": [-100.0, -100.0, -100.0],
+        },
+    ]
+    k = 1
+    relations = [context.Mark, context.d_star, context.r_star, "equality"]
+    h, i, j, null = [context.get_goal_consts(name) for name in ("h", "i", "j", "null")]
+    constants = [h, i, j, null]
+    constants_mappings = [
+        # row 1
+        {h: "x1", i: "x1", j: "x1", null: "null"},
+        {h: "x1", i: "x1", j: "x2", null: "null"},
+        {h: "x1", i: "x1", j: "x3", null: "null"},
+        {h: "x1", i: "x1", j: "null", null: "null"},
+        # row 2
+        {h: "x1", i: "x4", j: "x4", null: "null"},
+        {h: "x1", i: "x4", j: "x5", null: "null"},
+        {h: "x1", i: "x4", j: "x6", null: "null"},
+        {h: "x1", i: "x4", j: "null", null: "null"},
+    ]
+    functions = [context.l0]
+    functions_evaluation_cache = [
+        {
+            "x1": "x1",
+            "x2": "x1",
+            "x3": "x1",
+            "x4": "x4",
+            "x5": "x4",
+            "x6": "x4",
+            "null": "null",
+        }
+    ]
+    mark_lookup_by_state = [
+        # row 1
+        {"x1": False, "x2": False, "x3": False, "x4": False, "x5": False, "x6": False},
+        {"x1": True, "x2": False, "x3": False, "x4": False, "x5": False, "x6": False},
+        {"x1": True, "x2": True, "x3": False, "x4": False, "x5": False, "x6": False},
+        {"x1": True, "x2": True, "x3": True, "x4": False, "x5": False, "x6": False},
+        # row 2
+        {"x1": True, "x2": True, "x3": True, "x4": False, "x5": False, "x6": False},
+        {"x1": True, "x2": True, "x3": True, "x4": True, "x5": False, "x6": False},
+        {"x1": True, "x2": True, "x3": True, "x4": True, "x5": True, "x6": False},
+        {"x1": True, "x2": True, "x3": True, "x4": True, "x5": True, "x6": True},
+    ]
+    return loop_inference_2d(
+        states_zero,
+        states,
+        k,
+        relations,
+        constants,
+        constants_mappings,
+        functions,
+        functions_evaluation_cache,
+        context=context,
+        mark_lookup_by_state=mark_lookup_by_state,
+    )
 
 
 def run_proposal_example(

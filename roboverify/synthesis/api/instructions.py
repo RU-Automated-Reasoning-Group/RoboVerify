@@ -320,6 +320,7 @@ class While(Instruction):
         - `bindings` maps variable names (str) -> block index (int)
         - `all_block_pos` is a list of xyz arrays for each block id
         """
+
         def eval_term(term, bound_vals):
             if z3.is_var(term):
                 return bound_vals[z3.get_var_index(term)]

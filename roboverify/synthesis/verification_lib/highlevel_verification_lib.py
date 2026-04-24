@@ -267,7 +267,9 @@ class HighLevelContext:
 
     def f_(self, rel, a, b):
         if self.GoalSort is None:
-            raise ValueError("Goal relational helpers require verification_mode='goals'.")
+            raise ValueError(
+                "Goal relational helpers require verification_mode='goals'."
+            )
         t = Const("t_f", self.GoalSort)
         return And(
             self._f_plus(rel, a, b),
@@ -276,7 +278,9 @@ class HighLevelContext:
 
     def f_tot(self, rel, a, b):
         if self.GoalSort is None:
-            raise ValueError("Goal relational helpers require verification_mode='goals'.")
+            raise ValueError(
+                "Goal relational helpers require verification_mode='goals'."
+            )
         t = Const("t_ft", self.GoalSort)
         return Or(
             self.f_(rel, a, b),
@@ -291,13 +295,21 @@ class HighLevelContext:
 
     def _dr_reach(self, x, y):
         if self.GoalSort is None:
-            raise ValueError("Goal relational helpers require verification_mode='goals'.")
+            raise ValueError(
+                "Goal relational helpers require verification_mode='goals'."
+            )
         return self.d_star(x, self.l0(y))
 
     def _flat_order(self, a, b):
         if self.GoalSort is None:
-            raise ValueError("Goal relational helpers require verification_mode='goals'.")
-        return If(self.l0(a) == self.l0(b), self.r_star(a, b), self.d_star(self.l0(a), self.l0(b)))
+            raise ValueError(
+                "Goal relational helpers require verification_mode='goals'."
+            )
+        return If(
+            self.l0(a) == self.l0(b),
+            self.r_star(a, b),
+            self.d_star(self.l0(a), self.l0(b)),
+        )
 
     def _flat_between(self, a, b, c):
         return And(self._flat_order(a, b), self._flat_order(b, c))
@@ -539,7 +551,10 @@ class HighLevelContext:
         visualize_model: bool = True,
         viz_tag: Optional[str] = None,
     ):
-        """Check satisfiability under axioms without negating formula."""
+        """Check satisfiability under axioms without negating formula.
+
+        Returns (z3_result, model_or_none). The model is present only when result is sat.
+        """
         s = Solver()
         self.add_axiom(s)
         self.add_axiom_on_star_zero(s)
@@ -549,6 +564,7 @@ class HighLevelContext:
         if formula is not None:
             s.add(formula)
         result = s.check()
+        model = None
         if result == sat:
             print("satisfiable")
             model = s.model()
@@ -559,7 +575,7 @@ class HighLevelContext:
             print("unsatisfiable")
         else:
             print(result)
-        return result
+        return result, model
 
     def expr_to_spec(self, expr) -> InvariantSpec:
         return InvariantSpec(data={"sexpr": expr.sexpr()})

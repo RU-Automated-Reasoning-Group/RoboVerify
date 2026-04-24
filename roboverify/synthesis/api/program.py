@@ -1,5 +1,7 @@
+import os
 from copy import deepcopy
-from typing import List, Union
+from pathlib import Path
+from typing import List, Optional, Union
 
 from z3 import (
     Z3_OP_UNINTERPRETED,
@@ -263,7 +265,9 @@ def rewrite_for_mark_goal(expr, target, context):
         if decl.kind() == Z3_OP_UNINTERPRETED and decl.name() == "Mark":
             (alpha,) = expr.children()
             return Or(context.Mark(alpha), alpha == target)
-        new_children = [rewrite_for_mark_goal(c, target, context) for c in expr.children()]
+        new_children = [
+            rewrite_for_mark_goal(c, target, context) for c in expr.children()
+        ]
         return decl(*new_children)
 
     return expr
@@ -331,7 +335,16 @@ class Program:
         enum_names: Union[List[str], None] = None,
         visualize_enum_scene: bool = False,
         visualization_prefix: str = "highlevel_scene",
+        counterexample_image_dir: Optional[Union[str, Path]] = None,
     ):
+        """High-level VC checks.
+
+        When ``verification_mode='goals'`` and ``counterexample_image_dir`` is set
+        (or env ``ROBOVERIFY_HL_COUNTEREXAMPLE_DIR``), any **failed** check that
+        yields a satisfying Z3 model saves a two-panel PNG under that directory
+        (e.g. ``vc_0_check2.png``). Implication VC: check 1 expects ``sat``;
+        check 2 expects ``unsat`` (counterexample = ``sat`` model).
+        """
         solver = (
             context
             if context is not None
@@ -347,8 +360,41 @@ class Program:
         vcs = self.VC_gen(P, Q, solver)
         ok = True
 
+        img_dir: Optional[Path] = None
+        ce_dir = counterexample_image_dir
+        if ce_dir is None and getattr(solver, "verification_mode", None) == "goals":
+            env_ce = os.environ.get("ROBOVERIFY_HL_COUNTEREXAMPLE_DIR")
+            if env_ce:
+                ce_dir = env_ce
+        if ce_dir is not None and str(ce_dir).strip() != "":
+            img_dir = Path(ce_dir).expanduser()
+            if not img_dir.is_absolute():
+                img_dir = (Path.cwd() / img_dir).resolve()
+            else:
+                img_dir = img_dir.resolve()
+
+        def save_goal_counterexample_on_failure(viz_tag: str, model) -> None:
+            if img_dir is None or model is None:
+                return
+            if getattr(solver, "verification_mode", "box") != "goals":
+                return
+            if solver.GoalSort is None:
+                return
+            img_dir.mkdir(parents=True, exist_ok=True)
+            safe = viz_tag.replace(os.sep, "_").replace("/", "_")
+            out_path = img_dir / f"{safe}.png"
+            from synthesis.verification_lib import goal_model_diagram
+
+            written = goal_model_diagram.save_goal_counterexample_figure(
+                solver,
+                model,
+                str(out_path),
+                diagram_title=f"Failure model ({viz_tag})",
+            )
+            print(f"[counterexample diagram] saved {written}")
+
         print("testing axioms")
-        axiom_check = solver.check_satisfiable(
+        axiom_check, axiom_model = solver.check_satisfiable(
             None, visualize_model=True, viz_tag="axioms_consistency"
         )
         if axiom_check != sat:
@@ -356,6 +402,7 @@ class Program:
             print(
                 f"[FAIL] axioms consistency check returned {axiom_check}; expected sat"
             )
+            save_goal_counterexample_on_failure("axioms_consistency", axiom_model)
         print("=====================")
 
         print("total number of VCs:", len(vcs))
@@ -365,7 +412,7 @@ class Program:
                 premise = vc.arg(0)
                 conclusion = vc.arg(1)
                 print("check 1: axioms + premise")
-                check1 = solver.check_satisfiable(
+                check1, model1 = solver.check_satisfiable(
                     premise,
                     visualize_model=True,
                     viz_tag=f"vc_{idx}_check1",
@@ -373,9 +420,10 @@ class Program:
                 if check1 != sat:
                     ok = False
                     print(f"[FAIL] VC {idx} check 1 returned {check1}; expected sat")
+                    save_goal_counterexample_on_failure(f"vc_{idx}_check1", model1)
                 print("---------------------")
                 print("check 2: axioms + premise + not(conclusion)")
-                check2 = solver.check_satisfiable(
+                check2, model2 = solver.check_satisfiable(
                     And(premise, Not(conclusion)),
                     visualize_model=True,
                     viz_tag=f"vc_{idx}_check2",
@@ -383,11 +431,12 @@ class Program:
                 if check2 != unsat:
                     ok = False
                     print(f"[FAIL] VC {idx} check 2 returned {check2}; expected unsat")
+                    save_goal_counterexample_on_failure(f"vc_{idx}_check2", model2)
             else:
                 print(
                     "non-implication VC; using check 2 style: axioms + not(VC) should be unsat"
                 )
-                check = solver.check_satisfiable(
+                check, model_n = solver.check_satisfiable(
                     Not(vc),
                     visualize_model=True,
                     viz_tag=f"vc_{idx}_not_vc",
@@ -397,6 +446,7 @@ class Program:
                     print(
                         f"[FAIL] VC {idx} non-implication check returned {check}; expected unsat"
                     )
+                    save_goal_counterexample_on_failure(f"vc_{idx}_not_vc", model_n)
             print("=====================")
         return ok
 

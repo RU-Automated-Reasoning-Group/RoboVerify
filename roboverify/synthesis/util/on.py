@@ -38,6 +38,20 @@ def on_star_implementation(block1, block2) -> bool:
     )
 
 
+def d_star_implementation(block1, block2) -> bool:
+    """define the numerical interpretation of the d_star(block1, block2) between two blocks"""
+    x1, y1, z1 = block1
+    x2, y2, z2 = block2
+    return x1 == x2 and z1 == z2 and y1 <= y2
+
+
+def r_star_implementation(block1, block2) -> bool:
+    """define the numerical interpretation of the r_star(block1, block2) between two blocks"""
+    x1, y1, z1 = block1
+    x2, y2, z2 = block2
+    return y1 == y2 and z1 == z2 and x1 <= x2
+
+
 def higher_implementation(block1, block2) -> bool:
     """define the numerical interpretation of the on(block1, block2) between two blocks"""
     x1, y1, z1 = block1

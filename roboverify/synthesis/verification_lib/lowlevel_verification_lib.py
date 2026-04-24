@@ -64,7 +64,7 @@ def draw_cube(ax, cx, cy, cz, L, color="blue"):
 
 
 def _box_corners(center, halfwidth):
-    (cx, cy, cz) = center
+    cx, cy, cz = center
     h = float(halfwidth)
     return np.array(
         [
@@ -87,8 +87,8 @@ def draw_encoded_tube(ax, p0, p1, halfwidth, color="purple", alpha=0.12):
     The swept volume is the convex hull of the two endpoint AABBs centered at p0/p1
     with halfwidth `halfwidth` (since the constraint is Abs(coord - c(t)) < halfwidth).
     """
-    (x0, y0, z0) = p0
-    (x1, y1, z1) = p1
+    x0, y0, z0 = p0
+    x1, y1, z1 = p1
 
     # Draw the centerline.
     ax.plot([x0, x1], [y0, y1], [z0, z1], color=color, linewidth=2, alpha=0.6)
@@ -152,8 +152,8 @@ class LowLevelContext:
 
         p0, p1 are (x, y, z) triples of Z3 Real expressions.
         """
-        (x0, y0, z0) = p0
-        (x1, y1, z1) = p1
+        x0, y0, z0 = p0
+        x1, y1, z1 = p1
         t = Real("t")
         cx = (1 - t) * x0 + t * x1
         cy = (1 - t) * y0 + t * y1
@@ -287,7 +287,7 @@ class LowLevelContext:
             print_relation_tables(rel_objects, rel_labels)
 
         if encoded_tube is not None:
-            (p0_expr, p1_expr, label) = encoded_tube
+            p0_expr, p1_expr, label = encoded_tube
             p0 = tuple(to_float(e) for e in p0_expr)
             p1 = tuple(to_float(e) for e in p1_expr)
             # In encode_collision we use Abs(coord - c(t)) < L, so L is halfwidth.
