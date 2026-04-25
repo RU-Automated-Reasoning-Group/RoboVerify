@@ -132,7 +132,20 @@ def build_goal_relation_matrices(
     if context.GoalSort is None:
         raise ValueError("HighLevelContext must use verification_mode='goals'.")
 
-    universe = list(model.get_universe(context.GoalSort))
+    model_universe = model.get_universe(context.GoalSort)
+    if model_universe is None:
+        # EnumSort domains are finite and known a priori, but Z3 may report
+        # `None` for get_universe on non-uninterpreted sorts.
+        enum_goals = getattr(context, "enum_goals", None)
+        if enum_goals:
+            universe = list(enum_goals)
+        else:
+            raise ValueError(
+                "Unable to obtain Goal universe from model. "
+                "For enum-goal mode, ensure context.enum_goals is populated."
+            )
+    else:
+        universe = list(model_universe)
     n = len(universe)
     r_mat: List[List[bool]] = []
     d_mat: List[List[bool]] = []
@@ -141,16 +154,8 @@ def build_goal_relation_matrices(
         di: List[bool] = []
         for j in range(n):
             a, b = universe[i], universe[j]
-            ri.append(
-                is_true(
-                    model.eval(context.r_star(a, b), model_completion=True)
-                )
-            )
-            di.append(
-                is_true(
-                    model.eval(context.d_star(a, b), model_completion=True)
-                )
-            )
+            ri.append(is_true(model.eval(context.r_star(a, b), model_completion=True)))
+            di.append(is_true(model.eval(context.d_star(a, b), model_completion=True)))
         r_mat.append(ri)
         d_mat.append(di)
 
@@ -378,13 +383,12 @@ def save_goal_relation_png(
     *,
     diagram_title: str,
 ) -> str:
-    """Write reference grid + Goal relation diagram from explicit matrices."""
+    """Write goal-relation counterexample diagram from explicit matrices."""
     parent = os.path.dirname(os.path.abspath(output_path))
     if parent:
         os.makedirs(parent, exist_ok=True)
 
-    fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(13.5, 6.2))
-    draw_canonical_2d_grid(ax0)
+    fig, ax1 = plt.subplots(1, 1, figsize=(8.4, 6.2))
     draw_goal_model_panel(
         ax1,
         r_mat=r_mat,
@@ -411,7 +415,7 @@ def save_goal_counterexample_figure(
     diagram_title: str,
 ) -> str:
     """
-    Write a two-panel PNG: reference grid + Goal model from Z3.
+    Write a PNG of the Goal model from a Z3 counterexample.
     Returns the absolute path written.
     """
     _, r_mat, d_mat, l0_map, named = build_goal_relation_matrices(context, model)

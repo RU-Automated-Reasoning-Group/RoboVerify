@@ -831,10 +831,13 @@ def check_tautology(
 
     # add all axioms
     active_context = _ensure_context(context)
-    active_context.add_axiom(solver)
-    active_context.add_axiom_on_star_zero(solver)
-    active_context.add_axiom_higher(solver)
-    active_context.add_axiom_scattered(solver)
+    if active_context.verification_mode == "goals":
+        active_context.add_axiom_goal_nested(solver)
+    else:
+        active_context.add_axiom(solver)
+        active_context.add_axiom_on_star_zero(solver)
+        active_context.add_axiom_higher(solver)
+        active_context.add_axiom_scattered(solver)
 
     solver.add(z3.Not(clause))
     result = solver.check()
@@ -1373,6 +1376,13 @@ def loop_inference_2d(
     context: highlevel_verification_lib.HighLevelContext,
     mark_lookup_by_state: Optional[List[Dict[str, bool]]] = None,
 ):
+    assert (
+        len(states_zero)
+        == len(states)
+        == len(constants_mappings)
+        == len(mark_lookup_by_state)
+    )
+
     active_context = _ensure_context(context)
     omega_inv, universal_quantified_vars = compute_omega_k_with_function(
         k, relations, constants, functions, active_context
@@ -1694,11 +1704,13 @@ def check_redundancy(
     filtered_invariants = []
     for candidate in candidates:
         solver = z3.Solver()
-        active_context.add_axiom(solver)
-        active_context.add_axiom_on_star_zero(solver)
-        active_context.add_axiom_higher(solver)
-        active_context.add_axiom_scattered(solver)
-        active_context.add_axiom_goal_nested(solver)
+        if active_context.verification_mode == "goals":
+            active_context.add_axiom_goal_nested(solver)
+        else:
+            active_context.add_axiom(solver)
+            active_context.add_axiom_on_star_zero(solver)
+            active_context.add_axiom_higher(solver)
+            active_context.add_axiom_scattered(solver)
 
         for existing in filtered_invariants:
             solver.add(existing)
@@ -1733,7 +1745,7 @@ def run_2d_outer_loop_example(
     Bottom row: x4  --r-->  x5  --r-->  x6
     """
     context = _ensure_context(context)
-    states_zero: List[Dict] = [{}, {}, {}]
+    states_zero: List[Dict] = [{}, {}, {}, {}]
     states: List[Dict] = [
         {
             "x1": [0.0, 0.0, 0.0],
@@ -1742,6 +1754,9 @@ def run_2d_outer_loop_example(
             "x4": [0.0, 1.0, 0.0],
             "x5": [1.0, 1.0, 0.0],
             "x6": [2.0, 1.0, 0.0],
+            "x7": [0.0, 2.0, 0.0],
+            "x8": [1.0, 2.0, 0.0],
+            "x9": [2.0, 2.0, 0.0],
             "null": [-100.0, -100.0, -100.0],
         },
         {
@@ -1751,6 +1766,9 @@ def run_2d_outer_loop_example(
             "x4": [0.0, 1.0, 0.0],
             "x5": [1.0, 1.0, 0.0],
             "x6": [2.0, 1.0, 0.0],
+            "x7": [0.0, 2.0, 0.0],
+            "x8": [1.0, 2.0, 0.0],
+            "x9": [2.0, 2.0, 0.0],
             "null": [-100.0, -100.0, -100.0],
         },
         {
@@ -1760,6 +1778,21 @@ def run_2d_outer_loop_example(
             "x4": [0.0, 1.0, 0.0],
             "x5": [1.0, 1.0, 0.0],
             "x6": [2.0, 1.0, 0.0],
+            "x7": [0.0, 2.0, 0.0],
+            "x8": [1.0, 2.0, 0.0],
+            "x9": [2.0, 2.0, 0.0],
+            "null": [-100.0, -100.0, -100.0],
+        },
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [1.0, 0.0, 0.0],
+            "x3": [2.0, 0.0, 0.1],
+            "x4": [0.0, 1.0, 0.0],
+            "x5": [1.0, 1.0, 0.0],
+            "x6": [2.0, 1.0, 0.0],
+            "x7": [0.0, 2.0, 0.0],
+            "x8": [1.0, 2.0, 0.0],
+            "x9": [2.0, 2.0, 0.0],
             "null": [-100.0, -100.0, -100.0],
         },
     ]
@@ -1768,26 +1801,77 @@ def run_2d_outer_loop_example(
     h, i, null = [context.get_goal_consts(name) for name in ("h", "i", "null")]
     constants = [h, i, null]
     constants_mappings = [
+        # row 1
         {h: "x1", i: "x1", null: "null"},
+        # row 2
         {h: "x1", i: "x4", null: "null"},
+        # row 3
+        {h: "x1", i: "x7", null: "null"},
+        # row 4
         {h: "x1", i: "null", null: "null"},
     ]
-    functions = [context.l0]
-    functions_evaluation_cache = [
-        {
-            "x1": "x1",
-            "x2": "x1",
-            "x3": "x1",
-            "x4": "x4",
-            "x5": "x4",
-            "x6": "x4",
-            "null": "null",
-        }
-    ]
+    # functions = [context.l0]
+    # functions_evaluation_cache = [
+    #     {
+    #         "x1": "x1",
+    #         "x2": "x1",
+    #         "x3": "x1",
+    #         "x4": "x4",
+    #         "x5": "x4",
+    #         "x6": "x4",
+    #         "x7": "x7",
+    #         "x8": "x7",
+    #         "x9": "x7",
+    #         "null": "null",
+    #     }
+    # ]
+    functions = []
+    functions_evaluation_cache = []
     mark_lookup_by_state = [
-        {"x1": False, "x2": False, "x3": False, "x4": False, "x5": False, "x6": False},
-        {"x1": True, "x2": True, "x3": True, "x4": False, "x5": False, "x6": False},
-        {"x1": True, "x2": True, "x3": True, "x4": True, "x5": True, "x6": True},
+        {
+            "x1": False,
+            "x2": False,
+            "x3": False,
+            "x4": False,
+            "x5": False,
+            "x6": False,
+            "x7": False,
+            "x8": False,
+            "x9": False,
+        },
+        {
+            "x1": True,
+            "x2": True,
+            "x3": True,
+            "x4": False,
+            "x5": False,
+            "x6": False,
+            "x7": False,
+            "x8": False,
+            "x9": False,
+        },
+        {
+            "x1": True,
+            "x2": True,
+            "x3": True,
+            "x4": True,
+            "x5": True,
+            "x6": True,
+            "x7": False,
+            "x8": False,
+            "x9": False,
+        },
+        {
+            "x1": True,
+            "x2": True,
+            "x3": True,
+            "x4": True,
+            "x5": True,
+            "x6": True,
+            "x7": True,
+            "x8": True,
+            "x9": True,
+        },
     ]
     return loop_inference_2d(
         states_zero,
@@ -1806,6 +1890,9 @@ def run_2d_outer_loop_example(
 def run_2d_inner_loop_example(
     context: highlevel_verification_lib.HighLevelContext,
 ) -> Tuple[z3.ExprRef, List[z3.ExprRef]]:
+    import pdb
+
+    pdb.set_trace()
     """example setting:
     x dimention points to right
     y dimention points down
@@ -1907,18 +1994,20 @@ def run_2d_inner_loop_example(
         {h: "x1", i: "x4", j: "x6", null: "null"},
         {h: "x1", i: "x4", j: "null", null: "null"},
     ]
-    functions = [context.l0]
-    functions_evaluation_cache = [
-        {
-            "x1": "x1",
-            "x2": "x1",
-            "x3": "x1",
-            "x4": "x4",
-            "x5": "x4",
-            "x6": "x4",
-            "null": "null",
-        }
-    ]
+    # functions = [context.l0]
+    # functions_evaluation_cache = [
+    #     {
+    #         "x1": "x1",
+    #         "x2": "x1",
+    #         "x3": "x1",
+    #         "x4": "x4",
+    #         "x5": "x4",
+    #         "x6": "x4",
+    #         "null": "null",
+    #     }
+    # ]
+    functions = []
+    functions_evaluation_cache = []
     mark_lookup_by_state = [
         # row 1
         {"x1": False, "x2": False, "x3": False, "x4": False, "x5": False, "x6": False},

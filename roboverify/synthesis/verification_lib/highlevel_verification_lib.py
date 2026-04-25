@@ -39,6 +39,8 @@ class HighLevelContext:
         mode: str = "declare",
         num_blocks: Optional[int] = None,
         enum_names: Optional[List[str]] = None,
+        num_goals: Optional[int] = None,
+        goal_enum_names: Optional[List[str]] = None,
         use_tbl: bool = False,
         visualize_enum_scene: bool = False,
         visualization_prefix: str = "highlevel_scene",
@@ -47,14 +49,21 @@ class HighLevelContext:
         self.mode = mode
         self.num_blocks = num_blocks
         self.enum_names = enum_names
+        self.num_goals = num_goals
+        self.goal_enum_names = goal_enum_names
         self.use_tbl = use_tbl
         self.visualize_enum_scene = visualize_enum_scene
         self.visualization_prefix = visualization_prefix
         self.verification_mode = verification_mode
         self.enum_blocks: List[Any] = []
+        self.enum_goals: List[Any] = []
+        self.goal_enum_names_effective: List[str] = []
         self._build_symbols()
+        self._build_goal_symbols()
 
     def _build_symbols(self):
+        if self.verification_mode == "goals":
+            return
         if self.mode == "declare":
             self.BoxSort = DeclareSort("Box")
             self.enum_blocks = []
@@ -78,7 +87,24 @@ class HighLevelContext:
         self.Higher = Function("Higher", self.BoxSort, self.BoxSort, BoolSort())
         self.Scattered = Function("Scattered", self.BoxSort, self.BoxSort, BoolSort())
         self.Top = Function("Top", self.BoxSort, BoolSort())
-        self._build_goal_symbols()
+
+    def _resolve_goal_enum_names(self) -> List[str]:
+        """Finite Goal universe for ``mode=='enum'`` (goal nodes only, no ``null`` ctor)."""
+        if self.goal_enum_names is not None:
+            names = list(self.goal_enum_names)
+            if not names:
+                raise ValueError("goal_enum_names must be a non-empty list.")
+            if "null" in names:
+                raise ValueError(
+                    'goal_enum_names must not include "null"; null is a separate Goal constant.'
+                )
+            return names
+        if self.num_goals is not None:
+            return [f"g{i}" for i in range(self.num_goals)]
+        raise ValueError(
+            "mode='enum' with verification_mode='goals' requires goal_enum_names or "
+            "num_goals to define the finite Goal universe."
+        )
 
     def _build_goal_symbols(self):
         self.GoalSort = None
@@ -87,10 +113,21 @@ class HighLevelContext:
         self.r_star = None
         self.l0 = None
         self.Mark = None
+        self.enum_goals = []
+        self.goal_enum_names_effective = []
         if self.verification_mode != "goals":
             return
-        self.GoalSort = DeclareSort("Goal")
-        self.null = Const("null", self.GoalSort)
+        if self.mode == "declare":
+            self.GoalSort = DeclareSort("Goal")
+            self.null = Const("null", self.GoalSort)
+        elif self.mode == "enum":
+            gnames = self._resolve_goal_enum_names()
+            self.GoalSort, goal_consts = EnumSort("Goal", gnames)
+            self.enum_goals = list(goal_consts)
+            self.goal_enum_names_effective = list(gnames)
+            self.null = Const("null", self.GoalSort)
+        else:
+            raise ValueError(f"Unknown mode for GoalSort: {self.mode}")
         self.d_star = Function("d_star", self.GoalSort, self.GoalSort, BoolSort())
         self.r_star = Function("r_star", self.GoalSort, self.GoalSort, BoolSort())
         self.l0 = Function("l0", self.GoalSort, self.GoalSort)
@@ -556,11 +593,14 @@ class HighLevelContext:
         Returns (z3_result, model_or_none). The model is present only when result is sat.
         """
         s = Solver()
-        self.add_axiom(s)
-        self.add_axiom_on_star_zero(s)
-        self.add_axiom_higher(s)
-        self.add_axiom_scattered(s)
-        self.add_axiom_goal_nested(s)
+        if self.verification_mode == "goals":
+            self.add_axiom_goal_nested(s)
+        else:
+            self.add_axiom(s)
+            self.add_axiom_on_star_zero(s)
+            self.add_axiom_higher(s)
+            self.add_axiom_scattered(s)
+
         if formula is not None:
             s.add(formula)
         result = s.check()
@@ -569,7 +609,11 @@ class HighLevelContext:
             print("satisfiable")
             model = s.model()
             print(model)
-            if visualize_model and self.mode == "enum":
+            if (
+                visualize_model
+                and self.mode == "enum"
+                and self.verification_mode != "goals"
+            ):
                 self._visualize_enum(model, viz_tag=viz_tag)
         elif result == unsat:
             print("unsatisfiable")
@@ -609,6 +653,8 @@ class highlevel_z3_solver:
         box_sort_mode: str = "declare",
         num_blocks: Optional[int] = None,
         enum_names: Optional[List[str]] = None,
+        num_goals: Optional[int] = None,
+        goal_enum_names: Optional[List[str]] = None,
         visualize_enum_scene: bool = False,
         visualization_prefix: str = "highlevel_scene",
         verification_mode: str = "box",
@@ -617,6 +663,8 @@ class highlevel_z3_solver:
             mode=box_sort_mode,
             num_blocks=num_blocks,
             enum_names=enum_names,
+            num_goals=num_goals,
+            goal_enum_names=goal_enum_names,
             use_tbl=use_tbl,
             visualize_enum_scene=visualize_enum_scene,
             visualization_prefix=visualization_prefix,

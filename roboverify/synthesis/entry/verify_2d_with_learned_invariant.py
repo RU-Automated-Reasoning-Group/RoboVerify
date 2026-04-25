@@ -1,6 +1,6 @@
 import argparse
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 from z3 import And, Const, Consts, ExprRef, ForAll, If, Implies, Not
 
@@ -57,7 +57,8 @@ def precondition(context, h0, mark_fn=None):
     return And(
         h0 != context.null,
         context.l0(h0) == h0,
-        ForAll([x], Implies(context._dr_reach(h0, x), Not(m(x)))),
+        ForAll([x], Implies(x != context.null, context._dr_reach(h0, x))),
+        ForAll([x], Not(m(x))),
     )
 
 
@@ -89,42 +90,64 @@ def _build_program(context, h, i, j, outer_inv, inner_inv):
     return Program(2, instructions=instructions)
 
 
-def infer_loop_invariants(context) -> Tuple[ExprRef, ExprRef]:
+def infer_outer_loop_invariant(context) -> ExprRef:
     """
-    Infer 2D nested-loop invariants through proposal+validation.
+    Infer only the outer-loop invariant (proposal+validation in inference_lib).
 
-    Like stack, proposal is delegated to inference_lib. Unlike stack (constants only),
-    this setup includes uniquely-defined function terms such as l0(constant).
+    Inner-loop invariant is intentionally not inferred here so callers can debug
+    the outer invariant against a known-good handwritten inner (_inner_template).
     """
-    learned_outer_invariant, learned_outer_invariant_lists = run_2d_outer_loop_example(
-        context
-    )
-    learned_inner_invariant, learned_inner_invariant_lists = run_2d_inner_loop_example(
-        context
-    )
-    return learned_outer_invariant, learned_inner_invariant
+    learned_outer_invariant, _ = run_2d_outer_loop_example(context)
+    return learned_outer_invariant
+
+
+def infer_inner_loop_invariant(context) -> ExprRef:
+    """
+    Infer only the inner-loop invariant (proposal+validation in inference_lib).
+
+    Outer-loop invariant is intentionally not inferred here so callers can debug
+    the inner invariant against a known-good handwritten outer (_outer_template).
+    """
+    learned_inner_invariant, _ = run_2d_inner_loop_example(context)
+    return learned_inner_invariant
 
 
 def verify_2d_program_with_learned_invariant(
     use_hardcoded_invariant: bool = False,
     counterexample_image_dir: Optional[Union[str, Path]] = None,
+    num_goals: Optional[int] = None,
 ):
-    """Verify nested while-loop mark-all using program-level VC generation."""
-    context = highlevel_verification_lib.HighLevelContext(
-        mode="declare",
-        verification_mode="goals",
-    )
+    """
+    Verify nested while-loop mark-all using program-level VC generation.
+
+    Default path: learned outer invariant + handwritten inner (_inner_template).
+    With --use-hardcoded-invariant: both loops use the original templates.
+    If ``num_goals`` is set, Goal sort is a finite ``EnumSort`` of ``null`` and
+    ``g0``..``g{num_goals-1}``; otherwise Goal is an uninterpreted sort.
+    """
+    if num_goals is not None and num_goals < 0:
+        raise ValueError("num_goals must be non-negative")
+    if num_goals is not None:
+        context = highlevel_verification_lib.HighLevelContext(
+            mode="enum",
+            num_goals=num_goals,
+            verification_mode="goals",
+        )
+    else:
+        context = highlevel_verification_lib.HighLevelContext(
+            mode="declare",
+            verification_mode="goals",
+        )
 
     h, i, j = Consts("h i j", context.GoalSort)
     if use_hardcoded_invariant:
-        # Original handwritten invariant choice.
         outer_inv = _outer_template(context, h, i)
         inner_inv = _inner_template(context, h, i, j)
     else:
-        outer_inv, inner_inv = infer_loop_invariants(context)
+        outer_inv = infer_outer_loop_invariant(context)
+        inner_inv = infer_inner_loop_invariant(context)
 
     program = _build_program(context, h, i, j, outer_inv, inner_inv)
-
     pre = precondition(context, h)
     post = postcondition(context, h)
     return bool(
@@ -142,7 +165,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--use-hardcoded-invariant",
         action="store_true",
-        help="Use the original handwritten outer/inner invariants instead of inferred ones.",
+        help="Use handwritten outer and inner templates; otherwise outer is learned, inner is handwritten.",
     )
     parser.add_argument(
         "--counterexample-dir",
@@ -153,10 +176,21 @@ if __name__ == "__main__":
             "Pass an empty string to disable."
         ),
     )
+    parser.add_argument(
+        "--num-goals",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "If set, use a finite Goal enum: null and g0..gN-1 (enum mode). "
+            "Omit for an uninterpreted Goal sort (declare mode)."
+        ),
+    )
     args = parser.parse_args()
     ce = args.counterexample_dir.strip() or None
     success = verify_2d_program_with_learned_invariant(
         use_hardcoded_invariant=args.use_hardcoded_invariant,
         counterexample_image_dir=ce,
+        num_goals=args.num_goals,
     )
     print(f"overall_ok: {success}")

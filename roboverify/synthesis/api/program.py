@@ -333,6 +333,9 @@ class Program:
         box_sort_mode: str = "declare",
         num_blocks: Union[int, None] = None,
         enum_names: Union[List[str], None] = None,
+        num_goals: Union[int, None] = None,
+        goal_enum_names: Union[List[str], None] = None,
+        verification_mode: str = "box",
         visualize_enum_scene: bool = False,
         visualization_prefix: str = "highlevel_scene",
         counterexample_image_dir: Optional[Union[str, Path]] = None,
@@ -352,9 +355,12 @@ class Program:
                 mode=box_sort_mode,
                 num_blocks=num_blocks,
                 enum_names=enum_names,
+                num_goals=num_goals,
+                goal_enum_names=goal_enum_names,
                 use_tbl=use_tbl,
                 visualize_enum_scene=visualize_enum_scene,
                 visualization_prefix=visualization_prefix,
+                verification_mode=verification_mode,
             )
         )
         vcs = self.VC_gen(P, Q, solver)
