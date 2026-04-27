@@ -1796,7 +1796,7 @@ def run_2d_outer_loop_example(
             "null": [-100.0, -100.0, -100.0],
         },
     ]
-    k = 1
+    k = 2
     relations = [context.Mark, context.d_star, context.r_star, "equality"]
     h, i, null = [context.get_goal_consts(name) for name in ("h", "i", "null")]
     constants = [h, i, null]

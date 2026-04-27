@@ -621,6 +621,48 @@ class HighLevelContext:
             print(result)
         return result, model
 
+    def check_satisfiable_with_pq(
+        self,
+        p=None,
+        q=None,
+        visualize_model: bool = True,
+        viz_tag: Optional[str] = None,
+    ):
+        """Check satisfiability under axioms without negating formula.
+
+        Returns (z3_result, model_or_none). The model is present only when result is sat.
+        """
+        s = Solver()
+        if self.verification_mode == "goals":
+            self.add_axiom_goal_nested(s)
+        else:
+            self.add_axiom(s)
+            self.add_axiom_on_star_zero(s)
+            self.add_axiom_higher(s)
+            self.add_axiom_scattered(s)
+
+        if p is not None:
+            s.add(p)
+        if q is not None:
+            s.add(Not(q))
+        result = s.check()
+        model = None
+        if result == sat:
+            print("satisfiable")
+            model = s.model()
+            print(model)
+            if (
+                visualize_model
+                and self.mode == "enum"
+                and self.verification_mode != "goals"
+            ):
+                self._visualize_enum(model, viz_tag=viz_tag)
+        elif result == unsat:
+            print("unsatisfiable")
+        else:
+            print(result)
+        return result, model
+
     def expr_to_spec(self, expr) -> InvariantSpec:
         return InvariantSpec(data={"sexpr": expr.sexpr()})
 

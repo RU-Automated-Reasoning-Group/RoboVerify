@@ -145,7 +145,12 @@ def verify_2d_program_with_learned_invariant(
         inner_inv = _inner_template(context, h, i, j)
     else:
         outer_inv = infer_outer_loop_invariant(context)
-        inner_inv = infer_inner_loop_invariant(context)
+        # inner_inv = infer_inner_loop_invariant(context)
+        inner_inv = _inner_template(context, h, i, j)
+        import pdb; pdb.set_trace()
+        context.check_satisfiable_with_pq(p=outer_inv, q=_outer_template(context, h, i))
+        # context.check_satisfiable_with_pq(p=inner_inv, q=_inner_template(context, h, i, j))
+
 
     program = _build_program(context, h, i, j, outer_inv, inner_inv)
     pre = precondition(context, h)
