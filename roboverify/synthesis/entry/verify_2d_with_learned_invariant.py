@@ -8,6 +8,7 @@ import synthesis.verification_lib.highlevel_verification_lib as highlevel_verifi
 from synthesis.api.instructions import GoalAssign, MarkGoal, MoveDown, MoveRight, While
 from synthesis.api.program import Program
 from synthesis.inference_lib.inference import (
+    ProvenancedClause,
     run_2d_inner_loop_example,
     run_2d_outer_loop_example,
 )
@@ -90,26 +91,27 @@ def _build_program(context, h, i, j, outer_inv, inner_inv):
     return Program(2, instructions=instructions)
 
 
-def infer_outer_loop_invariant(context) -> ExprRef:
+def infer_outer_loop_invariant(context) -> list[ProvenancedClause]:
     """
     Infer only the outer-loop invariant (proposal+validation in inference_lib).
 
     Inner-loop invariant is intentionally not inferred here so callers can debug
     the outer invariant against a known-good handwritten inner (_inner_template).
     """
-    learned_outer_invariant, _ = run_2d_outer_loop_example(context)
-    return learned_outer_invariant
+    _outer_and, outer_clauses = run_2d_outer_loop_example(context)
+    # We return the clause list so verification can report provenance by index.
+    return outer_clauses
 
 
-def infer_inner_loop_invariant(context) -> ExprRef:
+def infer_inner_loop_invariant(context) -> list[ProvenancedClause]:
     """
     Infer only the inner-loop invariant (proposal+validation in inference_lib).
 
     Outer-loop invariant is intentionally not inferred here so callers can debug
     the inner invariant against a known-good handwritten outer (_outer_template).
     """
-    learned_inner_invariant, _ = run_2d_inner_loop_example(context)
-    return learned_inner_invariant
+    _inner_and, inner_clauses = run_2d_inner_loop_example(context)
+    return inner_clauses
 
 
 def verify_2d_program_with_learned_invariant(
@@ -144,12 +146,19 @@ def verify_2d_program_with_learned_invariant(
         outer_inv = _outer_template(context, h, i)
         inner_inv = _inner_template(context, h, i, j)
     else:
-        outer_inv = infer_outer_loop_invariant(context)
-        # inner_inv = infer_inner_loop_invariant(context)
-        inner_inv = _inner_template(context, h, i, j)
-        import pdb; pdb.set_trace()
-        context.check_satisfiable_with_pq(p=outer_inv, q=_outer_template(context, h, i))
-        # context.check_satisfiable_with_pq(p=inner_inv, q=_inner_template(context, h, i, j))
+        # outer_inv = infer_outer_loop_invariant(context)
+        inner_inv = infer_inner_loop_invariant(context)
+        # inner_inv = _inner_template(context, h, i, j)
+        # Debug check: compare learned outer vs handwritten outer as plain Z3 formulas.
+        # print("checking learned outer vs handwritten outer")
+        # outer_inv_z3 = And(*[c.expr for c in outer_inv])
+        # context.check_satisfiable_with_pq(
+        #     p=outer_inv_z3, q=_outer_template(context, h, i)
+        # )
+
+        print("checking learned inner vs handwritten inner")
+        inner_inv_z3 = And(*[c.expr for c in inner_inv])
+        context.check_satisfiable_with_pq(p=inner_inv_z3, q=_inner_template(context, h, i, j))
 
 
     program = _build_program(context, h, i, j, outer_inv, inner_inv)

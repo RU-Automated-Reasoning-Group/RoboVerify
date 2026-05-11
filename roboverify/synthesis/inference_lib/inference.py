@@ -1,6 +1,7 @@
 import itertools
 import pdb
 from copy import deepcopy
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import sympy
@@ -11,6 +12,36 @@ from synthesis.inference_lib import quant_enum_merge
 from synthesis.util import on
 
 z3.set_option("smt.core.minimize", "true")
+
+@dataclass(frozen=True)
+class ProvenancedClause:
+    expr: z3.ExprRef
+    omega_index: int
+    target_predicate: str
+    learned_via: str  # "phi" or "phi_prime"
+
+# Above this many selected predicates, SymPy POSform minimization is too slow;
+# build an unminimized POS (CNF) by one maxterm per rejected assignment instead.
+_POSFORM_VAR_THRESHOLD = 5
+
+
+def _sympy_pos_unminimized_from_rejected(
+    var_symbols: Tuple, rejected_values: List, num_selected: int
+):
+    """
+    Build product-of-sums as AND of maxterms: for each rejected row, one OR-clause
+    that is false exactly on that row (standard CNF from the false points).
+    """
+    if not rejected_values:
+        return sympy.true
+    clauses = []
+    for assign in rejected_values:
+        literals = [
+            var_symbols[i] if assign[i] == 0 else sympy.Not(var_symbols[i])
+            for i in range(num_selected)
+        ]
+        clauses.append(sympy.Or(*literals))
+    return sympy.And(*clauses) if len(clauses) > 1 else clauses[0]
 
 
 def _ensure_context(
@@ -690,7 +721,13 @@ def construct_truth_table_and_extract_expression_for_phi_prime(
         raise ValueError("Not all assignment from current_U are rejected")
 
     var_symbols = sympy.symbols(f"term0:{num_selected}")
-    return sympy.POSform(var_symbols, accepted_values), var_symbols
+    if num_selected > _POSFORM_VAR_THRESHOLD:
+        pos_expr = _sympy_pos_unminimized_from_rejected(
+            var_symbols, rejected_values, num_selected
+        )
+    else:
+        pos_expr = sympy.POSform(var_symbols, accepted_values)
+    return pos_expr, var_symbols
 
 
 def project_to_selected(dataset: Set, selected: List) -> Set:
@@ -993,6 +1030,7 @@ def forall_exists_loop_inference_by_index(
     print(
         f"=========== learning with index = {index} with target predicate {omega_inv[index]}"
     )
+    target_pred_str = str(omega_inv[index])
 
     all_full_S, all_full_U, all_target, all_reduced_omega = [], [], [], []
     all_reduced_S, all_reduced_U = [], []
@@ -1041,6 +1079,7 @@ def forall_exists_loop_inference_by_index(
                 # if not check_tautology(x)
             ]
         )
+        # (provenance is now carried structurally via ProvenancedClause elsewhere)
     useful_invariant_with_phi = deduplicate_z3_exprs(useful_invariant_with_phi)
     print("useful invariant using phi", useful_invariant_with_phi)
     print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
@@ -1086,6 +1125,7 @@ def forall_exists_loop_inference_by_index(
                 # if not check_tautology(x)
             ]
         )
+        # (provenance is now carried structurally via ProvenancedClause elsewhere)
     useful_invariant_with_phi_prime = deduplicate_z3_exprs(
         useful_invariant_with_phi_prime
     )
@@ -1214,29 +1254,46 @@ def loop_inference_by_index(
     print("reduced_S", len(reduced_S))
     print("reduced_U", len(reduced_U))
 
-    # learn phi in phi => target
-    phi_selected_idxs = learn_from_partition(reduced_S, full_U)
+    # Learn (~target) => phi_new, where phi_new is in POS form.
+    # Keep phi_new directly (conservative acceptance) without negation conversion.
+    phi_selected_idxs = learn_from_partition(full_U, reduced_S)
     selected_phi_omega = [reduced_omega[i] for i in phi_selected_idxs]
-    phi, phi_sympy_vars = construct_truth_table_and_extract_expression_for_phi(
-        current_S=project_to_selected(reduced_S, phi_selected_idxs),
-        current_U=project_to_selected(full_U, phi_selected_idxs),
-        num_selected=len(phi_selected_idxs),
+    phi_new_pos, phi_sympy_vars = (
+        construct_truth_table_and_extract_expression_for_phi_prime(
+            current_S=project_to_selected(full_U, phi_selected_idxs),
+            current_U=project_to_selected(reduced_S, phi_selected_idxs),
+            num_selected=len(phi_selected_idxs),
+        )
     )
-    print("phi", phi)
-    z3_phi = sympy_to_z3(phi, z3_terms=selected_phi_omega)
-    print("z3_phi", z3_phi)
-    phi_clauses = implication_sop_to_clauses_z3(z3_phi, target)
+    print("phi_selected_idxs", phi_selected_idxs)
+    print("selected_phi_omega", selected_phi_omega)
+    print("project_to_selected(full_U, phi_selected_idxs)", project_to_selected(full_U, phi_selected_idxs))
+    print("project_to_selected(reduced_S, phi_selected_idxs)", project_to_selected(reduced_S, phi_selected_idxs))
+    print("phi_new (POS for ~target => phi_new)", phi_new_pos)
+    z3_phi_new_pos = sympy_to_z3(phi_new_pos, z3_terms=selected_phi_omega)
+    print("z3_phi_new_pos", z3_phi_new_pos)
+
+    # Build clauses for (~target) => phi_new_pos.
+    # implication_pos_to_clauses_z3(A, N) builds clauses for A => N.
+    phi_new_clauses = implication_pos_to_clauses_z3(z3.Not(target), z3_phi_new_pos)
     universal_quantified_phi_clauses = add_universal_quantifiers(
-        phi_clauses, universal_quantified_vars
+        phi_new_clauses, universal_quantified_vars
     )
     print("universal quantified phi clauses", universal_quantified_phi_clauses)
     useful_invariant_with_phi = [
-        z3.simplify(x)
+        ProvenancedClause(
+            expr=z3.simplify(x),
+            omega_index=index,
+            target_predicate=str(omega_inv[index]),
+            learned_via="phi",
+        )
         for x in universal_quantified_phi_clauses
         if not check_tautology(x, context)
     ]
     print("useful invariant using phi", useful_invariant_with_phi)
     print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+
+
     # learn phi_prime in target => phi_prime
     phi_prime_selected_idxs = learn_from_partition(full_S, reduced_U)
     selected_phi_prime_omega = [reduced_omega[i] for i in phi_prime_selected_idxs]
@@ -1247,6 +1304,10 @@ def loop_inference_by_index(
             num_selected=len(phi_prime_selected_idxs),
         )
     )
+    print("phi_prime_selected_idxs", phi_prime_selected_idxs)
+    print("selected_phi_prime_omega", selected_phi_prime_omega)
+    print("project_to_selected(full_S, phi_prime_selected_idxs)", project_to_selected(full_S, phi_prime_selected_idxs))
+    print("project_to_selected(reduced_U, phi_prime_selected_idxs)", project_to_selected(reduced_U, phi_prime_selected_idxs))
     print("phi_prime", phi_prime)
     z3_phi_prime = sympy_to_z3(phi_prime, z3_terms=selected_phi_prime_omega)
     print("z3_phi_prime", z3_phi_prime)
@@ -1258,7 +1319,12 @@ def loop_inference_by_index(
         "universal quantified phi prime clauses", universal_quantified_phi_prime_clauses
     )
     useful_invariant_with_phi_prime = [
-        z3.simplify(x)
+        ProvenancedClause(
+            expr=z3.simplify(x),
+            omega_index=index,
+            target_predicate=str(omega_inv[index]),
+            learned_via="phi_prime",
+        )
         for x in universal_quantified_phi_prime_clauses
         if not check_tautology(x, context)
     ]
@@ -1422,7 +1488,12 @@ def loop_inference_2d(
     print("filtered candidates", len(filtered_invariants))
     print(filtered_invariants)
 
-    final_result = z3.And(*filtered_invariants)
+    final_result = z3.And(
+        *[
+            (c.expr if hasattr(c, "expr") else c)
+            for c in filtered_invariants
+        ]
+    )
     print("final result", final_result)
     return final_result, filtered_invariants
 
@@ -1697,12 +1768,13 @@ def loop_inference(
 
 
 def check_redundancy(
-    candidates: List[z3.ExprRef], context: highlevel_verification_lib.HighLevelContext
-) -> List[z3.ExprRef]:
+    candidates: List, context: highlevel_verification_lib.HighLevelContext
+) -> List:
     print("======= starting check redundancy =======")
     active_context = _ensure_context(context)
-    filtered_invariants = []
+    filtered_invariants: List = []
     for candidate in candidates:
+        cand_expr = candidate.expr if hasattr(candidate, "expr") else candidate
         solver = z3.Solver()
         if active_context.verification_mode == "goals":
             active_context.add_axiom_goal_nested(solver)
@@ -1713,19 +1785,20 @@ def check_redundancy(
             active_context.add_axiom_scattered(solver)
 
         for existing in filtered_invariants:
-            solver.add(existing)
-        solver.add(z3.Not(candidate))
+            ex_expr = existing.expr if hasattr(existing, "expr") else existing
+            solver.add(ex_expr)
+        solver.add(z3.Not(cand_expr))
 
         result = solver.check()
         if result == z3.sat:
             # not redundant
             filtered_invariants.append(candidate)
-            print("not redundant", candidate)
+            print("not redundant", cand_expr)
         elif result == z3.unsat:
-            print("redundant candidate", candidate)
+            print("redundant candidate", cand_expr)
         else:
             reason = solver.reason_unknown()
-            print("unknown candidate (kept)", candidate)
+            print("unknown candidate (kept)", cand_expr)
             print("z3 reason_unknown:", reason)
             filtered_invariants.append(candidate)
 
@@ -1749,50 +1822,50 @@ def run_2d_outer_loop_example(
     states: List[Dict] = [
         {
             "x1": [0.0, 0.0, 0.0],
-            "x2": [1.0, 0.0, 0.0],
-            "x3": [2.0, 0.0, 0.1],
+            "x2": [2.0, 0.0, 0.0],
+            "x3": [3.0, 0.0, 0.0],
             "x4": [0.0, 1.0, 0.0],
-            "x5": [1.0, 1.0, 0.0],
-            "x6": [2.0, 1.0, 0.0],
+            "x5": [5.0, 1.0, 0.0],
+            "x6": [6.0, 1.0, 0.0],
             "x7": [0.0, 2.0, 0.0],
-            "x8": [1.0, 2.0, 0.0],
-            "x9": [2.0, 2.0, 0.0],
+            "x8": [8.0, 2.0, 0.0],
+            "x9": [9.0, 2.0, 0.0],
             "null": [-100.0, -100.0, -100.0],
         },
         {
             "x1": [0.0, 0.0, 0.0],
-            "x2": [1.0, 0.0, 0.0],
-            "x3": [2.0, 0.0, 0.1],
+            "x2": [2.0, 0.0, 0.0],
+            "x3": [3.0, 0.0, 0.0],
             "x4": [0.0, 1.0, 0.0],
-            "x5": [1.0, 1.0, 0.0],
-            "x6": [2.0, 1.0, 0.0],
+            "x5": [5.0, 1.0, 0.0],
+            "x6": [6.0, 1.0, 0.0],
             "x7": [0.0, 2.0, 0.0],
-            "x8": [1.0, 2.0, 0.0],
-            "x9": [2.0, 2.0, 0.0],
+            "x8": [8.0, 2.0, 0.0],
+            "x9": [9.0, 2.0, 0.0],
             "null": [-100.0, -100.0, -100.0],
         },
         {
             "x1": [0.0, 0.0, 0.0],
-            "x2": [1.0, 0.0, 0.0],
-            "x3": [2.0, 0.0, 0.1],
+            "x2": [2.0, 0.0, 0.0],
+            "x3": [3.0, 0.0, 0.0],
             "x4": [0.0, 1.0, 0.0],
-            "x5": [1.0, 1.0, 0.0],
-            "x6": [2.0, 1.0, 0.0],
+            "x5": [5.0, 1.0, 0.0],
+            "x6": [6.0, 1.0, 0.0],
             "x7": [0.0, 2.0, 0.0],
-            "x8": [1.0, 2.0, 0.0],
-            "x9": [2.0, 2.0, 0.0],
+            "x8": [8.0, 2.0, 0.0],
+            "x9": [9.0, 2.0, 0.0],
             "null": [-100.0, -100.0, -100.0],
         },
         {
             "x1": [0.0, 0.0, 0.0],
-            "x2": [1.0, 0.0, 0.0],
-            "x3": [2.0, 0.0, 0.1],
+            "x2": [2.0, 0.0, 0.0],
+            "x3": [3.0, 0.0, 0.0],
             "x4": [0.0, 1.0, 0.0],
-            "x5": [1.0, 1.0, 0.0],
-            "x6": [2.0, 1.0, 0.0],
+            "x5": [5.0, 1.0, 0.0],
+            "x6": [6.0, 1.0, 0.0],
             "x7": [0.0, 2.0, 0.0],
-            "x8": [1.0, 2.0, 0.0],
-            "x9": [2.0, 2.0, 0.0],
+            "x8": [8.0, 2.0, 0.0],
+            "x9": [9.0, 2.0, 0.0],
             "null": [-100.0, -100.0, -100.0],
         },
     ]
@@ -1889,10 +1962,7 @@ def run_2d_outer_loop_example(
 
 def run_2d_inner_loop_example(
     context: highlevel_verification_lib.HighLevelContext,
-) -> Tuple[z3.ExprRef, List[z3.ExprRef]]:
-    import pdb
-
-    pdb.set_trace()
+) -> Tuple[z3.ExprRef, List[Any]]:
     """example setting:
     x dimention points to right
     y dimention points down
@@ -1903,82 +1973,154 @@ def run_2d_inner_loop_example(
     Bottom row: x4  --r-->  x5  --r-->  x6
     """
     context = _ensure_context(context)
-    states_zero: List[Dict] = [{}, {}, {}, {}, {}, {}, {}, {}]
+    states_zero: List[Dict] = [{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}]
     states: List[Dict] = [
         {
             "x1": [0.0, 0.0, 0.0],
-            "x2": [1.0, 0.0, 0.0],
-            "x3": [2.0, 0.0, 0.1],
+            "x2": [2.0, 0.0, 0.0],
+            "x3": [3.0, 0.0, 0.0],
             "x4": [0.0, 1.0, 0.0],
-            "x5": [1.0, 1.0, 0.0],
-            "x6": [2.0, 1.0, 0.0],
+            "x5": [5.0, 1.0, 0.0],
+            "x6": [6.0, 1.0, 0.0],
+            "x7": [0.0, 2.0, 0.0],
+            "x8": [8.0, 2.0, 0.0],
+            "x9": [9.0, 2.0, 0.0],
             "null": [-100.0, -100.0, -100.0],
         },
         {
             "x1": [0.0, 0.0, 0.0],
-            "x2": [1.0, 0.0, 0.0],
-            "x3": [2.0, 0.0, 0.1],
+            "x2": [2.0, 0.0, 0.0],
+            "x3": [3.0, 0.0, 0.0],
             "x4": [0.0, 1.0, 0.0],
-            "x5": [1.0, 1.0, 0.0],
-            "x6": [2.0, 1.0, 0.0],
+            "x5": [5.0, 1.0, 0.0],
+            "x6": [6.0, 1.0, 0.0],
+            "x7": [0.0, 2.0, 0.0],
+            "x8": [8.0, 2.0, 0.0],
+            "x9": [9.0, 2.0, 0.0],
             "null": [-100.0, -100.0, -100.0],
         },
         {
             "x1": [0.0, 0.0, 0.0],
-            "x2": [1.0, 0.0, 0.0],
-            "x3": [2.0, 0.0, 0.1],
+            "x2": [2.0, 0.0, 0.0],
+            "x3": [3.0, 0.0, 0.0],
             "x4": [0.0, 1.0, 0.0],
-            "x5": [1.0, 1.0, 0.0],
-            "x6": [2.0, 1.0, 0.0],
+            "x5": [5.0, 1.0, 0.0],
+            "x6": [6.0, 1.0, 0.0],
+            "x7": [0.0, 2.0, 0.0],
+            "x8": [8.0, 2.0, 0.0],
+            "x9": [9.0, 2.0, 0.0],
             "null": [-100.0, -100.0, -100.0],
         },
         {
             "x1": [0.0, 0.0, 0.0],
-            "x2": [1.0, 0.0, 0.0],
-            "x3": [2.0, 0.0, 0.1],
+            "x2": [2.0, 0.0, 0.0],
+            "x3": [3.0, 0.0, 0.0],
             "x4": [0.0, 1.0, 0.0],
-            "x5": [1.0, 1.0, 0.0],
-            "x6": [2.0, 1.0, 0.0],
+            "x5": [5.0, 1.0, 0.0],
+            "x6": [6.0, 1.0, 0.0],
+            "x7": [0.0, 2.0, 0.0],
+            "x8": [8.0, 2.0, 0.0],
+            "x9": [9.0, 2.0, 0.0],
             "null": [-100.0, -100.0, -100.0],
         },
         {
             "x1": [0.0, 0.0, 0.0],
-            "x2": [1.0, 0.0, 0.0],
-            "x3": [2.0, 0.0, 0.1],
+            "x2": [2.0, 0.0, 0.0],
+            "x3": [3.0, 0.0, 0.0],
             "x4": [0.0, 1.0, 0.0],
-            "x5": [1.0, 1.0, 0.0],
-            "x6": [2.0, 1.0, 0.0],
+            "x5": [5.0, 1.0, 0.0],
+            "x6": [6.0, 1.0, 0.0],
+            "x7": [0.0, 2.0, 0.0],
+            "x8": [8.0, 2.0, 0.0],
+            "x9": [9.0, 2.0, 0.0],
             "null": [-100.0, -100.0, -100.0],
         },
         {
             "x1": [0.0, 0.0, 0.0],
-            "x2": [1.0, 0.0, 0.0],
-            "x3": [2.0, 0.0, 0.1],
+            "x2": [2.0, 0.0, 0.0],
+            "x3": [3.0, 0.0, 0.0],
             "x4": [0.0, 1.0, 0.0],
-            "x5": [1.0, 1.0, 0.0],
-            "x6": [2.0, 1.0, 0.0],
+            "x5": [5.0, 1.0, 0.0],
+            "x6": [6.0, 1.0, 0.0],
+            "x7": [0.0, 2.0, 0.0],
+            "x8": [8.0, 2.0, 0.0],
+            "x9": [9.0, 2.0, 0.0],
             "null": [-100.0, -100.0, -100.0],
         },
         {
             "x1": [0.0, 0.0, 0.0],
-            "x2": [1.0, 0.0, 0.0],
-            "x3": [2.0, 0.0, 0.1],
+            "x2": [2.0, 0.0, 0.0],
+            "x3": [3.0, 0.0, 0.0],
             "x4": [0.0, 1.0, 0.0],
-            "x5": [1.0, 1.0, 0.0],
-            "x6": [2.0, 1.0, 0.0],
+            "x5": [5.0, 1.0, 0.0],
+            "x6": [6.0, 1.0, 0.0],
+            "x7": [0.0, 2.0, 0.0],
+            "x8": [8.0, 2.0, 0.0],
+            "x9": [9.0, 2.0, 0.0],
             "null": [-100.0, -100.0, -100.0],
         },
         {
             "x1": [0.0, 0.0, 0.0],
-            "x2": [1.0, 0.0, 0.0],
-            "x3": [2.0, 0.0, 0.1],
+            "x2": [2.0, 0.0, 0.0],
+            "x3": [3.0, 0.0, 0.0],
             "x4": [0.0, 1.0, 0.0],
-            "x5": [1.0, 1.0, 0.0],
-            "x6": [2.0, 1.0, 0.0],
+            "x5": [5.0, 1.0, 0.0],
+            "x6": [6.0, 1.0, 0.0],
+            "x7": [0.0, 2.0, 0.0],
+            "x8": [8.0, 2.0, 0.0],
+            "x9": [9.0, 2.0, 0.0],
+            "null": [-100.0, -100.0, -100.0],
+        },
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [2.0, 0.0, 0.0],
+            "x3": [3.0, 0.0, 0.0],
+            "x4": [0.0, 1.0, 0.0],
+            "x5": [5.0, 1.0, 0.0],
+            "x6": [6.0, 1.0, 0.0],
+            "x7": [0.0, 2.0, 0.0],
+            "x8": [8.0, 2.0, 0.0],
+            "x9": [9.0, 2.0, 0.0],
+            "null": [-100.0, -100.0, -100.0],
+        },
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [2.0, 0.0, 0.0],
+            "x3": [3.0, 0.0, 0.0],
+            "x4": [0.0, 1.0, 0.0],
+            "x5": [5.0, 1.0, 0.0],
+            "x6": [6.0, 1.0, 0.0],
+            "x7": [0.0, 2.0, 0.0],
+            "x8": [8.0, 2.0, 0.0],
+            "x9": [9.0, 2.0, 0.0],
+            "null": [-100.0, -100.0, -100.0],
+        },
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [2.0, 0.0, 0.0],
+            "x3": [3.0, 0.0, 0.0],
+            "x4": [0.0, 1.0, 0.0],
+            "x5": [5.0, 1.0, 0.0],
+            "x6": [6.0, 1.0, 0.0],
+            "x7": [0.0, 2.0, 0.0],
+            "x8": [8.0, 2.0, 0.0],
+            "x9": [9.0, 2.0, 0.0],
+            "null": [-100.0, -100.0, -100.0],
+        },
+        {
+            "x1": [0.0, 0.0, 0.0],
+            "x2": [2.0, 0.0, 0.0],
+            "x3": [3.0, 0.0, 0.0],
+            "x4": [0.0, 1.0, 0.0],
+            "x5": [5.0, 1.0, 0.0],
+            "x6": [6.0, 1.0, 0.0],
+            "x7": [0.0, 2.0, 0.0],
+            "x8": [8.0, 2.0, 0.0],
+            "x9": [9.0, 2.0, 0.0],
             "null": [-100.0, -100.0, -100.0],
         },
     ]
-    k = 1
+    k = 2
     relations = [context.Mark, context.d_star, context.r_star, "equality"]
     h, i, j, null = [context.get_goal_consts(name) for name in ("h", "i", "j", "null")]
     constants = [h, i, j, null]
@@ -1993,6 +2135,11 @@ def run_2d_inner_loop_example(
         {h: "x1", i: "x4", j: "x5", null: "null"},
         {h: "x1", i: "x4", j: "x6", null: "null"},
         {h: "x1", i: "x4", j: "null", null: "null"},
+        # row 3
+        {h: "x1", i: "x7", j: "x7", null: "null"},
+        {h: "x1", i: "x7", j: "x8", null: "null"},
+        {h: "x1", i: "x7", j: "x9", null: "null"},
+        {h: "x1", i: "x7", j: "null", null: "null"},
     ]
     # functions = [context.l0]
     # functions_evaluation_cache = [
@@ -2010,15 +2157,20 @@ def run_2d_inner_loop_example(
     functions_evaluation_cache = []
     mark_lookup_by_state = [
         # row 1
-        {"x1": False, "x2": False, "x3": False, "x4": False, "x5": False, "x6": False},
-        {"x1": True, "x2": False, "x3": False, "x4": False, "x5": False, "x6": False},
-        {"x1": True, "x2": True, "x3": False, "x4": False, "x5": False, "x6": False},
-        {"x1": True, "x2": True, "x3": True, "x4": False, "x5": False, "x6": False},
+        {"x1": False, "x2": False, "x3": False, "x4": False, "x5": False, "x6": False, "x7": False, "x8": False, "x9": False},
+        {"x1": True, "x2": False, "x3": False, "x4": False, "x5": False, "x6": False, "x7": False, "x8": False, "x9": False},
+        {"x1": True, "x2": True, "x3": False, "x4": False, "x5": False, "x6": False, "x7": False, "x8": False, "x9": False},
+        {"x1": True, "x2": True, "x3": True, "x4": False, "x5": False, "x6": False, "x7": False, "x8": False, "x9": False},
         # row 2
-        {"x1": True, "x2": True, "x3": True, "x4": False, "x5": False, "x6": False},
-        {"x1": True, "x2": True, "x3": True, "x4": True, "x5": False, "x6": False},
-        {"x1": True, "x2": True, "x3": True, "x4": True, "x5": True, "x6": False},
-        {"x1": True, "x2": True, "x3": True, "x4": True, "x5": True, "x6": True},
+        {"x1": True, "x2": True, "x3": True, "x4": False, "x5": False, "x6": False, "x7": False, "x8": False, "x9": False},
+        {"x1": True, "x2": True, "x3": True, "x4": True, "x5": False, "x6": False, "x7": False, "x8": False, "x9": False},
+        {"x1": True, "x2": True, "x3": True, "x4": True, "x5": True, "x6": False, "x7": False, "x8": False, "x9": False},
+        {"x1": True, "x2": True, "x3": True, "x4": True, "x5": True, "x6": True, "x7": False, "x8": False, "x9": False},
+        # row 3
+        {"x1": True, "x2": True, "x3": True, "x4": True, "x5": True, "x6": True, "x7": False, "x8": False, "x9": False},
+        {"x1": True, "x2": True, "x3": True, "x4": True, "x5": True, "x6": True, "x7": True, "x8": False, "x9": False},
+        {"x1": True, "x2": True, "x3": True, "x4": True, "x5": True, "x6": True, "x7": True, "x8": True, "x9": False},
+        {"x1": True, "x2": True, "x3": True, "x4": True, "x5": True, "x6": True, "x7": True, "x8": True, "x9": True},
     ]
     return loop_inference_2d(
         states_zero,

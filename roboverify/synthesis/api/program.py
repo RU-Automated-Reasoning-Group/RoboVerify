@@ -1,3 +1,4 @@
+import itertools
 import os
 from copy import deepcopy
 from pathlib import Path
@@ -13,11 +14,16 @@ from z3 import (
     Implies,
     Not,
     Or,
+    is_and,
     is_app,
+    is_false,
     is_implies,
     is_quantifier,
+    is_true,
     sat,
+    simplify,
     substitute,
+    substitute_vars,
     unsat,
 )
 
@@ -38,6 +44,329 @@ from synthesis.api.instructions import (
     Skip,
     While,
 )
+
+
+def _sexpr_trunc(expr, max_len: int = 420) -> str:
+    s = expr.sexpr()
+    if len(s) <= max_len:
+        return s
+    return s[:max_len] + " ..."
+
+
+_MAX_FINITE_FORALL_DIAG_DEPTH = 16
+_MAX_GOAL_FORALL_PRODUCT = 25000
+
+
+def _goal_universe_for_diag(solver: highlevel_verification_lib.HighLevelContext):
+    """Finite Goal domain (null + enum goals), or None if not available."""
+    if getattr(solver, "GoalSort", None) is None:
+        return None
+    u = [solver.null] + list(getattr(solver, "enum_goals", []) or [])
+    return u if u else None
+
+
+def _is_goal_only_forall(solver, expr) -> bool:
+    if not (is_quantifier(expr) and expr.is_forall()):
+        return False
+    if _goal_universe_for_diag(solver) is None:
+        return False
+    gsort = solver.GoalSort
+    return all(expr.var_sort(i) == gsort for i in range(expr.num_vars()))
+
+
+def _tri_goal_forall_by_finite_expansion(
+    model,
+    solver: highlevel_verification_lib.HighLevelContext,
+    q,
+    _depth: int,
+) -> str:
+    """
+    For ``ForAll`` over finite Goal only: truth = all instantiations true (finite
+    semantics). Z3 often leaves ``model.eval(ForAll...)`` non-Boolean; this forces
+    a definite true/false when every instantiated body evaluates to a constant.
+    """
+    universe = _goal_universe_for_diag(solver)
+    n = q.num_vars()
+    body = q.body()
+    seen = 0
+    for tup in itertools.product(universe, repeat=n):
+        seen += 1
+        if seen > _MAX_GOAL_FORALL_PRODUCT:
+            return "unknown"
+        # For ``ForAll([v0,...,v_{n-1}], body)``, DB index 0 is innermost = v_{n-1}.
+        inst = substitute_vars(body, *reversed(tup))
+        st = _tri_status_under_model(model, inst, solver, _depth + 1)
+        if st == "false":
+            return "false"
+        if st == "unknown":
+            return "unknown"
+    return "true"
+
+
+def _tri_status_under_model(
+    model, expr, solver=None, _depth: int = 0
+) -> str:
+    """
+    Whether ``expr`` holds in ``model``: 'true', 'false', or 'unknown'.
+
+    When ``solver`` is a goals-mode context with finite Goal, top-level
+    ``ForAll`` over Goal is decided by enumerating all tuples (finite expansion),
+    so Z3 does not need to reduce the quantifier node to a Boolean constant.
+    """
+    if (
+        solver is not None
+        and _depth < _MAX_FINITE_FORALL_DIAG_DEPTH
+        and _is_goal_only_forall(solver, expr)
+    ):
+        return _tri_goal_forall_by_finite_expansion(model, solver, expr, _depth)
+
+    v = simplify(model.eval(expr, True))
+    if is_true(v):
+        return "true"
+    if is_false(v):
+        return "false"
+    vn = simplify(model.eval(Not(expr), True))
+    if is_true(vn):
+        return "false"
+    if is_false(vn):
+        return "true"
+    return "unknown"
+
+
+def _flatten_and(expr):
+    """Flatten nested And into a list of conjuncts (single non-And node stays one element)."""
+    if is_and(expr):
+        out: List = []
+        for ch in expr.children():
+            out.extend(_flatten_and(ch))
+        return out
+    return [expr]
+
+
+def _forall_goal_find_falsifying_witness(
+    solver: highlevel_verification_lib.HighLevelContext, model, q, _depth: int = 0
+):
+    """
+    If ``q`` is ForAll over GoalSort only, enumerate finite Goal tuples and return
+    (witness_tuple, instantiated_body) for the first instantiation that is false in model.
+    """
+    if not (is_quantifier(q) and q.is_forall()):
+        return None
+    gsort = getattr(solver, "GoalSort", None)
+    if gsort is None:
+        return None
+    n = q.num_vars()
+    if n == 0 or any(q.var_sort(i) != gsort for i in range(n)):
+        return None
+    universe = _goal_universe_for_diag(solver)
+    if not universe:
+        return None
+    body = q.body()
+    seen = 0
+    for tup in itertools.product(universe, repeat=n):
+        seen += 1
+        if seen > _MAX_GOAL_FORALL_PRODUCT:
+            break
+        inst = substitute_vars(body, *reversed(tup))
+        if _tri_status_under_model(model, inst, solver, _depth + 1) == "false":
+            return tup, inst
+    return None
+
+
+def print_where_conclusion_fails(
+    solver: highlevel_verification_lib.HighLevelContext,
+    model,
+    conclusion,
+    max_lines: int = 96,
+    max_conjuncts_to_list: int = 64,
+) -> None:
+    """
+    When VC check-2 is SAT, the model satisfies premise ∧ ¬conclusion, so ``conclusion``
+    is false. Flatten nested And, then report each conjunct that is false (or unknown)
+    under the model; drill into Implies / nested And / Goal ForAll when possible.
+    """
+    state = {"n": 0}
+
+    def emit(msg: str) -> bool:
+        if state["n"] >= max_lines:
+            return False
+        print(msg)
+        state["n"] += 1
+        return True
+
+    def walk(expr, path: str) -> None:
+        if state["n"] >= max_lines:
+            return
+        truth = _tri_status_under_model(model, expr, solver)
+        if truth == "true":
+            return
+        if truth == "unknown":
+            if is_quantifier(expr) and expr.is_forall():
+                wit = _forall_goal_find_falsifying_witness(solver, model, expr)
+                if wit is not None:
+                    tup, inst = wit
+                    emit(f"{path}: ForAll falsified at Goal witness {tup}")
+                    walk(inst, f"{path}@{tup}")
+                    return
+            emit(f"{path}: unknown truth under model; {_sexpr_trunc(expr)}")
+            return
+
+        if is_implies(expr):
+            ant, cons = expr.arg(0), expr.arg(1)
+            if (
+                _tri_status_under_model(model, ant, solver) == "true"
+                and _tri_status_under_model(model, cons, solver) == "false"
+            ):
+                emit(
+                    f"{path}: Implies with TRUE antecedent and FALSE consequent "
+                    f"(antecedent: {_sexpr_trunc(ant, 200)})"
+                )
+                walk(cons, f"{path}/consequent")
+                return
+            emit(f"{path}: false Implies (unexpected shape): {_sexpr_trunc(expr)}")
+            return
+
+        if is_and(expr):
+            chs = expr.children()
+            false_idxs = [
+                i
+                for i, ch in enumerate(chs)
+                if _tri_status_under_model(model, ch, solver) != "true"
+            ]
+            strict_false = [
+                i
+                for i, ch in enumerate(chs)
+                if _tri_status_under_model(model, ch, solver) == "false"
+            ]
+            emit(
+                f"{path}: And — {len(strict_false)} definitely false, "
+                f"{len(false_idxs) - len(strict_false)} unknown among {len(chs)} children "
+                f"(non-true indices {false_idxs[:30]}{'...' if len(false_idxs) > 30 else ''})"
+            )
+            for i in false_idxs:
+                if state["n"] >= max_lines:
+                    break
+                walk(chs[i], f"{path}/[{i}]")
+            return
+
+        if is_quantifier(expr) and expr.is_forall() and getattr(solver, "GoalSort", None):
+            wit = _forall_goal_find_falsifying_witness(solver, model, expr)
+            if wit is not None:
+                tup, inst = wit
+                emit(f"{path}: ForAll falsified at Goal witness {tup}")
+                walk(inst, f"{path}@{tup}")
+                return
+
+        emit(f"{path}: FALSE: {_sexpr_trunc(expr)}")
+
+    print(
+        "[diagnosis] conclusion is false in the counterexample model; "
+        "failing conjunct(s) below (nested And flattened; truncated s-exprs). "
+        "ForAll over finite Goal is evaluated by full tuple enumeration (not model.eval)."
+    )
+    parts = _flatten_and(conclusion)
+    n_true = n_false = n_unk = 0
+    bad_rows: List[tuple] = []
+    # One-shot debug aid for "unknown under model" ForAll in Goal-mode.
+    dbg_forall_printed = False
+    for i, p in enumerate(parts):
+        st = _tri_status_under_model(model, p, solver)
+        if st == "true":
+            n_true += 1
+        elif st == "false":
+            n_false += 1
+            bad_rows.append((i, p, st))
+        else:
+            n_unk += 1
+            bad_rows.append((i, p, st))
+            if (
+                not dbg_forall_printed
+                and st == "unknown"
+                and is_quantifier(p)
+                and p.is_forall()
+                and getattr(solver, "GoalSort", None) is not None
+            ):
+                dbg_forall_printed = True
+                u = _goal_universe_for_diag(solver)
+                gsort = getattr(solver, "GoalSort", None)
+                # Print only metadata (no huge s-expr dumps).
+                emit("[diagnosis-debug] first unknown ForAll summary:")
+                emit(
+                    f"[diagnosis-debug]  enum_goals={len(getattr(solver, 'enum_goals', []) or [])}, "
+                    f"universe_size={(len(u) if u else 0)} (includes null), "
+                    f"num_vars={p.num_vars()}, "
+                    f"product={( (len(u) ** p.num_vars()) if u else 0 )}, "
+                    f"cutoff={_MAX_GOAL_FORALL_PRODUCT}"
+                )
+                emit(
+                    f"[diagnosis-debug]  is_goal_only_forall={_is_goal_only_forall(solver, p)}; "
+                    f"GoalSort={gsort}; "
+                    f"var_sorts={[p.var_sort(j) for j in range(p.num_vars())]}"
+                )
+    emit(
+        f"Flattened conjunction: {len(parts)} conjunct(s) — "
+        f"{n_true} true, {n_false} false, {n_unk} unknown under model."
+    )
+    listed = 0
+    for i, p, st in bad_rows:
+        if listed >= max_conjuncts_to_list or state["n"] >= max_lines:
+            break
+        emit(f"  conjunct[{i}] ({st}): {_sexpr_trunc(p)}")
+        # Robust provenance lookup: match against clauses carried on While nodes.
+        provs = getattr(solver, "_learned_clause_provenance", []) or []
+        matched = 0
+        for c in provs:
+            try:
+                if p.eq(c.expr):
+                    emit(
+                        "    -> learned-from: "
+                        f"omega_index={getattr(c, 'omega_index', None)} "
+                        f"target={getattr(c, 'target_predicate', None)} "
+                        f"via={getattr(c, 'learned_via', None)}"
+                    )
+                    matched += 1
+                    if matched >= 3:
+                        break
+            except Exception:
+                continue
+        if st == "unknown" and is_quantifier(p) and p.is_forall():
+            wit = _forall_goal_find_falsifying_witness(solver, model, p)
+            if wit is not None:
+                tup, inst = wit
+                emit(f"    -> ForAll broken at Goal witness {tup}; body: {_sexpr_trunc(inst, 300)}")
+        listed += 1
+    if len(bad_rows) > listed:
+        emit(
+            f"  ... ({len(bad_rows) - listed} more false/unknown conjunct(s) not shown; "
+            f"raise max_conjuncts_to_list={max_conjuncts_to_list})"
+        )
+
+    # Robust provenance report by *index in provenance list* (no expr matching).
+    provs = getattr(solver, "_learned_clause_provenance", []) or []
+    if provs:
+        emit("[diagnosis] learned-clause provenance (indexed list; evaluated in model):")
+        shown = 0
+        for j, c in enumerate(provs):
+            if state["n"] >= max_lines:
+                break
+            expr = getattr(c, "expr", None)
+            if expr is None:
+                continue
+            stj = _tri_status_under_model(model, expr, solver)
+            if stj == "true":
+                continue
+            emit(
+                f"  prov[{j}] ({stj}): "
+                f"omega_index={getattr(c, 'omega_index', None)} "
+                f"target={getattr(c, 'target_predicate', None)} "
+                f"via={getattr(c, 'learned_via', None)} "
+                f"expr={_sexpr_trunc(expr, 220)}"
+            )
+            shown += 1
+            if shown >= max_conjuncts_to_list:
+                break
+    emit("[diagnosis] structured walk (nested detail):")
+    walk(conclusion, "conclusion")
 
 
 def rewrite_for_put_for_ON_star(expr, b_prime, b, context):
@@ -363,6 +692,12 @@ class Program:
                 verification_mode=verification_mode,
             )
         )
+        # Collect structured learned-clause provenance from While invariants (if present).
+        prov_clauses = []
+        for inst in self.instructions:
+            if isinstance(inst, While) and getattr(inst, "invariant_provenance", None):
+                prov_clauses.extend(inst.invariant_provenance)
+        setattr(solver, "_learned_clause_provenance", prov_clauses)
         vcs = self.VC_gen(P, Q, solver)
         ok = True
 
@@ -437,6 +772,8 @@ class Program:
                 if check2 != unsat:
                     ok = False
                     print(f"[FAIL] VC {idx} check 2 returned {check2}; expected unsat")
+                    if check2 == sat and model2 is not None:
+                        print_where_conclusion_fails(solver, model2, conclusion)
                     save_goal_counterexample_on_failure(f"vc_{idx}_check2", model2)
             else:
                 print(
@@ -504,12 +841,18 @@ def to_seq(instructions):
 
 def wp(seq_instruction, Q, context):
     """calculate weakest precondition"""
+    def inv_expr(inv):
+        # Invariant may be a Z3 expr or a list of ProvenancedClause-like objects.
+        if isinstance(inv, list) and inv and hasattr(inv[0], "expr"):
+            return And(*[c.expr for c in inv])
+        return inv
+
     if isinstance(seq_instruction, Skip):
         return Q
     elif isinstance(seq_instruction, Seq):
         return wp(seq_instruction.s1, wp(seq_instruction.s2, Q, context), context)
     elif isinstance(seq_instruction, While):
-        return seq_instruction.invariant
+        return inv_expr(seq_instruction.invariant)
     elif isinstance(seq_instruction, Assign):
         return substitute(
             Q,
@@ -559,19 +902,25 @@ def wp(seq_instruction, Q, context):
 
 def VC_aux(seq_instruction, Q, context) -> List:
     """generate auxiliary verification conditions"""
+    def inv_expr(inv):
+        # Invariant may be a Z3 expr or a list of ProvenancedClause-like objects.
+        if isinstance(inv, list) and inv and hasattr(inv[0], "expr"):
+            return And(*[c.expr for c in inv])
+        return inv
+
     if isinstance(seq_instruction, Seq):
         return VC_aux(
             seq_instruction.s1, wp(seq_instruction.s2, Q, context), context
         ) + VC_aux(seq_instruction.s2, Q, context)
     elif isinstance(seq_instruction, While):
         return VC_aux(
-            to_seq(seq_instruction.body), seq_instruction.invariant, context
+            to_seq(seq_instruction.body), inv_expr(seq_instruction.invariant), context
         ) + [
             Implies(
-                And(seq_instruction.instantiated_cond, seq_instruction.invariant),
-                wp(to_seq(seq_instruction.body), seq_instruction.invariant, context),
+                And(seq_instruction.instantiated_cond, inv_expr(seq_instruction.invariant)),
+                wp(to_seq(seq_instruction.body), inv_expr(seq_instruction.invariant), context),
             ),
-            Implies(And(Not(seq_instruction.cond), seq_instruction.invariant), Q),
+            Implies(And(Not(seq_instruction.cond), inv_expr(seq_instruction.invariant)), Q),
         ]
     elif isinstance(seq_instruction, Instruction):
         return []
