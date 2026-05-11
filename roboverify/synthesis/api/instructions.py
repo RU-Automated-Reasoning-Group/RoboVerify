@@ -72,6 +72,359 @@ class Skip(Instruction):
         return "Skip"
 
 
+class Pick(Instruction):
+    def __init__(self, grab_box_id: int = 0, limit: int = 50):
+        self.limit = limit
+        self.grab_box_id = grab_box_id
+        self.types = ["Box"]
+
+    def get_box_pos(self, box_id, obs):
+        block_num = (obs.shape[0] - 13) // 15
+        if 0 <= box_id < block_num:
+            return obs[10 + box_id * 12 : 10 + box_id * 12 + 3]
+        assert False, f"unknown box id {box_id}"
+
+    def eval(self, env, traj, return_image=False):
+        # from synthesis.environment.data.pickplace_naive import get_pick_control_naive
+
+        # imgs = []
+        # success = False
+        # initial_goal_box = self.get_box_pos(self.target_box_id, traj[-1])
+        # step = 0
+        # while not success and step < self.limit:
+        #     obs = env.flatten_observation(env.env._get_obs())
+        #     action, success = get_pick_control_naive(
+        #         obs,
+        #         initial_goal_box
+        #         + np.array([offset.val for offset in self.target_offset]),
+        #         block_id=self.grab_box_id,
+        #         last_block=True,
+        #     )
+        #     env.step(action)
+        #     step += 1
+        #     if return_image:
+        #         imgs.append(env.render())
+        #     traj.append(obs)
+        # return imgs
+        pass
+
+    def register_trainable_parameter(self, parameter: List[float]):
+        return
+
+    def update_trainable_parameter(self, new_parameter: List[float]):
+        return
+
+    def get_operand(self):
+        return [{"type": self.types[0], "val": self.grab_box_id}]
+
+    def set_operand(self, new_operands):
+        assert new_operands[0]["type"] == "Box"
+        self.grab_box_id = new_operands[0]["val"]
+
+    def __eq__(self, other):
+        if not isinstance(other, Pick):
+            return False
+        cond1 = self.get_operand() == other.get_operand()
+        return cond1
+
+    def __str__(self):
+        return f"Pick({self.grab_box_id})"
+
+
+class PickByName(Instruction):
+    def __init__(self, grab_box_name: str, limit: int = 50):
+        self.limit = limit
+        self.grab_box_name = grab_box_name
+        self.types = ["BoxName"]
+
+    def _resolve(self, env) -> Dict[str, int]:
+        mapping = getattr(env, "symbolic_name_to_box_id", None)
+        if mapping is None:
+            raise ValueError(
+                "PickPlaceByName requires env.symbolic_name_to_box_id (e.g. {'b0': 1})."
+            )
+        if not isinstance(mapping, dict):
+            raise TypeError("env.symbolic_name_to_box_id must be a dict[str, int].")
+        return mapping
+
+    def get_box_pos(self, box_id: int, obs):
+        block_num = (obs.shape[0] - 13) // 15
+        if 0 <= box_id < block_num:
+            return obs[10 + box_id * 12 : 10 + box_id * 12 + 3]
+        assert False, f"unknown box id {box_id}"
+
+    def eval(self, env, traj, return_image=False):
+        pass
+
+    def register_trainable_parameter(self, parameter: List[float]):
+        return
+
+    def update_trainable_parameter(self, new_parameter: List[float]):
+        return
+
+    def get_operand(self):
+        return [{"type": self.types[0], "val": self.grab_box_name}]
+
+    def set_operand(self, new_operands):
+        assert new_operands[0]["type"] == "BoxName"
+        self.grab_box_name = new_operands[0]["val"]
+
+    def __eq__(self, other):
+        if not isinstance(other, PickByName):
+            return False
+        cond1 = self.get_operand() == other.get_operand()
+        return cond1
+
+    def __str__(self):
+        return f"PickByName({self.grab_box_name})"
+
+
+class Move(Instruction):
+    def __init__(
+        self,
+        target_box_id_x: int = 0,
+        target_box_id_y: int = 0,
+        target_box_id_z: int = 0,
+        limit: int = 50,
+        target_offset: Optional[List[float]] = None,
+    ):
+        self.limit = limit
+        self.target_box_id_x = target_box_id_x
+        self.target_box_id_y = target_box_id_y
+        self.target_box_id_z = target_box_id_z
+        self.types = ["Box", "Box", "Box"]
+        if target_offset is None:
+            self.target_offset = [Parameter(0.0) for _ in range(3)]
+        else:
+            if len(target_offset) != 3:
+                raise ValueError("target_offset must be a length-3 list of floats.")
+            self.target_offset = [Parameter(float(v)) for v in target_offset]
+
+    def get_box_pos(self, box_id, obs):
+        block_num = (obs.shape[0] - 13) // 15
+        if 0 <= box_id < block_num:
+            return obs[10 + box_id * 12 : 10 + box_id * 12 + 3]
+        assert False, f"unknown box id {box_id}"
+
+    def eval(self, env, traj, return_image=False):
+        # from synthesis.environment.data.pickplace_naive import get_pick_control_naive
+
+        # imgs = []
+        # success = False
+        # initial_goal_box = self.get_box_pos(self.target_box_id, traj[-1])
+        # step = 0
+        # while not success and step < self.limit:
+        #     obs = env.flatten_observation(env.env._get_obs())
+        #     action, success = get_pick_control_naive(
+        #         obs,
+        #         initial_goal_box
+        #         + np.array([offset.val for offset in self.target_offset]),
+        #         block_id=self.grab_box_id,
+        #         last_block=True,
+        #     )
+        #     env.step(action)
+        #     step += 1
+        #     if return_image:
+        #         imgs.append(env.render())
+        #     traj.append(obs)
+        # return imgs
+        pass
+
+    def register_trainable_parameter(self, parameter: List[float]):
+        for p in self.target_offset:
+            p.register(parameter)
+
+    def update_trainable_parameter(self, new_parameter: List[float]):
+        for p in self.target_offset:
+            p.update(new_parameter)
+
+    def get_operand(self):
+        return [
+            {"type": self.types[0], "val": self.target_box_id_x},
+            {"type": self.types[1], "val": self.target_box_id_y},
+            {"type": self.types[2], "val": self.target_box_id_z},
+        ]
+
+    def set_operand(self, new_operands):
+        assert new_operands[0]["type"] == "Box"
+        assert new_operands[1]["type"] == "Box"
+        assert new_operands[2]["type"] == "Box"
+        self.target_box_id_x = new_operands[0]["val"]
+        self.target_box_id_y = new_operands[1]["val"]
+        self.target_box_id_z = new_operands[2]["val"]
+
+    def __eq__(self, other):
+        if not isinstance(other, Move):
+            return False
+        cond1 = self.get_operand() == other.get_operand()
+        return cond1
+
+    def __str__(self):
+        return f"Move({self.target_box_id_x}({str(self.target_offset[0])}), {self.target_box_id_y}({str(self.target_offset[1])}), {self.target_box_id_z}({str(self.target_offset[2])}))"
+
+
+class MoveByName(Instruction):
+    def __init__(
+        self,
+        target_box_name_x: str,
+        target_box_name_y: str,
+        target_box_name_z: str,
+        limit: int = 50,
+        target_offset: Optional[List[float]] = None,
+    ):
+        self.limit = limit
+        self.target_box_name_x = target_box_name_x
+        self.target_box_name_y = target_box_name_y
+        self.target_box_name_z = target_box_name_z
+        self.types = ["BoxName", "BoxName", "BoxName"]
+        if target_offset is None:
+            self.target_offset = [Parameter(0.0) for _ in range(3)]
+        else:
+            if len(target_offset) != 3:
+                raise ValueError("target_offset must be a length-3 list of floats.")
+            self.target_offset = [Parameter(float(v)) for v in target_offset]
+
+    def get_box_pos(self, box_id: int, obs):
+        block_num = (obs.shape[0] - 13) // 15
+        if 0 <= box_id < block_num:
+            return obs[10 + box_id * 12 : 10 + box_id * 12 + 3]
+        assert False, f"unknown box id {box_id}"
+
+    def eval(self, env, traj, return_image=False):
+        pass
+
+    def register_trainable_parameter(self, parameter: List[float]):
+        for p in self.target_offset:
+            p.register(parameter)
+
+    def update_trainable_parameter(self, new_parameter: List[float]):
+        for p in self.target_offset:
+            p.update(new_parameter)
+
+    def get_operand(self):
+        return [
+            {"type": self.types[0], "val": self.target_box_name_x},
+            {"type": self.types[1], "val": self.target_box_name_y},
+            {"type": self.types[2], "val": self.target_box_name_z},
+        ]
+
+    def set_operand(self, new_operands):
+        assert new_operands[0]["type"] == "BoxName"
+        assert new_operands[1]["type"] == "BoxName"
+        assert new_operands[2]["type"] == "BoxName"
+        self.target_box_name_x = new_operands[0]["val"]
+        self.target_box_name_y = new_operands[1]["val"]
+        self.target_box_name_z = new_operands[2]["val"]
+
+    def __eq__(self, other):
+        if not isinstance(other, MoveByName):
+            return False
+        cond1 = self.get_operand() == other.get_operand()
+        return cond1
+
+    def __str__(self):
+        return f"MoveByName({self.target_box_name_x}, {self.target_box_name_y}, {self.target_box_name_z})"
+
+
+class Release(Instruction):
+    def __init__(self, release_box_id: int = 0, limit: int = 50):
+        self.limit = limit
+        self.release_box_id = release_box_id
+        self.types = ["Box"]
+        self.target_z_offset = Parameter(0.0)
+
+    def get_box_pos(self, box_id, obs):
+        block_num = (obs.shape[0] - 13) // 15
+        if 0 <= box_id < block_num:
+            return obs[10 + box_id * 12 : 10 + box_id * 12 + 3]
+        assert False, f"unknown box id {box_id}"
+
+    def eval(self, env, traj, return_image=False):
+        # from synthesis.environment.data.pickplace_naive import get_pick_control_naive
+
+        # imgs = []
+        # success = False
+        # initial_goal_box = self.get_box_pos(self.target_box_id, traj[-1])
+        # step = 0
+        # while not success and step < self.limit:
+        #     obs = env.flatten_observation(env.env._get_obs())
+        #     action, success = get_pick_control_naive(
+        #         obs,
+        #         initial_goal_box
+        #         + np.array([offset.val for offset in self.target_offset]),
+        #         block_id=self.grab_box_id,
+        #         last_block=True,
+        #     )
+        #     env.step(action)
+        #     step += 1
+        #     if return_image:
+        #         imgs.append(env.render())
+        #     traj.append(obs)
+        # return imgs
+        pass
+
+    def register_trainable_parameter(self, parameter: List[float]):
+        self.target_z_offset.register(parameter)
+
+    def update_trainable_parameter(self, new_parameter: List[float]):
+        self.target_z_offset.update(new_parameter)
+
+    def get_operand(self):
+        return [{"type": self.types[0], "val": self.release_box_id}]
+
+    def set_operand(self, new_operands):
+        assert new_operands[0]["type"] == "Box"
+        self.release_box_id = new_operands[0]["val"]
+
+    def __eq__(self, other):
+        if not isinstance(other, Release):
+            return False
+        cond1 = self.get_operand() == other.get_operand()
+        return cond1
+
+    def __str__(self):
+        return f"Release({self.release_box_id}, {self.target_z_offset})"
+
+
+class ReleaseByName(Instruction):
+    def __init__(self, release_box_name: str, limit: int = 50):
+        self.limit = limit
+        self.release_box_name = release_box_name
+        self.types = ["BoxName"]
+        self.target_z_offset = Parameter(0.0)
+
+    def get_box_pos(self, box_id: int, obs):
+        block_num = (obs.shape[0] - 13) // 15
+        if 0 <= box_id < block_num:
+            return obs[10 + box_id * 12 : 10 + box_id * 12 + 3]
+        assert False, f"unknown box id {box_id}"
+
+    def eval(self, env, traj, return_image=False):
+        pass
+
+    def register_trainable_parameter(self, parameter: List[float]):
+        self.target_z_offset.register(parameter)
+
+    def update_trainable_parameter(self, new_parameter: List[float]):
+        self.target_z_offset.update(new_parameter)
+
+    def get_operand(self):
+        return [{"type": self.types[0], "val": self.release_box_name}]
+
+    def set_operand(self, new_operands):
+        assert new_operands[0]["type"] == "BoxName"
+        self.release_box_name = new_operands[0]["val"]
+
+    def __eq__(self, other):
+        if not isinstance(other, ReleaseByName):
+            return False
+        cond1 = self.get_operand() == other.get_operand()
+        return cond1
+
+    def __str__(self):
+        return f"ReleaseByName({self.release_box_name}, {self.target_z_offset})"
+
+
 class PickPlace(Instruction):
     def __init__(self, grab_box_id: int = 0, target_box_id: int = 0, limit: int = 50):
         self.limit = limit
