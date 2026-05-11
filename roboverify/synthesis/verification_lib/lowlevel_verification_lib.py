@@ -382,9 +382,12 @@ class LowLevelContext:
                 )
 
             end_pos = (
-                self.X(ll_target_x) + RealVal(instruction.target_offset[0].val),
-                self.Y(ll_target_y) + RealVal(instruction.target_offset[1].val),
-                self.Z(ll_target_z) + RealVal(instruction.target_offset[2].val),
+                self.X(ll_target_x)
+                + RealVal(instruction.target_offset[0].concrete_float("tube x offset")),
+                self.Y(ll_target_y)
+                + RealVal(instruction.target_offset[1].concrete_float("tube y offset")),
+                self.Z(ll_target_z)
+                + RealVal(instruction.target_offset[2].concrete_float("tube z offset")),
             )
 
             print(f"  checking tube_{idx}")

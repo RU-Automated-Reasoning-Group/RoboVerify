@@ -9,13 +9,31 @@ from synthesis.util import on as on_util
 
 
 class Parameter:
-    def __init__(self, val: float = 0):
+    """Scalar program parameter. ``val is None`` means *unspecified* (trainable /
+    BMC-solve unknown), not numeric zero. Use ``numeric_val()`` for a float
+    suitable before training (unknown → ``0.0``)."""
+
+    def __init__(self, val: float | None = None):
         self.pos: int | None = None
-        self.val: float = val
+        self.val: float | None = float(val) if val is not None else None
+
+    def numeric_val(self) -> float:
+        """Float for runtime / flat parameter vectors; unknown maps to ``0.0``."""
+        return 0.0 if self.val is None else float(self.val)
+
+    def concrete_float(self, where: str) -> float:
+        """Require a numeric value (e.g. BMC **verify**); raise if still unspecified."""
+        if self.val is None:
+            raise ValueError(
+                f"{where}: offset parameter is unspecified (None). "
+                "Pass explicit floats on the instruction for verify mode, "
+                "or use BMC solve for existentially quantified offsets."
+            )
+        return float(self.val)
 
     def register(self, parameters: List):
         self.pos = len(parameters)
-        parameters.append(self.val)
+        parameters.append(self.numeric_val())
 
     def update(self, new_parameter: List[float]):
         if self.pos is not None:
@@ -30,6 +48,8 @@ class Parameter:
         return self.pos == other.pos and self.val == other.val
 
     def __str__(self):
+        if self.val is None:
+            return "?"
         return f"{self.val:.3}"
 
 
@@ -194,7 +214,7 @@ class Move(Instruction):
         self.target_box_id_z = target_box_id_z
         self.types = ["Box", "Box", "Box"]
         if target_offset is None:
-            self.target_offset = [Parameter(0.0) for _ in range(3)]
+            self.target_offset = [Parameter() for _ in range(3)]
         else:
             if len(target_offset) != 3:
                 raise ValueError("target_offset must be a length-3 list of floats.")
@@ -218,7 +238,7 @@ class Move(Instruction):
         #     action, success = get_pick_control_naive(
         #         obs,
         #         initial_goal_box
-        #         + np.array([offset.val for offset in self.target_offset]),
+        #         + np.array([offset.numeric_val() for offset in self.target_offset]),
         #         block_id=self.grab_box_id,
         #         last_block=True,
         #     )
@@ -278,7 +298,7 @@ class MoveByName(Instruction):
         self.target_box_name_z = target_box_name_z
         self.types = ["BoxName", "BoxName", "BoxName"]
         if target_offset is None:
-            self.target_offset = [Parameter(0.0) for _ in range(3)]
+            self.target_offset = [Parameter() for _ in range(3)]
         else:
             if len(target_offset) != 3:
                 raise ValueError("target_offset must be a length-3 list of floats.")
@@ -327,11 +347,19 @@ class MoveByName(Instruction):
 
 
 class Release(Instruction):
-    def __init__(self, release_box_id: int = 0, limit: int = 50):
+    def __init__(
+        self,
+        release_box_id: int = 0,
+        limit: int = 50,
+        *,
+        target_z: float | None = None,
+    ):
         self.limit = limit
         self.release_box_id = release_box_id
         self.types = ["Box"]
-        self.target_z_offset = Parameter(0.0)
+        self.target_z_offset = (
+            Parameter(float(target_z)) if target_z is not None else Parameter()
+        )
 
     def get_box_pos(self, box_id, obs):
         block_num = (obs.shape[0] - 13) // 15
@@ -351,7 +379,7 @@ class Release(Instruction):
         #     action, success = get_pick_control_naive(
         #         obs,
         #         initial_goal_box
-        #         + np.array([offset.val for offset in self.target_offset]),
+        #         + np.array([offset.numeric_val() for offset in self.target_offset]),
         #         block_id=self.grab_box_id,
         #         last_block=True,
         #     )
@@ -387,11 +415,19 @@ class Release(Instruction):
 
 
 class ReleaseByName(Instruction):
-    def __init__(self, release_box_name: str, limit: int = 50):
+    def __init__(
+        self,
+        release_box_name: str,
+        limit: int = 50,
+        *,
+        target_z: float | None = None,
+    ):
         self.limit = limit
         self.release_box_name = release_box_name
         self.types = ["BoxName"]
-        self.target_z_offset = Parameter(0.0)
+        self.target_z_offset = (
+            Parameter(float(target_z)) if target_z is not None else Parameter()
+        )
 
     def get_box_pos(self, box_id: int, obs):
         block_num = (obs.shape[0] - 13) // 15
@@ -431,7 +467,7 @@ class PickPlace(Instruction):
         self.grab_box_id = grab_box_id
         self.target_box_id = target_box_id
         self.types = ["Box", "Box"]
-        self.target_offset = [Parameter(0.0) for _ in range(3)]
+        self.target_offset = [Parameter() for _ in range(3)]
 
     def get_box_pos(self, box_id, obs):
         block_num = (obs.shape[0] - 13) // 15
@@ -451,7 +487,10 @@ class PickPlace(Instruction):
             action, success = get_pick_control_naive(
                 obs,
                 initial_goal_box
-                + np.array([offset.val for offset in self.target_offset]),
+                + np.array(
+                    [offset.numeric_val() for offset in self.target_offset],
+                    dtype=float,
+                ),
                 block_id=self.grab_box_id,
                 last_block=True,
             )
@@ -513,7 +552,7 @@ class PickPlaceByName(Instruction):
         self.release = bool(release)
         self.types = ["BoxName", "BoxName", "BoxName", "BoxName"]
         if target_offset is None:
-            self.target_offset = [Parameter(0.0) for _ in range(3)]
+            self.target_offset = [Parameter() for _ in range(3)]
         else:
             if len(target_offset) != 3:
                 raise ValueError("target_offset must be a length-3 list of floats.")
@@ -561,7 +600,7 @@ class PickPlaceByName(Instruction):
             gy = float(self.get_box_pos(target_y_id, obs)[1])
             gz = float(self.get_box_pos(target_z_id, obs)[2])
             goal = np.array([gx, gy, gz], dtype=float) + np.array(
-                [offset.val for offset in self.target_offset], dtype=float
+                [offset.numeric_val() for offset in self.target_offset], dtype=float
             )
             action, success = get_pick_control_naive(
                 obs,

@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import numpy as np
+import z3
 
 BLOCK_LENGTH = (
     0.025 * 2
@@ -24,6 +27,26 @@ def on(block1, block2) -> bool:
         abs(x1 - x2) < BLOCK_LENGTH / 2
         and abs(y1 - y2) < BLOCK_LENGTH / 2
         and 0 <= z1 - z2 < 1.5 * BLOCK_LENGTH
+    )
+
+
+def z3_on(
+    x1: z3.ArithRef,
+    y1: z3.ArithRef,
+    z1: z3.ArithRef,
+    x2: z3.ArithRef,
+    y2: z3.ArithRef,
+    z2: z3.ArithRef,
+    block_length: float = BLOCK_LENGTH,
+) -> z3.BoolRef:
+    """Z3 encoding aligned with :func:`on` (same xy tolerance and vertical gap)."""
+    half_xy = z3.RealVal(block_length / 2.0)
+    max_dz = z3.RealVal(1.5 * block_length)
+    return z3.And(
+        z3.Abs(x1 - x2) < half_xy,
+        z3.Abs(y1 - y2) < half_xy,
+        z1 - z2 >= 0,
+        z1 - z2 < max_dz,
     )
 
 
