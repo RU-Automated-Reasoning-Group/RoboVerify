@@ -111,6 +111,20 @@ def get_block_pos(obs, block_id):
     return np.array(obs[start_idx:end_idx])
 
 
+def state_comparison_indices(num_blocks: int) -> list[int]:
+    """Indices into flattened RoboVerifyStack obs for policy vs expert comparison.
+
+    Includes gripper position (0-2), finger opening (3-4), and every block's xyz.
+    """
+    agent_dim = 10
+    object_dyn_dim = 12
+    indices = [0, 1, 2, 3, 4]
+    for block_id in range(num_blocks):
+        start = agent_dim + block_id * object_dyn_dim
+        indices.extend(range(start, start + 3))
+    return indices
+
+
 def print_block_layout(obs, num_block):
     for i in range(0, num_block):
         for j in range(0, num_block):

@@ -350,22 +350,23 @@ def _frame_all(sym: BMCTraceSymbols, t: int) -> List[z3.BoolRef]:
 
 
 def _encode_pick(sym: BMCTraceSymbols, t: int, box_id: int) -> z3.BoolRef:
+    """
+    Move the EE to the target block's ``(x, y, z)`` and close the gripper.
+    Block positions are unchanged; only ``holding`` and EE coordinates update.
+    """
     if not 0 <= box_id < len(sym.block_names):
         raise IndexError(
             f"Pick box id {box_id} out of range for {len(sym.block_names)} blocks."
         )
     name = sym.block_names[box_id]
-    cons: List[z3.BoolRef] = [
+    return z3.And(
         sym.holding[t] == sym.NONE,
-        sym.ee_x[t] == sym.bx[name][t],
-        sym.ee_y[t] == sym.by[name][t],
         sym.holding[t + 1] == sym.block_consts[name],
-        sym.ee_x[t + 1] == sym.ee_x[t],
-        sym.ee_y[t + 1] == sym.ee_y[t],
-        sym.ee_z[t + 1] == sym.ee_z[t],
-    ]
-    cons.extend(_frame_all(sym, t))
-    return z3.And(*cons)
+        sym.ee_x[t + 1] == sym.bx[name][t],
+        sym.ee_y[t + 1] == sym.by[name][t],
+        sym.ee_z[t + 1] == sym.bz[name][t],
+        z3.And(*_frame_all(sym, t)),
+    )
 
 
 def _move_target(
@@ -421,15 +422,26 @@ def _encode_move(
     return z3.And(*moved)
 
 
-def _encode_release(sym: BMCTraceSymbols, t: int, z_off: z3.ArithRef) -> z3.BoolRef:
-    # ``z_off`` is kept for API parity with ``Release.target_z_offset``; the
-    # simple BMC model fixes geometry at release (see user example).
-    _ = z_off
+def _encode_release(
+    sym: BMCTraceSymbols, t: int, ref_box_id: int, z_off: z3.ArithRef
+) -> z3.BoolRef:
+    """
+    Open the gripper after lowering EE z to ``bz[ref][t] + z_off``. EE x/y and
+    every block position are unchanged; only ``holding`` and ``ee_z`` update.
+    """
+    if not 0 <= ref_box_id < len(sym.block_names):
+        raise IndexError(
+            f"Release reference box id {ref_box_id} out of range for "
+            f"{len(sym.block_names)} blocks."
+        )
+    ref_name = sym.block_names[ref_box_id]
+    target_z = sym.bz[ref_name][t] + z_off
     return z3.And(
+        sym.holding[t] != sym.NONE,
         sym.holding[t + 1] == sym.NONE,
         sym.ee_x[t + 1] == sym.ee_x[t],
         sym.ee_y[t + 1] == sym.ee_y[t],
-        sym.ee_z[t + 1] == sym.ee_z[t],
+        sym.ee_z[t + 1] == target_z,
         z3.And(*_frame_all(sym, t)),
     )
 
@@ -498,9 +510,26 @@ def encode_step(
         oz = offset_vars[key_oz]
         return _encode_move(sym, t, ix, iy, iz, ox, oy, oz)
     if isinstance(instr, Release):
-        return _encode_release(sym, t, offset_vars[key_rz])
+        k = str(int(instr.release_box_id))
+        if k not in name_to_box_id:
+            raise KeyError(
+                f"Release: box id {instr.release_box_id!r} not in inferred layout keys."
+            )
+        return _encode_release(
+            sym, t, int(name_to_box_id[k]), offset_vars[key_rz]
+        )
     if isinstance(instr, ReleaseByName):
-        return _encode_release(sym, t, offset_vars[key_rz])
+        if instr.release_box_name not in name_to_box_id:
+            raise KeyError(
+                f"ReleaseByName: name {instr.release_box_name!r} not in inferred "
+                f"layout (known: {sorted(name_to_box_id)})."
+            )
+        return _encode_release(
+            sym,
+            t,
+            int(name_to_box_id[instr.release_box_name]),
+            offset_vars[key_rz],
+        )
     raise TypeError(f"encode_step: unsupported instruction {type(instr).__name__}")
 
 

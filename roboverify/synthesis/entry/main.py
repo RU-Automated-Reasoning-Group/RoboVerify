@@ -113,6 +113,41 @@ if __name__ == "__main__":
             f"Split {len(demo_splits)} demos using {best_feature}; "
             f"videos saved under {feature_video_dir}/"
         )
+        stage1_tag = str(best_feature).replace(" ", "")
+        failed_split_seeds = [
+            split["demo_idx"]
+            for split in demo_splits
+            if split["split_idx"] is None
+        ]
+        if failed_split_seeds:
+            print(
+                f"Unexpected split failures for {best_feature} on seeds: "
+                f"{failed_split_seeds}"
+            )
+            exit()
+        part1_splits = [split for split in demo_splits if split["split_idx"] is not None]
+        part1_trajs = [split["part1"] for split in part1_splits]
+        part1_seeds = [split["demo_idx"] for split in part1_splits]
+        part1_expert_states = [state for traj in part1_trajs for state in traj]
+        if part1_expert_states:
+            print(f"=== running MCMC on part-1 trajectories for {best_feature} ===")
+            synthesis.MCMC(
+                program.Program(5),
+                {"Box": list(range(num_blocks))},
+                [program.Pick, program.Move, program.Release],
+                2000,
+                expert_states=part1_expert_states,
+                num_seeds=len(part1_trajs),
+                num_block=num_blocks,
+                save_dir=f"MCMC_results_after_{stage1_tag}_part1",
+                seeds=part1_seeds,
+                bmc_goal=synthesis.bmc_goal_from_on_feature(best_feature),
+                bmc_initial_constraints=synthesis.roboverify_bmc_initial_constraints(),
+            )
+        else:
+            print(
+                f"Skipping part-1 MCMC for {best_feature}: no prefix trajectories found."
+            )
 
         valid_splits = [split for split in demo_splits if split["part2"]]
         part2_trajs = [split["part2"] for split in valid_splits]
@@ -129,7 +164,6 @@ if __name__ == "__main__":
             length=8,
             block_ids=list(range(num_blocks)),
         )
-        stage1_tag = str(best_feature).replace(" ", "")
         random_video_dir = f"random_rollouts_after_{stage1_tag}"
         print(
             "=== stage-2 random program from part-1 checkpoints ===\n",

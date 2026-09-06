@@ -4,12 +4,11 @@ import pickle
 import random
 import tempfile
 from copy import deepcopy
-from typing import Any, Optional, Tuple
+from typing import Any, Callable, Optional, Tuple
 
 import ffmpeg
 import imageio
 import numpy as np
-from PIL import Image  # for saving images as PNG
 
 from synthesis.api import program
 from synthesis.environment.cee_us_env.fpp_construction_env import (
@@ -18,6 +17,15 @@ from synthesis.environment.cee_us_env.fpp_construction_env import (
 from synthesis.environment.general_env import GymToGymnasium
 from synthesis.mcmc import cem, cost_func, decision_tree
 from synthesis.util import on
+from synthesis.verification_lib.bmc_lib import (
+    BMCTraceSymbols,
+    ConstraintSpec,
+    bmc_feasible,
+    default_table_initial_state,
+    goal_on_box_ids,
+)
+
+BMC_FAILED_COST = -1e6
 
 
 def sample_proportional(values):
@@ -36,31 +44,63 @@ def sample_proportional(values):
     return random.choices(range(len(values)), weights=probs, k=1)[0]
 
 
-def swap_two_elements_maybe_same(lst):
-    """
-    Randomly selects two indices (which may be the same) and swaps their elements.
+def executable_instructions(p: program.Program) -> list:
+    """Non-Skip instructions that affect execution and BMC."""
+    return [ins for ins in p.instructions if type(ins) != program.Skip]
 
-    Parameters:
-    - lst: List of elements to mutate (in-place)
 
-    Returns:
-    - A new list with two elements swapped (or not, if indices are the same)
-    """
-    if len(lst) == 0:
-        raise ValueError("List must contain at least one element.")
+def describe_instruction_slot_changes(
+    old_program: program.Program, new_program: program.Program
+) -> list[str]:
+    """Human-readable per-slot diff between two programs."""
+    lines: list[str] = []
+    for i, (old_ins, new_ins) in enumerate(
+        zip(old_program.instructions, new_program.instructions)
+    ):
+        if str(old_ins) != str(new_ins):
+            lines.append(f"  slot {i}: {old_ins!s} -> {new_ins!s}")
+    if not lines:
+        lines.append("  (no per-slot instruction changes)")
+    return lines
 
-    i = random.randint(0, len(lst) - 1)
-    j = random.randint(0, len(lst) - 1)
-    print(f"swap instructions {i} and {j}")
-    lst[i], lst[j] = lst[j], lst[i]
-    return lst
+
+def format_mutation_report(
+    mutation_info: dict,
+    old_program: program.Program,
+    new_program: program.Program,
+    *,
+    equivalence: bool,
+) -> str:
+    """Build a detailed mutation report for logging and summaries."""
+    lines = [
+        f"mutation type: {mutation_info['type']}",
+        f"mutation changed program: {mutation_info['changed']}",
+    ]
+    lines.extend(f"  {detail}" for detail in mutation_info["details"])
+    lines.append("per-slot instruction diff:")
+    lines.extend(describe_instruction_slot_changes(old_program, new_program))
+    lines.append(
+        "executable instructions (non-Skip) before: "
+        + repr([str(ins) for ins in executable_instructions(old_program)])
+    )
+    lines.append(
+        "executable instructions (non-Skip) after: "
+        + repr([str(ins) for ins in executable_instructions(new_program)])
+    )
+    lines.append(f"executable equivalence: {equivalence}")
+    if equivalence and mutation_info["changed"]:
+        lines.append(
+            "note: mutation changed Skip-only slots or otherwise left "
+            "executable instructions identical"
+        )
+    return "\n".join(lines)
 
 
 def mutate_program(
     current_program: program.Program,
     available_operands: dict,
     available_instructions: list,
-) -> tuple[program.Program, bool]:
+) -> tuple[program.Program, bool, dict]:
     pc = 0  # opcode
     po = 1  # operand
     ps = 1  # swap
@@ -72,54 +112,258 @@ def mutate_program(
         2: "swap",
         3: "instruction",
     }[sampled_mutation]
-    print("mutation type", mutate_type_name)
+    mutation_info = {
+        "type": mutate_type_name,
+        "changed": False,
+        "details": [f"sampled mutation operator: {mutate_type_name}"],
+    }
 
     new_program = deepcopy(current_program)
     if sampled_mutation == 0:
-        pass
+        mutation_info["details"].append(
+            "opcode mutation is not implemented yet (no-op)"
+        )
     elif sampled_mutation == 1:
         index = random.randint(0, len(new_program.instructions) - 1)
-        old_operands = new_program.instructions[index].get_operand()
+        target = new_program.instructions[index]
+        old_operands = target.get_operand()
+        mutation_info["details"].append(
+            f"operand mutation at slot {index} on {target!s}"
+        )
         if old_operands:
             operand_index = random.randint(0, len(old_operands) - 1)
+            operand_spec = old_operands[operand_index]
             proposed_operand = random.choice(
-                available_operands[old_operands[operand_index]["type"]]
+                available_operands[operand_spec["type"]]
             )
-            print(
-                "old operand",
-                old_operands[operand_index],
-                "proposed operand",
-                proposed_operand,
+            mutation_info["details"].append(
+                f"operand index {operand_index} ({operand_spec['type']}): "
+                f"old={operand_spec.get('val', operand_spec)!r} "
+                f"proposed={proposed_operand!r}"
             )
-            if old_operands[operand_index] == proposed_operand:
-                return new_program, False
-            old_operands[operand_index]["val"] = proposed_operand
-            new_program.instructions[index].set_operand(old_operands)
+            if operand_spec.get("val", operand_spec) == proposed_operand:
+                mutation_info["details"].append(
+                    "proposed operand equals current value; no change"
+                )
+                return new_program, False, mutation_info
+            operand_spec["val"] = proposed_operand
+            target.set_operand(old_operands)
+            mutation_info["changed"] = True
         else:
-            return new_program, False
+            mutation_info["details"].append(
+                f"instruction at slot {index} has no mutable operands"
+            )
     elif sampled_mutation == 2:
-        swap_two_elements_maybe_same(new_program.instructions)
+        i = random.randint(0, len(new_program.instructions) - 1)
+        j = random.randint(0, len(new_program.instructions) - 1)
+        before_i, before_j = (
+            new_program.instructions[i],
+            new_program.instructions[j],
+        )
+        new_program.instructions[i], new_program.instructions[j] = (
+            new_program.instructions[j],
+            new_program.instructions[i],
+        )
+        mutation_info["details"].append(
+            f"swap slots {i} and {j}: "
+            f"{before_i!s} <-> {before_j!s}"
+        )
+        if i == j:
+            mutation_info["details"].append(
+                "same slot selected twice; swap is a no-op"
+            )
+        else:
+            mutation_info["changed"] = True
     elif sampled_mutation == 3:
         index = random.randint(0, len(new_program.instructions) - 1)
+        old_instruction = new_program.instructions[index]
         pu = 0.25  # probability the SKIP token is proposed
-        if random.random() < pu:
-            if type(new_program.instructions[index]) == program.Skip:
-                print("chaning skip to skip")
-                return new_program, False
+        propose_skip = random.random() < pu
+        mutation_info["details"].append(
+            f"instruction mutation at slot {index}; "
+            f"old={old_instruction!s}; propose_skip={propose_skip}"
+        )
+        if propose_skip:
+            if type(old_instruction) == program.Skip:
+                mutation_info["details"].append("Skip -> Skip; no change")
+                return new_program, False, mutation_info
             new_program.instructions[index] = program.Skip()
+            mutation_info["details"].append(
+                f"replaced with Skip (was {old_instruction!s})"
+            )
+            mutation_info["changed"] = True
         else:
             new_instruction = random.choice(available_instructions)()
             operands = new_instruction.get_operand()
-            for i in range(len(operands)):
-                operands[i]["val"] = random.choice(
-                    available_operands[operands[i]["type"]]
+            operand_choices = []
+            for operand_i in range(len(operands)):
+                chosen = random.choice(
+                    available_operands[operands[operand_i]["type"]]
+                )
+                operands[operand_i]["val"] = chosen
+                operand_choices.append(
+                    f"{operands[operand_i]['type']}={chosen!r}"
                 )
             new_instruction.set_operand(operands)
             new_program.instructions[index] = new_instruction
+            mutation_info["details"].append(
+                f"replaced with {new_instruction!s} "
+                f"(operands: {', '.join(operand_choices)})"
+            )
+            mutation_info["changed"] = True
     else:
         assert False, "unknown mutation"
 
-    return new_program, True
+    return new_program, mutation_info["changed"], mutation_info
+
+
+def program_instructions_for_bmc(p: program.Program) -> list:
+    """Drop ``Skip`` tokens so BMC sees only executable instructions."""
+    return [
+        ins for ins in p.instructions if not isinstance(ins, program.Skip)
+    ]
+
+
+def roboverify_bmc_initial_constraints() -> Callable[[BMCTraceSymbols], list]:
+    """Scattered tabletop layout aligned with RoboVerifyStack separation."""
+
+    def make_init(sym: BMCTraceSymbols) -> list:
+        sep = 2.0 * on.BLOCK_LENGTH
+        xy_positions = {
+            b: (float(i) * sep, 0.0) for i, b in enumerate(sym.block_names)
+        }
+        return default_table_initial_state(sym, xy_positions=xy_positions)
+
+    return make_init
+
+
+def bmc_goal_from_on_feature(feature) -> Callable[[BMCTraceSymbols], Any]:
+    """Build a BMC goal for ``ON(b1, b2)`` from a learned :class:`ON_feature`."""
+
+    def goal(sym: BMCTraceSymbols):
+        return goal_on_box_ids(sym, feature.b1, feature.b2)
+
+    return goal
+
+
+def check_bmc_candidate(
+    p: program.Program,
+    goal: Optional[Callable[[BMCTraceSymbols], Any]],
+    *,
+    initial_constraints: Optional[ConstraintSpec] = None,
+) -> tuple[Optional[bool], str]:
+    """Run BMC on ``p`` and return ``(feasible, report)``.
+
+    When ``goal`` is ``None``, BMC is disabled and ``feasible`` is ``None``.
+    """
+    if goal is None:
+        return None, "BMC: disabled (no bmc_goal configured)"
+
+    instrs = program_instructions_for_bmc(p)
+    if not instrs:
+        return False, (
+            "BMC: INFEASIBLE — no non-Skip instructions "
+            f"({len(p.instructions)} program slots, 0 executable)"
+        )
+
+    instr_summary = "; ".join(str(ins) for ins in instrs)
+    try:
+        import pdb; pdb.set_trace()
+        feasible = bmc_feasible(
+            instrs,
+            goal,
+            initial_constraints=initial_constraints,
+        )
+    except KeyError as exc:
+        return False, (
+            "BMC: INFEASIBLE — goal references blocks not present in program "
+            f"({exc}); instructions: [{instr_summary}]"
+        )
+    except (TypeError, ValueError) as exc:
+        return False, (
+            "BMC: INFEASIBLE — solver error "
+            f"({exc}); instructions: [{instr_summary}]"
+        )
+
+    verdict = "FEASIBLE" if feasible else "INFEASIBLE"
+    return feasible, (
+        f"BMC: {verdict} — {len(instrs)} executable instruction(s): "
+        f"[{instr_summary}]"
+    )
+
+
+def bmc_feasible_program(
+    p: program.Program,
+    goal: Callable[[BMCTraceSymbols], Any],
+    *,
+    initial_constraints: Optional[ConstraintSpec] = None,
+) -> bool:
+    """Check whether ``p`` can reach ``goal`` for some float offset assignment."""
+    feasible, _report = check_bmc_candidate(
+        p, goal, initial_constraints=initial_constraints
+    )
+    return bool(feasible)
+
+
+def print_bmc_check(label: str, report: str) -> None:
+    print(f"=== {label} BMC check ===\n{report}")
+
+
+def score_candidate_program(
+    p: program.Program,
+    expert_states,
+    num_seeds: int,
+    num_block: int,
+    cem_N: int,
+    cem_K: int,
+    cem_iterations: int,
+    *,
+    seeds: Optional[list] = None,
+    bmc_goal: Optional[Callable[[BMCTraceSymbols], Any]] = None,
+    bmc_initial_constraints: Optional[ConstraintSpec] = None,
+    bmc_failed_cost: float = BMC_FAILED_COST,
+    bmc_label: str = "candidate program",
+    video_dir: Optional[str] = None,
+    video_fps: int = 30,
+) -> tuple[float, program.Program, bool, str]:
+    """Optionally require BMC feasibility, then CEM-optimize ``p``."""
+    bmc_passed, bmc_report = check_bmc_candidate(
+        p,
+        bmc_goal,
+        initial_constraints=bmc_initial_constraints,
+    )
+    print_bmc_check(bmc_label, bmc_report)
+
+    if bmc_goal is not None:
+        if not bmc_passed:
+            print(f"BMC feasibility failed; skipping CEM, cost -> {bmc_failed_cost}")
+            return bmc_failed_cost, p, False, bmc_report
+        print("BMC feasibility passed; running CEM")
+    cost, p = optimize_program(
+        p,
+        expert_states,
+        num_seeds,
+        num_block,
+        cem_N,
+        cem_K,
+        cem_iterations,
+        seeds=seeds,
+    )
+    if video_dir is not None:
+        save_program_seed_videos(
+            p,
+            num_seeds=num_seeds,
+            num_block=num_block,
+            video_dir=video_dir,
+            seeds=seeds,
+            video_fps=video_fps,
+        )
+    return (
+        cost,
+        p,
+        True if bmc_goal is None else bool(bmc_passed),
+        bmc_report,
+    )
 
 
 def MCMC(
@@ -134,21 +378,39 @@ def MCMC(
     cem_K: int = 4,
     cem_iterations: int = 10,
     save_dir: str = "MCMC_results",
+    seeds: Optional[list] = None,
+    bmc_goal: Optional[Callable[[BMCTraceSymbols], Any]] = None,
+    bmc_initial_constraints: Optional[ConstraintSpec] = None,
+    bmc_failed_cost: float = BMC_FAILED_COST,
+    save_candidate_videos: bool = True,
+    video_fps: int = 30,
 ):
     # Ensure save_dir exists
     os.makedirs(save_dir, exist_ok=True)
 
     print("=== initial program ===\n", current_program)
-    current_cost, current_program = optimize_program(
-        current_program,
-        expert_states,
-        num_seeds,
-        num_block,
-        cem_N,
-        cem_K,
-        cem_iterations,
+    initial_video_dir = (
+        os.path.join(save_dir, "initial", "videos") if save_candidate_videos else None
     )
-    print("evaluated with cost", current_cost)
+    current_cost, current_program, current_bmc_passed, current_bmc_report = (
+        score_candidate_program(
+            current_program,
+            expert_states,
+            num_seeds,
+            num_block,
+            cem_N,
+            cem_K,
+            cem_iterations,
+            seeds=seeds,
+            bmc_goal=bmc_goal,
+            bmc_initial_constraints=bmc_initial_constraints,
+            bmc_failed_cost=bmc_failed_cost,
+            bmc_label="initial program",
+            video_dir=initial_video_dir,
+            video_fps=video_fps,
+        )
+    )
+    print("evaluated with cost", current_cost, f"(bmc_feasible={current_bmc_passed})")
 
     samples = [deepcopy(current_program)]
     costs = [current_cost]
@@ -157,46 +419,95 @@ def MCMC(
         iter_folder = os.path.join(save_dir, f"iter{i}")
         os.makedirs(iter_folder, exist_ok=True)
 
-        new_program, changed = mutate_program(
+        new_program, changed, mutation_info = mutate_program(
             current_program, available_operands, available_instructions
         )
-        print(f"=== iter {i} program ===\n", new_program)
 
-        ins1 = [x for x in current_program.instructions if type(x) != program.Skip]
-        ins2 = [x for x in new_program.instructions if type(x) != program.Skip]
-        equivalence = ins1 == ins2
-        print("program equivalence", equivalence)
+        equivalence = executable_instructions(current_program) == executable_instructions(
+            new_program
+        )
+        mutation_report = format_mutation_report(
+            mutation_info,
+            current_program,
+            new_program,
+            equivalence=equivalence,
+        )
+        print(f"=== iter {i} mutation ===\n{mutation_report}")
+        print(f"=== iter {i} new program ===\n{new_program}")
 
         # Save a copy of current_program BEFORE acceptance update
         saved_current_program = deepcopy(current_program)
         saved_current_cost = current_cost
+        new_bmc_passed = current_bmc_passed
+        new_bmc_report = current_bmc_report
 
+        candidate_video_dir: Optional[str] = None
         if changed and not equivalence:
-            # Optimize new_program, which may modify it
-            new_cost, new_program = optimize_program(
-                new_program,
-                expert_states,
-                num_seeds,
-                num_block,
-                cem_N,
-                cem_K,
-                cem_iterations,
+            candidate_video_dir = (
+                os.path.join(iter_folder, "videos")
+                if save_candidate_videos
+                else None
             )
-            print("evaluated with cost", new_cost)
+            new_cost, new_program, new_bmc_passed, new_bmc_report = (
+                score_candidate_program(
+                    new_program,
+                    expert_states,
+                    num_seeds,
+                    num_block,
+                    cem_N,
+                    cem_K,
+                    cem_iterations,
+                    seeds=seeds,
+                    bmc_goal=bmc_goal,
+                    bmc_initial_constraints=bmc_initial_constraints,
+                    bmc_failed_cost=bmc_failed_cost,
+                    bmc_label=f"iter {i} candidate",
+                    video_dir=candidate_video_dir,
+                    video_fps=video_fps,
+                )
+            )
+            print(
+                "evaluated with cost",
+                new_cost,
+                f"(bmc_feasible={new_bmc_passed})",
+            )
         else:
             new_cost = current_cost
+            candidate_video_dir = None
+            if equivalence:
+                new_bmc_report = (
+                    "BMC: skipped (executable equivalence); "
+                    f"reusing prior result -> feasible={current_bmc_passed}"
+                )
+                print(
+                    "program equivalence: skipping cost evaluation "
+                    "(reusing current cost)"
+                )
+            else:
+                new_bmc_report = (
+                    "BMC: skipped (mutation produced no change); "
+                    f"reusing prior result -> feasible={current_bmc_passed}"
+                )
+                print("mutation produced no change: reusing current cost")
+            print_bmc_check(f"iter {i} candidate", new_bmc_report)
 
         # Save a copy of new_program AFTER optimization
         saved_new_program = deepcopy(new_program)
 
         # Decide acceptance
         if changed and not equivalence:
-            acceptance_ratio = math.exp(new_cost - current_cost)
+            log_acceptance_ratio = new_cost - current_cost
+            if log_acceptance_ratio >= 0:
+                acceptance_ratio = 1.0
+            else:
+                acceptance_ratio = math.exp(log_acceptance_ratio)
             print("acceptance_ratio is", acceptance_ratio)
             if random.random() < acceptance_ratio:
                 print("new program accepted")
                 current_program = new_program
                 current_cost = new_cost
+                current_bmc_passed = new_bmc_passed
+                current_bmc_report = new_bmc_report
             else:
                 print("new program NOT accepted")
 
@@ -206,37 +517,42 @@ def MCMC(
         with open(os.path.join(iter_folder, "new_program.pkl"), "wb") as f:
             pickle.dump(saved_new_program, f)
 
+        eval_skipped = equivalence or not new_bmc_passed
+        rollout_skip_reasons: list[str] = []
+        if equivalence:
+            rollout_skip_reasons.append("executable equivalence")
+        if not new_bmc_passed:
+            rollout_skip_reasons.append("BMC infeasible")
         # Save text summary
         with open(os.path.join(iter_folder, "summary.txt"), "w") as f:
+            f.write("=== Mutation Report ===\n")
+            f.write(mutation_report + "\n\n")
             f.write("=== Current Program ===\n")
             f.write(str(saved_current_program) + "\n")
-            f.write(f"Current Cost: {saved_current_cost}\n\n")
+            f.write(f"Current Cost: {saved_current_cost}\n")
+            f.write(f"Current BMC: {current_bmc_report}\n\n")
             f.write("=== New Program ===\n")
             f.write(str(saved_new_program) + "\n")
             f.write(f"New Cost: {new_cost}\n")
+            f.write(f"New BMC: {new_bmc_report}\n")
+            f.write(f"BMC Feasible: {new_bmc_passed}\n")
             f.write(f"Program Equivalence: {equivalence}\n")
             f.write(f"Accepted: {current_program == new_program}\n")
+            if candidate_video_dir is not None:
+                f.write(f"Videos: {candidate_video_dir}/seed_XXXX.mp4\n")
+            elif eval_skipped:
+                f.write(
+                    "Evaluation/Video: skipped ("
+                    + "; ".join(rollout_skip_reasons)
+                    + ")\n"
+                )
 
-        # --- Evaluate program and save images/video ---
-        frames_dir = os.path.join(iter_folder, "frames")
-        os.makedirs(frames_dir, exist_ok=True)
-
-        # Evaluate new_program and get images
-        _, _, imgs = evaluate_program(
-            saved_new_program, n=num_seeds, num_block=num_block, return_img=True
-        )
-
-        # Save each image as PNG
-        for idx, img in enumerate(imgs):
-            img_path = os.path.join(frames_dir, f"img{idx:04d}.png")
-            if isinstance(img, Image.Image):
-                img.save(img_path)
-            else:  # assume numpy array
-                Image.fromarray(img).save(img_path)
-
-        # Generate video
-        output_video_path = os.path.join(iter_folder, "program_video.mp4")
-        images_to_video(frames_dir, output_video_path=output_video_path)
+        if eval_skipped and save_candidate_videos:
+            print(
+                "skipping candidate rollout videos ("
+                + "; ".join(rollout_skip_reasons)
+                + ")"
+            )
 
         samples.append(deepcopy(new_program))
         costs.append(new_cost)
@@ -252,8 +568,9 @@ def optimize_program(
     cem_N: int,
     cem_K: int,
     cem_iterations: int,
+    seeds: Optional[list] = None,
 ) -> tuple[float, program.Program]:
-    f = Runner(p, expert_states, num_seeds, num_block)
+    f = Runner(p, expert_states, num_seeds, num_block, seeds=seeds)
     initial_parameters = p.register_trainable_parameter()
     iterations = cem_iterations if initial_parameters else 0
     best_cost, best_parameter = cem.cem_optimize(
@@ -273,22 +590,28 @@ def set_np_seed(seed: int):
     random.seed(seed)
 
 
+# Shared RoboVerifyStack settings for demo collection and MCMC evaluation.
+ROBOVERIFY_STACK_ENV_KWARGS = {
+    "sparse": False,
+    "shaped_reward": False,
+    "reward_type": "sparse",
+    "case": "RoboVerifyStack",
+    "visualize_mocap": False,
+    "simple": True,
+    "base_block_id": 0,
+}
+
+
 def make_roboverify_stack_env(
     num_blocks: int = 4,
     render_mode: str = "rgb_array",
 ) -> GymToGymnasium:
-    """RoboVerifyStack environment matching ``synthesis/entry/main.py``."""
+    """Create the RoboVerifyStack env used for all demo rollouts and MCMC eval."""
     return GymToGymnasium(
         FetchPickAndPlaceConstruction(
-            name="roboverify_stack_3",
-            sparse=False,
-            shaped_reward=False,
+            name=f"roboverify_stack_{num_blocks}",
             num_blocks=num_blocks,
-            reward_type="sparse",
-            case="RoboVerifyStack",
-            visualize_mocap=False,
-            simple=True,
-            base_block_id=0,
+            **ROBOVERIFY_STACK_ENV_KWARGS,
         ),
         render_mode=render_mode,
     )
@@ -462,17 +785,24 @@ def rollout_demos(
     num_blocks: int = 4,
     save_imgs: bool = False,
     verbose: bool = True,
+    seeds: Optional[list] = None,
 ) -> Tuple[list, list, list, list]:
     """Roll out ``p`` once per seed without saving to disk.
 
     Returns ``(individual_traj, flat_states, successes, imgs)``.
     """
+    rollout_seeds = list(seeds) if seeds is not None else list(range(num_demo))
+    if len(rollout_seeds) != num_demo:
+        raise ValueError(
+            f"seeds length {len(rollout_seeds)} must match num_demo {num_demo}"
+        )
+
     states = []
     imgs = []
     individual_traj = []
     successes = []
-    for i in range(num_demo):
-        set_np_seed(i)
+    for seed in rollout_seeds:
+        set_np_seed(seed)
         env = make_roboverify_stack_env(num_blocks=num_blocks)
         try:
             result = p.eval(env, return_img=save_imgs)
@@ -484,7 +814,7 @@ def rollout_demos(
             success = roboverify_env_success(env, traj[-1] if traj else None)
             successes.append(success)
             if verbose:
-                print(f"seed {i}: success={success}")
+                print(f"seed {seed}: success={success}")
                 print("initial layout")
                 on.print_block_layout(traj[0], num_blocks)
                 print("final layout")
@@ -504,6 +834,44 @@ def rollout_demos(
         )
         print("number of expert states", len(states))
     return individual_traj, states, successes, imgs
+
+
+def save_program_seed_videos(
+    p: program.Program,
+    *,
+    num_seeds: int,
+    num_block: int,
+    video_dir: str,
+    seeds: Optional[list] = None,
+    video_fps: int = 30,
+    verbose: bool = True,
+) -> list[str]:
+    """Roll out ``p`` once per seed and write ``seed_XXXX.mp4`` under ``video_dir``."""
+    os.makedirs(video_dir, exist_ok=True)
+    rollout_seeds = list(seeds) if seeds is not None else list(range(num_seeds))
+    if len(rollout_seeds) != num_seeds:
+        raise ValueError(
+            f"seeds length {len(rollout_seeds)} must match num_seeds {num_seeds}"
+        )
+
+    saved_paths: list[str] = []
+    for seed in rollout_seeds:
+        set_np_seed(seed)
+        env = make_roboverify_stack_env(num_blocks=num_block)
+        try:
+            traj, imgs = p.eval(env, return_img=True)
+            success = roboverify_env_success(env, traj[-1] if traj else None)
+            if verbose:
+                print(
+                    f"seed {seed}: success={success}, "
+                    f"frames={len(imgs)}, saving video"
+                )
+            output_path = os.path.join(video_dir, f"seed_{seed:04d}.mp4")
+            save_frames_as_video(imgs, output_path, fps=video_fps)
+            saved_paths.append(output_path)
+        finally:
+            env.close()
+    return saved_paths
 
 
 def rollout_demos_from_initial_states(
@@ -714,38 +1082,22 @@ def collect_trajectories(
     return states, individual_traj
 
 
-def evaluate_program(p: program.Program, n: int, num_block: int, return_img=False):
-    states = []
-    imgs = []
-    individual_traj = []
-    for i in range(n):
-        set_np_seed(i)
-        env_name = f"pickmulti{num_block}"
-        env = GymToGymnasium(
-            FetchPickAndPlaceConstruction(
-                name=env_name,
-                sparse=False,
-                shaped_reward=False,
-                num_blocks=int(num_block),
-                reward_type="sparse",
-                case="Singletower",
-                visualize_mocap=False,
-                stack_only=True,
-                simple=True,
-            ),
-        )
-        traj = p.eval(env, return_img)
-        if return_img:
-            traj, traj_imgs = traj
-            for image in traj_imgs:
-                imgs.append(image)
-
-        copy_traj = []
-        for state in traj:
-            states.append(state)
-            copy_traj.append(deepcopy(state))
-        individual_traj.append(copy_traj)
-
+def evaluate_program(
+    p: program.Program,
+    n: int,
+    num_block: int,
+    return_img: bool = False,
+    seeds: Optional[list] = None,
+):
+    """Evaluate ``p`` using the same RoboVerifyStack env as demo collection."""
+    individual_traj, states, _successes, imgs = rollout_demos(
+        p,
+        n,
+        num_blocks=num_block,
+        save_imgs=return_img,
+        verbose=False,
+        seeds=seeds,
+    )
     print("number of policy states", len(states))
     if return_img:
         return states, individual_traj, imgs
@@ -754,22 +1106,28 @@ def evaluate_program(p: program.Program, n: int, num_block: int, return_img=Fals
 
 class Runner:
     def __init__(
-        self, program: program.Program, expert_states, num_seeds: int, num_block: int
+        self,
+        program: program.Program,
+        expert_states,
+        num_seeds: int,
+        num_block: int,
+        seeds: Optional[list] = None,
     ):
         self.p = program
         self.expert_states = np.array(expert_states)
         self.slices: list[Any] = [slice(None)] * self.expert_states.ndim
-        self.slices[1] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 22, 23, 24]
+        self.slices[1] = on.state_comparison_indices(num_block)
         self.tuple_slices = tuple(self.slices)
         self.expert_states = self.expert_states[self.tuple_slices]
         self.num_seeds = num_seeds
         self.num_block = num_block
+        self.seeds = seeds
 
     def __call__(self, new_parameters):
         p = deepcopy(self.p)
         p.update_trainable_parameter(new_parameters)
         policy_states, _individual_trajs, _imgs = evaluate_program(
-            p, self.num_seeds, self.num_block
+            p, self.num_seeds, self.num_block, seeds=self.seeds
         )
         policy_states = np.array(policy_states)[self.tuple_slices]
         kl_value = cost_func.kl_divergence_kde(policy_states, self.expert_states)

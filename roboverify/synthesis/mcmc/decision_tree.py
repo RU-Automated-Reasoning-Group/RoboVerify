@@ -178,6 +178,16 @@ def split_demos_by_feature(
             entry["part2_video"] = os.path.join(demo_video_dir, "part2.mp4")
 
         results.append(entry)
+
+    failed_seeds = [entry["demo_idx"] for entry in results if entry["split_idx"] is None]
+    if failed_seeds:
+        print(
+            f"WARNING: feature {feature} split failed on "
+            f"{len(failed_seeds)}/{len(demos)} seeds: {failed_seeds}"
+        )
+    else:
+        print(f"Feature {feature} split succeeded on all {len(demos)} seeds.")
+
     return results
 
 
