@@ -38,10 +38,22 @@ uv run python -m synthesis.entry.verify_2d_with_learned_invariant
 uv run python -m synthesis.entry.main   # big ad hoc experiment/demo-collection script
 ```
 
+Run an *instrumented* MCMC search, which writes a monitorable run directory (see
+"Monitoring runs" below) instead of printing a firehose:
+
+```bash
+uv run python -m synthesis.experiment.mcmc.run --smoke --demo-dir demos
+uv run python -m synthesis.experiment.mcmc.run \
+    --task stack --num-blocks 4 --iters 2000 --demo-dir demos \
+    --goal-feature 'ON(1,0)' --slug stack-nb4
+```
+
 Run tests (unittest, not pytest):
 
 ```bash
 uv run python -m unittest synthesis.verification_lib.test_bmc_lib -v
+uv run python -m unittest synthesis.experiment.test_run_logger -v      # fast, no simulator
+uv run python -m unittest synthesis.experiment.test_mcmc_parity -v     # drives MuJoCo
 ```
 
 Format code (isort then black, over the package dirs — no linter is configured):
@@ -127,5 +139,57 @@ bash format.sh
   across `instructions.py`, `on.py`, and the `While` guard evaluator — keep it in sync if the
   observation layout ever changes.
 
+- **`synthesis/experiment/`** — run logging and reporting, plus an instrumented copy of
+  the MCMC search. `run_logger.py` owns the run-directory contract; `report.py` is the
+  bounded reader; `config.py` captures every knob into `config.json`. Under `mcmc/`,
+  `search.py`, `cem.py` and `run.py` reimplement only the four functions that need to
+  emit records (`MCMC`, `score_candidate_program`, `optimize_program`, `cem_optimize`)
+  and import everything else unchanged from `synthesis.mcmc`, so there is no second
+  copy of `synthesis.py` to keep in sync. `synthesis/mcmc/` itself is untouched, and
+  `test_mcmc_parity.py` pins the two to the same accept/reject sequence.
+
 - **`synthesis/topdown/`** — an alternate top-down program synthesis DSL (`dsl.py`,
   `topdown.py`), separate from the MCMC search path.
+
+## Monitoring runs
+
+Instrumented runs write `runs/<name>/<utc>-<sha>-<slug>/`, with `runs/<name>/latest`
+symlinked to the newest one. The contract:
+
+| file | pattern | notes |
+|---|---|---|
+| `config.json` | written once | resolved config, git sha + dirty flag, argv, library versions |
+| `status.json` | **overwritten** each update | one small object forever; `alive` plus a stale `heartbeat` means the run is wedged, not finished |
+| `metrics.jsonl` | one flat record per iteration | aggregate it; never read it line by line |
+| `events.jsonl` | rare, rate-limited per kind | new bests, first feasible candidate, exceptions |
+| `stdout.log` | fd-level capture | the firehose, including MuJoCo/OpenGL output; grep only |
+| `result.json` | written once at exit | final verdict |
+| `artifacts/` | as needed | programs, pickles, videos, tracebacks (referenced by path, never inlined) |
+
+**Read a run with the report tool, not by opening the files:**
+
+```bash
+uv run python -m synthesis.experiment.report --run runs/mcmc/latest
+uv run python -m synthesis.experiment.report --glob 'runs/mcmc/*' --table
+```
+
+Output is capped at `--max-lines` (default 60) so inspecting a run costs the same
+whether it is at iteration 10 or 10,000, and the shape is stable so two reports diff
+cleanly. **Never `cat` `metrics.jsonl` or `stdout.log`**; if you must grep the log,
+bound it (`grep -m 20`). Avoiding those two reads is the entire point of the run
+directory.
+
+### Diagnosing a bad run
+
+The metrics are chosen so each symptom points at a specific lever:
+
+| symptom in the report | likely cause | lever |
+|---|---|---|
+| `bmc_feasible` near 0, `bmc_reason` dominated by one label | goal spec, operand pool, or program length | `--program-slots`, `--goal-feature`, `--num-blocks` |
+| `accept` near 1.0 | acceptance rule is nearly unselective (a cost delta of 0.0065 gives ratio 0.993) | `--beta` |
+| `at_floor` near 1.0, `first_feasible` unset | chain pinned at `bmc_failed_cost`, so acceptance is unconditional | seed program, BMC penalty shape |
+| `cem` delta mean ~0 or many zero-delta iters | inner parameter optimization not improving anything | `--cem-N/-K/--cem-iterations`, `--cem-init-std` |
+| `success` mean ~0 while `best_cost` improves | objective is not tracking task success | reward weights, objective design |
+
+`--smoke` (20 iterations, 2 CEM iterations, no videos) is for testing one of these
+hypotheses in minutes rather than hours.
