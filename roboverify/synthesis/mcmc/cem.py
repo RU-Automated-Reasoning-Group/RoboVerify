@@ -52,4 +52,7 @@ def cem_optimize(
 
     # Pick the best mu seen
     max_idx = np.argmax(score_list)
+    print(max_idx, score_list[max_idx], mu_list[max_idx])
+    print(score_list)
+    print(mu_list)
     return score_list[max_idx], mu_list[max_idx]

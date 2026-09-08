@@ -64,6 +64,7 @@ if __name__ == "__main__":
         demo_dir="demos",
         img_dir="demo_images",
         verify_reproducible=True,
+        task="unstack",
     )
     synthesis.images_to_video("demo_images", "demo_video.mp4")
 
@@ -87,6 +88,7 @@ if __name__ == "__main__":
         num_blocks=num_blocks,
         save_imgs=False,
         verbose=True,
+        task="unstack",
     )
 
     on_features = decision_tree.compute_ON_features(num_blocks)
@@ -131,8 +133,16 @@ if __name__ == "__main__":
         part1_expert_states = [state for traj in part1_trajs for state in traj]
         if part1_expert_states:
             print(f"=== running MCMC on part-1 trajectories for {best_feature} ===")
+            p = program.Program(5)
+            p.instructions = [
+                program.Pick(grab_box_id=1),
+                program.Move(target_box_id_x=1, target_box_id_y=1, target_box_id_z=0, target_offset=[0.0, 0.0, 0.0]),
+                program.Move(target_box_id_x=0, target_box_id_y=0, target_box_id_z=0, target_offset=[0.0, 0.0, 0.0]),
+                program.Move(target_box_id_x=0, target_box_id_y=0, target_box_id_z=0, target_offset=[0.0, 0.0, 0.0]),
+                # program.Release(release_box_id=0, target_z=0.15),
+            ]
             synthesis.MCMC(
-                program.Program(5),
+                program.Program(4),
                 {"Box": list(range(num_blocks))},
                 [program.Pick, program.Move, program.Release],
                 2000,
@@ -143,6 +153,7 @@ if __name__ == "__main__":
                 seeds=part1_seeds,
                 bmc_goal=synthesis.bmc_goal_from_on_feature(best_feature),
                 bmc_initial_constraints=synthesis.roboverify_bmc_initial_constraints(),
+                goal_feature=best_feature,
             )
         else:
             print(

@@ -133,10 +133,10 @@ def verify_stack_program_with_learned_invariant(
             [m],
             ForAll([n], Or(m == n, Not(context.ON_star(n, m)))),
         ),
-        ForAll(
-            [m],
-            ForAll([n], context.Higher(n, m)),
-        ),
+        # ForAll(
+        #     [m],
+        #     ForAll([n], context.Higher(n, m)),
+        # ),
         ForAll([m, n], Implies(m != n, context.Scattered(m, n))),
     )
 
