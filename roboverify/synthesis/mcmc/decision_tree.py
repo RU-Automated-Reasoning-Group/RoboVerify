@@ -23,6 +23,12 @@ class ON_feature(Feature):
     def __call__(self, obs):
         return on.on(on.get_block_pos(obs, self.b1), on.get_block_pos(obs, self.b2))
 
+    def reward(self, obs) -> float:
+        return on.on_reward(
+            on.get_block_pos(obs, self.b1),
+            on.get_block_pos(obs, self.b2),
+        )
+
     def __str__(self) -> str:
         return f"ON({self.b1}, {self.b2})"
 

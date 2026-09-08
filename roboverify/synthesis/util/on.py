@@ -30,6 +30,43 @@ def on(block1, block2) -> bool:
     )
 
 
+def _clamped_linear_reward(error: float, tolerance: float) -> float:
+    """Return 1 at zero error and linearly decay to 0 beyond ``tolerance``."""
+    if tolerance <= 0.0:
+        return 1.0 if error <= 0.0 else 0.0
+    return float(max(0.0, 1.0 - error / tolerance))
+
+
+def on_reward(
+    block1,
+    block2,
+    block_length: float = BLOCK_LENGTH,
+) -> float:
+    """Dense [0, 1] reward aligned with :func:`on` geometry.
+
+    Returns 1.0 when ``on(block1, block2)`` holds; decays smoothly as xy
+    misalignment or vertical gap move outside the valid ON band.
+    """
+    x1, y1, z1 = np.asarray(block1, dtype=float)
+    x2, y2, z2 = np.asarray(block2, dtype=float)
+    half_xy = block_length / 2.0
+    max_dz = 1.5 * block_length
+
+    score_x = _clamped_linear_reward(abs(x1 - x2), half_xy)
+    score_y = _clamped_linear_reward(abs(y1 - y2), half_xy)
+    score_xy = score_x * score_y
+
+    dz = z1 - z2
+    if 0.0 <= dz < max_dz:
+        score_z = 1.0
+    elif dz < 0.0:
+        score_z = _clamped_linear_reward(-dz, half_xy)
+    else:
+        score_z = _clamped_linear_reward(dz - max_dz, half_xy)
+
+    return float(score_xy * score_z)
+
+
 def z3_on(
     x1: z3.ArithRef,
     y1: z3.ArithRef,
