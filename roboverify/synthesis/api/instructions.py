@@ -370,11 +370,11 @@ class Move(Instruction):
         return imgs
 
     def register_trainable_parameter(self, parameter: List[float]):
-        for p in self.target_offset:
+        for p in self.target_offset[2:]:
             p.register(parameter)
 
     def update_trainable_parameter(self, new_parameter: List[float]):
-        for p in self.target_offset:
+        for p in self.target_offset[2:]: # only update the z offset
             p.update(new_parameter)
 
     def get_operand(self):
