@@ -26,6 +26,7 @@ from synthesis.verification_lib.bmc_lib import (
 )
 
 BMC_FAILED_COST = -1e6
+DEFAULT_GOAL_FEATURE_REWARD_WEIGHT = 1.0
 
 
 def sample_proportional(values):
@@ -246,6 +247,55 @@ def bmc_goal_from_on_feature(feature) -> Callable[[BMCTraceSymbols], Any]:
     return goal
 
 
+def goal_feature_reward_at_execution_end(
+    feature,
+    individual_trajs: list,
+    *,
+    seeds: Optional[list] = None,
+) -> tuple[float, str]:
+    """Dense reward for a learned ON feature at each rollout's final state.
+
+    Uses :func:`on.on_reward`, which scores xy alignment and vertical gap on a
+    continuous [0, 1] scale aligned with the ON predicate geometry.
+    """
+    if not individual_trajs:
+        return 0.0, f"goal feature {feature}: no trajectories to evaluate"
+
+    per_seed_rewards: list[tuple[Any, float]] = []
+    for traj_idx, traj in enumerate(individual_trajs):
+        seed_id = seeds[traj_idx] if seeds is not None else traj_idx
+        if not traj:
+            per_seed_rewards.append((seed_id, 0.0))
+            continue
+        per_seed_rewards.append((seed_id, float(feature.reward(traj[-1]))))
+
+    reward = float(np.mean([seed_reward for _, seed_reward in per_seed_rewards]))
+    seed_report = ", ".join(
+        f"{seed_id}={seed_reward:.3f}" for seed_id, seed_reward in per_seed_rewards
+    )
+    report = (
+        f"goal feature {feature}: dense reward={reward:.3f} "
+        f"(mean over {len(individual_trajs)} seeds at final state; "
+        f"per-seed: {seed_report})"
+    )
+    return reward, report
+
+
+def print_goal_feature_reward(label: str, report: str) -> None:
+    print(f"=== {label} goal-feature reward ===\n{report}")
+
+
+def candidate_checks_passed(
+    *,
+    bmc_goal: Optional[Callable[[BMCTraceSymbols], Any]],
+    bmc_passed: bool,
+) -> bool:
+    """Return whether configured BMC feasibility checks passed."""
+    if bmc_goal is not None and not bmc_passed:
+        return False
+    return True
+
+
 def check_bmc_candidate(
     p: program.Program,
     goal: Optional[Callable[[BMCTraceSymbols], Any]],
@@ -268,7 +318,6 @@ def check_bmc_candidate(
 
     instr_summary = "; ".join(str(ins) for ins in instrs)
     try:
-        import pdb; pdb.set_trace()
         feasible = bmc_feasible(
             instrs,
             goal,
@@ -322,10 +371,12 @@ def score_candidate_program(
     bmc_goal: Optional[Callable[[BMCTraceSymbols], Any]] = None,
     bmc_initial_constraints: Optional[ConstraintSpec] = None,
     bmc_failed_cost: float = BMC_FAILED_COST,
+    goal_feature=None,
+    goal_feature_reward_weight: float = DEFAULT_GOAL_FEATURE_REWARD_WEIGHT,
     bmc_label: str = "candidate program",
     video_dir: Optional[str] = None,
     video_fps: int = 30,
-) -> tuple[float, program.Program, bool, str]:
+) -> tuple[float, program.Program, bool, str, str]:
     """Optionally require BMC feasibility, then CEM-optimize ``p``."""
     bmc_passed, bmc_report = check_bmc_candidate(
         p,
@@ -337,9 +388,15 @@ def score_candidate_program(
     if bmc_goal is not None:
         if not bmc_passed:
             print(f"BMC feasibility failed; skipping CEM, cost -> {bmc_failed_cost}")
-            return bmc_failed_cost, p, False, bmc_report
+            return (
+                bmc_failed_cost,
+                p,
+                False,
+                bmc_report,
+                "goal feature: skipped (BMC failed)",
+            )
         print("BMC feasibility passed; running CEM")
-    cost, p = optimize_program(
+    cost, p, _goal_reward, goal_feature_report = optimize_program(
         p,
         expert_states,
         num_seeds,
@@ -348,8 +405,15 @@ def score_candidate_program(
         cem_K,
         cem_iterations,
         seeds=seeds,
+        goal_feature=goal_feature,
+        goal_feature_reward_weight=goal_feature_reward_weight,
     )
-    if video_dir is not None:
+    print_goal_feature_reward(bmc_label, goal_feature_report)
+    checks_passed = candidate_checks_passed(
+        bmc_goal=bmc_goal,
+        bmc_passed=bool(bmc_passed),
+    )
+    if video_dir is not None and checks_passed:
         save_program_seed_videos(
             p,
             num_seeds=num_seeds,
@@ -361,8 +425,9 @@ def score_candidate_program(
     return (
         cost,
         p,
-        True if bmc_goal is None else bool(bmc_passed),
+        checks_passed,
         bmc_report,
+        goal_feature_report,
     )
 
 
@@ -382,6 +447,8 @@ def MCMC(
     bmc_goal: Optional[Callable[[BMCTraceSymbols], Any]] = None,
     bmc_initial_constraints: Optional[ConstraintSpec] = None,
     bmc_failed_cost: float = BMC_FAILED_COST,
+    goal_feature=None,
+    goal_feature_reward_weight: float = DEFAULT_GOAL_FEATURE_REWARD_WEIGHT,
     save_candidate_videos: bool = True,
     video_fps: int = 30,
 ):
@@ -392,7 +459,7 @@ def MCMC(
     initial_video_dir = (
         os.path.join(save_dir, "initial", "videos") if save_candidate_videos else None
     )
-    current_cost, current_program, current_bmc_passed, current_bmc_report = (
+    current_cost, current_program, current_checks_passed, current_bmc_report, current_goal_report = (
         score_candidate_program(
             current_program,
             expert_states,
@@ -405,12 +472,18 @@ def MCMC(
             bmc_goal=bmc_goal,
             bmc_initial_constraints=bmc_initial_constraints,
             bmc_failed_cost=bmc_failed_cost,
+            goal_feature=goal_feature,
+            goal_feature_reward_weight=goal_feature_reward_weight,
             bmc_label="initial program",
             video_dir=initial_video_dir,
             video_fps=video_fps,
         )
     )
-    print("evaluated with cost", current_cost, f"(bmc_feasible={current_bmc_passed})")
+    print(
+        "evaluated with cost",
+        current_cost,
+        f"(checks_passed={current_checks_passed})",
+    )
 
     samples = [deepcopy(current_program)]
     costs = [current_cost]
@@ -438,8 +511,9 @@ def MCMC(
         # Save a copy of current_program BEFORE acceptance update
         saved_current_program = deepcopy(current_program)
         saved_current_cost = current_cost
-        new_bmc_passed = current_bmc_passed
+        new_checks_passed = current_checks_passed
         new_bmc_report = current_bmc_report
+        new_goal_report = current_goal_report
 
         candidate_video_dir: Optional[str] = None
         if changed and not equivalence:
@@ -448,7 +522,7 @@ def MCMC(
                 if save_candidate_videos
                 else None
             )
-            new_cost, new_program, new_bmc_passed, new_bmc_report = (
+            new_cost, new_program, new_checks_passed, new_bmc_report, new_goal_report = (
                 score_candidate_program(
                     new_program,
                     expert_states,
@@ -461,6 +535,8 @@ def MCMC(
                     bmc_goal=bmc_goal,
                     bmc_initial_constraints=bmc_initial_constraints,
                     bmc_failed_cost=bmc_failed_cost,
+                    goal_feature=goal_feature,
+                    goal_feature_reward_weight=goal_feature_reward_weight,
                     bmc_label=f"iter {i} candidate",
                     video_dir=candidate_video_dir,
                     video_fps=video_fps,
@@ -469,7 +545,7 @@ def MCMC(
             print(
                 "evaluated with cost",
                 new_cost,
-                f"(bmc_feasible={new_bmc_passed})",
+                f"(checks_passed={new_checks_passed})",
             )
         else:
             new_cost = current_cost
@@ -477,7 +553,11 @@ def MCMC(
             if equivalence:
                 new_bmc_report = (
                     "BMC: skipped (executable equivalence); "
-                    f"reusing prior result -> feasible={current_bmc_passed}"
+                    f"reusing prior result -> checks_passed={current_checks_passed}"
+                )
+                new_goal_report = (
+                    "goal feature: skipped (executable equivalence); "
+                    f"reusing prior result -> checks_passed={current_checks_passed}"
                 )
                 print(
                     "program equivalence: skipping cost evaluation "
@@ -486,10 +566,15 @@ def MCMC(
             else:
                 new_bmc_report = (
                     "BMC: skipped (mutation produced no change); "
-                    f"reusing prior result -> feasible={current_bmc_passed}"
+                    f"reusing prior result -> checks_passed={current_checks_passed}"
+                )
+                new_goal_report = (
+                    "goal feature: skipped (mutation produced no change); "
+                    f"reusing prior result -> checks_passed={current_checks_passed}"
                 )
                 print("mutation produced no change: reusing current cost")
             print_bmc_check(f"iter {i} candidate", new_bmc_report)
+            print_goal_feature_reward(f"iter {i} candidate", new_goal_report)
 
         # Save a copy of new_program AFTER optimization
         saved_new_program = deepcopy(new_program)
@@ -506,8 +591,9 @@ def MCMC(
                 print("new program accepted")
                 current_program = new_program
                 current_cost = new_cost
-                current_bmc_passed = new_bmc_passed
+                current_checks_passed = new_checks_passed
                 current_bmc_report = new_bmc_report
+                current_goal_report = new_goal_report
             else:
                 print("new program NOT accepted")
 
@@ -517,12 +603,12 @@ def MCMC(
         with open(os.path.join(iter_folder, "new_program.pkl"), "wb") as f:
             pickle.dump(saved_new_program, f)
 
-        eval_skipped = equivalence or not new_bmc_passed
+        eval_skipped = equivalence or not new_checks_passed
         rollout_skip_reasons: list[str] = []
         if equivalence:
             rollout_skip_reasons.append("executable equivalence")
-        if not new_bmc_passed:
-            rollout_skip_reasons.append("BMC infeasible")
+        if not new_checks_passed:
+            rollout_skip_reasons.append("candidate checks failed")
         # Save text summary
         with open(os.path.join(iter_folder, "summary.txt"), "w") as f:
             f.write("=== Mutation Report ===\n")
@@ -530,12 +616,14 @@ def MCMC(
             f.write("=== Current Program ===\n")
             f.write(str(saved_current_program) + "\n")
             f.write(f"Current Cost: {saved_current_cost}\n")
-            f.write(f"Current BMC: {current_bmc_report}\n\n")
+            f.write(f"Current BMC: {current_bmc_report}\n")
+            f.write(f"Current Goal Feature: {current_goal_report}\n\n")
             f.write("=== New Program ===\n")
             f.write(str(saved_new_program) + "\n")
             f.write(f"New Cost: {new_cost}\n")
             f.write(f"New BMC: {new_bmc_report}\n")
-            f.write(f"BMC Feasible: {new_bmc_passed}\n")
+            f.write(f"New Goal Feature: {new_goal_report}\n")
+            f.write(f"Checks Passed: {new_checks_passed}\n")
             f.write(f"Program Equivalence: {equivalence}\n")
             f.write(f"Accepted: {current_program == new_program}\n")
             if candidate_video_dir is not None:
@@ -569,8 +657,18 @@ def optimize_program(
     cem_K: int,
     cem_iterations: int,
     seeds: Optional[list] = None,
-) -> tuple[float, program.Program]:
-    f = Runner(p, expert_states, num_seeds, num_block, seeds=seeds)
+    goal_feature=None,
+    goal_feature_reward_weight: float = DEFAULT_GOAL_FEATURE_REWARD_WEIGHT,
+) -> tuple[float, program.Program, float, str]:
+    f = Runner(
+        p,
+        expert_states,
+        num_seeds,
+        num_block,
+        seeds=seeds,
+        goal_feature=goal_feature,
+        goal_feature_reward_weight=goal_feature_reward_weight,
+    )
     initial_parameters = p.register_trainable_parameter()
     iterations = cem_iterations if initial_parameters else 0
     best_cost, best_parameter = cem.cem_optimize(
@@ -582,7 +680,10 @@ def optimize_program(
         init_mu=initial_parameters,
     )
     p.update_trainable_parameter(best_parameter)
-    return best_cost, p
+    if goal_feature is not None:
+        best_cost = f(best_parameter)
+        return best_cost, p, f.last_goal_feature_reward, f.last_goal_feature_report
+    return best_cost, p, 0.0, "goal feature: disabled"
 
 
 def set_np_seed(seed: int):
@@ -601,12 +702,62 @@ ROBOVERIFY_STACK_ENV_KWARGS = {
     "base_block_id": 0,
 }
 
+ROBOVERIFY_UNSTACK_ENV_KWARGS = {
+    "sparse": False,
+    "shaped_reward": False,
+    "reward_type": "sparse",
+    "case": "RoboVerifyUnstack",
+    "visualize_mocap": False,
+    "simple": True,
+    "base_block_id": 0,
+}
+
+ROBOVERIFY_REVERSE_ENV_KWARGS = {
+    "sparse": False,
+    "shaped_reward": False,
+    "reward_type": "sparse",
+    "case": "RoboVerifyReverse",
+    "visualize_mocap": False,
+    "simple": True,
+    "base_block_id": 0,
+}
+
+ROBOVERIFY_PARTIAL_STACK_ENV_KWARGS = {
+    "sparse": False,
+    "shaped_reward": False,
+    "reward_type": "sparse",
+    "case": "RoboVerifyPartialStack",
+    "visualize_mocap": False,
+    "simple": True,
+    "base_block_id": 0,
+}
+
+ROBOVERIFY_GRID_ENV_KWARGS = {
+    "sparse": False,
+    "shaped_reward": False,
+    "reward_type": "sparse",
+    "case": "RoboVerifyGrid",
+    "visualize_mocap": False,
+    "simple": True,
+    "visualize_target": True,
+}
+
+ROBOVERIFY_PYRAMID_ENV_KWARGS = {
+    "sparse": False,
+    "shaped_reward": False,
+    "reward_type": "sparse",
+    "case": "RoboVerifyPyramid",
+    "visualize_mocap": False,
+    "simple": True,
+    "visualize_target": True,
+}
+
 
 def make_roboverify_stack_env(
     num_blocks: int = 4,
     render_mode: str = "rgb_array",
 ) -> GymToGymnasium:
-    """Create the RoboVerifyStack env used for all demo rollouts and MCMC eval."""
+    """Create the RoboVerifyStack env used for stack demo rollouts and MCMC eval."""
     return GymToGymnasium(
         FetchPickAndPlaceConstruction(
             name=f"roboverify_stack_{num_blocks}",
@@ -615,6 +766,108 @@ def make_roboverify_stack_env(
         ),
         render_mode=render_mode,
     )
+
+
+def make_roboverify_unstack_env(
+    num_blocks: int = 4,
+    render_mode: str = "rgb_array",
+) -> GymToGymnasium:
+    """Create the RoboVerifyUnstack env for unstack demo rollouts and MCMC eval."""
+    return GymToGymnasium(
+        FetchPickAndPlaceConstruction(
+            name=f"roboverify_unstack_{num_blocks}",
+            num_blocks=num_blocks,
+            **ROBOVERIFY_UNSTACK_ENV_KWARGS,
+        ),
+        render_mode=render_mode,
+    )
+
+
+def make_roboverify_reverse_env(
+    num_blocks: int = 4,
+    render_mode: str = "rgb_array",
+) -> GymToGymnasium:
+    """Create the RoboVerifyReverse env for reverse demo rollouts and MCMC eval."""
+    return GymToGymnasium(
+        FetchPickAndPlaceConstruction(
+            name=f"roboverify_reverse_{num_blocks}",
+            num_blocks=num_blocks,
+            **ROBOVERIFY_REVERSE_ENV_KWARGS,
+        ),
+        render_mode=render_mode,
+    )
+
+
+def make_roboverify_partial_stack_env(
+    num_blocks: int = 4,
+    render_mode: str = "rgb_array",
+) -> GymToGymnasium:
+    """Create the RoboVerifyPartialStack env for partial-stack rollouts and MCMC eval."""
+    return GymToGymnasium(
+        FetchPickAndPlaceConstruction(
+            name=f"roboverify_partial_stack_{num_blocks}",
+            num_blocks=num_blocks,
+            **ROBOVERIFY_PARTIAL_STACK_ENV_KWARGS,
+        ),
+        render_mode=render_mode,
+    )
+
+
+def make_roboverify_grid_env(
+    grid_rows: int = 3,
+    grid_cols: int = 2,
+    render_mode: str = "rgb_array",
+) -> GymToGymnasium:
+    """Create the RoboVerifyGrid env with ``grid_rows * grid_cols`` blocks."""
+    return GymToGymnasium(
+        FetchPickAndPlaceConstruction(
+            name=f"roboverify_grid_{grid_rows}x{grid_cols}",
+            num_blocks=grid_rows * grid_cols,
+            grid_rows=grid_rows,
+            grid_cols=grid_cols,
+            **ROBOVERIFY_GRID_ENV_KWARGS,
+        ),
+        render_mode=render_mode,
+    )
+
+
+def make_roboverify_pyramid_env(
+    render_mode: str = "rgb_array",
+) -> GymToGymnasium:
+    """Create the RoboVerifyPyramid env with six blocks in a 3+2+1 goal pyramid."""
+    return GymToGymnasium(
+        FetchPickAndPlaceConstruction(
+            name="roboverify_pyramid_6",
+            num_blocks=6,
+            **ROBOVERIFY_PYRAMID_ENV_KWARGS,
+        ),
+        render_mode=render_mode,
+    )
+
+
+def make_roboverify_env(
+    task: str,
+    num_blocks: int = 4,
+    render_mode: str = "rgb_array",
+) -> GymToGymnasium:
+    """Create a RoboVerify env for stack / unstack / reverse / partial_stack tasks."""
+    if task == "stack":
+        return make_roboverify_stack_env(num_blocks=num_blocks, render_mode=render_mode)
+    if task == "unstack":
+        return make_roboverify_unstack_env(num_blocks=num_blocks, render_mode=render_mode)
+    if task == "reverse":
+        return make_roboverify_reverse_env(num_blocks=num_blocks, render_mode=render_mode)
+    if task in ("partial_stack", "partial"):
+        return make_roboverify_partial_stack_env(
+            num_blocks=num_blocks, render_mode=render_mode
+        )
+    if task in ("grid", "2dgrid"):
+        raise ValueError(
+            "use make_roboverify_grid_env(grid_rows=..., grid_cols=...) for grid tasks"
+        )
+    if task == "pyramid":
+        raise ValueError("use make_roboverify_pyramid_env() for pyramid tasks")
+    raise ValueError(f"unsupported RoboVerify task: {task!r}")
 
 
 def save_frames_as_video(
@@ -769,7 +1022,7 @@ def save_numpy_arrays_as_images(arrays, output_dir="images"):
 
 
 def roboverify_env_success(env, final_obs) -> bool:
-    """Return whether ``final_obs`` satisfies RoboVerifyStack tower success."""
+    """Return whether ``final_obs`` satisfies the env's RoboVerify task success."""
     if final_obs is None:
         return False
     inner = getattr(env, "env", env)
@@ -786,6 +1039,7 @@ def rollout_demos(
     save_imgs: bool = False,
     verbose: bool = True,
     seeds: Optional[list] = None,
+    task: str = "stack",
 ) -> Tuple[list, list, list, list]:
     """Roll out ``p`` once per seed without saving to disk.
 
@@ -803,7 +1057,7 @@ def rollout_demos(
     successes = []
     for seed in rollout_seeds:
         set_np_seed(seed)
-        env = make_roboverify_stack_env(num_blocks=num_blocks)
+        env = make_roboverify_env(task, num_blocks=num_blocks)
         try:
             result = p.eval(env, return_img=save_imgs)
             if save_imgs:
@@ -845,6 +1099,7 @@ def save_program_seed_videos(
     seeds: Optional[list] = None,
     video_fps: int = 30,
     verbose: bool = True,
+    task: str = "stack",
 ) -> list[str]:
     """Roll out ``p`` once per seed and write ``seed_XXXX.mp4`` under ``video_dir``."""
     os.makedirs(video_dir, exist_ok=True)
@@ -857,7 +1112,7 @@ def save_program_seed_videos(
     saved_paths: list[str] = []
     for seed in rollout_seeds:
         set_np_seed(seed)
-        env = make_roboverify_stack_env(num_blocks=num_block)
+        env = make_roboverify_env(task, num_blocks=num_block)
         try:
             traj, imgs = p.eval(env, return_img=True)
             success = roboverify_env_success(env, traj[-1] if traj else None)
@@ -884,6 +1139,7 @@ def rollout_demos_from_initial_states(
     demo_indices: Optional[list] = None,
     video_fps: int = 30,
     verbose: bool = True,
+    task: str = "stack",
 ) -> Tuple[list, list, list, list]:
     """Roll out ``p`` from fixed initial observations (one per demo).
 
@@ -911,7 +1167,7 @@ def rollout_demos_from_initial_states(
             else rollout_idx
         )
         set_np_seed(demo_idx)
-        env = make_roboverify_stack_env(num_blocks=num_blocks)
+        env = make_roboverify_env(task, num_blocks=num_blocks)
         try:
             result = p.eval_from_observation(
                 env, initial_state, return_img=save_imgs or video_dir is not None
@@ -990,6 +1246,7 @@ def verify_demo_reproducibility(
     *,
     num_blocks: int = 4,
     atol: float = 1e-5,
+    task: str = "stack",
 ) -> bool:
     """Re-collect demos and check each seed reproduces ``reference_trajs``."""
     if len(reference_trajs) != num_demo:
@@ -1004,6 +1261,7 @@ def verify_demo_reproducibility(
         num_blocks=num_blocks,
         save_imgs=False,
         verbose=False,
+        task=task,
     )
 
     all_ok = True
@@ -1038,8 +1296,11 @@ def collect_trajectories(
     img_dir: str = "images",
     verify_reproducible: bool = False,
     repro_atol: float = 1e-5,
+    task: str = "stack",
 ):
-    """Roll out ``p`` in RoboVerifyStack ``num_demo`` times with fixed seeds.
+    """Roll out ``p`` in a RoboVerify env ``num_demo`` times with fixed seeds.
+
+    ``task`` is ``"stack"`` (RoboVerifyStack) or ``"unstack"`` (RoboVerifyUnstack).
 
     Seed ``i`` is used for demo ``i`` (via :func:`set_np_seed`), so rollouts are
     reproducible. Trajectories are written under ``demo_dir`` (default
@@ -1056,6 +1317,7 @@ def collect_trajectories(
         num_blocks=num_blocks,
         save_imgs=save_imgs,
         verbose=True,
+        task=task,
     )
 
     if demo_dir is not None:
@@ -1077,6 +1339,7 @@ def collect_trajectories(
             individual_traj,
             num_blocks=num_blocks,
             atol=repro_atol,
+            task=task,
         )
 
     return states, individual_traj
@@ -1088,8 +1351,9 @@ def evaluate_program(
     num_block: int,
     return_img: bool = False,
     seeds: Optional[list] = None,
+    task: str = "stack",
 ):
-    """Evaluate ``p`` using the same RoboVerifyStack env as demo collection."""
+    """Evaluate ``p`` using the same RoboVerify env as demo collection."""
     individual_traj, states, _successes, imgs = rollout_demos(
         p,
         n,
@@ -1097,6 +1361,7 @@ def evaluate_program(
         save_imgs=return_img,
         verbose=False,
         seeds=seeds,
+        task=task,
     )
     print("number of policy states", len(states))
     if return_img:
@@ -1112,6 +1377,8 @@ class Runner:
         num_seeds: int,
         num_block: int,
         seeds: Optional[list] = None,
+        goal_feature=None,
+        goal_feature_reward_weight: float = DEFAULT_GOAL_FEATURE_REWARD_WEIGHT,
     ):
         self.p = program
         self.expert_states = np.array(expert_states)
@@ -1122,13 +1389,29 @@ class Runner:
         self.num_seeds = num_seeds
         self.num_block = num_block
         self.seeds = seeds
+        self.goal_feature = goal_feature
+        self.goal_feature_reward_weight = goal_feature_reward_weight
+        self.last_goal_feature_reward = 0.0
+        self.last_goal_feature_report = "goal feature: disabled"
 
     def __call__(self, new_parameters):
         p = deepcopy(self.p)
         p.update_trainable_parameter(new_parameters)
-        policy_states, _individual_trajs, _imgs = evaluate_program(
+        policy_states, individual_trajs, _imgs = evaluate_program(
             p, self.num_seeds, self.num_block, seeds=self.seeds
         )
         policy_states = np.array(policy_states)[self.tuple_slices]
-        kl_value = cost_func.kl_divergence_kde(policy_states, self.expert_states)
-        return -kl_value
+        mmd_value = cost_func.maximum_mean_discrepancy_rbf(
+            policy_states, self.expert_states
+        )
+        score = -mmd_value
+        if self.goal_feature is not None:
+            goal_reward, goal_feature_report = goal_feature_reward_at_execution_end(
+                self.goal_feature,
+                individual_trajs,
+                seeds=self.seeds,
+            )
+            self.last_goal_feature_reward = goal_reward
+            self.last_goal_feature_report = goal_feature_report
+            score += self.goal_feature_reward_weight * goal_reward
+        return score
