@@ -2,7 +2,7 @@
 
 > **Status — read this first.**
 >
-> Branch: `phase-d-motion-obligations`; Phases A–C are integrated into `main`.
+> Branch: `phase-e-cegis` (based on committed Phase D); Phases A–C are integrated into `main`.
 > This plan is being executed top to bottom, Phase A first. Progress:
 >
 > **Phase A: all seven items done.** Listed in plan order; commits landed in a
@@ -31,7 +31,7 @@
 > - [x] **A.7** `PAPER-DISCREPANCIES.md` created and seeded with the Theorem 5.2 /
 >       Table 7 contradiction and the segment-reset omission. Commit `c2f0744`.
 >
-> **Phases A–D are complete. Phase E is next.**
+> **Phases A–D are complete. Phase E is in progress.**
 > Phases A–C are included in `main`.
 > Validation is recorded below; Unstack is subject to a 60-second wall-clock cap.
 >
@@ -88,7 +88,11 @@
 >       concrete existing Stack body. Both refute its release endpoint contract.
 >       The exact swept-cube encoding is retained; no AABB fallback was needed.
 >       These are fixture timings, not a universal bound or hardware proof.
-> - [ ] Phases E–F: not started.
+> - [x] Phase E.1–E.2: labeled VCs; valid/invalid/vacuous/unknown verdicts;
+>       local core minimization; smallest finite model search and relation-preserving
+>       geometric counterexample conversion. Eight focused tests pass.
+> - [ ] Phase E.3 symbolic/motion CEGIS and objective integration in progress.
+>       Phase F remains not started.
 >
 > **Pre-existing failure, not a regression.**
 > `verify_stack_with_learned_invariant` reports two high-level VC failures

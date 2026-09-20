@@ -10,7 +10,6 @@ import synthesis.verification_lib.highlevel_verification_lib as highlevel_verifi
 from synthesis.inference_lib import quant_enum_merge
 from synthesis.util import on
 
-z3.set_option("smt.core.minimize", "true")
 
 
 class InferenceDataError(Exception):
@@ -1582,6 +1581,7 @@ def loop_inference(
     print("checking equivalent with ground truth")
     solver = z3.Solver()
     solver.set(unsat_core=True)
+    solver.set("smt.core.minimize", True)
 
     active_context.add_axiom(solver)
     active_context.add_axiom_on_star_zero(solver)

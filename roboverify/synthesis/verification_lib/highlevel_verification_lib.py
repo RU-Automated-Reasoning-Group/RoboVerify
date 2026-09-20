@@ -53,7 +53,9 @@ class HighLevelContext:
         visualize_enum_scene: bool = False,
         visualization_prefix: str = "highlevel_scene",
         verification_mode: str = "box",
+        sort_name: str = "Box",
     ):
+        self.sort_name = sort_name
         self.mode = mode
         self.num_blocks = num_blocks
         self.enum_names = enum_names
@@ -74,7 +76,7 @@ class HighLevelContext:
         if self.verification_mode == "goals":
             return
         if self.mode == "declare":
-            self.BoxSort = DeclareSort("Box")
+            self.BoxSort = DeclareSort(self.sort_name)
             self.enum_blocks = []
             self.enum_names_effective: List[str] = []
         elif self.mode == "enum":
@@ -83,7 +85,7 @@ class HighLevelContext:
                 if self.num_blocks is None:
                     raise ValueError("enum mode requires enum_names or num_blocks.")
                 names = [f"b{9+i}" for i in range(self.num_blocks)]
-            self.BoxSort, enum_consts = EnumSort("Box", names)
+            self.BoxSort, enum_consts = EnumSort(self.sort_name, names)
             self.enum_blocks = list(enum_consts)
             self.enum_names_effective = list(names)
         else:
@@ -649,6 +651,22 @@ class HighLevelContext:
             print("VC is unsatisfiable")
         else:
             print(result)
+
+    def new_solver(self, timeout_ms=VC_CHECK_TIMEOUT_MS):
+        """Domain axioms and solver options are local, independent of imports."""
+        if timeout_ms <= 0:
+            raise ValueError("Solver timeout must be positive")
+        solver = Solver()
+        solver.set(timeout=timeout_ms, unsat_core=True)
+        solver.set("smt.core.minimize", True)
+        if self.verification_mode == "goals":
+            self.add_axiom_goal_nested(solver)
+        else:
+            self.add_axiom(solver)
+            self.add_axiom_on_star_zero(solver)
+            self.add_axiom_higher(solver)
+            self.add_axiom_scattered(solver)
+        return solver
 
     def check_satisfiable(
         self,

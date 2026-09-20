@@ -992,9 +992,31 @@ class Program:
         return "\n".join(["begin", *instruction_str, "end"])
 
     def VC_gen(self, P, Q, context):
-        # P, Q are z3 formula
-        seq_instruction = to_seq(self.instructions)
-        return [Implies(P, self.wp(Q, context))] + VC_aux(seq_instruction, Q, context)
+        from synthesis.verification_lib.symbolic_verify import VC
+
+        def collect(instructions, post, prefix=""):
+            result = []
+            for index in reversed(range(len(instructions))):
+                instruction = instructions[index]
+                path = f"{prefix}.{index}" if prefix else str(index)
+                if isinstance(instruction, While):
+                    invariant = And(*self._invariant_condition_exprs(instruction.invariant))
+                    # Preservation binds a particular existential guard witness;
+                    # exit negates the entire existential, not that one witness.
+                    result[0:0] = collect(instruction.body, invariant, path) + [
+                        VC("preserve", path, Implies(
+                            And(instruction.instantiated_cond, invariant),
+                            wp(to_seq(instruction.body), invariant, context))),
+                        VC("exit", path, Implies(
+                            And(Not(instruction.cond), invariant), post)),
+                    ]
+                post = wp(instruction, post, context)
+            return result
+
+        first_loop = next((str(i) for i, inst in enumerate(self.instructions)
+                           if isinstance(inst, While)), None)
+        return [VC("establish" if first_loop is not None else "body", first_loop,
+                   Implies(P, self.wp(Q, context)))] + collect(self.instructions, Q)
 
     def wp(self, Q, context):
         seq_instruction = to_seq(self.instructions)
@@ -1094,74 +1116,21 @@ class Program:
         #     save_goal_counterexample_on_failure("axioms_consistency", axiom_model)
         # print("=====================")
 
+        from synthesis.verification_lib.symbolic_verify import (
+            SymbolicVerificationResult, discharge_vc,
+        )
+
+        checks = []
         print("total number of VCs:", len(vcs))
         for idx, vc in enumerate(vcs):
-            print(f"verifying VC {idx}", vc)
-            if is_implies(vc):
-                premise = vc.arg(0)
-                conclusion = vc.arg(1)
-                print("premise:", premise)
-                print("conclusion:", conclusion)
-                print("---------------------")
-                print("check 1: axioms + premise")
-                check1, model1 = solver.check_satisfiable(
-                    premise,
-                    visualize_model=True,
-                    viz_tag=f"vc_{idx}_check1",
-                )
-                if check1 != sat:
-                    ok = False
-                    print(f"[FAIL] VC {idx} check 1 returned {check1}; expected sat")
-                    save_goal_counterexample_on_failure(f"vc_{idx}_check1", model1)
-                print("---------------------")
-                print("check 2: axioms + premise + not(conclusion)")
-                check2, model2 = solver.check_satisfiable(
-                    And(premise, Not(conclusion)),
-                    visualize_model=True,
-                    viz_tag=f"vc_{idx}_check2",
-                )
-                if check2 != unsat:
-                    ok = False
-                    # sat and unknown are both failures but not the same event:
-                    # sat is a genuine refutation carrying a counterexample to
-                    # learn from, unknown is the solver giving up and says
-                    # nothing about validity. Phase E turns this into a typed
-                    # verdict; for now at least name which one happened.
-                    if check2 == sat:
-                        print(
-                            f"[FAIL] VC {idx} check 2 returned sat; expected unsat "
-                            "(refuted: the conclusion does not follow)"
-                        )
-                    else:
-                        print(
-                            f"[FAIL] VC {idx} check 2 returned {check2}; expected "
-                            "unsat (inconclusive: solver gave up, validity unknown)"
-                        )
-                    if check2 == sat and model2 is not None:
-                        print_where_conclusion_fails(
-                            solver,
-                            model2,
-                            conclusion,
-                            outer_move_down_var=outer_md_var,
-                        )
-                    save_goal_counterexample_on_failure(f"vc_{idx}_check2", model2)
-            else:
-                print(
-                    "non-implication VC; using check 2 style: axioms + not(VC) should be unsat"
-                )
-                check, model_n = solver.check_satisfiable(
-                    Not(vc),
-                    visualize_model=True,
-                    viz_tag=f"vc_{idx}_not_vc",
-                )
-                if check != unsat:
-                    ok = False
-                    print(
-                        f"[FAIL] VC {idx} non-implication check returned {check}; expected unsat"
-                    )
-                    save_goal_counterexample_on_failure(f"vc_{idx}_not_vc", model_n)
-            print("=====================")
-        return ok
+            check = discharge_vc(vc, solver)
+            checks.append(check)
+            print(f"VC {idx} ({vc.kind}, loop={vc.loop_id}): {check.status}")
+            if check.model is not None:
+                save_goal_counterexample_on_failure(f"vc_{idx}_check2", check.model)
+                if visualize_enum_scene and solver.mode == "enum":
+                    solver._visualize_enum(check.model, viz_tag=f"vc_{idx}_check2")
+        return SymbolicVerificationResult(checks)
 
     @staticmethod
     def _invariant_condition_exprs(invariant):
