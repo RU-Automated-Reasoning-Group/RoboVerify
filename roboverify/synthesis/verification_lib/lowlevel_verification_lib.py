@@ -18,6 +18,7 @@ from z3 import (
     BoolVal,
     Consts,
     DeclareSort,
+    FreshConst,
     Function,
     If,
     Not,
@@ -29,6 +30,7 @@ from z3 import (
     Solver,
     get_var_index,
     is_app,
+    is_bool,
     is_quantifier,
     is_true,
     is_var,
@@ -158,9 +160,6 @@ class LowLevelContext:
         # no table would add an unconstrained sort element that weakens every
         # condition for nothing.
         self.use_tbl = use_tbl
-        # Monotonic across the whole context: two existentials must not be given
-        # the same witness just because they sit in different conditions.
-        self._skolem_counter = 0
         self._build_symbols()
 
     def _build_symbols(self):
@@ -171,8 +170,17 @@ class LowLevelContext:
         (self.L,) = Reals("L")
 
     def lowlevel_box_equal(self, b1, b2):
-        return And(
-            self.X(b1) == self.X(b2), self.Y(b1) == self.Y(b2), self.Z(b1) == self.Z(b2)
+        # The table has no position. Equal coordinates must never identify a
+        # physical block with tbl; real blocks retain geometric equality.
+        return self._isolate_table(
+            And(
+                self.X(b1) == self.X(b2),
+                self.Y(b1) == self.Y(b2),
+                self.Z(b1) == self.Z(b2),
+            ),
+            b1,
+            b2,
+            reflexive=True,
         )
 
     def table_const(self):
@@ -602,9 +610,7 @@ class LowLevelContext:
 
     def _fresh_skolem_const(self):
         """A Box constant no other term uses, for witnessing an existential."""
-        name = f"sk_{self._skolem_counter}"
-        self._skolem_counter += 1
-        return self.get_consts(name)
+        return FreshConst(self.BoxSort, prefix="sk_")
 
     @staticmethod
     def _child_polarities(expr, polarity):
@@ -620,7 +626,9 @@ class LowLevelContext:
             return [flipped] * num_args
         if kind == Z3_OP_IMPLIES:
             return [flipped] + [polarity] * (num_args - 1)
-        if kind == Z3_OP_XOR:
+        if kind == Z3_OP_XOR or (
+            kind in (Z3_OP_EQ, Z3_OP_DISTINCT) and is_bool(expr.arg(0))
+        ):
             return [None] * num_args
         if kind == Z3_OP_ITE:
             return [None] + [polarity] * (num_args - 1)
@@ -641,7 +649,7 @@ class LowLevelContext:
 
         * ``ForAll`` at positive polarity becomes the finite conjunction over
           ``lowlevel_constants``, which the real universally quantified formula
-          implies -- the Box sort is a ``DeclareSort`` and therefore infinite, so
+          implies -- the Box sort has no finite domain bound, so
           this is a weakening and not an equivalence.
         * ``Exists`` at positive polarity is Skolemized: fresh constants, one per
           occurrence. Since the enclosing universals have already been expanded
@@ -718,16 +726,18 @@ class LowLevelContext:
                     return self.lowlevel_scattered(children[0], children[1])
                 raise NotImplementedError(f"Unhandled high-level predicate: {name}")
 
-            if decl.kind() == Z3_OP_EQ:
+            if decl.kind() == Z3_OP_EQ and not is_bool(expr.arg(0)):
                 children = [
                     self._translate_expr(
                         c, lowlevel_constants, const_map, bindings, polarity
                     )
                     for c in expr.children()
                 ]
-                return self.lowlevel_box_equal(children[0], children[1])
+                if children[0].sort() == self.BoxSort:
+                    return self.lowlevel_box_equal(children[0], children[1])
+                return decl(*children)
 
-            if decl.kind() == Z3_OP_DISTINCT:
+            if decl.kind() == Z3_OP_DISTINCT and not is_bool(expr.arg(0)):
                 children = [
                     self._translate_expr(
                         c, lowlevel_constants, const_map, bindings, polarity
