@@ -30,13 +30,29 @@ class DemoSegment:
 
     @property
     def states(self):
-        return self.trace.states[self.t_start:self.t_end+1]
+        return self.trace.states[self.t_start : self.t_end + 1]
 
     def split(self, absolute_index):
         if not self.t_start < absolute_index < self.t_end:
             raise ValueError("A split must leave two nonempty transition segments")
-        return (DemoSegment(self.demo_idx, self.t_start, absolute_index, self.trace, self.bindings, self),
-                DemoSegment(self.demo_idx, absolute_index, self.t_end, self.trace, self.bindings, self))
+        return (
+            DemoSegment(
+                self.demo_idx,
+                self.t_start,
+                absolute_index,
+                self.trace,
+                self.bindings,
+                self,
+            ),
+            DemoSegment(
+                self.demo_idx,
+                absolute_index,
+                self.t_end,
+                self.trace,
+                self.bindings,
+                self,
+            ),
+        )
 
 
 @dataclass

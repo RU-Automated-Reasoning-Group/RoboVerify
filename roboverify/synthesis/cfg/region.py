@@ -17,6 +17,8 @@ class LoopRegion:
     update: tuple = ()
     invariant: object = None
     iteration_counts: tuple = ()
+    postconditions: tuple = ()
+    body_demos: tuple = ()
 
     @property
     def max_iters(self):

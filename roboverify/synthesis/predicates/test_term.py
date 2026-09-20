@@ -5,7 +5,18 @@ import unittest
 import z3
 
 from synthesis.predicates.scene import Scene, evaluate
-from synthesis.predicates.term import atom, boolean, conjunction, exists, forall, free_names, negate, ref, substitute, to_z3
+from synthesis.predicates.term import (
+    atom,
+    boolean,
+    conjunction,
+    exists,
+    forall,
+    free_names,
+    negate,
+    ref,
+    substitute,
+    to_z3,
+)
 from synthesis.verification_lib.highlevel_verification_lib import HighLevelContext
 
 
@@ -29,18 +40,25 @@ class TermTests(unittest.TestCase):
         ctx = HighLevelContext(mode="enum", num_blocks=3, sort_name="TermDifferential")
         blocks = ctx.enum_blocks
         for trial in range(8):
-            scene = Scene({i: (i*.15, 0., rng.choice((.425,.475))) for i in range(3)}, {"b": 0})
+            scene = Scene(
+                {i: (i * 0.15, 0.0, rng.choice((0.425, 0.475))) for i in range(3)},
+                {"b": 0},
+            )
             solver = ctx.new_solver(1000)
             solver.add(ctx.get_consts("b") == blocks[0])
             for rel in ("ON_star", "ON_star_zero", "Higher", "Scattered"):
                 for i, j in itertools.product(range(3), repeat=2):
                     formula = atom(rel, ref("a"), ref("c"))
-                    solver.add(getattr(ctx, rel)(blocks[i], blocks[j]) == evaluate(formula, scene, {"a": i, "c": j}))
+                    solver.add(
+                        getattr(ctx, rel)(blocks[i], blocks[j])
+                        == evaluate(formula, scene, {"a": i, "c": j})
+                    )
             self.assertEqual(solver.check(), z3.sat)
             for _ in range(12):
                 rel = rng.choice(("ON_star", "Higher", "Scattered", "eq", "ON"))
                 body = atom(rel, ref("x"), ref("b"))
-                if rng.randrange(2): body = negate(body)
+                if rng.randrange(2):
+                    body = negate(body)
                 term = (forall if rng.randrange(2) else exists)(["x"], body)
                 solver.push()
                 solver.add(to_z3(term, ctx) != evaluate(term, scene))
