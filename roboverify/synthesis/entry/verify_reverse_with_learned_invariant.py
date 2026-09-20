@@ -105,9 +105,17 @@ def verify_reverse_program_with_learned_invariant(
     precondition = And(
         ForAll([m], Implies(m != tbl, context.ON_star(m, b0))),
         b0 != tbl,
+        # Pin ON_star_zero to the initial configuration. Inference evaluates its
+        # atoms against `state_zero`, the state the loop started in, but the
+        # axioms alone leave it an arbitrary relation, so those atoms said
+        # nothing here. This belongs in the precondition and not in the axioms:
+        # `put` rewrites ON_star but never ON_star_zero, so the two are meant to
+        # diverge as the loop runs, which is the whole point of having both --
+        # Reverse's invariant reads the original tower off ON_star_zero while
+        # ON_star tracks the one being rebuilt.
+        ForAll([m], ForAll([n], context.ON_star_zero(m, n) == context.ON_star(m, n))),
     )
 
-    m, b0 = Consts("m n", context.BoxSort)
     postcondition = And(
         ForAll([m], ForAll([n], Implies(context.ON_star(n, m), n == m))),
         ForAll(

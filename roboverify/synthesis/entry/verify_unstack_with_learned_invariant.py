@@ -139,7 +139,6 @@ def verify_unstack_program_with_learned_invariant(
         b0 != tbl,
     )
 
-    m, b0 = Consts("m n", context.BoxSort)
     postcondition = And(
         ForAll([m], ForAll([n], Implies(context.ON_star(n, m), n == m))),
         ForAll(
