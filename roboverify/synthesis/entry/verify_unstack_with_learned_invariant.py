@@ -19,7 +19,9 @@ from synthesis.inference_lib.inference import (
 from synthesis.verification_lib.motion_verification import MotionContract
 
 
-def build_unstack_programs(context, learned_invariant=True, learned_invariant_lists=None):
+def build_unstack_programs(
+    context, learned_invariant=True, learned_invariant_lists=None
+):
     """Existing verification fixture, independent of inference and CLI setup."""
     b_prime, b, c, b0, tbl = Consts("b_prime b c b0 tbl", context.BoxSort)
     instructions = [
@@ -144,7 +146,9 @@ def verify_unstack_program_with_learned_invariant(
             learned_spec, context, known_const_names=["b0", "b", "tbl"]
         )
 
-    program, ll_program = build_unstack_programs(context, learned_invariant, learned_invariant_lists)
+    program, ll_program = build_unstack_programs(
+        context, learned_invariant, learned_invariant_lists
+    )
     b0 = context.get_consts("b0")
 
     m, n = Consts("m n", context.BoxSort)

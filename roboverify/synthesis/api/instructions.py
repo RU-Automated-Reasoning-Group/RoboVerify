@@ -907,10 +907,12 @@ class While(Instruction):
     def _eval_z3_guard(self, z3_expr, bindings, all_block_pos):
         from synthesis.api.guard_eval import evaluate_z3
         from synthesis.predicates.scene import Scene
+
         return evaluate_z3(z3_expr, Scene(dict(enumerate(all_block_pos)), bindings))
 
     def _find_and_bind_guard_exists(self, env, traj) -> bool:
         from synthesis.api.guard_eval import find_and_bind
+
         return find_and_bind(self, env, traj)
 
     def eval(
@@ -924,8 +926,10 @@ class While(Instruction):
         learning rows.
         """
         from synthesis.predicates.scene import scene_from_obs
+
         self._guard_entry_positions = scene_from_obs(
-            traj[-1], self._get_num_blocks(env, traj[-1]),
+            traj[-1],
+            self._get_num_blocks(env, traj[-1]),
             getattr(env, "symbolic_name_to_box_id", {}),
             include_table="tbl" in getattr(env, "symbolic_name_to_box_id", {}),
         ).positions
@@ -1117,6 +1121,7 @@ class Seq:
 
 class Get(Instruction):
     """Bind one or more names once; absence of a witness is an explicit failure."""
+
     def __init__(self, var, cond, exists_vars=None, *, guard_term=None):
         self.var = var
         self.instantiated_cond = cond
@@ -1127,6 +1132,7 @@ class Get(Instruction):
 
     def eval(self, env, traj, return_image=False):
         from synthesis.api.guard_eval import NoGuardWitness, find_and_bind
+
         if not find_and_bind(self, env, traj):
             raise NoGuardWitness(f"No witness for {self.instantiated_cond}")
         return []
