@@ -22,10 +22,15 @@ class DemoSegment:
     trace: DemoTrace
     bindings: dict = field(default_factory=dict)
     parent: object = None
+    entry_index: int = None
 
     def __post_init__(self):
         if not 0 <= self.t_start <= self.t_end < len(self.trace.states):
             raise ValueError("Segment bounds must be absolute and inside the trace")
+        if self.entry_index is None:
+            self.entry_index = self.t_start
+        if not 0 <= self.entry_index <= self.t_start:
+            raise ValueError("Entry geometry must precede the segment")
         self.bindings = dict(self.bindings)
 
     @property
@@ -43,6 +48,7 @@ class DemoSegment:
                 self.trace,
                 self.bindings,
                 self,
+                self.entry_index,
             ),
             DemoSegment(
                 self.demo_idx,
@@ -51,6 +57,7 @@ class DemoSegment:
                 self.trace,
                 self.bindings,
                 self,
+                self.entry_index,
             ),
         )
 

@@ -27,8 +27,10 @@ class RefineTests(unittest.TestCase):
         with patch(
             "synthesis.cfg.refine.learn_classifier",
             return_value=SearchResult("found", feature),
-        ):
-            result = refine_cfg(cfg, "v0", [scattered], {"a", "b"})
+        ) as learner:
+            before_get = Scene(scattered.positions, {"b": 0})
+            result = refine_cfg(cfg, "v0", [before_get, scattered], {"a", "b"})
+            self.assertEqual(learner.call_args.args[1], [scattered])
         self.assertTrue(result)
         self.assertEqual(cfg.order, ["v0.0", "v0.1"])
         self.assertEqual(cfg.demos.for_node("v0.1")[0].t_start, 1)

@@ -10,17 +10,21 @@ from synthesis.api.instructions import (
     PickPlaceByName,
     Put,
     ReleaseByName,
+    Skip,
 )
 from synthesis.cfg.demos import DemoSegment
 from synthesis.cfg.graph import Edge, Node
 from synthesis.cfg.kleene import (
+    Letter,
     anti_unify,
     carried_bindings,
     encode_fragment,
     match_template,
 )
+from synthesis.cfg.physical import name_operands
 from synthesis.cfg.refine import scene_at
 from synthesis.cfg.region import BlockRegion, LoopRegion
+from synthesis.cfg.scope import scope as graph_scope
 from synthesis.predicates.guard import loop_guard_synthesis
 from synthesis.predicates.scene import Scene, evaluate
 from synthesis.predicates.term import conjunction, ref, substitute
@@ -35,7 +39,11 @@ class Repetition:
 
 
 def find_repetition(labels):
-    word = encode_fragment(labels)
+    word = (
+        tuple(labels)
+        if labels and isinstance(labels[0], Letter)
+        else encode_fragment(labels)
+    )
     for width in range(1, len(word) // 2 + 1):
         for start in range(len(word) - 2 * width + 1):
             template = anti_unify(
@@ -107,6 +115,8 @@ def _rename_instruction(instruction, names):
             "target_box_name_z",
         ),
     }
+    if isinstance(result, Skip):
+        return result
     if type(result) not in fields:
         raise ValueError(f"Cannot generalize instruction {type(result).__name__}")
     for field in fields[type(result)]:
@@ -118,17 +128,40 @@ def _rename_instruction(instruction, names):
 def quotient(cfg, *, language=None, infer_invariant=None):
     """One flat collapse. Missing data/guard/invariant leaves the graph unchanged."""
     cfg.validate_structure()
-    repetition = find_repetition([cfg.outgoing(n)[0].label for n in cfg.order])
+    word = []
+    for node in cfg.order:
+        edge = cfg.outgoing(node)[0]
+        word.append(
+            Letter(
+                (
+                    edge.binding_condition
+                    if edge.binding_condition is not None
+                    else edge.label
+                ),
+                edge.binds,
+                isinstance(cfg.nodes[node].region, LoopRegion),
+            )
+        )
+    repetition = find_repetition(word)
     if repetition is None:
         return False
     r = repetition
     carry, rebound = carried_bindings(r.template)
     if not carry or not rebound:
         return False
-    names = {name: ("b" if i == 0 else f"b{i}") for i, name in enumerate(carry)}
+    occupied = set(graph_scope(cfg)[cfg.order[r.start]])
+
+    def fresh(preferred):
+        name = preferred
+        while name in occupied:
+            name += "_loop"
+        occupied.add(name)
+        return name
+
+    names = {name: fresh("b" if i == 0 else f"b{i}") for i, name in enumerate(carry)}
     names.update(
         {
-            name: ("b_prime" if i == 0 else f"b_prime{i}")
+            name: fresh("b_prime" if i == 0 else f"b_prime{i}")
             for i, name in enumerate(rebound)
         }
     )
@@ -149,6 +182,10 @@ def quotient(cfg, *, language=None, infer_invariant=None):
         return False
     if not groups or any(not group for group in groups):
         return False
+    entries = {s.demo_idx: s.t_start for s in groups[0]}
+    for group in groups:
+        for segment in group:
+            segment.entry_index = entries[segment.demo_idx]
     positive, exits, loop_segments = [], [], []
     for iteration, (group, mapping) in enumerate(zip(groups, r.substitutions)):
         for segment in group:
@@ -174,6 +211,7 @@ def quotient(cfg, *, language=None, infer_invariant=None):
                     segment.trace,
                     dict(segment.bindings, **bindings),
                     segment,
+                    entries[segment.demo_idx],
                 )
             )
             if iteration == len(groups) - 1:
@@ -187,7 +225,7 @@ def quotient(cfg, *, language=None, infer_invariant=None):
                         final.entry_positions,
                     )
                 )
-    scope = set(cfg.initial_scope) | set(names[key] for key in carry)
+    scope = set(graph_scope(cfg)[cfg.order[r.start]]) | set(names[key] for key in carry)
     hint = conjunction(
         *(
             substitute(
@@ -213,16 +251,37 @@ def quotient(cfg, *, language=None, infer_invariant=None):
     body = []
     for node in cfg.order[r.start : r.start + r.width]:
         region = cfg.nodes[node].region
-        if not isinstance(region, BlockRegion) or region.symbolic is None:
+        if not isinstance(region, BlockRegion):
             return False
         try:
+            # Numeric candidates may become named physical loop bodies, but do not
+            # acquire a relational summary merely by matching demonstrations.
+            rows = cfg.demos.for_node(node)
+            aliases = {}
+            for key, variable in inverse.items():
+                ids = {scene_at(row, row.t_start).bindings[key] for row in rows}
+                if len(ids) == 1:
+                    aliases[ids.pop()] = variable
+            for key in sorted(scope - set(names.values())):
+                ids = {scene_at(row, row.t_start).bindings[key] for row in rows}
+                if len(ids) == 1:
+                    aliases.setdefault(ids.pop(), key)
             body.append(
                 BlockRegion(
-                    tuple(_rename_instruction(i, inverse) for i in region.symbolic),
-                    tuple(_rename_instruction(i, inverse) for i in region.physical),
+                    (
+                        None
+                        if region.symbolic is None
+                        else tuple(
+                            _rename_instruction(i, inverse) for i in region.symbolic
+                        )
+                    ),
+                    tuple(
+                        _rename_instruction(name_operands(i, aliases), inverse)
+                        for i in region.physical
+                    ),
                 )
             )
-        except ValueError:
+        except (KeyError, ValueError):
             return False
     init = tuple((names[key], r.template.first[key].value) for key in carry)
     posts = tuple(
@@ -250,6 +309,7 @@ def quotient(cfg, *, language=None, infer_invariant=None):
                         segment.trace,
                         dict(segment.bindings, **bindings),
                         segment,
+                        entries[segment.demo_idx],
                     )
                 )
         body_demos.append(tuple(examples))
@@ -263,6 +323,7 @@ def quotient(cfg, *, language=None, infer_invariant=None):
         tuple(len(groups) for _ in groups[0]),
         posts,
         tuple(body_demos),
+        require_unique_guard=True,
     )
     first, last = r.start, r.start + r.width * len(groups)
     removed = cfg.order[first:last]
@@ -270,8 +331,22 @@ def quotient(cfg, *, language=None, infer_invariant=None):
     incoming, outgoing = cfg.incoming(removed[0])[0], cfg.outgoing(removed[-1])[0]
     edge_index = cfg.edges.index(incoming)
     cfg.edges[edge_index : edge_index + len(removed) + 1] = [
-        Edge(incoming.source, new, incoming.label),
-        Edge(new, outgoing.target, outgoing.label),
+        Edge(
+            incoming.source,
+            new,
+            incoming.label,
+            incoming.binds,
+            incoming.kills,
+            incoming.binding_condition,
+        ),
+        Edge(
+            new,
+            outgoing.target,
+            outgoing.label,
+            outgoing.binds,
+            outgoing.kills,
+            outgoing.binding_condition,
+        ),
     ]
     cfg.order[first:last] = [new]
     for node in removed:

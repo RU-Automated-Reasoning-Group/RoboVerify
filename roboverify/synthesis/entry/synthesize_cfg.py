@@ -99,6 +99,22 @@ def run(args, logger):
         for i, t in enumerate(traces)
     ]
     pre, post = task_spec(args.task)
+    from synthesis.cfg.refine import scene_at
+
+    demo_checks = {
+        "total": len(segments),
+        "pre_holds": sum(evaluate(pre, scene_at(s, s.t_start)) for s in segments),
+        "post_at_end": sum(evaluate(post, scene_at(s, s.t_end)) for s in segments),
+        "post_reached": sum(
+            any(evaluate(post, scene_at(s, t)) for t in range(s.t_start, s.t_end + 1))
+            for s in segments
+        ),
+    }
+    logger.log_event(
+        "demo_validation",
+        f"Task predicate checks on recorded demos: {demo_checks}",
+        force=True,
+    )
     cfg = RelationalCFG.initial(segments, pre, post, ("b0",))
     budget = SearchBudget(
         iterations=args.iterations,
@@ -312,6 +328,7 @@ def run(args, logger):
         rounds=result.rounds,
         failed_block=result.failed_block,
         formal_verification="not_run",
+        demonstration_checks=demo_checks,
         task=args.task,
     )
     return 0 if result else 2

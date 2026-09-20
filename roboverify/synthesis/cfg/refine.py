@@ -23,7 +23,7 @@ def scene_at(segment, t):
         segment.trace.num_blocks,
         segment.bindings,
         include_table="tbl" in segment.bindings,
-        entry_obs=segment.trace.states[segment.t_start],
+        entry_obs=segment.trace.states[segment.entry_index],
     )
 
 
@@ -46,6 +46,11 @@ def refine_cfg(cfg, node, negative, available_scope, *, language=None, on_split=
         raise ValueError("Refinement requires a single-entry/exit block")
     segments = cfg.demos.for_node(node)
     positive = transition_witnesses(segments, outgoing[0].label)
+    # Prefix execution also contains states before the Get that introduces this
+    # block's aliases. Those states are not in this classifier's scoped domain.
+    negative = [
+        scene for scene in negative if set(available_scope) <= set(scene.bindings)
+    ]
     result = learn_classifier(positive, negative, available_scope, language=language)
     if not result:
         return result

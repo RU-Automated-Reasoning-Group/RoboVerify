@@ -27,6 +27,42 @@ class QuotientTests(unittest.TestCase):
         self.assertEqual(result.template.first["p1"], ref("b0"))
         # p1 -> b, p0 -> b_prime yields Assign(b, b_prime).
 
+    def test_historical_unstack_guard_spike_derives_carried_update(self):
+        from synthesis.predicates.term import conjunction, disjunction, forall, negate
+
+        # Lifted from demo_sources.unstack_oracle; no loop supplied to matching.
+        labels = []
+        for i in range(3):
+            bp, b, n = ref(f"b{i+1}"), ref(f"b{i}"), ref("n")
+            labels.append(
+                conjunction(
+                    forall(
+                        ["n"],
+                        disjunction(atom("eq", bp, n), negate(atom("ON_star", n, bp))),
+                    ),
+                    negate(atom("eq", bp, b)),
+                )
+            )
+        repeated = find_repetition(labels)
+        self.assertEqual((repeated.width, len(repeated.substitutions)), (1, 3))
+        carry, rebound = carried_bindings(repeated.template)
+        self.assertEqual(len(carry), 1)
+        current, next_ = next(iter(carry.items()))
+        self.assertEqual(repeated.template.first[current], ref("b0"))
+        self.assertEqual(repeated.template.first[next_], ref("b1"))
+        self.assertIn(next_, rebound)
+
+    def test_get_bound_arguments_match_by_template_role(self):
+        from synthesis.cfg.kleene import Letter
+
+        a = Letter(atom("ON", ref("a"), ref("b")), frozenset(["a"]))
+        b = Letter(atom("ON", ref("c"), ref("a")), frozenset(["c"]))
+        template = anti_unify((a,), (b,))
+        self.assertIsNotNone(template)
+        self.assertEqual(template.word[0].get_bound, frozenset(["p0"]))
+        wrong = Letter(b.predicate, frozenset(["a"]))
+        self.assertIsNone(match_template(template, (wrong,)))
+
     def test_length_two_repeated_units_are_kept(self):
         a = lambda rel, x, y: atom(rel, ref(x), ref(y))
         labels = [
@@ -92,6 +128,23 @@ class FullQuotientTests(unittest.TestCase):
             }
         )
         cfg = RelationalCFG(nodes, edges, names, demos, initial_scope=frozenset(["b0"]))
+        from copy import deepcopy
+
+        from synthesis.api.instructions import Pick, PickByName
+
+        physical_cfg = deepcopy(cfg)
+        for i, name in enumerate(names):
+            physical_cfg.nodes[name].region = BlockRegion(None, (Pick(i + 1),))
+        self.assertTrue(
+            quotient(
+                physical_cfg, infer_invariant=lambda rows, g, scope: z3.BoolVal(True)
+            )
+        )
+        physical = lower(physical_cfg, HighLevelContext(), physical=True)
+        self.assertIsInstance(physical.instructions[1].body[0], PickByName)
+        self.assertEqual(physical.instructions[1].body[0].grab_box_name, "b_prime")
+        with self.assertRaisesRegex(ValueError, "relational summary"):
+            lower(physical_cfg, HighLevelContext())
         self.assertTrue(
             quotient(cfg, infer_invariant=lambda rows, g, scope: z3.BoolVal(True))
         )
@@ -104,3 +157,11 @@ class FullQuotientTests(unittest.TestCase):
         self.assertIsInstance(loop, While)
         self.assertEqual((loop.body[-1].left, loop.body[-1].right), ("b", "b_prime"))
         self.assertEqual(loop.max_iters, 3)
+        self.assertTrue(loop.require_unique_guard)
+        self.assertEqual(
+            [(s.t_start, s.t_end) for s in cfg.demos.for_node(cfg.order[0])], [(0, 3)]
+        )
+        self.assertEqual(
+            [s.entry_index for s in cfg.nodes[cfg.order[0]].region.body_demos[0]],
+            [0, 0, 0],
+        )

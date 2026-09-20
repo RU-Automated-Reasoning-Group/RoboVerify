@@ -56,13 +56,14 @@ def anti_unify(first, second):
         for a, b in zip(first, second):
             if a.starred or b.starred:
                 return None
-            if a.get_bound != b.get_bound:
+            predicate = match(canonical(a.predicate), canonical(b.predicate))
+            left_names = {v.value: k for k, v in left.items()}
+            right_names = {v.value: k for k, v in right.items()}
+            left_bound = frozenset(left_names.get(n, n) for n in a.get_bound)
+            right_bound = frozenset(right_names.get(n, n) for n in b.get_bound)
+            if left_bound != right_bound:
                 return None
-            word.append(
-                Letter(
-                    match(canonical(a.predicate), canonical(b.predicate)), a.get_bound
-                )
-            )
+            word.append(Letter(predicate, left_bound))
         return Template(tuple(word), left, right)
     except ValueError:
         return None
@@ -88,7 +89,12 @@ def match_template(template, word):
     if len(template.word) != len(word) or any(w.starred for w in word):
         return None
     if all(match(p.predicate, w.predicate) for p, w in zip(template.word, word)):
-        return result
+        if all(
+            frozenset(result[n].value if n in result else n for n in p.get_bound)
+            == w.get_bound
+            for p, w in zip(template.word, word)
+        ):
+            return result
     return None
 
 

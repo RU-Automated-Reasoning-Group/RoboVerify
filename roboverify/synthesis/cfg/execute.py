@@ -4,8 +4,15 @@ from synthesis.cfg.reset import reset_segment
 from synthesis.predicates.scene import scene_from_obs
 
 
-def execute_current(program, env, initial_observation):
-    trajectory = [initial_observation]
+def execute_current(program, env, initial_observation, on_state=None):
+    class Trajectory(list):
+        def append(self, state):
+            super().append(state)
+            if on_state is not None:
+                on_state(state, dict(env.symbolic_name_to_box_id))
+
+    trajectory = Trajectory()
+    trajectory.append(initial_observation)
     for instruction in program.instructions:
         instruction.eval(env, trajectory)
     return trajectory
@@ -13,6 +20,7 @@ def execute_current(program, env, initial_observation):
 
 def execute_cfg(cfg, context, env_factory, *, reset_mode="replay"):
     """Generate negatives from the current graph, never a random unrelated program."""
+    from synthesis.api.guard_eval import AmbiguousGuardWitness, NoGuardWitness
     from synthesis.api.instructions import Get
     from synthesis.api.program import Program
     from synthesis.cfg.lower import lower_region
@@ -42,17 +50,25 @@ def execute_cfg(cfg, context, env_factory, *, reset_mode="replay"):
         env = env_factory(segment.trace)
         try:
             first = reset_segment(env, segment, mode=reset_mode)
-            states = execute_current(program, env, first)
-            output.extend(
-                scene_from_obs(
-                    obs,
-                    segment.trace.num_blocks,
-                    segment.bindings,
-                    include_table="tbl" in segment.bindings,
-                    entry_obs=first,
+
+            def record(obs, bindings):
+                output.append(
+                    scene_from_obs(
+                        obs,
+                        segment.trace.num_blocks,
+                        bindings,
+                        include_table="tbl" in bindings,
+                        entry_obs=first,
+                    )
                 )
-                for obs in states
-            )
+
+            try:
+                execute_current(program, env, first, on_state=record)
+            except (NoGuardWitness, AmbiguousGuardWitness):
+                # A partial candidate can stop at a failed Get; its actual
+                # prefix states still provide classifier negatives.
+                pass
+
         finally:
             env.close()
     return output
