@@ -275,21 +275,56 @@ This corrects the uniqueness restriction; matching demonstrations alone still do
 not prove that a learned guard or its body is correct.
 
 
-## 12. Alignment certification is absent from the implemented motion checks
+## 12. Alignment checks added, but root discovery and the proof premises remain open
 
-**Direct algorithm audit, 2026-09-20; unresolved code/plan gap.** Section 5.5,
-equations (6)/(7), and Appendix J require root-relative alignment to justify a
-bounded geometric interpretation of transitive reachability. Phase D2 specified
-local direct-on and frame checks but omitted this obligation. The current motion
-checker has no root search or alignment VC.
+**Status after follow-up review:** the original drift counterexample is rejected,
+but selecting a justified root is still an implementation gap. The paper's
+alignment argument also needs an explicit maintained geometric invariant.
 
-A synthetic clear scene passes MotionVerify with root x=0, top x=.024 and a new
-block placed at x=.048 (block length .05). Both neighboring ON* relations hold,
-but ON*(new,root) is false under the implementation's .025 horizontal bound.
-Thus local placement plus frame/collision checks does not establish the symbolic
-transitive effect. Reconcile root and pairwise bounds before adding the missing
-obligation; do not silently substitute the paper's inconsistent thresholds.
-See A1 in `AUDIT-popl-alignment.md`.
+**Original audit finding.** Section 5.5, equations (6)/(7), and Appendix J require
+root-relative alignment. Phase D2 omitted this obligation. With block length .05,
+root x=0, top x=.024, and the new block at x=.048, local placement and the original
+motion checks passed although geometric ON*(new,root) was false. The added
+alignment and complete-effect checks now reject this scene; see
+`roboverify/synthesis/verification_lib/test_motion_verification.py`,
+`test_root_drift_is_rejected_even_when_local_placement_passes`.
+
+**Remaining code gap.** `cfg/verification.py:verify_cfg_motion` picks `b0`, or the
+first sorted non-table name, as the reference. `motion_verification.py` checks
+alignment against the contract's `frame_base` when the target is geometrically
+above it. This is not the paper's symbolic root discovery, and the name fallback
+does not establish that the reference is a root. Do not call A1 fully complete.
+
+**Paper root rule, p. 30, lines 1433–1439.** With P = wp(pi_phi, I), seek a named
+r such that P implies: for every u below y, u is above r. Under reflexivity,
+antisymmetry, a satisfiable P, and quantification over the relevant objects, this
+is a valid bottom-root criterion. It need not have a named solution. Its use also
+requires the actual entry context to imply P; failed/unknown checks cannot select
+an arbitrary fallback. The main text writes u in O, whereas Appendix J writes
+unrestricted u. O includes a fresh arbitrary witness, so finite instantiation can
+cover unnamed objects only with the corresponding universal-validity argument;
+checking a single concrete assignment is insufficient.
+
+**Paper alignment proof gap, pp. 29–32 and Appendix J.** Lemma 5.5/J.1 correctly
+assumes every old element is within delta of the SAME root, then bounds pairwise
+distance by 2*delta <= N. Definition 5.4's translated ON* supplies only the looser
+N bound. Checking a newly placed element within delta does not establish the
+lemma's hypothesis for an arbitrary existing tower. The While rule also resets
+the geometry to the translated invariant, so tighter bounds must be included
+there or separately established and preserved; root changes require justification.
+
+A concrete horizontal counterexample, in units of delta with N=2, has existing
+block centers bottom-to-top [0, -1, -2, -1, 0]. Every adjacent displacement is 1,
+all old pairwise distances are at most 2, and the true root is the first block.
+Place a new top block at +1: its distance to both target and root is 1, but its
+distance to the old block at -2 is 3 > N. Heights can increase by one valid block
+step, with the other horizontal coordinate fixed. Direct arithmetic checks confirm
+all these inequalities. This refutes the sufficiency of the loose old-chain
+bounds plus the new-element alignment check; it does not refute the lemma with
+its full hypotheses or assert that the current complete-effect checker accepts
+this scene. A sound implementation needs a justified stable reference and an
+established/preserved tight alignment invariant, or another proof of the complete
+required geometric effects. See A1 in `AUDIT-popl-alignment.md`.
 
 ## 13. Placement summaries assume relational effects their physical contract does not check
 
@@ -396,10 +431,11 @@ validation decision is recorded in discrepancy 17.
 
 ### Remediation status after the direct paper rereading
 
-Audit A1 closes discrepancies 12–13's missing checks: placement must satisfy the
-complete ON*/Higher/Scattered effect and consistent root alignment. The earlier
-passing counterexamples are now regressions that must be rejected. Discrepancy
-15's silent loop-cap exit is fixed; termination still is not proved.
+Audit A1 added the complete ON*/Higher/Scattered effect and designated-reference
+alignment checks, rejecting the original discrepancy 12–13 counterexamples.
+Follow-up review reopens A1's root discovery and alignment-premise justification
+(see entry 12); the earlier completion claim was too broad. Discrepancy 15's
+silent loop-cap exit is fixed; termination still is not proved.
 
 For discrepancy 18, the new primitive model explicitly excludes intended
 Pick/Release contact with the selected object, models the empty gripper as a

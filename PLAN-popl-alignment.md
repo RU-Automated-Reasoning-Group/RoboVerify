@@ -17,17 +17,22 @@
 > straight-segment collision query. The proposed endpoint bounding-box fallback
 > was never implemented; its original equivalence claim below has been corrected.
 >
-> **Audit remediation implemented and tested within the agreed flat-loop scope.** The user requested fixes for
+> **Audit remediation: A1 reopened after root/alignment review; other completed items retain their status.** The user requested fixes for
 > all eleven findings in [AUDIT-popl-alignment.md](AUDIT-popl-alignment.md), plus
 > the demo-independent follow-ups below. Check this checklist for current status;
 > the audit describes the pre-fix baseline. Mark an item complete only with tests
 > and a recorded implementation, not merely a proposed solution.
 >
-> - [x] **A1:** MotionVerify checks ON*/Higher/Scattered outcomes against Put WP,
+> - [ ] **A1 (reopened):** MotionVerify checks ON*/Higher/Scattered outcomes against Put WP,
 >       plus root alignment; the table Scattered rewrite preserves isolation.
 >       Exact quantified effects fail closed. Both audit geometries are rejected;
 >       31 motion/CEGIS tests pass. A newly exposed paper Higher mismatch is
 >       rejected explicitly (discrepancy 16), not silently rewritten.
+>       **Remaining:** replace name-based reference selection with justified root
+>       discovery and account for the tight alignment invariant needed by the
+>       paper's lemma. Entry 12 records the root criterion and a counterexample
+>       to assuming that loose existing-chain bounds suffice. Analysis only in
+>       this follow-up; the controller/verifier implementation is unchanged.
 > - [x] **A2:** Runtime budget exhaustion raises `LoopBudgetExceeded`; generated
 >       loops no longer derive an execution cap from demo counts. Explicit caps
 >       remain optional and collectors report incomplete outcomes. Nineteen
