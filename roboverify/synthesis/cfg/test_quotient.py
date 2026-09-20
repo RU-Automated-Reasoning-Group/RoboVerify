@@ -27,6 +27,30 @@ class QuotientTests(unittest.TestCase):
         self.assertEqual(result.template.first["p1"], ref("b0"))
         # p1 -> b, p0 -> b_prime yields Assign(b, b_prime).
 
+    def test_template_names_do_not_capture_existing_free_names(self):
+        from synthesis.predicates.term import substitute
+
+        for existing in ("p0", "p1", "p2"):
+            left = atom("ON", ref("a"), ref(existing))
+            right = atom("ON", ref("b"), ref(existing))
+            template = anti_unify(encode_fragment([left]), encode_fragment([right]))
+            self.assertNotIn(existing, template.first)
+            self.assertEqual(substitute(template.word[0].predicate, template.first), left)
+            self.assertEqual(substitute(template.word[0].predicate, template.second), right)
+
+    def test_repetition_stops_when_carried_update_changes(self):
+        labels = [atom("ON", ref(a), ref(b)) for a, b in
+                  [("b1", "b0"), ("b2", "b1"), ("b4", "b3")]]
+        repeated = find_repetition(labels)
+        self.assertEqual(len(repeated.substitutions), 2)
+
+    def test_repetition_rejects_noninjective_later_substitution(self):
+        labels = [atom("ON", ref(a), ref(b)) for a, b in
+                  [("b1", "b0"), ("b2", "b1"), ("b2", "b2"), ("b3", "b2")]]
+        repeated = find_repetition(labels)
+        # The third would make both roles carry the same previous value.
+        self.assertEqual(len(repeated.substitutions), 2)
+
     def test_historical_unstack_guard_spike_derives_carried_update(self):
         from synthesis.predicates.term import conjunction, disjunction, forall, negate
 

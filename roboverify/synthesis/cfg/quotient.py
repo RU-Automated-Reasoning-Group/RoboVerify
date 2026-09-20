@@ -16,6 +16,7 @@ from synthesis.cfg.demos import DemoSegment
 from synthesis.cfg.graph import Edge, Node
 from synthesis.cfg.kleene import (
     Letter,
+    Template,
     anti_unify,
     carried_bindings,
     encode_fragment,
@@ -52,7 +53,7 @@ def find_repetition(labels):
             if template is None or not template.first:
                 continue
             try:
-                carried_bindings(template)
+                expected_update = carried_bindings(template)
             except ValueError:
                 continue
             substitutions = [template.first, template.second]
@@ -60,6 +61,12 @@ def find_repetition(labels):
             while cursor + width <= len(word):
                 mapping = match_template(template, word[cursor : cursor + width])
                 if mapping is None:
+                    break
+                try:
+                    update = carried_bindings(Template(template.word, substitutions[-1], mapping))
+                except ValueError:
+                    break
+                if update != expected_update:
                     break
                 substitutions.append(mapping)
                 cursor += width

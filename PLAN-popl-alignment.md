@@ -13,8 +13,11 @@
 > - [ ] **A1:** Check complete geometric effects of symbolic placement, including
 >       root alignment, separation and relational table isolation.
 > - [ ] **A2:** Make runtime loop budgets consistent with symbolic exit semantics.
-> - [ ] **A3:** Make anti-unification template variables fresh.
-> - [ ] **A4:** Check carried updates across every matched iteration.
+> - [x] **A3:** Template variables exclude all existing free/binding names;
+>       substitution round-trip regressions pass.
+> - [x] **A4:** Every adjacent substitution must have the same partial carry
+>       composition; mismatched/noninjective extensions stop matching. Nine
+>       quotient tests pass, including three new synthetic regressions.
 > - [ ] **A5:** Complete flat loop extraction, folding and body refinement.
 > - [ ] **A6:** Connect synthesized CFGs to verification and counterexample repair.
 > - [ ] **A7:** Verify synthesized primitives and propagate block contexts.
