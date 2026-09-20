@@ -14,10 +14,19 @@
 >       `lowlevel_verification` fails closed when no loop was checked, and
 >       `start_verification`'s blanket skip became a three-way inert /
 >       motion-unhandled / unknown classification. Commit `97a196d`.
-> - [ ] **A.3** `pdb.set_trace()` → typed exceptions (9 sites in `inference.py`,
->       1 in `instructions.py`). ***Next.*** Nothing written yet.
-> - [ ] **A.4** Solver `unknown` handling in `check_tautology` and
->       `highlevel_verification`.
+> - [x] **A.3** `pdb.set_trace()` → `InferenceDataError` / `SeparationInfeasible`,
+>       plus a message on `Parameter.update`'s bare `ValueError`. Commit `3d6635f`.
+> - [x] **A.4** Solver timeouts added so `unknown` is reachable rather than a hang;
+>       `check_tautology` keeps the clause instead of asserting, and
+>       `highlevel_verification` now distinguishes *refuted* from *inconclusive*.
+>       Commit `9c77f09`.
+>
+> **Phase A is complete. Phase B is next** — predicate, vocabulary and parameter
+> alignment. Its first item is the table rework: `tbl` stays a sort element but
+> loses its fake `[-100,-100,-100]` position, and the three `z >= 0` tests become
+> an explicit `is_table` check. Read the Phase B section in full before starting;
+> the reasoning about *why* the isolation is currently accidental matters.
+>
 > - [ ] Phases B–F: not started.
 >
 > **Pre-existing failure, not a regression.**
