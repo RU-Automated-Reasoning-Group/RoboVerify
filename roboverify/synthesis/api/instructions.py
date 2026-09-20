@@ -997,10 +997,6 @@ class While(Instruction):
                 return on_util.scattered_implementation(
                     all_block_pos[a], all_block_pos[b]
                 )
-            if name == "Top":
-                a = eval_term(expr.arg(0), bound_vals)
-                return on_util.top_implementation(all_block_pos[a], all_block_pos)
-
             raise TypeError(
                 f"Unsupported Z3 operator/predicate in guard: {name} ({expr})"
             )

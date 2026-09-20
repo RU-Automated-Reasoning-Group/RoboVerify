@@ -130,11 +130,6 @@ def add_all_pairs(vocabulary, r, all_vars):
                 assert False, f"unknown relation r: {r}"
 
 
-def add_univariable_predicate(vocabulary, r, all_vars):
-    for v in all_vars:
-        vocabulary.append(r(v))
-
-
 def forall_exists_compute_omega(
     universally_quantified_vars: List,
     existential_quantified_vars: List,
@@ -144,10 +139,7 @@ def forall_exists_compute_omega(
     all_vars = universally_quantified_vars + existential_quantified_vars + constants
     omega_inv = []
     for r in relations:
-        if str(r) == "Top":
-            add_univariable_predicate(omega_inv, r, all_vars)
-        else:
-            add_all_pairs(omega_inv, r, all_vars)
+        add_all_pairs(omega_inv, r, all_vars)
     return omega_inv
 
 
@@ -356,21 +348,7 @@ def compute_data(
     data = []
     for predicate in omega_k:
         print("predicate:", predicate)
-        if str(predicate).startswith("Top"):
-            arg0 = predicate.arg(0)
-            block1_name = (
-                var_mapping[arg0] if arg0 in var_mapping else constants_mapping[arg0]
-            )
-            top_flag = True
-            for other_block_name in state:
-                if block1_name != other_block_name:
-                    if on.on_star_implementation(
-                        state[other_block_name], state[block1_name]
-                    ):
-                        top_flag = False
-                        break
-            data.append(top_flag)
-        elif str(predicate).startswith("ON_star") and not str(predicate).startswith(
+        if str(predicate).startswith("ON_star") and not str(predicate).startswith(
             "ON_star_zero"
         ):
             arg0, arg1 = predicate.arg(0), predicate.arg(1)
@@ -514,19 +492,7 @@ def compute_data_with_function(
     data = []
     for predicate in omega_k:
         print("predicate:", predicate)
-        if str(predicate).startswith("Top"):
-            arg0 = predicate.arg(0)
-            block1_name = _resolve_term_to_object_name(arg0)
-            top_flag = True
-            for other_block_name in state:
-                if block1_name != other_block_name:
-                    if on.on_star_implementation(
-                        state[other_block_name], state[block1_name]
-                    ):
-                        top_flag = False
-                        break
-            data.append(top_flag)
-        elif str(predicate).startswith("Mark"):
+        if str(predicate).startswith("Mark"):
             arg0 = predicate.arg(0)
             block1_name = _resolve_term_to_object_name(arg0)
             assert isinstance(block1_name, str)
@@ -1445,10 +1411,6 @@ def forall_exists_loop_inference(
         universally_quantified_vars, existential_quantified_vars, relations, constants
     )
 
-    # (ux1,) = universally_quantified_vars
-    # (ex1,) = existential_quantified_vars
-    # b0, b = constants
-    # omega_inv = [ON_star(ex1, b0), Top(ex1)]
     print("omega_inv", omega_inv)
 
     all_datasets: List = forall_exists_compute_dataset(
@@ -2715,7 +2677,6 @@ def run_promote_example(
     function_imples = {
         "ON_star": on.on_star_implementation,
         "ON_star_zero": on.on_star_implementation,
-        "Top": on.top_implementation,
     }
     promoted = quant_enum_merge.promote_exists_to_forall_right_z3(
         candidate, base_envs, domain, function_imples
@@ -2737,7 +2698,7 @@ def quant_enum_merge_test(
             "x5": (10.0, 10.0, 0.0),
         }
     ]
-    relations = [context.ON_star, "equality", context.Top]
+    relations = [context.ON_star, "equality"]
     b0, b = context.get_consts("b0"), context.get_consts("b")
     x, y = context.get_consts("x"), context.get_consts("y")
     m, n = context.get_consts("m"), context.get_consts("n")
@@ -2750,7 +2711,6 @@ def quant_enum_merge_test(
     function_imples = {
         "ON_star": on.on_star_implementation,
         "ON_star_zero": on.on_star_implementation,
-        "Top": on.top_implementation,
     }
     env = {"b0": [0.0, 0.0, 0.0], "b": [0.0, 0.0, 0.1]}
     quant_enum_merge.eval_quantified_expr(py_expr, env, domain, function_imples)
@@ -2760,7 +2720,7 @@ def quant_enum_merge_test(
     )
     print(py_rst)
 
-    test_z3_expr_1 = z3.Exists([y], context.Top(y))
+    test_z3_expr_1 = z3.Exists([y], z3.Not(context.ON_star(b0, y)))
     test_z3_expr_2 = z3.Exists([y], context.ON_star(y, b0))
 
     test_expr_1 = quant_enum_merge.z3_to_python_expr(test_z3_expr_1)
@@ -2818,7 +2778,6 @@ def quant_enum_merge_test(
     func_maps = {
         "ON_star": context.ON_star,
         "ON_star_zero": context.ON_star_zero,
-        "Top": context.Top,
     }
     var_maps = {"b0": b0, "b": b}
     quant_enum_merge_expr = quant_enum_merge.python_expr_to_z3(

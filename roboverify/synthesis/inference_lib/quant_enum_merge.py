@@ -132,8 +132,6 @@ def eval_quantified_expr(
             eval_quantified_expr(a, env, domain, function_impls, bound_vars)
             for a in expr["args"]
         ]
-        if expr["name"] == "Top":
-            return function_impls[expr["name"]](*args, domain)
         return function_impls[expr["name"]](*args)
 
     # ---------- Boolean ----------

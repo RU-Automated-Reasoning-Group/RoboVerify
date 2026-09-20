@@ -214,16 +214,6 @@ def scattered_implementation(block1, block2) -> bool:
     return abs(x1 - x2) >= 2 * BLOCK_LENGTH or abs(y1 - y2) >= 2 * BLOCK_LENGTH
 
 
-def top_implementation(block, all_blocks) -> bool:
-    """Check if a block is on top"""
-    top_flag = True
-    for other_block in all_blocks:
-        if other_block != block and on_star_implementation(other_block, block):
-            top_flag = False
-            break
-    return top_flag
-
-
 def get_block_pos(obs, block_id):
     start_idx = 10 + 12 * block_id
     end_idx = start_idx + 3

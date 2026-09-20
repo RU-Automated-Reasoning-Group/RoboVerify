@@ -95,7 +95,6 @@ class HighLevelContext:
         )
         self.Higher = Function("Higher", self.BoxSort, self.BoxSort, BoolSort())
         self.Scattered = Function("Scattered", self.BoxSort, self.BoxSort, BoolSort())
-        self.Top = Function("Top", self.BoxSort, BoolSort())
 
     def _resolve_goal_enum_names(self) -> List[str]:
         """Finite Goal universe for ``mode=='enum'`` (goal nodes only, no ``null`` ctor)."""
@@ -752,7 +751,6 @@ class HighLevelContext:
             "ON_star_zero": self.ON_star_zero,
             "Higher": self.Higher,
             "Scattered": self.Scattered,
-            "Top": self.Top,
         }
         for name in known_const_names or []:
             decls[name] = Const(name, self.BoxSort)
