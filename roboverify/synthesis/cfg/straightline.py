@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from time import perf_counter
 
 import numpy as np
-
 from synthesis.cfg.execute import execute_current
 from synthesis.cfg.refine import scene_at
 from synthesis.cfg.reset import reset_segment
@@ -55,7 +54,9 @@ def _features(states, num_blocks):
             [
                 [
                     value
-                    for key in sorted(s.positions, key=str)
+                    for key in sorted(
+                        s.positions, key=lambda key: (isinstance(key, str), key)
+                    )
                     if key != "tbl"
                     for value in s.positions[key]
                 ]
@@ -74,7 +75,20 @@ def segment_rollout(program, segment, env_factory, reset_mode="replay"):
         env = env_factory(segment.trace)
         try:
             first = reset_segment(env, segment, mode=reset_mode)
-            return execute_current(program, env, first)
+            scenes = []
+            entry = scene_at(segment, segment.entry_index).entry_positions
+
+            def record(obs, bindings):
+                scene = scene_from_obs(
+                    obs,
+                    segment.trace.num_blocks,
+                    bindings,
+                    include_table="tbl" in bindings,
+                )
+                scenes.append(Scene(scene.positions, scene.bindings, entry))
+
+            execute_current(program, env, first, on_state=record)
+            return scenes
         finally:
             env.close()
 

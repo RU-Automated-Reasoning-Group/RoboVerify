@@ -15,6 +15,7 @@ from synthesis.api.instructions import (
     Skip,
 )
 from synthesis.api.program import Program, generate_random_program
+from synthesis.cfg.bindings import close_objects, mutate_scoped, require_closed
 from synthesis.cfg.demo_sources import unstack_oracle
 from synthesis.cfg.demos import DemoSegment, DemoTrace
 from synthesis.cfg.execute import execute_cfg
@@ -155,27 +156,15 @@ def run(args, logger):
         def propose(candidate, rng):
             with preserved_global_rng():
                 set_np_seed(int(rng.integers(2**31)))
-                if any(
-                    isinstance(i, (PickByName, MoveByName, ReleaseByName))
-                    for i in candidate.instructions
-                ):
-                    names = sorted(
-                        set.intersection(*(set(d.bindings) for d in demos)) - {"tbl"}
-                    )
-                    constructors = [
-                        lambda: PickByName(names[0]),
-                        lambda: MoveByName(names[0], names[0], names[0]),
-                        lambda: ReleaseByName(names[0]),
-                        Skip,
-                    ]
-                    return mutate_program(candidate, {"BoxName": names}, constructors)[
-                        0
-                    ]
-                return mutate_program(
-                    candidate,
-                    {"Box": list(range(args.num_blocks))},
-                    [Pick, Move, Release, Skip],
-                )[0]
+                return mutate_scoped(candidate, node.available_scope)
+
+        initial = close_objects(
+            initial,
+            demos,
+            node.available_scope,
+            context,
+            prefix="object_" + node.name.replace(".", "_"),
+        )
 
         result = straight_line_synthesize(
             demos,
@@ -197,11 +186,16 @@ def run(args, logger):
             elapsed=result.elapsed,
             postscore_seconds=result.postscore_seconds,
         )
+        exports = (
+            require_closed(result.program.instructions, node.available_scope)
+            - node.available_scope
+        )
         # No unsupported relational summary is invented for arbitrary physical code.
         return (
             BlockRegion(
                 node.region.symbolic if isinstance(node.region, BlockRegion) else None,
                 tuple(result.program.instructions),
+                exports,
             ),
             result.ok,
         )

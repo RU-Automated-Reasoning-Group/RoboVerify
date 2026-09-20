@@ -30,7 +30,10 @@
 >       and preserving the outer loop during body refinement.
 > - [ ] **A6:** Connect synthesized CFGs to verification and counterexample repair.
 > - [ ] **A7:** Verify synthesized primitives and propagate block contexts.
-> - [ ] **A8:** Close object bindings and restrict mutation to runtime scope.
+> - [x] **A8:** Numeric objects close through consistent in-scope aliases or typed
+>       Get bindings before search; mutation preserves Get prefixes and uses only
+>       runtime scope. Block exports participate in must-reach analysis, and scoring
+>       observes actual runtime bindings after assignments. Twenty focused tests pass.
 > - [x] **A9:** Search includes zero-binder classifiers and direct ON by default;
 >       ground separation and intermediate-object adjacency regressions pass
 >       together with the existing search/refinement tests (nine tests).

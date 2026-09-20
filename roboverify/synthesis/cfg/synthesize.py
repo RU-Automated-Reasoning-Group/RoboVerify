@@ -75,6 +75,7 @@ def synthesize_cfg(
                 node.region.body_demos = tuple(
                     tuple(body_cfg.demos.for_node(n)) for n in body_cfg.order
                 )
+            node.available_scope = scope(cfg)[name]
             region, ok = realize(
                 node, cfg.demos.for_node(name), cfg.outgoing(name)[0].label
             )

@@ -9,13 +9,17 @@ def scope(cfg):
         if expanded == reachable:
             break
         reachable = expanded
-    from synthesis.cfg.region import LoopRegion
+    from synthesis.cfg.region import BlockRegion, LoopRegion
 
     exports = {
         name: (
             {left for left, _ in node.region.init}
             if isinstance(node.region, LoopRegion)
-            else set()
+            else (
+                set(node.region.bindings)
+                if isinstance(node.region, BlockRegion)
+                else set()
+            )
         )
         for name, node in cfg.nodes.items()
     }

@@ -15,6 +15,8 @@ def execute_current(program, env, initial_observation, on_state=None):
     trajectory.append(initial_observation)
     for instruction in program.instructions:
         instruction.eval(env, trajectory)
+        if on_state is not None:
+            on_state(trajectory[-1], dict(env.symbolic_name_to_box_id))
     return trajectory
 
 

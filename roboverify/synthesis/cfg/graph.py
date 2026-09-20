@@ -8,6 +8,7 @@ from synthesis.predicates.term import boolean
 class Node:
     name: str
     region: object = None
+    available_scope: frozenset = frozenset()
 
 
 @dataclass(frozen=True)
