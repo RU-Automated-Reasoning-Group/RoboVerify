@@ -2,7 +2,7 @@
 
 > **Status — read this first.**
 >
-> Branch: `phase-a-fail-closed`. This plan is being executed top to bottom,
+> Branch: `phase-b-predicate-alignment`. This plan is being executed top to bottom,
 > Phase A first. Progress:
 >
 > **Phase A: all seven items done.** Listed in plan order; commits landed in a
@@ -31,13 +31,29 @@
 > - [x] **A.7** `PAPER-DISCREPANCIES.md` created and seeded with the Theorem 5.2 /
 >       Table 7 contradiction and the segment-reset omission. Commit `c2f0744`.
 >
-> **Phase A is complete. Phase B is next** — predicate, vocabulary and parameter
-> alignment. Its first item is the table rework: `tbl` stays a sort element but
-> loses its fake `[-100,-100,-100]` position, and the three `z >= 0` tests become
-> an explicit `is_table` check. Read the Phase B section in full before starting;
-> the reasoning about *why* the isolation is currently accidental matters.
+> **Phase B implementation is complete. Phase C is next.**
+> Validation is recorded below; Unstack is subject to a 60-second wall-clock cap.
 >
-> - [ ] Phases B–F: not started.
+> - [x] Explicit numeric table marker and predicate isolation (`b972637`).
+> - [x] Symbolic table isolation, Scattered boundary agreement, and direct-on
+>       predicate (`c3e285b`).
+> - [x] Existential translation (`ba45fbc`): fresh witnesses replace the planned
+>       finite disjunction, which would unsoundly restrict the witness domain.
+> - [x] Remove Top (`7740d0c`) and pin Reverse's initial relation (`7fbd433`).
+> - [x] Predicate/vocabulary regression tests, table identity in equality,
+>       collision-free witness names, and Boolean/finite-sort equality translation
+>       (`f6ea593`). Boolean equivalence gives quantifiers mixed polarity and is
+>       refused rather than unsoundly expanded.
+> - [x] Physical table surface height on all four tower environments, separate
+>       from block-center height and observation packing (`f972e3c`).
+> - [x] Move xyz parameters and independent parameter-slot tests (`c6f96e1`).
+> - [x] All **49 unittest tests pass**, including BMC, run logging, MCMC parity,
+>       table geometry in all four tower tasks, and Phase B regression tests.
+>       `bash format.sh` completed; unrelated formatting changes were restored.
+> - [x] Stack infinite and finite (4 blocks): both retain `hl_ok: False`,
+>       `ll_ok: True`, with the same VC 0/1 refutations documented below.
+> - [x] MCMC smoke comparison: all runs complete; results and budgets below.
+> - [ ] Phases C–F: not started.
 >
 > **Pre-existing failure, not a regression.**
 > `verify_stack_with_learned_invariant` reports two high-level VC failures
@@ -45,6 +61,37 @@
 > and after the A.1/A.2 change by stashing and re-running, so it predates this
 > work. Phase E's counterexample-guided loop is what is meant to address it —
 > do not treat it as damage from Phase A.
+>
+> **Unstack validation remains inconclusive.** The final corrected code was run
+> with `timeout 60s` and stopped with exit 124 during high-level verification;
+> that run did not reach the motion checks. Per the user's standing instruction,
+> **cap Unstack end-to-end runs at one minute** rather than waiting on a stalled
+> solver. An earlier Phase B run reached the existing 300-second solver timeout
+> on VC 2 check 2; the Phase A comparison (`ede20b5`) completed with
+> `hl_ok: True`, `ll_ok: False` (inconsistent low-level initial conditions).
+> Thus Unstack verdict parity is **not established**, and must not be reported
+> as passing. Its solver/invariant behavior remains follow-up work; Phase B's
+> finite-sort translation and predicates have direct regression coverage.
+>
+> **Phase B optimizer budget check (2026-09-20 UTC).**
+> Same seed 0, four blocks, two demo seeds, 20 MCMC iterations, two CEM iterations,
+> and `cem_init_std=0.1`; BMC and goal-feature reward disabled. Higher cost is better.
+>
+> | Parameters | CEM N/K | Best cost | Elapsed |
+> |---|---:|---:|---:|
+> | Phase A z-only (`ede20b5`) | 16/4 | -0.163374 | 53s |
+> | Phase B xyz | 16/4 | -0.182996 | 68s |
+> | Phase B xyz | 48/12 | -0.156418 | 76s |
+>
+> The larger vector still optimizes: both xyz runs improve from -0.303462,
+> with nonzero CEM improvement in 8/9 evaluations. The larger sample budget
+> recovers the short-run baseline score here. Defaults remain 16/4 and std 0.1:
+> this one seed is a smoke check, not evidence for a universal tuning change or
+> task success (success stayed zero). Use 48/12 as a measured comparison budget
+> when evaluating longer xyz runs. Read the three recorded runs with
+> `uv run python -m synthesis.experiment.report --glob 'runs/phase-b/*' --table`
+> from `roboverify/`; run slugs are `phase-a-z-only`, `phase-b-xyz`, and
+> `phase-b-xyz-n48-k12`.
 >
 > **Setup:** see `AGENTS.md`. Two environment variables are needed, not one.
 >
