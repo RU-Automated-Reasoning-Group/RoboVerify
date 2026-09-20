@@ -4,17 +4,37 @@
 >
 > Branch: `phase-f-synthesis`; Phases A–E are integrated into `main`.
 >
-> **Direct paper/code audit (2026-09-20):** see [AUDIT-popl-alignment.md](AUDIT-popl-alignment.md).
-> Prior completion checkboxes describe the implemented plan scope, not complete
-> paper-algorithm conformance. Phase F remains incomplete for reasons independent
-> of demo quality: flat extraction/body refinement, binding/summary lowering and
-> the Algorithm 6 handoff are missing. Confirmed template freshness/carry bugs
-> also remain. Verification follow-up is required for root alignment, complete
-> symbolic/physical action agreement, and runtime loop-cap semantics; the original
-> D2 plan did not cover all of these obligations. The audit changed no implementation.
-> All 133 existing tests pass (25.822 s); five synthetic probes expose uncovered issues.
-> Next: address the audit's soundness findings, then complete the synthesis connections.
-> Removing saved-demo dependencies from all tests remains proposed, pending user consideration.
+> **Audit remediation authorized and in progress.** The user requested fixes for
+> all eleven findings in [AUDIT-popl-alignment.md](AUDIT-popl-alignment.md), plus
+> the demo-independent follow-ups below. Check this checklist for current status;
+> the audit describes the pre-fix baseline. Mark an item complete only with tests
+> and a recorded implementation, not merely a proposed solution.
+>
+> - [ ] **A1:** Check complete geometric effects of symbolic placement, including
+>       root alignment, separation and relational table isolation.
+> - [ ] **A2:** Make runtime loop budgets consistent with symbolic exit semantics.
+> - [ ] **A3:** Make anti-unification template variables fresh.
+> - [ ] **A4:** Check carried updates across every matched iteration.
+> - [ ] **A5:** Complete flat loop extraction, folding and body refinement.
+> - [ ] **A6:** Connect synthesized CFGs to verification and counterexample repair.
+> - [ ] **A7:** Verify synthesized primitives and propagate block contexts.
+> - [ ] **A8:** Close object bindings and restrict mutation to runtime scope.
+> - [ ] **A9:** Include ground classifiers and the supported direct-ON vocabulary.
+> - [ ] **A10:** Validate temporal partitions across the CFG.
+> - [ ] **A11:** Expose the intended invariant learner/vocabulary and terminal heads.
+> - [ ] **D1:** Validate demonstrations against their initial/final task conditions;
+>       reject invalid inputs with actionable diagnostics before synthesis.
+> - [ ] **D2:** Validate loop recovery and synthesis/verification integration using
+>       synthetic examples independent of historical demonstrations (A3–A8).
+> - [ ] **D3:** Remove saved-demo dependencies from automated tests. The user's
+>       latest request authorizes this previously deferred follow-up.
+>
+> Verification-first order: A1/A2 and the reproduced A3/A4 defects, then the
+> synthesis connections and remaining algorithm coverage. Each coherent change
+> is committed on `phase-f-synthesis`; unrelated untracked files stay untouched.
+> Baseline: 133 tests passed; five audit probes exposed uncovered issues.
+> Full learning acceptance on new task-correct demonstrations remains distinct
+> from completion of these implementation and synthetic-validation items.
 > This plan is being executed top to bottom, Phase A first. Progress:
 >
 > **Phase A: all seven items done.** Listed in plan order; commits landed in a

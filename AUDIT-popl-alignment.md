@@ -1,5 +1,9 @@
 # Synthesis and verification algorithm audit
 
+Remediation tracking: the A1–A11 and D1–D3 checklist in
+[PLAN-popl-alignment.md](PLAN-popl-alignment.md) records fixes and validation.
+This document preserves the findings at the audited baseline.
+
 Audit date: 2026-09-20. Reviewed implementation: `132cfee`, branch
 `phase-f-synthesis`. The working tree initially contained only the three previously
 known unrelated untracked paths.
