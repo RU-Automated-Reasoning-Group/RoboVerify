@@ -19,6 +19,7 @@ class LoopRegion:
     iteration_counts: tuple = ()
     postconditions: tuple = ()
     body_demos: tuple = ()
+    require_unique_guard: bool = False
 
     @property
     def max_iters(self):

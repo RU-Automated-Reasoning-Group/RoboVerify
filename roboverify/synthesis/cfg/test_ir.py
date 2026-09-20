@@ -85,6 +85,39 @@ class IRTests(unittest.TestCase):
             )
         )
 
+    def test_learned_guard_rejects_multiple_witnesses_without_mutating_bindings(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from synthesis.api.guard_eval import AmbiguousGuardWitness, find_and_bind
+
+        ctx = HighLevelContext()
+        inst = While(z3.BoolVal(True), [ctx.get_consts("x")], [], z3.BoolVal(True))
+        inst.require_unique_guard = True
+        inst._get_num_blocks = lambda env, obs: 2
+        env = SimpleNamespace(symbolic_name_to_box_id={"b0": 0})
+        scene = Scene({0: (0, 0, 0.425), 1: (0.2, 0, 0.425)}, {"b0": 0})
+        with patch("synthesis.api.guard_eval.scene_from_obs", return_value=scene):
+            with self.assertRaises(AmbiguousGuardWitness):
+                find_and_bind(inst, env, [None])
+        self.assertEqual(env.symbolic_name_to_box_id, {"b0": 0})
+
+    def test_learned_guard_uniqueness_is_a_verification_obligation(self):
+        from synthesis.verification_lib.symbolic_verify import discharge_vc
+
+        context = HighLevelContext(mode="enum", num_blocks=2, sort_name="UniqueGuard")
+        x, b = context.get_consts("x"), context.get_consts("b")
+        for guard, expected in [(z3.BoolVal(True), "invalid"), (x == b, "valid")]:
+            loop = While(guard, [x], [Assign("b", "b")], z3.BoolVal(True))
+            loop.require_unique_guard = True
+            obligations = Program(1, [loop]).VC_gen(
+                z3.BoolVal(True), z3.BoolVal(True), context
+            )
+            check = next(vc for vc in obligations if vc.kind == "guard_unique")
+            self.assertEqual(
+                discharge_vc(check, context, timeout_ms=1000).status, expected
+            )
+
     def test_legacy_nested_guards_and_frozen_geometry(self):
         ctx = HighLevelContext()
         x, y, b = (ctx.get_consts(v) for v in ("x", "y", "b"))

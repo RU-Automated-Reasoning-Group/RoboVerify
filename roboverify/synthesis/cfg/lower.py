@@ -36,6 +36,7 @@ def lower_region(region, context, *, physical=False):
         max_iters=region.max_iters,
     )
     loop.guard_term = region.guard
+    loop.require_unique_guard = region.require_unique_guard
     return [*(Assign(a, b) for a, b in region.init), loop]
 
 

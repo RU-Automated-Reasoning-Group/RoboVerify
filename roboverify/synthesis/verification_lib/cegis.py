@@ -239,7 +239,7 @@ def run_symbolic_cegis(
                 reason=failure.reason,
                 history=history,
             )
-        if failure.vc.kind in ("establish", "body"):
+        if failure.vc.kind in ("establish", "body", "guard_unique"):
             raise NeedsResynthesis(result)
         if failure.vc.kind == "exit":
             return CEGISResult(

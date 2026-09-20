@@ -13,6 +13,7 @@ from z3 import (
     Consts,
     Exists,
     ForAll,
+    FreshConst,
     Implies,
     Not,
     Or,
@@ -38,8 +39,8 @@ import synthesis.verification_lib.highlevel_verification_lib as highlevel_verifi
 import synthesis.verification_lib.lowlevel_verification_lib as lowlevel_verification_lib
 from synthesis.api.instructions import (
     Assign,
-    GoalAssign,
     Get,
+    GoalAssign,
     Instruction,
     MarkGoal,
     Move,
@@ -943,10 +944,12 @@ class Program:
         if on_state is None:
             traj = [initial_obs]
         else:
+
             class RecordedTrajectory(list):
                 def append(self, observation):
                     super().append(observation)
                     on_state(observation)
+
             traj = RecordedTrajectory()
             traj.append(initial_obs)
         if return_img:
@@ -1013,6 +1016,34 @@ class Program:
                     invariant = And(
                         *self._invariant_condition_exprs(instruction.invariant)
                     )
+                    if getattr(instruction, "require_unique_guard", False):
+                        witnesses = list(instruction.guard_exists_vars)
+                        alternatives = [
+                            FreshConst(v.sort(), prefix="guard_alternative")
+                            for v in witnesses
+                        ]
+                        other_guard = substitute(
+                            instruction.instantiated_cond, *zip(witnesses, alternatives)
+                        )
+                        unique = (
+                            ForAll(
+                                witnesses + alternatives,
+                                Implies(
+                                    And(instruction.instantiated_cond, other_guard),
+                                    And(
+                                        *(
+                                            a == b
+                                            for a, b in zip(witnesses, alternatives)
+                                        )
+                                    ),
+                                ),
+                            )
+                            if witnesses
+                            else And(True)
+                        )
+                        result.insert(
+                            0, VC("guard_unique", path, Implies(invariant, unique))
+                        )
                     # Preservation binds a particular existential guard witness;
                     # exit negates the entire existential, not that one witness.
                     result[0:0] = collect(instruction.body, invariant, path) + [
@@ -1316,10 +1347,14 @@ def wp(seq_instruction, Q, context):
     elif isinstance(seq_instruction, While):
         return inv_expr(seq_instruction.invariant)
     elif isinstance(seq_instruction, Get):
-        variables = [context.get_consts(str(v)) for v in seq_instruction.guard_exists_vars]
+        variables = [
+            context.get_consts(str(v)) for v in seq_instruction.guard_exists_vars
+        ]
         condition = seq_instruction.instantiated_cond
         # A runtime Get without a witness raises: total execution requires existence.
-        return And(Exists(variables, condition), ForAll(variables, Implies(condition, Q)))
+        return And(
+            Exists(variables, condition), ForAll(variables, Implies(condition, Q))
+        )
     elif isinstance(seq_instruction, Assign):
         return substitute(
             Q,
