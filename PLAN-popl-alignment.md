@@ -4,6 +4,12 @@
 >
 > Branch: `phase-f-synthesis`; Phases A–E are integrated into `main`.
 >
+> **Discrepancy housekeeping:** resolved entries 5, 6, 11, 12 and the implementation
+> part of 13 are recorded in [PAPER-RESOLUTIONS.md](PAPER-RESOLUTIONS.md), with IDs
+> retained. The active discrepancy file keeps entry 13 only for the paper's
+> explicit block-only Scattered domain; the code already proves those effects
+> at motion level and excludes the table marker. This is a documentation update.
+>
 > **A1 root/alignment follow-up completed and tested.**
 > User decision: existing input towers satisfy tight root-relative alignment.
 > Root discovery now proves the paper's quantified criterion using established
@@ -45,7 +51,8 @@
 >       constructed placement proves `< L/4` relative to its root under allowed
 >       noise; frame/support checks and loop contexts preserve that invariant.
 >       Triangle inequality gives pairwise distance `< L/2`, without additional
->       all-pairs placement checks. Entry 12 records the proof and assumption.
+>       all-pairs placement checks. [Resolved entry 12](PAPER-RESOLUTIONS.md#12-root-discovery-and-tight-alignment-premises--implemented-with-an-explicit-input-assumption)
+>       records the proof and assumption.
 > - [x] **A2:** Runtime budget exhaustion raises `LoopBudgetExceeded`; generated
 >       loops no longer derive an execution cap from demo counts. Explicit caps
 >       remain optional and collectors report incomplete outcomes. Nineteen
@@ -721,7 +728,8 @@ so overlap can report a collision that never occurs along the modeled trajectory
 A correctly enclosing box could provide a conservative clearance check, but an
 overlap would require the original query to establish a collision. The paper's
 §5.5 collision predicate and the retained code both require overlap on all axes
-at the same segment parameter `t`. Discrepancy 6 records this plan correction,
+at the same segment parameter `t`. [Resolved entry 6](PAPER-RESOLUTIONS.md#6-plan-correction-an-endpoint-bounding-box-is-not-an-equivalent-collision-check)
+records this plan correction,
 not a defect in that paper formula or its implementation.
 
 **Test:** extend `test_bmc_lib.py` with `test_default_encoding_unchanged` (no `NoiseSpec`

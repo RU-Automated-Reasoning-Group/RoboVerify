@@ -5,7 +5,7 @@ Remediation tracking: the A1–A11 and D1–D3 checklist in
 This document preserves the findings at the audited baseline. The root/alignment
 follow-up now proves the paper's root criterion and checks constructed placements
 under the user's explicit tight-alignment assumption for input towers. Entry 12 of
-[PAPER-DISCREPANCIES.md](PAPER-DISCREPANCIES.md) records the root-only induction,
+[PAPER-RESOLUTIONS.md](PAPER-RESOLUTIONS.md) records the root-only induction,
 implementation, and input assumption. The active plan records final test results.
 See [verification scope](roboverify/synthesis/cfg/VERIFICATION.md) for model
 assumptions, unsupported cases, and the still-open real-demonstration acceptance.

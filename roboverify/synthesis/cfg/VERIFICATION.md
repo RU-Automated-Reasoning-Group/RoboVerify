@@ -71,8 +71,9 @@ support checks reject removing a root with blocks above it. A separated table
 placement creates a singleton. Together these preserve the tight invariant.
 Changing references requires proving the new root and its entry alignment.
 The triangle inequality gives strict pairwise distance `< L/2`; separate
-all-pairs placement checks are unnecessary. See discrepancy 12 for the proof and
-user decision. Complete ON*/Higher/Scattered effect checks remain in force.
+all-pairs placement checks are unnecessary. See
+[resolved entry 12](../../../PAPER-RESOLUTIONS.md#12-root-discovery-and-tight-alignment-premises--implemented-with-an-explicit-input-assumption)
+for the proof and user decision. Complete ON*/Higher/Scattered effect checks remain in force.
 A transfer may span adjacent blocks. A Get/assignment/control boundary inside an
 unfinished transfer, multiple placements in one unsplit block, unknown primitive,
 or unsupported summary produces an explicit unsupported result. The existing
