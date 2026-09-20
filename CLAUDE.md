@@ -103,7 +103,7 @@ bash format.sh
     of two modes — `"declare"` (an infinite `DeclareSort`, used for *inference*, i.e. learning
     invariants generically) or `"enum"` (a finite `EnumSort` with a concrete `num_blocks`,
     used to *check* a learned invariant is sound for a specific finite instance, optionally
-    rendering a scene). Defines the `ON_star`/`Higher`/`Scattered`/`Top` predicates as Z3
+    rendering a scene). Defines the `ON_star`/`ON_star_zero`/`Higher`/`Scattered` predicates as Z3
     functions.
   - `bmc_lib.py`: bounded model checking. Encodes a fixed-length sequence of `Pick`/`Move`/
     `Release` instructions as Z3 constraints over per-timestep box positions
@@ -135,8 +135,8 @@ bash format.sh
     trajectory-distribution distance metrics used as the optimization objective.
 
 - **`synthesis/util/on.py`** — the ground-truth geometric implementations of the block algebra
-  (`on_star_implementation`, `higher_implementation`, `scattered_implementation`,
-  `top_implementation`) operating on raw `obs` arrays; both the `While` runtime interpreter and
+  (`on_star_implementation`, `higher_implementation`, `scattered_implementation`)
+  operating on raw `obs` arrays; both the `While` runtime interpreter and
   the MCMC reward/feature code call into these rather than duplicating geometry logic.
 
 - **`synthesis/entry/`** — runnable pipelines. `verify_{stack,unstack,reverse,partial,2d}_with_learned_invariant.py`
@@ -153,7 +153,10 @@ bash format.sh
   `fetch_block_construction`. Observations pack agent state first, then per-block state in
   fixed-width slots; the `10 + 12*i : 10 + 12*i + 3` box-position slice convention recurs
   across `instructions.py`, `on.py`, and the `While` guard evaluator — keep it in sync if the
-  observation layout ever changes.
+  observation layout ever changes. The four tower tasks expose
+  `table_surface_height` separately (the world z of the simulator's table plane);
+  `height_offset` is the resting block-center height, and relational `tbl` has no
+  coordinates.
 
 - **`synthesis/experiment/`** — run logging and reporting, plus an instrumented copy of
   the MCMC search. `run_logger.py` owns the run-directory contract; `report.py` is the

@@ -57,6 +57,11 @@ class FetchPickAndPlaceConstruction(
         GymRoboticsGroundTruthSupportEnv.__init__(self, name=name, **kwargs)
 
         if self.case in ROBOVERIFY_CASES:
+            # table0 is a horizontal plane; its world z is the physical surface,
+            # unlike height_offset, which is the resting block-center height.
+            # Keep this motion-level fact separate from observation packing and
+            # the relational tbl marker, which has no coordinates.
+            self.table_surface_height = float(self.sim.data.get_geom_xpos("table0")[2])
             if base_block_id is None:
                 raise ValueError(f"{self.case} requires base_block_id.")
             if not isinstance(base_block_id, int):
