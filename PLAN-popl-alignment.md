@@ -12,7 +12,10 @@
 >
 > - [ ] **A1:** Check complete geometric effects of symbolic placement, including
 >       root alignment, separation and relational table isolation.
-> - [ ] **A2:** Make runtime loop budgets consistent with symbolic exit semantics.
+> - [x] **A2:** Runtime budget exhaustion raises `LoopBudgetExceeded`; generated
+>       loops no longer derive an execution cap from demo counts. Explicit caps
+>       remain optional and collectors report incomplete outcomes. Nineteen
+>       IR/quotient/real trace tests pass, including exhaustion and larger runs.
 > - [x] **A3:** Template variables exclude all existing free/binding names;
 >       substitution round-trip regressions pass.
 > - [x] **A4:** Every adjacent substitution must have the same partial carry

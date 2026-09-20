@@ -2,6 +2,7 @@
 
 import argparse
 
+from synthesis.api.instructions import LoopBudgetExceeded
 from synthesis.entry.verify_stack_with_learned_invariant import build_stack_programs
 from synthesis.inference_lib.demo_store import DemoStore
 from synthesis.mcmc.synthesis import (
@@ -24,7 +25,19 @@ def collect_stack_loop_traces(*, num_blocks=4, seeds=(0, 1), max_iters=10):
             env = make_roboverify_stack_env(num_blocks=num_blocks)
             try:
                 before = len(store)
-                traj = program.eval(env, on_loop_head=store.add)
+                try:
+                    traj = program.eval(env, on_loop_head=store.add)
+                except LoopBudgetExceeded as exc:
+                    outcomes.append(
+                        {
+                            "seed": int(seed),
+                            "loop_heads": len(store) - before,
+                            "success": False,
+                            "status": "budget_exhausted",
+                            "reason": str(exc),
+                        }
+                    )
+                    continue
                 outcomes.append(
                     {
                         "seed": int(seed),

@@ -27,7 +27,7 @@ class IRTests(unittest.TestCase):
         self.assertFalse(validate_split({3: 15}, {3: 15}))
         self.assertTrue(validate_split({3: 16}, {3: 15}))
 
-    def test_lowering_preserves_program_vcs_and_recorded_iteration_bound(self):
+    def test_lowering_preserves_vcs_without_using_demo_count_as_execution_limit(self):
         ctx = HighLevelContext()
         guard = atom("eq", ref("b_prime"), ref("b"))
         region = LoopRegion(
@@ -51,16 +51,43 @@ class IRTests(unittest.TestCase):
                     [ctx.get_consts("b_prime")],
                     [Put("b_prime", "tbl"), Assign("b", "b_prime")],
                     z3.BoolVal(True),
-                    max_iters=3,
+                    max_iters=None,
                 ),
             ],
         )
-        self.assertEqual(actual.instructions[1].max_iters, 3)
+        self.assertIsNone(actual.instructions[1].max_iters)
         for a, b in zip(
             actual.VC_gen(z3.BoolVal(True), z3.BoolVal(True), ctx),
             expected.VC_gen(z3.BoolVal(True), z3.BoolVal(True), ctx),
         ):
             self.assertTrue(a.expr.eq(b.expr))
+
+    def test_loop_budget_exhaustion_is_not_normal_exit(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock, patch
+
+        from synthesis.api.instructions import LoopBudgetExceeded
+
+        env = SimpleNamespace(num_blocks=1, symbolic_name_to_box_id={})
+        scene = Scene({0: (0, 0, 0)}, {})
+        body = Mock()
+        body.eval.return_value = []
+        loop = While(z3.BoolVal(True), [], [body], z3.BoolVal(True), max_iters=2)
+        with patch(
+            "synthesis.predicates.scene.scene_from_obs", return_value=scene
+        ), patch.object(loop, "_find_and_bind_guard_exists", return_value=True):
+            with self.assertRaises(LoopBudgetExceeded):
+                loop.eval(env, [object()])
+        self.assertEqual(body.eval.call_count, 2)
+        body.reset_mock()
+        loop.max_iters = None
+        with patch(
+            "synthesis.predicates.scene.scene_from_obs", return_value=scene
+        ), patch.object(
+            loop, "_find_and_bind_guard_exists", side_effect=[True] * 4 + [False]
+        ):
+            loop.eval(env, [object()])
+        self.assertEqual(body.eval.call_count, 4)
 
     def test_scope_intersects_guard_and_bypass_paths(self):
         graph = RelationalCFG.initial([], boolean(True), boolean(True), ("b0",))

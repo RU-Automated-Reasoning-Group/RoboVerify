@@ -2,7 +2,14 @@
 
 from dataclasses import dataclass
 
-from synthesis.predicates.term import Term, _term, canonical, free_names, ref, substitute
+from synthesis.predicates.term import (
+    Term,
+    _term,
+    canonical,
+    free_names,
+    ref,
+    substitute,
+)
 
 
 @dataclass(frozen=True)
@@ -31,7 +38,9 @@ def anti_unify(first, second):
     if len(first) != len(second):
         return None
     memo, left, right = {}, {}, {}
-    occupied = set().union(*(free_names(w.predicate) | w.get_bound for w in (*first, *second)))
+    occupied = set().union(
+        *(free_names(w.predicate) | w.get_bound for w in (*first, *second))
+    )
 
     def match(a, b, bound=frozenset()):
         if a == b:

@@ -20,9 +20,10 @@ class LoopRegion:
     postconditions: tuple = ()
     body_demos: tuple = ()
     require_unique_guard: bool = False
+    iteration_limit: object = None
 
     @property
     def max_iters(self):
-        if not self.iteration_counts or min(self.iteration_counts) < 0:
-            raise ValueError("Loop lowering requires recorded iteration counts")
-        return max(self.iteration_counts)
+        # Observation counts are evidence, not executable semantics. A caller
+        # may impose a resource budget, whose exhaustion raises explicitly.
+        return self.iteration_limit

@@ -63,7 +63,9 @@ def find_repetition(labels):
                 if mapping is None:
                     break
                 try:
-                    update = carried_bindings(Template(template.word, substitutions[-1], mapping))
+                    update = carried_bindings(
+                        Template(template.word, substitutions[-1], mapping)
+                    )
                 except ValueError:
                     break
                 if update != expected_update:

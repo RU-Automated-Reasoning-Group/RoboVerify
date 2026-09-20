@@ -846,6 +846,10 @@ class PickPlaceByName(Instruction):
         )
 
 
+class LoopBudgetExceeded(TimeoutError):
+    """Execution stopped with a true guard; this is not a normal loop exit."""
+
+
 class While(Instruction):
     def __init__(
         self,
@@ -866,7 +870,9 @@ class While(Instruction):
             if len(guard_exists_vars) == 0
             else z3.Exists(guard_exists_vars, instantiated_cond)
         )
-        self.max_iters = int(max_iters)
+        self.max_iters = None if max_iters is None else int(max_iters)
+        if self.max_iters is not None and self.max_iters < 0:
+            raise ValueError("Loop iteration budget must be nonnegative")
         # Optional structured provenance for learned invariants:
         # list of objects with attribute `.expr` (z3.ExprRef) and metadata.
         self.invariant_provenance = (
@@ -945,8 +951,10 @@ class While(Instruction):
         iters = 0
         while self._find_and_bind_guard_exists(env, traj):
             iters += 1
-            if iters > self.max_iters:
-                break
+            if self.max_iters is not None and iters > self.max_iters:
+                raise LoopBudgetExceeded(
+                    f"Loop {loop_id} still has a guard witness after {self.max_iters} iterations"
+                )
             if on_loop_head is not None:
                 on_loop_head(
                     LoopHeadState.from_observation(

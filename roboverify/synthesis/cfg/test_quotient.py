@@ -35,18 +35,26 @@ class QuotientTests(unittest.TestCase):
             right = atom("ON", ref("b"), ref(existing))
             template = anti_unify(encode_fragment([left]), encode_fragment([right]))
             self.assertNotIn(existing, template.first)
-            self.assertEqual(substitute(template.word[0].predicate, template.first), left)
-            self.assertEqual(substitute(template.word[0].predicate, template.second), right)
+            self.assertEqual(
+                substitute(template.word[0].predicate, template.first), left
+            )
+            self.assertEqual(
+                substitute(template.word[0].predicate, template.second), right
+            )
 
     def test_repetition_stops_when_carried_update_changes(self):
-        labels = [atom("ON", ref(a), ref(b)) for a, b in
-                  [("b1", "b0"), ("b2", "b1"), ("b4", "b3")]]
+        labels = [
+            atom("ON", ref(a), ref(b))
+            for a, b in [("b1", "b0"), ("b2", "b1"), ("b4", "b3")]
+        ]
         repeated = find_repetition(labels)
         self.assertEqual(len(repeated.substitutions), 2)
 
     def test_repetition_rejects_noninjective_later_substitution(self):
-        labels = [atom("ON", ref(a), ref(b)) for a, b in
-                  [("b1", "b0"), ("b2", "b1"), ("b2", "b2"), ("b3", "b2")]]
+        labels = [
+            atom("ON", ref(a), ref(b))
+            for a, b in [("b1", "b0"), ("b2", "b1"), ("b2", "b2"), ("b3", "b2")]
+        ]
         repeated = find_repetition(labels)
         # The third would make both roles carry the same previous value.
         self.assertEqual(len(repeated.substitutions), 2)
@@ -180,7 +188,7 @@ class FullQuotientTests(unittest.TestCase):
         loop = program.instructions[1]
         self.assertIsInstance(loop, While)
         self.assertEqual((loop.body[-1].left, loop.body[-1].right), ("b", "b_prime"))
-        self.assertEqual(loop.max_iters, 3)
+        self.assertIsNone(loop.max_iters)
         self.assertTrue(loop.require_unique_guard)
         self.assertEqual(
             [(s.t_start, s.t_end) for s in cfg.demos.for_node(cfg.order[0])], [(0, 3)]
