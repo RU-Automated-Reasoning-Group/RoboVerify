@@ -1,4 +1,4 @@
-"""Flat adjacent-fragment quotient with witnessed bindings and unique guards."""
+"""Flat adjacent-fragment quotient with witnessed bindings and existential guards."""
 
 from copy import copy, deepcopy
 from dataclasses import dataclass
@@ -266,7 +266,6 @@ def _fold(cfg, repetition, language, infer_invariant):
         tuple(len(it.bodies) for it in extracted),
         posts,
         tuple(tuple(rows) for rows in body_demos),
-        require_unique_guard=True,
         body_cfg=body_cfg,
         exit_demos=terminals,
     )

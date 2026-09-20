@@ -216,8 +216,10 @@ bash format.sh
   segment reset/replay and split validation. Numeric physical operands can be
   generalized to named operands during folding, but this does not establish a
   relational summary: symbolic lowering rejects such candidates. Learned guards
-  must have unique witnesses on every training scene and reject ambiguous runtime
-  witnesses. Symbolic verification checks a separate `guard_unique` obligation.
+  accept demonstrated witnesses and reject all bindings at demonstrated exits;
+  unselected continuing-state bindings are unlabeled. Runtime may choose the first
+  matching witness; symbolic preservation verification covers every matching choice.
+  Multiple witnesses are permitted, without a separate uniqueness requirement.
   Extracted iterations share their invocation's frozen entry geometry.
 
   Run `uv run python -m synthesis.entry.synthesize_cfg --task unstack --num-blocks 3

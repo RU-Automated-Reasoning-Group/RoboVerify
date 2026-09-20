@@ -19,7 +19,6 @@ class LoopRegion:
     iteration_counts: tuple = ()
     postconditions: tuple = ()
     body_demos: tuple = ()
-    require_unique_guard: bool = False
     iteration_limit: object = None
     body_cfg: object = None
     exit_demos: tuple = ()

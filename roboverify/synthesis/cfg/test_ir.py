@@ -112,38 +112,87 @@ class IRTests(unittest.TestCase):
             )
         )
 
-    def test_learned_guard_rejects_multiple_witnesses_without_mutating_bindings(self):
+    def test_lowered_loop_executes_one_of_multiple_witnesses_then_exits(self):
         from types import SimpleNamespace
         from unittest.mock import patch
 
-        from synthesis.api.guard_eval import AmbiguousGuardWitness, find_and_bind
+        from synthesis.cfg.lower import lower_region
+        from synthesis.predicates.term import negate
 
         ctx = HighLevelContext()
-        inst = While(z3.BoolVal(True), [ctx.get_consts("x")], [], z3.BoolVal(True))
-        inst.require_unique_guard = True
-        inst._get_num_blocks = lambda env, obs: 2
-        env = SimpleNamespace(symbolic_name_to_box_id={"b0": 0})
-        scene = Scene({0: (0, 0, 0.425), 1: (0.2, 0, 0.425)}, {"b0": 0})
-        with patch("synthesis.api.guard_eval.scene_from_obs", return_value=scene):
-            with self.assertRaises(AmbiguousGuardWitness):
-                find_and_bind(inst, env, [None])
-        self.assertEqual(env.symbolic_name_to_box_id, {"b0": 0})
+        guard = conjunction(
+            negate(atom("eq", ref("b"), ref("done"))),
+            atom("eq", ref("x"), ref("x")),
+        )
+        body = (Assign("selected", "x"), Assign("b", "done"))
+        region = LoopRegion(
+            guard, ("x",), (BlockRegion(body, body),), invariant=z3.BoolVal(True)
+        )
+        for use_terms in (True, False):
+            with self.subTest(use_terms=use_terms):
+                loop = lower_region(region, ctx, physical=True)[0]
+                if not use_terms:
+                    del loop.guard_term
+                env = SimpleNamespace(
+                    num_blocks=2, symbolic_name_to_box_id={"b": 0, "done": 1}
+                )
+                scene = Scene(
+                    {0: (0, 0, 0.425), 1: (0.2, 0, 0.425)}, env.symbolic_name_to_box_id
+                )
+                # Two witnesses exist initially, then none after b := done.
+                loop.max_iters = 1
+                with patch(
+                    "synthesis.api.guard_eval.scene_from_obs", return_value=scene
+                ), patch(
+                    "synthesis.predicates.scene.scene_from_obs", return_value=scene
+                ):
+                    loop.eval(env, [None])
+                self.assertEqual(
+                    env.symbolic_name_to_box_id,
+                    {"b": 1, "done": 1, "x": 0, "selected": 0},
+                )
 
-    def test_learned_guard_uniqueness_is_a_verification_obligation(self):
+    def test_verification_covers_all_permitted_loop_witnesses(self):
+        from synthesis.predicates.term import disjunction, negate
         from synthesis.verification_lib.symbolic_verify import discharge_vc
 
-        context = HighLevelContext(mode="enum", num_blocks=2, sort_name="UniqueGuard")
-        x, b = context.get_consts("x"), context.get_consts("b")
-        for guard, expected in [(z3.BoolVal(True), "invalid"), (x == b, "valid")]:
-            loop = While(guard, [x], [Assign("b", "b")], z3.BoolVal(True))
-            loop.require_unique_guard = True
-            obligations = Program(1, [loop]).VC_gen(
-                z3.BoolVal(True), z3.BoolVal(True), context
-            )
-            check = next(vc for vc in obligations if vc.kind == "guard_unique")
-            self.assertEqual(
-                discharge_vc(check, context, timeout_ms=1000).status, expected
-            )
+        context = HighLevelContext()
+        a, c, d, b, done, output, x = (
+            context.get_consts(n) for n in ("a", "c", "d", "b", "done", "output", "x")
+        )
+        invariant = z3.And(z3.Distinct(a, c, d), z3.Or(output == a, output == c))
+        for unsafe in (False, True):
+            with self.subTest(unsafe=unsafe):
+                choices = [atom("eq", ref("x"), ref(n)) for n in ("a", "c")]
+                if unsafe:
+                    choices.append(atom("eq", ref("x"), ref("d")))
+                guard = conjunction(
+                    negate(atom("eq", ref("b"), ref("done"))), disjunction(*choices)
+                )
+                region = LoopRegion(
+                    guard,
+                    ("x",),
+                    (BlockRegion((Assign("output", "x"), Assign("b", "done"))),),
+                    invariant=invariant,
+                )
+                cfg = RelationalCFG.initial([], boolean(True), boolean(True))
+                cfg.nodes["v0"].region = region
+                program = lower(cfg, context)
+                vcs = program.VC_gen(
+                    z3.And(invariant, b != done), z3.And(invariant, b == done), context
+                )
+                self.assertEqual(
+                    [vc.kind for vc in vcs], ["establish", "preserve", "exit"]
+                )
+                checks = [discharge_vc(vc, context) for vc in vcs]
+                self.assertEqual(
+                    [check.status for check in checks],
+                    ["valid", "invalid" if unsafe else "valid", "valid"],
+                )
+                if unsafe:
+                    # The verifier finds the bad alternative even though two
+                    # other guard witnesses preserve the invariant.
+                    self.assertTrue(z3.is_true(checks[1].model.eval(x == d)))
 
     def test_legacy_nested_guards_and_frozen_geometry(self):
         ctx = HighLevelContext()

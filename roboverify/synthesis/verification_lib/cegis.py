@@ -11,6 +11,7 @@ from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 
 import z3
+
 from synthesis.inference_lib.demo_store import DemoStore, LoopHeadState
 from synthesis.verification_lib.counterexamples import (
     UnrealizableCounterexample,
@@ -238,7 +239,7 @@ def run_symbolic_cegis(
                 reason=failure.reason,
                 history=history,
             )
-        if failure.vc.kind in ("establish", "body", "guard_unique"):
+        if failure.vc.kind in ("establish", "body"):
             raise NeedsResynthesis(result)
         if failure.vc.kind == "exit":
             return CEGISResult(

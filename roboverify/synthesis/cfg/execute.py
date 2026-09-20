@@ -22,7 +22,7 @@ def execute_current(program, env, initial_observation, on_state=None):
 
 def execute_cfg(cfg, context, env_factory, *, reset_mode="replay"):
     """Generate negatives from the current graph, never a random unrelated program."""
-    from synthesis.api.guard_eval import AmbiguousGuardWitness, NoGuardWitness
+    from synthesis.api.guard_eval import NoGuardWitness
     from synthesis.api.instructions import Get, LoopBudgetExceeded
     from synthesis.api.program import Program
     from synthesis.cfg.lower import lower_region
@@ -66,7 +66,7 @@ def execute_cfg(cfg, context, env_factory, *, reset_mode="replay"):
 
             try:
                 execute_current(program, env, first, on_state=record)
-            except (NoGuardWitness, AmbiguousGuardWitness, LoopBudgetExceeded):
+            except (NoGuardWitness, LoopBudgetExceeded):
                 # A partial candidate can stop at a failed Get; its actual
                 # prefix states still provide classifier negatives.
                 pass

@@ -3,6 +3,7 @@
 from copy import deepcopy
 
 import z3
+
 from synthesis.api.instructions import Assign, Get, While
 from synthesis.api.program import Program
 from synthesis.cfg.region import BlockRegion, LoopRegion
@@ -49,7 +50,6 @@ def lower_region(region, context, *, physical=False):
         max_iters=region.max_iters,
     )
     loop.guard_term = region.guard
-    loop.require_unique_guard = region.require_unique_guard
     return [*(Assign(a, b) for a, b in region.init), loop]
 
 

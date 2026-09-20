@@ -5,7 +5,7 @@ from synthesis.predicates.enumerate import enumerate_separator
 from synthesis.predicates.guard import loop_guard_synthesis
 from synthesis.predicates.language import Language
 from synthesis.predicates.scene import Scene, evaluate
-from synthesis.predicates.term import free_names
+from synthesis.predicates.term import atom, conjunction, free_names, negate, ref
 
 
 class SearchTests(unittest.TestCase):
@@ -74,7 +74,73 @@ class SearchTests(unittest.TestCase):
         self.assertTrue(result, result.status)
         self.assertEqual(result.term.op, "ON")
 
-    def test_guard_rejects_ambiguous_witnesses(self):
+    def test_guard_allows_indistinguishable_unselected_witnesses(self):
+        # Objects 1 and 2 have identical Higher relations, so demonstrations
+        # choosing one cannot justify rejecting the other.
+        head = Scene(
+            {0: (0, 0, 0.425), 1: (0.2, 0, 0.475), 2: (0.4, 0, 0.475)}, {"b": 0}
+        )
+        exit_scene = Scene(
+            {0: (0, 0, 0.425), 1: (0.2, 0, 0.425), 2: (0.4, 0, 0.425)}, {"b": 0}
+        )
+        candidate = negate(atom("Higher", ref("b"), ref("x")))
+        for candidates in ((), (candidate,)):
+            for chosen in (1, 2):
+                with self.subTest(candidates=candidates, chosen=chosen):
+                    result = loop_guard_synthesis(
+                        [(head, {"x": chosen})],
+                        [exit_scene],
+                        ("x",),
+                        {"b"},
+                        language=Language(
+                            relations=("Higher",), max_depth=2, max_variables=0
+                        ),
+                        candidates=candidates,
+                    )
+                    self.assertTrue(result, result.status)
+                    for other in (1, 2):
+                        self.assertTrue(evaluate(result.term, head, {"x": other}))
+                    for other in exit_scene.positions:
+                        self.assertFalse(
+                            evaluate(result.term, exit_scene, {"x": other})
+                        )
+
+    def test_guard_allows_alternative_witness_tuples(self):
+        head = Scene(
+            {0: (0, 0, 0.425), 1: (0.2, 0, 0.475), 2: (0.4, 0, 0.475)}, {"b": 0}
+        )
+        exit_scene = Scene(
+            {0: (0, 0, 0.425), 1: (0.2, 0, 0.425), 2: (0.4, 0, 0.425)}, {"b": 0}
+        )
+        candidate = conjunction(
+            negate(atom("Higher", ref("b"), ref("x"))),
+            negate(atom("Higher", ref("b"), ref("y"))),
+        )
+        result = loop_guard_synthesis(
+            [(head, {"x": 1, "y": 2})],
+            [exit_scene],
+            ("x", "y"),
+            {"b"},
+            candidates=(candidate,),
+        )
+        self.assertTrue(result, result.status)
+        self.assertTrue(evaluate(result.term, head, {"x": 2, "y": 1}))
+
+    def test_guard_requires_every_exit_binding_to_fail(self):
+        # Checking only the first object at the exit would miss witness 1.
+        scene = Scene({0: (0, 0, 0.425), 1: (0.2, 0, 0.475)}, {"b": 0})
+        candidate = negate(atom("Higher", ref("b"), ref("x")))
+        result = loop_guard_synthesis(
+            [(scene, {"x": 1})],
+            [scene],
+            ("x",),
+            {"b"},
+            candidates=(candidate,),
+            language=Language(relations=("Higher",), max_depth=2, max_variables=0),
+        )
+        self.assertFalse(result)
+
+    def test_guard_rejects_same_scene_as_both_continuation_and_exit(self):
         scene = Scene({0: (0, 0, 0.425), 1: (0.2, 0, 0.425)}, {"b": 0})
         result = loop_guard_synthesis(
             [(scene, {"x": 0})],

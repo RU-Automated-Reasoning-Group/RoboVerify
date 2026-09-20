@@ -118,8 +118,9 @@ if __name__ == "__main__":
 
 
 class FullQuotientTests(unittest.TestCase):
-    def test_full_flat_fold_learns_unique_guard_and_lowers_carried_assignment(self):
+    def test_full_flat_fold_learns_guard_and_lowers_carried_assignment(self):
         import z3
+
         from synthesis.api.instructions import Assign, While
         from synthesis.cfg.demos import DemoAssignment, DemoSegment, DemoTrace
         from synthesis.cfg.graph import Edge, Node, RelationalCFG
@@ -201,7 +202,6 @@ class FullQuotientTests(unittest.TestCase):
         self.assertIsInstance(loop, While)
         self.assertEqual((loop.body[-1].left, loop.body[-1].right), ("b", "b_prime"))
         self.assertIsNone(loop.max_iters)
-        self.assertTrue(loop.require_unique_guard)
         self.assertEqual(
             [(s.t_start, s.t_end) for s in cfg.demos.for_node(cfg.order[0])], [(0, 3)]
         )

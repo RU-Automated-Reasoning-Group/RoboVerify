@@ -262,7 +262,7 @@ matter for motion reasoning and exit invariants even with correct demonstrations
 | Symbolic WP/VC generation | Skip/sequence/Assign/Put/Get/While, establishment/preservation/exit obligations are present. This is not a blanket proof that every rewrite implements physical motion (A1). |
 | Verification verdicts | Valid/invalid/vacuous/unknown, finite countermodel search, optional unbounded checks, timeouts and relation-preserving concretization are implemented. Finite success is not promoted to unbounded success. |
 | Counterexample feedback | Symbolic successor refinement and accumulated motion penalties exist for supported cases. The full synthesis feedback connection is missing (A6). |
-| Guard learning | Global exact separation, exit negatives and a uniqueness VC are stronger/different than the paper's per-state conjunction with True fallback. Recorded in the plan/discrepancy 11. |
+| Guard learning | Global exact separation and exit negatives remain distinct from the paper's per-state conjunction with True fallback. The audited uniqueness restriction was subsequently removed (discrepancy 11): unselected continuing-state witnesses are unlabeled, and preservation verification covers all matching choices. |
 | Get | Code requires witness existence as well as correctness for every permitted choice; the paper's Table 1 omits existence despite runtime failure without a witness. Recorded discrepancy 9. |
 | Branches and nested loops | Deliberately deferred by the plan, as are Grid/Pyramid. This audit does not reopen those decisions or count them as accidentally unfinished F work. |
 

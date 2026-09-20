@@ -9,10 +9,6 @@ from synthesis.predicates.term import Term
 from synthesis.util import on
 
 
-class AmbiguousGuardWitness(RuntimeError):
-    """A learned loop guard has more than one runtime witness."""
-
-
 class NoGuardWitness(RuntimeError):
     pass
 
@@ -71,6 +67,7 @@ def evaluate_z3(expr, scene, bindings=None):
 
 
 def find_and_bind(instruction, env, traj):
+    """Choose the first matching binding; verification covers every matching choice."""
     mapping = getattr(env, "symbolic_name_to_box_id", None)
     if not isinstance(mapping, dict):
         raise ValueError("Guard execution requires symbolic_name_to_box_id")
@@ -85,8 +82,6 @@ def find_and_bind(instruction, env, traj):
     ]
     condition = getattr(instruction, "guard_term", None)
     condition = instruction.instantiated_cond if condition is None else condition
-    witness = None
-    unique = getattr(instruction, "require_unique_guard", False)
     for values in itertools.product(scene.positions, repeat=len(names)):
         bindings = dict(mapping, **dict(zip(names, values)))
         holds = (
@@ -95,12 +90,6 @@ def find_and_bind(instruction, env, traj):
             else evaluate_z3(condition, scene, bindings)
         )
         if holds:
-            if witness is not None:
-                raise AmbiguousGuardWitness("Learned loop guard has multiple witnesses")
-            witness = {name: bindings[name] for name in names}
-            if not unique:
-                break
-    if witness is None:
-        return False
-    mapping.update(witness)
-    return True
+            mapping.update((name, bindings[name]) for name in names)
+            return True
+    return False

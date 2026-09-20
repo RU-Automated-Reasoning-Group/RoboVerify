@@ -4,6 +4,15 @@
 >
 > Branch: `phase-f-synthesis`; Phases A–E are integrated into `main`.
 >
+> **Entry 11 correction — completed and tested.**
+> User clarification: demonstrations select one permitted witness; other choices
+> are not negative examples. Guards may admit multiple witnesses. Learning keeps
+> demonstrated positives and all-binding exit negatives; runtime chooses the first
+> match. Preservation verification covers every matching witness. The uniqueness
+> flag, runtime rejection and extra VC are removed. Focused regressions: 27 pass.
+> Full suite: **173 unittest tests pass in 36.599 seconds**, including simulator
+> tests. Changed Python files pass isort/black; git diff whitespace checks pass.
+>
 > **Documentation correction (discrepancy 6):** D2 retains the paper's shared-`t`
 > straight-segment collision query. The proposed endpoint bounding-box fallback
 > was never implemented; its original equivalence claim below has been corrected.
@@ -204,12 +213,12 @@
 >       annealed search, epsilon pool/PostScore, recursive driver and instrumented CLI.
 >       Small real Unstack run refines once, then exhausts its budget in 15 seconds.
 > - [x] F7 flat implementation: get-bound-aware anti-unification, partial inverse
->       carry/rebind inference, length-2 matching, extracted body demos, unique
->       guards, inferred invariants, and observed iteration bounds. The historical
->       Unstack guard spike derives `b ← b_prime`; physical operands generalize to
->       names without inventing relational summaries. Ambiguous learned guards
->       fail at runtime and receive a `guard_unique` VC under the invariant;
->       extracted iterations share frozen entry geometry.
+>       carry/rebind inference, length-2 matching, extracted body demos,
+>       existential guards, inferred invariants, and observed iteration bounds.
+>       The historical Unstack guard spike derives `b ← b_prime`; physical operands generalize to
+>       names without inventing relational summaries. Multiple matching guard
+>       witnesses are permitted; preservation checks every choice (entry 11
+>       correction). Extracted iterations share frozen entry geometry.
 > - [x] **131 unittest tests pass** (101 previous + 30 new), **25.686 s**. This
 >       includes simulator reset/replay, MCMC parity, all earlier verification
 >       regressions, refinement, and flat folding. Changed Python files formatted.
@@ -1201,11 +1210,16 @@ semantics correction before claiming verified execution.
 
 **Two details that will bite.** `While.max_iters` defaults to 10 and silently truncates
 ([instructions.py:851](roboverify/synthesis/api/instructions.py:851)) — derive it from
-`max(len(iterations))`. And `_find_and_bind_guard_exists` returns the *first* satisfying
-binding in block-id order, while LoopGuardSynthesis learns from one positive per state;
-if `G` admits several witnesses, runtime picks by index while the demo picked by something
-else. Make witness uniqueness a hard constraint in guard synthesis, not merely a set of
-negative examples, and warn when only a weaker guard is found.
+`max(len(iterations))`.
+
+**Guard semantics correction (entry 11):** `_find_and_bind_guard_exists` selects the
+first satisfying binding, which is a valid implementation of arbitrary-witness
+selection. A demonstrated binding is positive evidence, not a reason to label
+unselected bindings negative. LoopGuardSynthesis requires demonstrated bindings to
+match and every binding at a demonstrated exit to fail. Multiple continuing-state
+witnesses are allowed; preservation verification checks every guard-satisfying
+binding. The earlier uniqueness requirement was incorrect and has been removed
+from learning, the region representation, runtime checks, and VC generation.
 
 ### Sizes
 

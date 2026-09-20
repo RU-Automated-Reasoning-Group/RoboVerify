@@ -39,6 +39,13 @@ explicitly resolving the paper's Pick self-collision contradiction. Release
 requires physical support; a missing support causes a failed obligation and an
 arbitrary falling position, never an assumed stable placement.
 
+Learned loop guards may have multiple witnesses. Demonstrated bindings are
+positive examples; unselected bindings at continuing heads are unlabeled, while
+all bindings at demonstrated exits are negative. Runtime selects the first match.
+The symbolic preservation obligation covers every guard-satisfying witness, so
+an unsafe alternative can refute verification even if it was never demonstrated.
+No match exits the loop; standalone Get still requires witness existence.
+
 Supported synthesis scope remains structured chains and recovered flat loops.
 Placement summaries are proposed from the outgoing ON relation or the final
 transport reference, then checked against all ON*/Higher/Scattered WP effects.

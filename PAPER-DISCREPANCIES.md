@@ -245,18 +245,34 @@ verified Unstack solution. Reconcile the intended demo source and task before
 claiming complete Unstack recovery. Report:
 `roboverify/runs/phase-f/cfg/20260920-044337-f261887-integrated-flat-smoke`.
 
-## 11. Learned guard uniqueness is distinct from first-witness execution
+## 11. Corrected plan/code restriction: loop guards may have multiple witnesses
 
-**Phase F boundary.** The historical runtime chooses the first satisfying block ID.
-`predicates/guard.py` now rejects any candidate that admits an alternative witness
-on a recorded positive scene, and all witnesses at recorded exits must fail.
-Those finite checks do not prove uniqueness on arbitrary unseen scenes. Loops
-introduced by `cfg/quotient.py` therefore carry a runtime uniqueness requirement;
-`api/guard_eval.py` raises before modifying bindings if several witnesses satisfy
-it. Legacy hand-written loops retain their existing first-witness behavior. Symbolic
-verification includes a separate `guard_unique` obligation under the learned
-invariant; its failure requests resynthesis. Uniqueness is never inferred from a
-separator fitting the demonstrations alone.
+**Status:** uniqueness restriction removed following the user's semantic correction.
+The paper's arbitrary-witness semantics are appropriate here; this entry records
+an incorrect plan/implementation restriction, not a paper error.
+
+The paper's §5.3 requires correctness for every witness satisfying the existential
+guard. Choosing one object in a demonstration does not make other choices wrong;
+symmetric objects can be indistinguishable and equally valid. First-match runtime
+selection is permitted because it chooses one of the witnesses covered by the proof.
+
+Previously, guard learning labeled all unselected bindings negative, generated loops
+required uniqueness, runtime raised on multiple matches, and a `guard_unique` VC
+rejected such guards. Those restrictions could reject valid programs and are removed:
+
+- Learning uses demonstrated bindings as positives. Unselected bindings at a
+  continuing head are unlabeled; every binding at a demonstrated exit is negative.
+- Runtime selects the first matching binding. No match exits a loop normally;
+  standalone Get still requires a witness (entry 9).
+- The preservation VC retains an arbitrary guard witness. Searching for a
+  refutation can select any matching witness, including one never demonstrated;
+  successful verification therefore covers all permitted choices.
+
+Regressions cover indistinguishable alternatives, multi-variable witnesses,
+witness-free exits, execution with multiple matches, acceptance when all choices
+preserve the invariant, and rejection when an additional permitted choice breaks it.
+This corrects the uniqueness restriction; matching demonstrations alone still does
+not prove that a learned guard or its body is correct.
 
 
 ## 12. Alignment certification is absent from the implemented motion checks

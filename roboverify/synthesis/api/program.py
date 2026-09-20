@@ -1020,36 +1020,9 @@ class Program:
                     invariant = And(
                         *self._invariant_condition_exprs(instruction.invariant)
                     )
-                    if getattr(instruction, "require_unique_guard", False):
-                        witnesses = list(instruction.guard_exists_vars)
-                        alternatives = [
-                            FreshConst(v.sort(), prefix="guard_alternative")
-                            for v in witnesses
-                        ]
-                        other_guard = substitute(
-                            instruction.instantiated_cond, *zip(witnesses, alternatives)
-                        )
-                        unique = (
-                            ForAll(
-                                witnesses + alternatives,
-                                Implies(
-                                    And(instruction.instantiated_cond, other_guard),
-                                    And(
-                                        *(
-                                            a == b
-                                            for a, b in zip(witnesses, alternatives)
-                                        )
-                                    ),
-                                ),
-                            )
-                            if witnesses
-                            else And(True)
-                        )
-                        result.insert(
-                            0, VC("guard_unique", path, Implies(invariant, unique))
-                        )
-                    # Preservation binds a particular existential guard witness;
-                    # exit negates the entire existential, not that one witness.
+                    # The witness is free in the preservation VC: validity must
+                    # hold for every guard-satisfying binding, and a refutation
+                    # may choose any unsafe one. Exit negates the whole existential.
                     result[0:0] = collect(instruction.body, invariant, path) + [
                         VC(
                             "preserve",
