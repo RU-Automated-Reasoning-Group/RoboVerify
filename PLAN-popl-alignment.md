@@ -2,7 +2,7 @@
 
 > **Status — read this first.**
 >
-> Integration branch: `main`; Phase C was developed on `phase-c-trace-inference`.
+> Branch: `phase-d-motion-obligations`; Phases A–C are integrated into `main`.
 > This plan is being executed top to bottom, Phase A first. Progress:
 >
 > **Phase A: all seven items done.** Listed in plan order; commits landed in a
@@ -31,7 +31,7 @@
 > - [x] **A.7** `PAPER-DISCREPANCIES.md` created and seeded with the Theorem 5.2 /
 >       Table 7 contradiction and the segment-reset omission. Commit `c2f0744`.
 >
-> **Phases A–C are complete. Phase D is next.**
+> **Phases A–C are complete. Phase D is in progress.**
 > Phases A–C are included in `main`.
 > Validation is recorded below; Unstack is subject to a 60-second wall-clock cap.
 >
@@ -69,7 +69,11 @@
 >       counterexample). This uses a newly learned invariant from actual execution,
 >       not the old literal dataset; do not present it as a verified Stack program.
 >       Unstack was not rerun for Phase C and retains the one-minute cap below.
-> - [ ] Phases D–F: not started.
+> - [x] Phase D1 API: opt-in bounded noise and explicit BMC result mode; all 15
+>       BMC tests pass, including exact no-noise transition comparison. CLI flags
+>       will be connected with the motion verifier in D2.
+> - [ ] Phase D2: placement contracts, frame preservation, counterexamples, and timing.
+> - [ ] Phases E–F: not started.
 >
 > **Pre-existing failure, not a regression.**
 > `verify_stack_with_learned_invariant` reports two high-level VC failures

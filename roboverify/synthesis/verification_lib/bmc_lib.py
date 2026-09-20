@@ -33,6 +33,17 @@ can run from the initial facts) and ``P ∧ ¬goal@T`` is **UNSAT** — i.e.
 step). This matches ``Implies(P, goal)`` / no counterexample, not
 ``SAT(P ∧ goal)``.
 
+Noise is opt-in: ``noise=None`` keeps deterministic nominal transitions. A
+``NoiseSpec`` adds independent bounded grasp, move and release errors. Verify
+checks all such errors by looking for a counterexample; solve/feasible remain
+existential and do not synthesize parameters robust to every noise choice.
+``bmc_verify`` returns a bool-compatible result carrying the mode and status.
+These are goal checks in the BMC abstraction, not collision or physical-controller
+certificates. The separate motion verifier checks placement and swept geometry.
+The legacy nominal Release changes EE z but leaves block positions unchanged;
+release noise perturbs that nominal held-block position, without adding a gravity
+or settling model.
+
 Typical stacking goals ``ON(upper, lower)`` use the same geometry as
 ``synthesis.util.on.on`` via :func:`z3_on`, or the helpers
 :func:`goal_on_box_ids` (id-only programs, integer gym ids) and
@@ -50,6 +61,7 @@ initially. Set ``assume_goal_false_at_start=False`` to disable. When
 from __future__ import annotations
 
 import itertools
+import math
 from dataclasses import dataclass
 from typing import (
     Callable,
@@ -80,6 +92,47 @@ from synthesis.util.on import z3_on
 
 ProgramPart = Union[Instruction, Seq]
 ProgramInput = Union[Sequence[ProgramPart], ProgramPart]
+
+
+@dataclass(frozen=True)
+class NoiseSpec:
+    """Independent per-axis error bounds in metres (not standard deviations)."""
+
+    eps_grasp: float
+    eps_move: float
+    eps_release: float
+
+    def __post_init__(self):
+        for value in (self.eps_grasp, self.eps_move, self.eps_release):
+            if not math.isfinite(value) or value < 0:
+                raise ValueError("Noise bounds must be finite and nonnegative")
+
+
+def bounded_noise(epsilon, prefix):
+    """Fresh free reals; counterexample search ranges over every bounded error."""
+    terms = tuple(z3.FreshReal(f"{prefix}_{axis}") for axis in "xyz")
+    bound = z3.RealVal(str(epsilon))
+    return terms, [z3.And(-bound <= term, term <= bound) for term in terms]
+
+
+@dataclass(frozen=True)
+class BMCVerificationResult:
+    status: str
+    noise: Optional[NoiseSpec]
+    model: Optional[z3.ModelRef] = None
+    symbols: Optional["BMCTraceSymbols"] = None
+    reason: str = ""
+
+    @property
+    def mode(self):
+        return "noiseless" if self.noise is None else "bounded-noise"
+
+    @property
+    def ok(self):
+        return self.status == "verified"
+
+    def __bool__(self):
+        return self.ok
 
 
 def flatten_program(program: ProgramInput) -> List[Instruction]:
@@ -349,7 +402,9 @@ def _frame_all(sym: BMCTraceSymbols, t: int) -> List[z3.BoolRef]:
     return [_frame_block(sym, b, t) for b in sym.block_names]
 
 
-def _encode_pick(sym: BMCTraceSymbols, t: int, box_id: int) -> z3.BoolRef:
+def _encode_pick(
+    sym: BMCTraceSymbols, t: int, box_id: int, noise: Optional[NoiseSpec] = None
+) -> z3.BoolRef:
     """
     Move the EE to the target block's ``(x, y, z)`` and close the gripper.
     Block positions are unchanged; only ``holding`` and EE coordinates update.
@@ -359,13 +414,19 @@ def _encode_pick(sym: BMCTraceSymbols, t: int, box_id: int) -> z3.BoolRef:
             f"Pick box id {box_id} out of range for {len(sym.block_names)} blocks."
         )
     name = sym.block_names[box_id]
+    target = (sym.bx[name][t], sym.by[name][t], sym.bz[name][t])
+    bounds = []
+    if noise is not None:
+        eta, bounds = bounded_noise(noise.eps_grasp, f"bmc_grasp_{t}")
+        target = tuple(p + e for p, e in zip(target, eta))
     return z3.And(
         sym.holding[t] == sym.NONE,
         sym.holding[t + 1] == sym.block_consts[name],
-        sym.ee_x[t + 1] == sym.bx[name][t],
-        sym.ee_y[t + 1] == sym.by[name][t],
-        sym.ee_z[t + 1] == sym.bz[name][t],
+        sym.ee_x[t + 1] == target[0],
+        sym.ee_y[t + 1] == target[1],
+        sym.ee_z[t + 1] == target[2],
         z3.And(*_frame_all(sym, t)),
+        *bounds,
     )
 
 
@@ -398,22 +459,33 @@ def _encode_move(
     ox: z3.ArithRef,
     oy: z3.ArithRef,
     oz: z3.ArithRef,
+    noise: Optional[NoiseSpec] = None,
 ) -> z3.BoolRef:
     tx, ty, tz = _move_target(sym, t, ix, iy, iz, ox, oy, oz)
+    bounds = []
+    if noise is not None:
+        eta, bounds = bounded_noise(noise.eps_move, f"bmc_move_{t}")
+        tx, ty, tz = (p + e for p, e in zip((tx, ty, tz), eta))
     moved: List[z3.BoolRef] = [
+        *bounds,
         sym.ee_x[t + 1] == tx,
         sym.ee_y[t + 1] == ty,
         sym.ee_z[t + 1] == tz,
     ]
     for j, bj in enumerate(sym.block_names):
+        bx, by, bz = tx, ty, tz
+        if noise is not None:
+            bx += sym.bx[bj][t] - sym.ee_x[t]
+            by += sym.by[bj][t] - sym.ee_y[t]
+            bz += sym.bz[bj][t] - sym.ee_z[t]
         held = sym.holding[t] == sym.block_consts[bj]
         moved.append(
             z3.If(
                 held,
                 z3.And(
-                    sym.bx[bj][t + 1] == tx,
-                    sym.by[bj][t + 1] == ty,
-                    sym.bz[bj][t + 1] == tz,
+                    sym.bx[bj][t + 1] == bx,
+                    sym.by[bj][t + 1] == by,
+                    sym.bz[bj][t + 1] == bz,
                 ),
                 _frame_block(sym, bj, t),
             )
@@ -423,7 +495,11 @@ def _encode_move(
 
 
 def _encode_release(
-    sym: BMCTraceSymbols, t: int, ref_box_id: int, z_off: z3.ArithRef
+    sym: BMCTraceSymbols,
+    t: int,
+    ref_box_id: int,
+    z_off: z3.ArithRef,
+    noise: Optional[NoiseSpec] = None,
 ) -> z3.BoolRef:
     """
     Open the gripper after lowering EE z to ``bz[ref][t] + z_off``. EE x/y and
@@ -436,13 +512,33 @@ def _encode_release(
         )
     ref_name = sym.block_names[ref_box_id]
     target_z = sym.bz[ref_name][t] + z_off
+    frame = _frame_all(sym, t)
+    bounds = []
+    if noise is not None:
+        eta, bounds = bounded_noise(noise.eps_release, f"bmc_release_{t}")
+        # Perturb the legacy nominal release location of the held block only.
+        frame = [
+            z3.If(
+                sym.holding[t] == sym.block_consts[b],
+                z3.And(
+                    *(
+                        coords[b][t + 1] == coords[b][t] + error
+                        for coords, error in zip((sym.bx, sym.by, sym.bz), eta)
+                    )
+                ),
+                _frame_block(sym, b, t),
+            )
+            for b in sym.block_names
+        ]
+        target_z += eta[2]
     return z3.And(
         sym.holding[t] != sym.NONE,
         sym.holding[t + 1] == sym.NONE,
         sym.ee_x[t + 1] == sym.ee_x[t],
         sym.ee_y[t + 1] == sym.ee_y[t],
         sym.ee_z[t + 1] == target_z,
-        z3.And(*_frame_all(sym, t)),
+        z3.And(*frame),
+        *bounds,
     )
 
 
@@ -453,6 +549,7 @@ def encode_step(
     *,
     name_to_box_id: Mapping[str, int],
     offset_vars: Mapping[Tuple[int, str], z3.ArithRef],
+    noise: Optional[NoiseSpec] = None,
 ) -> z3.BoolRef:
     """Encode ``instr`` as the transition from time ``t`` to ``t+1``."""
     key_ox = (t, "ox")
@@ -466,14 +563,14 @@ def encode_step(
             raise KeyError(
                 f"Pick: box id {instr.grab_box_id!r} not in inferred layout keys."
             )
-        return _encode_pick(sym, t, int(name_to_box_id[k]))
+        return _encode_pick(sym, t, int(name_to_box_id[k]), noise)
     if isinstance(instr, PickByName):
         if instr.grab_box_name not in name_to_box_id:
             raise KeyError(
                 f"PickByName: name {instr.grab_box_name!r} not in inferred layout "
                 f"(known: {sorted(name_to_box_id)})."
             )
-        return _encode_pick(sym, t, int(name_to_box_id[instr.grab_box_name]))
+        return _encode_pick(sym, t, int(name_to_box_id[instr.grab_box_name]), noise)
     if isinstance(instr, Move):
         ox = offset_vars[key_ox]
         oy = offset_vars[key_oy]
@@ -489,7 +586,7 @@ def encode_step(
         ix = int(name_to_box_id[mx])
         iy = int(name_to_box_id[my])
         iz = int(name_to_box_id[mz])
-        return _encode_move(sym, t, ix, iy, iz, ox, oy, oz)
+        return _encode_move(sym, t, ix, iy, iz, ox, oy, oz, noise)
     if isinstance(instr, MoveByName):
         m = name_to_box_id
         for nm, label in (
@@ -508,7 +605,7 @@ def encode_step(
         ox = offset_vars[key_ox]
         oy = offset_vars[key_oy]
         oz = offset_vars[key_oz]
-        return _encode_move(sym, t, ix, iy, iz, ox, oy, oz)
+        return _encode_move(sym, t, ix, iy, iz, ox, oy, oz, noise)
     if isinstance(instr, Release):
         k = str(int(instr.release_box_id))
         if k not in name_to_box_id:
@@ -516,7 +613,7 @@ def encode_step(
                 f"Release: box id {instr.release_box_id!r} not in inferred layout keys."
             )
         return _encode_release(
-            sym, t, int(name_to_box_id[k]), offset_vars[key_rz]
+            sym, t, int(name_to_box_id[k]), offset_vars[key_rz], noise
         )
     if isinstance(instr, ReleaseByName):
         if instr.release_box_name not in name_to_box_id:
@@ -529,6 +626,7 @@ def encode_step(
             t,
             int(name_to_box_id[instr.release_box_name]),
             offset_vars[key_rz],
+            noise,
         )
     raise TypeError(f"encode_step: unsupported instruction {type(instr).__name__}")
 
@@ -563,12 +661,20 @@ def _bmc_add_body(
     *,
     initial_constraints: ConstraintSpec,
     extra_constraints: ConstraintSpec,
+    noise: Optional[NoiseSpec] = None,
 ) -> None:
     s.add(*_expand_constraints(sym, initial_constraints))
     s.add(*_expand_constraints(sym, extra_constraints))
     for t, instr in enumerate(flat):
         s.add(
-            encode_step(sym, t, instr, name_to_box_id=name_to_box_id, offset_vars=off)
+            encode_step(
+                sym,
+                t,
+                instr,
+                name_to_box_id=name_to_box_id,
+                offset_vars=off,
+                noise=noise,
+            )
         )
 
 
@@ -580,9 +686,12 @@ def _bmc_build_and_check_solve(
     extra_constraints: ConstraintSpec,
     assume_goal_false_at_start: bool,
     solver: Optional[z3.Solver],
+    noise: Optional[NoiseSpec] = None,
 ) -> Tuple[BMCTraceSymbols, z3.Solver, z3.CheckSatResult]:
     sym, flat, off, name_to_box_id = _bmc_setup(program, "solve")
     s = solver if solver is not None else z3.Solver()
+    if solver is None:
+        s.set(timeout=10000)
     _bmc_add_body(
         s,
         sym,
@@ -591,6 +700,7 @@ def _bmc_build_and_check_solve(
         off,
         initial_constraints=initial_constraints,
         extra_constraints=extra_constraints,
+        noise=noise,
     )
     g_final = goal(sym)
     if assume_goal_false_at_start and sym.T > 0:
@@ -609,12 +719,15 @@ def _bmc_build_and_check_verify(
     extra_constraints: ConstraintSpec,
     assume_goal_false_at_start: bool,
     solver: Optional[z3.Solver],
+    noise: Optional[NoiseSpec] = None,
 ) -> Tuple[BMCTraceSymbols, z3.Solver, z3.CheckSatResult, z3.CheckSatResult]:
     """Return ``(sym, s_neg_goal, r_body, r_neg)``: ``r_body`` is ``P``; ``r_neg`` is ``P ∧ ¬goal``."""
     sym, flat, off, name_to_box_id = _bmc_setup(program, "verify")
     g_final = goal(sym)
 
     s_body = solver if solver is not None else z3.Solver()
+    if solver is None:
+        s_body.set(timeout=10000)
     _bmc_add_body(
         s_body,
         sym,
@@ -623,17 +736,17 @@ def _bmc_build_and_check_verify(
         off,
         initial_constraints=initial_constraints,
         extra_constraints=extra_constraints,
+        noise=noise,
     )
     if assume_goal_false_at_start and sym.T > 0:
         g0 = instantiate_goal_at_time(sym, g_final, sym.T, 0)
         s_body.add(z3.Not(g0))
     r_body = s_body.check()
 
-    s_cex = z3.Solver()
-    for a in s_body.assertions():
-        s_cex.add(a)
+    # Retain caller solver options (including timeout) for the counterexample query.
+    s_cex = s_body
     s_cex.add(z3.Not(g_final))
-    r_cex = s_cex.check()
+    r_cex = s_cex.check() if r_body == z3.sat else r_body
     return sym, s_cex, r_body, r_cex
 
 
@@ -685,6 +798,7 @@ def bmc_feasible(
     extra_constraints: ConstraintSpec = None,
     assume_goal_false_at_start: bool = True,
     solver: Optional[z3.Solver] = None,
+    noise: Optional[NoiseSpec] = None,
 ) -> bool:
     """
     Return ``True`` iff there exist **trajectory values** (and existential move /
@@ -709,6 +823,7 @@ def bmc_feasible(
         goal,
         initial_constraints=initial_constraints,
         extra_constraints=extra_constraints,
+        noise=noise,
         assume_goal_false_at_start=assume_goal_false_at_start,
         solver=solver,
     )
@@ -723,6 +838,7 @@ def bmc_solve(
     extra_constraints: ConstraintSpec = None,
     assume_goal_false_at_start: bool = True,
     solver: Optional[z3.Solver] = None,
+    noise: Optional[NoiseSpec] = None,
 ) -> Tuple[bool, Optional[z3.ModelRef], BMCTraceSymbols]:
     """Like ``bmc_feasible`` but returns ``(sat?, model, sym)``."""
     sym, s, r = _bmc_build_and_check_solve(
@@ -730,6 +846,7 @@ def bmc_solve(
         goal,
         initial_constraints=initial_constraints,
         extra_constraints=extra_constraints,
+        noise=noise,
         assume_goal_false_at_start=assume_goal_false_at_start,
         solver=solver,
     )
@@ -746,9 +863,11 @@ def bmc_verify(
     extra_constraints: ConstraintSpec = None,
     assume_goal_false_at_start: bool = True,
     solver: Optional[z3.Solver] = None,
-) -> bool:
+    noise: Optional[NoiseSpec] = None,
+) -> BMCVerificationResult:
     """
-    **Verify** mode (obligation): offsets are fixed to concrete ``Parameter.val``
+    Returns a bool-compatible :class:`BMCVerificationResult` with mode, status,
+    and a counterexample when refuted. **Verify** mode: offsets are fixed to concrete ``Parameter.val``
     (raises if any required offset is still ``None``).
 
     Let ``P`` be initial ∧ extra ∧ transitions (and optional ``¬goal@0``). Return
@@ -757,17 +876,24 @@ def bmc_verify(
     ``Implies(P, goal@T)`` in the SMT sense). If ``P`` is UNSAT, returns
     ``False`` (program not executable from the given initials).
     """
-    sym, _, r_body, r_neg = _bmc_build_and_check_verify(
+    sym, s, r_body, r_neg = _bmc_build_and_check_verify(
         program,
         goal,
         initial_constraints=initial_constraints,
         extra_constraints=extra_constraints,
+        noise=noise,
         assume_goal_false_at_start=assume_goal_false_at_start,
         solver=solver,
     )
-    if r_body != z3.sat:
-        return False
-    return r_neg == z3.unsat
+    if r_body == z3.unsat:
+        return BMCVerificationResult("infeasible", noise, symbols=sym)
+    if r_body == z3.unknown or r_neg == z3.unknown:
+        return BMCVerificationResult(
+            "unknown", noise, symbols=sym, reason=s.reason_unknown()
+        )
+    if r_neg == z3.sat:
+        return BMCVerificationResult("refuted", noise, s.model(), sym)
+    return BMCVerificationResult("verified", noise, symbols=sym)
 
 
 def bmc_verify_solve(
@@ -778,6 +904,7 @@ def bmc_verify_solve(
     extra_constraints: ConstraintSpec = None,
     assume_goal_false_at_start: bool = True,
     solver: Optional[z3.Solver] = None,
+    noise: Optional[NoiseSpec] = None,
 ) -> Tuple[bool, Optional[z3.ModelRef], BMCTraceSymbols]:
     """
     Like :func:`bmc_verify` but returns ``(proved?, model, sym)``.
@@ -791,6 +918,7 @@ def bmc_verify_solve(
         goal,
         initial_constraints=initial_constraints,
         extra_constraints=extra_constraints,
+        noise=noise,
         assume_goal_false_at_start=assume_goal_false_at_start,
         solver=solver,
     )
