@@ -19,7 +19,9 @@ class Term:
 
     @property
     def quantifier_count(self):
-        return int(self.op in ("exists", "forall")) + sum(a.quantifier_count for a in self.args)
+        return int(self.op in ("exists", "forall")) + sum(
+            a.quantifier_count for a in self.args
+        )
 
     def __str__(self):
         if self.op == "ref":
@@ -81,7 +83,9 @@ def canonical(term, env=None, depth=0):
         nested = dict(env, **dict(zip(term.value, names)))
         body = canonical(term.args[0], nested, depth + len(names))
         return _term(term.op, (body,), names)
-    return _term(term.op, tuple(canonical(a, env, depth) for a in term.args), term.value)
+    return _term(
+        term.op, tuple(canonical(a, env, depth) for a in term.args), term.value
+    )
 
 
 def quantify(kind, names, body):
@@ -111,34 +115,69 @@ def free_names(term, bound=frozenset()):
 
 def substitute(term, mapping, bound=frozenset()):
     """Capture-free substitution of free object references, not formula holes."""
+
     def walk(node, hidden):
         if node.op == "ref":
             return node if node.value in hidden else mapping.get(node.value, node)
         if node.op in ("forall", "exists"):
             hidden = hidden | frozenset(node.value)
         return _term(node.op, tuple(walk(a, hidden) for a in node.args), node.value)
+
     return canonical(walk(term, bound))
 
 
 def to_z3(term, context, bindings=None):
     import z3
+
     bindings = {} if bindings is None else bindings
     if term.op == "ref":
-        return bindings[term.value] if term.value in bindings else context.get_consts(term.value)
+        return (
+            bindings[term.value]
+            if term.value in bindings
+            else context.get_consts(term.value)
+        )
     if term.op == "bool":
         return z3.BoolVal(term.value)
     if term.op in ("exists", "forall"):
         variables = [z3.Const(name, context.BoxSort) for name in term.value]
-        body = to_z3(term.args[0], context, dict(bindings, **dict(zip(term.value, variables))))
+        body = to_z3(
+            term.args[0], context, dict(bindings, **dict(zip(term.value, variables)))
+        )
         return (z3.Exists if term.op == "exists" else z3.ForAll)(variables, body)
     args = [to_z3(a, context, bindings) for a in term.args]
-    operations = {"and": z3.And, "or": z3.Or, "not": z3.Not, "implies": z3.Implies,
-                  "eq": lambda a, b: a == b}
+    operations = {
+        "and": z3.And,
+        "or": z3.Or,
+        "not": z3.Not,
+        "implies": z3.Implies,
+        "eq": lambda a, b: a == b,
+    }
     if term.op in operations:
         return operations[term.op](*args)
     if term.op == "ON":
         a, b = args
         mid = z3.FreshConst(context.BoxSort, "direct_middle")
-        return z3.And(a != b, context.ON_star(a, b),
-                      z3.ForAll([mid], z3.Implies(z3.And(context.ON_star(a, mid), context.ON_star(mid, b)), z3.Or(mid == a, mid == b))))
+        return z3.And(
+            a != b,
+            context.ON_star(a, b),
+            z3.ForAll(
+                [mid],
+                z3.Implies(
+                    z3.And(context.ON_star(a, mid), context.ON_star(mid, b)),
+                    z3.Or(mid == a, mid == b),
+                ),
+            ),
+        )
     return getattr(context, term.op)(*args)
+
+
+def open_existentials(term, prefix):
+    """Open a classifier prefix into fresh program-level Get binders."""
+    names, mapping = [], {}
+    while term.op == "exists":
+        for old in term.value:
+            name = f"{prefix}_{len(names)}"
+            names.append(name)
+            mapping[old] = ref(name)
+        term = term.args[0]
+    return tuple(names), substitute(term, mapping)
