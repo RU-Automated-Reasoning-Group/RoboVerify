@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Language:
-    relations: tuple = ("ON_star", "Higher", "Scattered", "eq")
+    relations: tuple = ("ON", "ON_star", "Higher", "Scattered", "eq")
     max_depth: int = 4
     max_variables: int = 2
     max_candidates: int = 20000

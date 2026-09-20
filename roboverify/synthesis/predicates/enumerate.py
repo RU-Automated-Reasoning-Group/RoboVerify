@@ -40,7 +40,7 @@ def enumerate_separator(
 ):
     """Examples are (Scene, bool); no approximate classifier is returned as exact.
 
-    FO formulas are enumerated in prenex form. Classifiers require an outer
+    FO formulas are enumerated in prenex form. Classifiers allow an optional outer
     existential prefix and a quantifier-free matrix. Guard search permits any
     quantifier prefix. Observational pruning compares all binder assignments,
     not just the closed formula's output, so it remains valid under quantifiers.
@@ -61,9 +61,7 @@ def enumerate_separator(
         )
 
     for depth in range(1, language.max_depth + 1):
-        for count in range(
-            1 if mode == "classifier" else 0, language.max_variables + 1
-        ):
+        for count in range(language.max_variables + 1):
             matrix_depth = depth - count
             if matrix_depth < 1:
                 continue

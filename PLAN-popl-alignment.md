@@ -25,7 +25,9 @@
 > - [ ] **A6:** Connect synthesized CFGs to verification and counterexample repair.
 > - [ ] **A7:** Verify synthesized primitives and propagate block contexts.
 > - [ ] **A8:** Close object bindings and restrict mutation to runtime scope.
-> - [ ] **A9:** Include ground classifiers and the supported direct-ON vocabulary.
+> - [x] **A9:** Search includes zero-binder classifiers and direct ON by default;
+>       ground separation and intermediate-object adjacency regressions pass
+>       together with the existing search/refinement tests (nine tests).
 > - [ ] **A10:** Validate temporal partitions across the CFG.
 > - [ ] **A11:** Expose the intended invariant learner/vocabulary and terminal heads.
 > - [ ] **D1:** Validate demonstrations against their initial/final task conditions;

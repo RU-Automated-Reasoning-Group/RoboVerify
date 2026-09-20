@@ -47,6 +47,33 @@ class SearchTests(unittest.TestCase):
                     for scene, expected in examples:
                         self.assertEqual(evaluate(result.term, scene), expected)
 
+    def test_ground_separator_needs_no_existential_budget(self):
+        positive = Scene({0: (0, 0, 0.1), 1: (0, 0, 0)}, {"a": 0, "b": 1})
+        negative = Scene({0: (0, 0, 0), 1: (0, 0, 0.1)}, {"a": 0, "b": 1})
+        result = learn_classifier(
+            [positive],
+            [negative],
+            {"a", "b"},
+            language=Language(relations=("Higher",), max_depth=1, max_variables=0),
+        )
+        self.assertTrue(result, result.status)
+        self.assertEqual(result.term.op, "Higher")
+        self.assertEqual(result.term.quantifier_count, 0)
+
+    def test_default_vocabulary_can_distinguish_direct_from_transitive_on(self):
+        direct = Scene(
+            {0: (0, 0, 0), 1: (0, 0, 0.1), 2: (0.2, 0, 0.05)}, {"a": 1, "b": 0}
+        )
+        tall = Scene({0: (0, 0, 0), 1: (0, 0, 0.1), 2: (0, 0, 0.05)}, {"a": 1, "b": 0})
+        result = learn_classifier(
+            [direct],
+            [tall],
+            {"a", "b"},
+            language=Language(max_depth=1, max_variables=0),
+        )
+        self.assertTrue(result, result.status)
+        self.assertEqual(result.term.op, "ON")
+
     def test_guard_rejects_ambiguous_witnesses(self):
         scene = Scene({0: (0, 0, 0.425), 1: (0.2, 0, 0.425)}, {"b": 0})
         result = loop_guard_synthesis(
