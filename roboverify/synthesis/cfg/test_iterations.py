@@ -76,3 +76,25 @@ class IterationExtractionTests(unittest.TestCase):
         self.assertIn("ON_star_zero", vocab.relations)
         self.assertIn("equality", vocab.relations)
         self.assertNotIn("next", vocab.constants)
+
+
+class InvariantAdapterResultTests(unittest.TestCase):
+    def test_legacy_inference_returns_the_formula_not_provenance_tuple(self):
+        from unittest.mock import patch
+
+        import z3
+        from synthesis.cfg.invariants import infer_loop_invariant
+        from synthesis.verification_lib.highlevel_verification_lib import (
+            HighLevelContext,
+        )
+
+        context = HighLevelContext()
+        with patch(
+            "synthesis.cfg.invariants.loop_learning_data",
+            return_value=(object(), object()),
+        ), patch(
+            "synthesis.cfg.invariants.InvInference",
+            return_value=(z3.BoolVal(True), ["provenance"]),
+        ):
+            result = infer_loop_invariant([object()], None, (), context=context)
+        self.assertTrue(z3.is_true(result))

@@ -11,8 +11,7 @@ from unittest.mock import patch
 
 import numpy as np
 import z3
-
-from synthesis.api.instructions import Assign, While
+from synthesis.api.instructions import Assign, LoopBudgetExceeded, While
 from synthesis.api.program import Program
 from synthesis.inference_lib import golden_tower_fixtures as golden
 from synthesis.inference_lib.demo_store import (
@@ -45,15 +44,22 @@ class TraceCollection(unittest.TestCase):
         self.obs = np.zeros(13 + 15 * 3)
         self.obs[10:13] = [0, 0, 0]
         self.obs[22:25] = [1, 0, 0]
-        self.obs[34:37] = [2, 0, 0]
+        self.obs[34:37] = [2, 0, 0.125]
         self.env = SimpleNamespace(
-            num_blocks=3, symbolic_name_to_box_id={"b0": 0, "b": 0}
+            num_blocks=3, symbolic_name_to_box_id={"b0": 0, "b": 0, "anchor": 2}
         )
         self.env.reset = lambda: (self.obs.copy(), {})
         self.env.set_state_from_observation = lambda obs: None
         b_prime, b = z3.Consts("b_prime b", self.context.BoxSort)
+        anchor = self.context.get_consts("anchor")
         self.loop = While(
-            b_prime != b, [b_prime], [MoveUp()], z3.BoolVal(True), max_iters=3
+            z3.And(
+                b_prime != b, b_prime != anchor, self.context.Higher(anchor, b_prime)
+            ),
+            [b_prime],
+            [MoveUp()],
+            z3.BoolVal(True),
+            max_iters=3,
         )
 
     def test_three_iterations_copy_all_objects_and_guard_bindings(self):
@@ -78,7 +84,11 @@ class TraceCollection(unittest.TestCase):
         for cond, budget in [(z3.BoolVal(False), 3), (z3.BoolVal(True), 0)]:
             store = DemoStore()
             loop = While(cond, [], [MoveUp()], z3.BoolVal(True), max_iters=budget)
-            loop.eval(self.env, [self.obs.copy()], on_loop_head=store.add)
+            if budget == 0:
+                with self.assertRaises(LoopBudgetExceeded):
+                    loop.eval(self.env, [self.obs.copy()], on_loop_head=store.add)
+            else:
+                loop.eval(self.env, [self.obs.copy()], on_loop_head=store.add)
             self.assertEqual(len(store), 0)
 
     def test_program_callbacks_and_entry_state_reset_between_rollouts(self):
@@ -89,6 +99,7 @@ class TraceCollection(unittest.TestCase):
         traced = program.eval(self.env, on_loop_head=store.add)
         np.testing.assert_array_equal(plain, traced)
         self.obs[24] = 0.4
+        self.obs[36] = 0.525
         program.eval_from_observation(self.env, self.obs, on_loop_head=store.add)
         rows = store.for_loop("1")
         self.assertEqual(len(rows), 6)

@@ -54,7 +54,7 @@ def infer_loop_invariant(
         rows, scope, relations=relations, variables=variables
     )
     if learner == "legacy":
-        return InvInference(store, "loop", vocabulary, context)
+        return InvInference(store, "loop", vocabulary, context)[0]
     if learner == "monotone":
         return MonotoneInvariantLearner()(store, "loop", vocabulary, context)
     raise ValueError(f"Unknown invariant learner: {learner}")
