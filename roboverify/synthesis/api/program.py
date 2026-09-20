@@ -717,11 +717,15 @@ def rewrite_for_put_on_tbl_for_scattered(expr, placed_block, context):
         decl = expr.decl()
         if decl.kind() == Z3_OP_UNINTERPRETED and decl.name() == "Scattered":
             m, n = expr.children()
-            return Or(
+            effect = Or(
                 And(m == placed_block, n != placed_block),
                 And(m != placed_block, n == placed_block),
                 And(m != placed_block, n != placed_block, context.Scattered(m, n)),
             )
+            if context.use_tbl:
+                tbl = context.get_consts("tbl")
+                effect = And(m != tbl, n != tbl, effect)
+            return effect
         new_children = [
             rewrite_for_put_on_tbl_for_scattered(c, placed_block, context)
             for c in expr.children()

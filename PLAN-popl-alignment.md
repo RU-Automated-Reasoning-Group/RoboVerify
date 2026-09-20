@@ -10,8 +10,11 @@
 > the audit describes the pre-fix baseline. Mark an item complete only with tests
 > and a recorded implementation, not merely a proposed solution.
 >
-> - [ ] **A1:** Check complete geometric effects of symbolic placement, including
->       root alignment, separation and relational table isolation.
+> - [x] **A1:** MotionVerify checks ON*/Higher/Scattered outcomes against Put WP,
+>       plus root alignment; the table Scattered rewrite preserves isolation.
+>       Exact quantified effects fail closed. Both audit geometries are rejected;
+>       31 motion/CEGIS tests pass. A newly exposed paper Higher mismatch is
+>       rejected explicitly (discrepancy 16), not silently rewritten.
 > - [x] **A2:** Runtime budget exhaustion raises `LoopBudgetExceeded`; generated
 >       loops no longer derive an execution cap from demo counts. Explicit caps
 >       remain optional and collectors report incomplete outcomes. Nineteen

@@ -310,3 +310,26 @@ VC assumes the guard is false. This can stop a learned loop prematurely on more
 objects. Budget exhaustion must be an explicit incomplete outcome or part of the
 verified semantics; it is not a substitute for the paper's missing termination
 argument. See A2 in `AUDIT-popl-alignment.md`.
+
+
+## 16. The Higher rewrite can disagree with geometric placement
+
+**Found while closing audit A1.** Table 7's put-on-block Higher disjunct for
+m distinct from source/target and n=source uses Exists(t, t!=n and Higher(n,t)
+and Higher(t,target)); it does not depend on m's height. With source, target,
+and an unrelated object initially at equal height, the target itself witnesses
+that existential. The rewrite predicts the unrelated object is at least as high
+as the placed source, although the source has just been raised above the target.
+
+The implementation matches this paper rule, so the standing decision not to
+speculatively replace Higher's WP remains intact. Motion verification now checks
+ON*, Higher and Scattered outcomes against the actual rewritten formulas and
+rejects this mismatch. This can reject physically reasonable controllers whose
+claimed abstraction is wrong; that is an explicit abstraction failure, not a
+motion proof. Exact quantifiers/premises are retained for these equivalence checks;
+solver unknown remains inconclusive. The regression preserves this counterexample.
+
+Audit A1 also adds a root-alignment check with radius L/4, consistent with the
+existing pairwise ON* bound L/2, and fixes Scattered's table-isolation rewrite.
+The two original geometric audit probes are now rejected. This does not prove
+physical settling, arm collision avoidance, or total loop termination.

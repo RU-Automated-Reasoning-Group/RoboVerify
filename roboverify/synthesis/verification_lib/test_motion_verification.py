@@ -41,8 +41,10 @@ def stack_body(release_height=0.05, release=True):
 
 class MotionVerification(unittest.TestCase):
     def setUp(self):
+        # A source below the target layer admits the full current Put abstraction.
+        # Equal-height source/target exposes the separate Higher mismatch below.
         self.scene = {
-            "a": [0.3, 0, 0],
+            "a": [0.3, 0, -0.1],
             "b": [0, 0, 0],
             "b0": [0, 0, 0],
             "sym": [2, 2, 0],
@@ -68,6 +70,49 @@ class MotionVerification(unittest.TestCase):
         self.assertEqual(result.mode, "noiseless")
         self.assertEqual(result.counterexamples, [])
         self.assertGreater(result.elapsed_seconds, 0)
+
+    def test_root_drift_is_rejected_even_when_local_placement_passes(self):
+        self.scene.update(a=[0.3, 0, 0], b=[0.024, 0, 0.05], b0=[0, 0, 0])
+        body = [
+            waypoint("a", "a", "a", "a", [0, 0, 0.2], release=False),
+            waypoint("a", "b", "b", "b", [0.024, 0, 0.2], release=False),
+            waypoint("a", "b", "b", "b", [0.024, 0, 0.05], release=True),
+        ]
+        result = self.verify(body)
+        statuses = {c.obligation: c.status for c in result.checks}
+        self.assertEqual(statuses["contract"], "valid")
+        self.assertEqual(statuses["alignment"], "refuted")
+        self.assertEqual(statuses["effect_ON_star"], "refuted")
+        self.assertFalse(result)
+
+    def test_table_placement_requires_symbolic_separation_effect(self):
+        self.constants.append("tbl")
+        self.contract = MotionContract("a", "tbl", table_surface_height=0)
+        self.scene.update(a=[0, 0, 0.025], b=[0.075, 0, 0.025], b0=[0.075, 0, 0.025])
+        result = self.verify([waypoint("a", "a", "a", "a", [0, 0, 0], release=True)])
+        statuses = {c.obligation: c.status for c in result.checks}
+        self.assertEqual(statuses["contract"], "valid")
+        self.assertEqual(statuses["effect_Scattered"], "refuted")
+        self.assertFalse(result)
+
+    def test_paper_higher_effect_mismatch_is_not_a_motion_proof(self):
+        # Table 7's second disjunct ignores the height of the other block.
+        # From level source/target it can predict Higher(sym, source) after lifting.
+        self.scene["a"][2] = 0
+        result = self.verify()
+        statuses = {c.obligation: c.status for c in result.checks}
+        self.assertEqual(statuses["contract"], "valid")
+        self.assertEqual(statuses["effect_Higher"], "refuted")
+        self.assertFalse(result)
+
+    def test_table_scattered_wp_preserves_isolation(self):
+        from synthesis.api.instructions import Put
+        from synthesis.api.program import wp
+
+        high = HighLevelContext(use_tbl=True)
+        a, tbl = high.get_consts("a"), high.get_consts("tbl")
+        result = z3.simplify(wp(Put("a", "tbl"), high.Scattered(a, tbl), high))
+        self.assertTrue(z3.is_false(result))
 
     def test_large_release_offset_returns_breaking_configuration(self):
         result = self.verify(stack_body(0.1))
@@ -154,6 +199,9 @@ class MotionVerification(unittest.TestCase):
         self.assertFalse(program.lowlevel_verification(constants=self.constants))
 
     def test_table_contract_uses_physical_surface_not_relational_marker(self):
+        self.scene["a"][2] = 0
+        self.scene["b"][2] = self.scene["b0"][2] = 0.1
+        self.scene["sym"][2] = 0.1
         self.constants.append("tbl")
         self.contract = MotionContract("a", "tbl", table_surface_height=-0.025)
         body = [waypoint("a", "a", "a", "a", [0, 0, 0], release=True)]
@@ -162,6 +210,7 @@ class MotionVerification(unittest.TestCase):
         self.assertFalse(self.verify(body))
 
     def test_self_relative_waypoints_use_updated_positions(self):
+        self.scene["a"][2] = 0
         self.scene["b"] = [0.3, 0, -0.05]
         self.scene["b0"] = list(self.scene["b"])
         # Lift .1 then descend .1 relative to the carried block. The original
@@ -170,7 +219,12 @@ class MotionVerification(unittest.TestCase):
             waypoint("a", "a", "a", "a", [0, 0, 0.1], release=False),
             waypoint("a", "a", "a", "a", [0, 0, -0.1], release=True),
         ]
-        self.assertTrue(self.verify(body))
+        result = self.verify(body)
+        # This regression concerns state threading. Local placement succeeds;
+        # full abstract-effect agreement is checked separately.
+        self.assertEqual(
+            next(c.status for c in result.checks if c.obligation == "contract"), "valid"
+        )
 
     def test_noise_cli_defaults_off_and_accepts_three_bounds(self):
         parser = argparse.ArgumentParser()

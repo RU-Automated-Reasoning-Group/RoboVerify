@@ -122,6 +122,7 @@ class MotionProblem:
                 f"Contract constants missing from layout: {required - set(constants)}"
             )
         self.context = context
+        self.initial_condition = tuple(initial_condition)
         self.contract = contract
         self.noise = noise
         self.block_v = str(block_v)
@@ -421,6 +422,71 @@ def check_contract_realization(problem):
     )
 
 
+def check_abstract_effects(problem):
+    """Check the entire Put interpretation, not just its local placement atom.
+
+    Every relation involving the manipulated object is checked against each
+    named object and the arbitrary object sym. Relations between other objects
+    are unchanged by successful, support-free execution. Exact quantified
+    translation is necessary here: weakening under an equivalence is unsound.
+    """
+    from synthesis.api.instructions import Put
+    from synthesis.api.program import wp
+    from synthesis.verification_lib.highlevel_verification_lib import HighLevelContext
+
+    problem.solver.push()
+    try:
+        # Quantified effect checks may need information discarded by the finite
+        # assumption expansion. Reassert the actual supplied premises exactly;
+        # these are not new assumptions inferred from demonstration geometry.
+        problem.solver.add(
+            *(
+                problem.context.translate_exact(c, problem.constants)
+                for c in problem.initial_condition
+            )
+        )
+        high = HighLevelContext(use_tbl=problem.context.use_tbl)
+        put = Put(problem.contract.source, problem.contract.target)
+        names = list(problem.constants)
+        source = problem.contract.source
+        # Include source/other in both directions, plus unchanged named pairs.
+        pairs = [(a, b) for a in names for b in names if a == source or b == source]
+        replacements = [
+            (axis(problem.constants[name]), point[i])
+            for name, point in problem.current.items()
+            for i, axis in enumerate(
+                (problem.context.X, problem.context.Y, problem.context.Z)
+            )
+        ]
+        for relation in ("ON_star", "Higher", "Scattered"):
+            violations = []
+            for left, right in pairs:
+                atom = getattr(high, relation)(
+                    high.get_consts(left), high.get_consts(right)
+                )
+                expected = problem.context.translate_exact(
+                    wp(put, atom, high), problem.constants
+                )
+                before = problem.context.translate_exact(atom, problem.constants)
+                actual = z3.substitute(before, *replacements)
+                violations.append(actual != expected)
+            problem.check(f"effect_{relation}", z3.Or(*violations))
+        if problem.contract.target != "tbl":
+            root = problem.initial[problem.contract.frame_base]
+            target = problem.initial[problem.contract.target]
+            placed = problem.current[source]
+            # N=L/2 in ON*. A root radius below N/2 implies pairwise drift below N.
+            aligned = z3.And(
+                *(z3.Abs(placed[i] - root[i]) < problem.context.L / 4 for i in (0, 1))
+            )
+            problem.check(
+                "alignment",
+                z3.And(_on_star(target, root, problem.context.L), z3.Not(aligned)),
+            )
+    finally:
+        problem.solver.pop()
+
+
 def check_frame_preservation(problem):
     """Protect the initial tower except for the explicitly manipulated source."""
     contract = problem.contract
@@ -482,6 +548,7 @@ def verify_motion_block(
         if problem.check("transition_consistency").status == "valid":
             check_contract_realization(problem)
             check_frame_preservation(problem)
+            check_abstract_effects(problem)
     return MotionVerificationResult(problem.checks, noise, 1, perf_counter() - start)
 
 

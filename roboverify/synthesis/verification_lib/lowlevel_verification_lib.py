@@ -18,6 +18,8 @@ from z3 import (
     BoolVal,
     Consts,
     DeclareSort,
+    Exists,
+    ForAll,
     FreshConst,
     Function,
     If,
@@ -703,6 +705,57 @@ class LowLevelContext:
             return decl(*children)
 
         return expr
+
+    def translate_exact(self, expr, const_map, bindings=()):
+        """Interpret a postcondition/WP exactly, preserving quantified objects.
+
+        Unlike assumption weakening, this is safe inside equivalence/negation.
+        Quantified NRA can be inconclusive; callers must preserve that verdict.
+        """
+        if is_var(expr):
+            return bindings[get_var_index(expr)]
+        if is_quantifier(expr):
+            variables = [
+                FreshConst(self.BoxSort, prefix="effect")
+                for _ in range(expr.num_vars())
+            ]
+            body = self.translate_exact(
+                expr.body(), const_map, tuple(reversed(variables)) + tuple(bindings)
+            )
+            return (ForAll if expr.is_forall() else Exists)(variables, body)
+        if not is_app(expr):
+            return expr
+        decl = expr.decl()
+        if decl.kind() == Z3_OP_UNINTERPRETED and decl.arity() == 0:
+            return const_map[str(decl.name())]
+        children = [
+            self.translate_exact(c, const_map, bindings) for c in expr.children()
+        ]
+        if decl.kind() == Z3_OP_UNINTERPRETED:
+            relations = {
+                "ON_star": self.lowlevel_on_star,
+                "ON_star_zero": self.lowlevel_on_star_zero,
+                "Higher": self.lowlevel_higher,
+                "Scattered": self.lowlevel_scattered,
+            }
+            if str(decl.name()) not in relations:
+                raise NotImplementedError(f"Unsupported exact relation: {decl.name()}")
+            return relations[str(decl.name())](*children)
+        if decl.kind() == Z3_OP_EQ and children and children[0].sort() == self.BoxSort:
+            return self.lowlevel_box_equal(*children)
+        if (
+            decl.kind() == Z3_OP_DISTINCT
+            and children
+            and children[0].sort() == self.BoxSort
+        ):
+            return And(
+                *(
+                    Not(self.lowlevel_box_equal(a, b))
+                    for i, a in enumerate(children)
+                    for b in children[i + 1 :]
+                )
+            )
+        return decl(*children)
 
     def translate_condition(self, s: Solver, constants: List, conditions: List):
         const_map = {str(c): self.get_consts(str(c)) for c in constants}
