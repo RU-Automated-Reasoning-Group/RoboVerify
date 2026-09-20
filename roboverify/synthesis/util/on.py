@@ -8,6 +8,52 @@ BLOCK_LENGTH = (
 )  # (0.025, 0.025, 0.025) in the xml file of the gym env is half length
 
 
+class NoGeometry:
+    """Placeholder position for a ``Box``-sort element that is not a real block.
+
+    The block algebra quantifies over a ``Box`` sort that contains one such
+    element, ``tbl``. It is a null/bottom marker: the axioms in
+    ``highlevel_verification_lib`` isolate it from all three relations rather
+    than giving it a location. Handing it a coordinate triple (it used to carry
+    ``[-100, -100, -100]``) made the isolation depend on that triple landing
+    outside every tolerance, so a change to ``BLOCK_LENGTH`` or a block drifting
+    below the table plane would have shifted the semantics silently.
+    """
+
+    __slots__ = ("name",)
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    def __repr__(self) -> str:
+        return f"NoGeometry({self.name!r})"
+
+
+#: The table, as it appears in a relational state. Its physical surface height is
+#: a motion-level fact and is deliberately not recorded here.
+TABLE = NoGeometry("tbl")
+
+#: The ``Goal``-sort null element. Goal relations (``d_star``/``r_star``) special-case
+#: it by name; it has no position for the same reason ``TABLE`` has none.
+NULL = NoGeometry("null")
+
+
+def is_table(block) -> bool:
+    """True for the table marker, which is what the ``tbl`` axioms range over."""
+    return block is TABLE
+
+
+def _xyz(block):
+    """Unpack a block position, refusing sort elements that carry no geometry."""
+    if isinstance(block, NoGeometry):
+        raise TypeError(
+            f"{block!r} has no position: a geometric predicate was applied to a "
+            "sort element that is not a physical block"
+        )
+    x, y, z = block
+    return x, y, z
+
+
 def on_star_eval(block1, block2) -> bool:
     """define the numerical interpretation of the on(block1, block2) between two blocks"""
     x1, y1, z1 = block1
@@ -88,9 +134,19 @@ def z3_on(
 
 
 def on_star_implementation(block1, block2) -> bool:
-    """define the numerical interpretation of the on(block1, block2) between two blocks"""
-    x1, y1, z1 = block1
-    x2, y2, z2 = block2
+    """Numeric reading of ``ON*(block1, block2)``.
+
+    The table is ``on*``-isolated. The ``on_tbl`` axiom says
+    ``ON*(x, tbl) or ON*(tbl, x)`` implies ``x == tbl``, and ``on2`` makes ``ON*``
+    reflexive, so ``(tbl, tbl)`` is the one true pair involving the table. That
+    used to hold only because the table's sentinel coordinates fell outside the
+    ``BLOCK_LENGTH / 2`` tolerance below -- an accident of the numbers rather
+    than a statement of the axiom.
+    """
+    if is_table(block1) or is_table(block2):
+        return is_table(block1) and is_table(block2)
+    x1, y1, z1 = _xyz(block1)
+    x2, y2, z2 = _xyz(block2)
     return (
         abs(x1 - x2) < BLOCK_LENGTH / 2
         and abs(y1 - y2) < BLOCK_LENGTH / 2
@@ -113,23 +169,49 @@ def r_star_implementation(block1, block2) -> bool:
 
 
 def higher_implementation(block1, block2) -> bool:
-    """define the numerical interpretation of the on(block1, block2) between two blocks"""
-    x1, y1, z1 = block1
-    x2, y2, z2 = block2
-    return (0 <= z1 - z2 and z1 >= 0.0 and z2 >= 0.0) or (
-        x1 == x2 and y1 == y2 and z1 == z2
-    )
+    """Numeric reading of ``Higher(block1, block2)``: block1 is at least as high.
+
+    ``higher_tbl`` isolates the table and ``higher2`` makes ``Higher`` reflexive,
+    so again ``(tbl, tbl)`` is the only true pair involving it.
+
+    For real blocks this is exactly ``z1 >= z2``, which is what
+    ``LowLevelContext.lowlevel_higher`` checks. The two extra conjuncts this
+    used to carry, ``z1 >= 0`` and ``z2 >= 0``, were how the table's sentinel
+    position was excluded; they also dropped any genuine block sitting below the
+    plane ``z = 0`` out of the relation, which is a silent wrong answer rather
+    than a table check. The old second disjunct (identical positions) is
+    subsumed: equal ``z`` already satisfies ``z1 >= z2``.
+    """
+    if is_table(block1) or is_table(block2):
+        return is_table(block1) and is_table(block2)
+    _, _, z1 = _xyz(block1)
+    _, _, z2 = _xyz(block2)
+    return z1 >= z2
 
 
 def scattered_implementation(block1, block2) -> bool:
-    """define the numerical interpretation of the scattered(block1, block2) between two blocks"""
-    x1, y1, z1 = block1
-    x2, y2, z2 = block2
-    return (
-        (abs(x1 - x2) >= 2 * BLOCK_LENGTH or abs(y1 - y2) >= 2 * BLOCK_LENGTH)
-        and z1 >= 0.0
-        and z2 >= 0.0
-    )
+    """Numeric reading of ``Scattered(block1, block2)``: well separated in xy.
+
+    ``scattered_not_tbl`` gives ``not Scattered(x, tbl)``; with ``scattered1``
+    (symmetry) that also rules out ``Scattered(tbl, x)``, and instantiating it at
+    ``x = tbl`` rules out ``Scattered(tbl, tbl)``. So every pair involving the
+    table is false -- unlike ``ON*`` and ``Higher``, there is no reflexive case.
+
+    The separation test is non-strict. ``_reset_sim_roboverify_stack`` in
+    ``fpp_construction_env`` samples initial layouts by rejecting until
+    ``dx >= 2L or dy >= 2L``, so a layout separated by exactly ``2L`` is one the
+    environment can hand us and must count as scattered;
+    ``LowLevelContext.lowlevel_scattered`` uses the same non-strict test.
+
+    The ``z1 >= 0`` / ``z2 >= 0`` conjuncts this used to carry excluded the
+    table's sentinel position, and are removed for the same reason as in
+    :func:`higher_implementation`.
+    """
+    if is_table(block1) or is_table(block2):
+        return False
+    x1, y1, _ = _xyz(block1)
+    x2, y2, _ = _xyz(block2)
+    return abs(x1 - x2) >= 2 * BLOCK_LENGTH or abs(y1 - y2) >= 2 * BLOCK_LENGTH
 
 
 def top_implementation(block, all_blocks) -> bool:

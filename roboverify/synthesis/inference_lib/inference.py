@@ -385,7 +385,6 @@ def compute_data(
                     f"cannot resolve both arguments of {predicate} to object names; "
                     f"got {block1_name!r} and {block2_name!r}"
                 )
-            # if block1_name == "tbl" or block2_name == "tbl":
             data.append(
                 on.on_star_implementation(
                     state[block1_name],
@@ -420,7 +419,6 @@ def compute_data(
                     f"cannot resolve both arguments of {predicate} to object names; "
                     f"got {block1_name!r} and {block2_name!r}"
                 )
-            # if block1_name == "tbl" or block2_name == "tbl":
             data.append(
                 on.higher_implementation(
                     state[block1_name],
@@ -440,7 +438,6 @@ def compute_data(
                     f"cannot resolve both arguments of {predicate} to object names; "
                     f"got {block1_name!r} and {block2_name!r}"
                 )
-            # if block1_name == "tbl" or block2_name == "tbl":
             data.append(
                 on.scattered_implementation(
                     state[block1_name],
@@ -567,7 +564,6 @@ def compute_data_with_function(
                     f"cannot resolve both arguments of {predicate} to object names; "
                     f"got {block1_name!r} and {block2_name!r}"
                 )
-            # if block1_name == "tbl" or block2_name == "tbl":
             data.append(
                 on.on_star_implementation(
                     state[block1_name],
@@ -594,7 +590,6 @@ def compute_data_with_function(
                     f"cannot resolve both arguments of {predicate} to object names; "
                     f"got {block1_name!r} and {block2_name!r}"
                 )
-            # if block1_name == "tbl" or block2_name == "tbl":
             data.append(
                 on.higher_implementation(
                     state[block1_name],
@@ -610,7 +605,6 @@ def compute_data_with_function(
                     f"cannot resolve both arguments of {predicate} to object names; "
                     f"got {block1_name!r} and {block2_name!r}"
                 )
-            # if block1_name == "tbl" or block2_name == "tbl":
             data.append(
                 on.scattered_implementation(
                     state[block1_name],
@@ -1890,7 +1884,7 @@ def run_2d_outer_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -1902,7 +1896,7 @@ def run_2d_outer_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -1914,7 +1908,7 @@ def run_2d_outer_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -1926,7 +1920,7 @@ def run_2d_outer_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
     ]
     k = 2
@@ -2045,7 +2039,7 @@ def run_2d_inner_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -2057,7 +2051,7 @@ def run_2d_inner_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -2069,7 +2063,7 @@ def run_2d_inner_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -2081,7 +2075,7 @@ def run_2d_inner_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -2093,7 +2087,7 @@ def run_2d_inner_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -2105,7 +2099,7 @@ def run_2d_inner_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -2117,7 +2111,7 @@ def run_2d_inner_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -2129,7 +2123,7 @@ def run_2d_inner_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -2141,7 +2135,7 @@ def run_2d_inner_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -2153,7 +2147,7 @@ def run_2d_inner_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -2165,7 +2159,7 @@ def run_2d_inner_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -2177,7 +2171,7 @@ def run_2d_inner_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
     ]
     k = 2
@@ -2412,28 +2406,28 @@ def run_unstack_example(
             "x2": [0.0, 0.0, 0.05],
             "x3": [0.0, 0.0, 0.1],
             "x4": [0.0, 0.0, 0.15],
-            "tbl": [-100.0, -100.0, -100.0],
+            "tbl": on.TABLE,
         },
         {
             "x1": [0.0, 0.0, 0.0],
             "x2": [0.0, 0.0, 0.05],
             "x3": [0.0, 0.0, 0.1],
             "x4": [5.0, 0.0, 0.0],
-            "tbl": [-100.0, -100.0, -100.0],
+            "tbl": on.TABLE,
         },
         {
             "x1": [0.0, 0.0, 0.0],
             "x2": [0.0, 0.0, 0.05],
             "x3": [10.0, 0.0, 0.0],
             "x4": [5.0, 0.0, 0.0],
-            "tbl": [-100.0, -100.0, -100.0],
+            "tbl": on.TABLE,
         },
         {
             "x1": [0.0, 0.0, 0.0],
             "x2": [15.0, 0.0, 0.0],
             "x3": [10.0, 0.0, 0.0],
             "x4": [5.0, 0.0, 0.0],
-            "tbl": [-100.0, -100.0, -100.0],
+            "tbl": on.TABLE,
         },
     ]
     n_forall = 2
@@ -2471,7 +2465,7 @@ def run_reverse_example(
             "x3": [0.0, 0.0, 0.1],
             "x4": [0.0, 0.0, 0.15],
             "x5": [0.0, 0.0, 0.20],
-            "tbl": [-100.0, -100.0, -100.0],
+            "tbl": on.TABLE,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -2479,7 +2473,7 @@ def run_reverse_example(
             "x3": [0.0, 0.0, 0.1],
             "x4": [0.0, 0.0, 0.15],
             "x5": [0.0, 0.0, 0.20],
-            "tbl": [-100.0, -100.0, -100.0],
+            "tbl": on.TABLE,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -2487,7 +2481,7 @@ def run_reverse_example(
             "x3": [0.0, 0.0, 0.1],
             "x4": [0.0, 0.0, 0.15],
             "x5": [0.0, 0.0, 0.20],
-            "tbl": [-100.0, -100.0, -100.0],
+            "tbl": on.TABLE,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -2495,7 +2489,7 @@ def run_reverse_example(
             "x3": [0.0, 0.0, 0.1],
             "x4": [0.0, 0.0, 0.15],
             "x5": [0.0, 0.0, 0.20],
-            "tbl": [-100.0, -100.0, -100.0],
+            "tbl": on.TABLE,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -2503,7 +2497,7 @@ def run_reverse_example(
             "x3": [0.0, 0.0, 0.1],
             "x4": [0.0, 0.0, 0.15],
             "x5": [0.0, 0.0, 0.20],
-            "tbl": [-100.0, -100.0, -100.0],
+            "tbl": on.TABLE,
         },
     ]
     states: List[Dict] = [
@@ -2513,7 +2507,7 @@ def run_reverse_example(
             "x3": [0.0, 0.0, 0.1],
             "x4": [0.0, 0.0, 0.15],
             "x5": [0.0, 0.0, 0.20],
-            "tbl": [-100.0, -100.0, -100.0],
+            "tbl": on.TABLE,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -2521,7 +2515,7 @@ def run_reverse_example(
             "x3": [0.0, 0.0, 0.1],
             "x4": [0.0, 0.0, 0.15],
             "x5": [5.0, 0.0, 0.0],
-            "tbl": [-100.0, -100.0, -100.0],
+            "tbl": on.TABLE,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -2529,7 +2523,7 @@ def run_reverse_example(
             "x3": [0.0, 0.0, 0.1],
             "x4": [5.0, 0.0, 0.05],
             "x5": [5.0, 0.0, 0.0],
-            "tbl": [-100.0, -100.0, -100.0],
+            "tbl": on.TABLE,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -2537,7 +2531,7 @@ def run_reverse_example(
             "x3": [5.0, 0.0, 0.1],
             "x4": [5.0, 0.0, 0.05],
             "x5": [5.0, 0.0, 0.0],
-            "tbl": [-100.0, -100.0, -100.0],
+            "tbl": on.TABLE,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -2545,7 +2539,7 @@ def run_reverse_example(
             "x3": [5.0, 0.0, 0.1],
             "x4": [5.0, 0.0, 0.05],
             "x5": [5.0, 0.0, 0.0],
-            "tbl": [-100.0, -100.0, -100.0],
+            "tbl": on.TABLE,
         },
     ]
     k = 2
