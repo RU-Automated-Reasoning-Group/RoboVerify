@@ -3,6 +3,18 @@
 > **Status — read this first.**
 >
 > Branch: `phase-f-synthesis`; Phases A–E are integrated into `main`.
+>
+> **Direct paper/code audit (2026-09-20):** see [AUDIT-popl-alignment.md](AUDIT-popl-alignment.md).
+> Prior completion checkboxes describe the implemented plan scope, not complete
+> paper-algorithm conformance. Phase F remains incomplete for reasons independent
+> of demo quality: flat extraction/body refinement, binding/summary lowering and
+> the Algorithm 6 handoff are missing. Confirmed template freshness/carry bugs
+> also remain. Verification follow-up is required for root alignment, complete
+> symbolic/physical action agreement, and runtime loop-cap semantics; the original
+> D2 plan did not cover all of these obligations. The audit changed no implementation.
+> All 133 existing tests pass (25.822 s); five synthetic probes expose uncovered issues.
+> Next: address the audit's soundness findings, then complete the synthesis connections.
+> Removing saved-demo dependencies from all tests remains proposed, pending user consideration.
 > This plan is being executed top to bottom, Phase A first. Progress:
 >
 > **Phase A: all seven items done.** Listed in plan order; commits landed in a
@@ -204,6 +216,9 @@
 > `PAPER-DISCREPANCIES.md`.
 
 ## Context
+
+The following describes the original baseline before Phases A–F; use the status
+header and the direct audit for the current implementation.
 
 `POPL2027.pdf` ("Component-Based Synthesis from Demonstrations under Local
 Specifications") describes this repository, but a section-by-section comparison shows the
@@ -772,8 +787,8 @@ See `roboverify/synthesis/verification_lib/CEGIS.md` for APIs and runnable comma
 
 ## Phase F — Synthesis half (§3, Algorithms 1–5)
 
-None of this exists: no `CFG`, `RefineCFG`, `Quotient`, `LearnClassifier`, `Validate`,
-`PostScore` or `ExtractIterations` identifier appears anywhere in the repo.
+Original baseline: none of the components below existed. They are now partially
+implemented; see the status header and `AUDIT-popl-alignment.md` for remaining gaps.
 
 **Two IRs, one lowering.** The CFG is the *search* IR; `api/program.Program` stays the
 *verification/execution* IR. `Program` is a flat fixed-length `List[Instruction]`
@@ -1102,6 +1117,11 @@ the three iterations yield equal-length encodings; anti-unifying adjacent pairs 
 template whose σ₁/σ₂ differ exactly in the `b`/`b'` binding; and `σ₁⁻¹ ∘ σ₂` reproduces the
 `Assign("b","b_prime")` at `main.py:54`.
 
+**Audit follow-up:** the observed-count cap below was implemented, but silently
+exiting at that cap disagrees with the symbolic guard-exit proof and blocks
+generalization to larger scenes. See audit A2; this plan instruction needs a
+semantics correction before claiming verified execution.
+
 **Two details that will bite.** `While.max_iters` defaults to 10 and silently truncates
 ([instructions.py:851](roboverify/synthesis/api/instructions.py:851)) — derive it from
 `max(len(iterations))`. And `_find_and_bind_guard_exists` returns the *first* satisfying
@@ -1179,9 +1199,11 @@ published numbers.
 
 For Phase F, the acceptance criterion is likewise structural rather than numeric: running
 `synthesize_cfg` on the unstack demos must **re-derive** a CFG that lowers to a program
-verifying against the same spec the hand-written one does. `cfg/demo_sources.py:unstack_oracle()`
-is the ground truth to compare against — the pipeline should rediscover the loop, guard and
-`b ← b'` update that `main.py:16–69` currently hard-codes. Partial credit is meaningful and
+verifying against the same spec the hand-written one does. The original proposal used `cfg/demo_sources.py:unstack_oracle()` as a
+structural reference for the loop, guard and carried update. Discrepancy 10 shows
+that it is not a task-correctness oracle. Acceptance requires demonstrations
+validated against the intended specification; historical structure alone is not
+ground truth. See the direct audit for algorithm gaps independent of those demos. Partial credit is meaningful and
 should be reported: F6 with `Quotient` stubbed will produce a correct *acyclic* CFG for a
 fixed block count, and only F7 generalizes it to a loop.
 

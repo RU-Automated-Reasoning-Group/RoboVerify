@@ -246,3 +246,67 @@ it. Legacy hand-written loops retain their existing first-witness behavior. Symb
 verification includes a separate `guard_unique` obligation under the learned
 invariant; its failure requests resynthesis. Uniqueness is never inferred from a
 separator fitting the demonstrations alone.
+
+
+## 12. Alignment certification is absent from the implemented motion checks
+
+**Direct algorithm audit, 2026-09-20; unresolved code/plan gap.** Section 5.5,
+equations (6)/(7), and Appendix J require root-relative alignment to justify a
+bounded geometric interpretation of transitive reachability. Phase D2 specified
+local direct-on and frame checks but omitted this obligation. The current motion
+checker has no root search or alignment VC.
+
+A synthetic clear scene passes MotionVerify with root x=0, top x=.024 and a new
+block placed at x=.048 (block length .05). Both neighboring ON* relations hold,
+but ON*(new,root) is false under the implementation's .025 horizontal bound.
+Thus local placement plus frame/collision checks does not establish the symbolic
+transitive effect. Reconcile root and pairwise bounds before adding the missing
+obligation; do not silently substitute the paper's inconsistent thresholds.
+See A1 in `AUDIT-popl-alignment.md`.
+
+## 13. Placement summaries assume relational effects their physical contract does not check
+
+**Direct algorithm audit; unresolved bridge and paper specification issue.**
+Table 7 rewrites Scattered after Put(a,tbl) to true for every distinct object.
+MotionVerify's table contract checks release and table height. In a concrete scene
+with a block .075 m away, MotionVerify passes while geometric Scattered is false
+(the threshold is .1); the symbolic WP for Scattered(a,b0) is merely a!=b0.
+The checker must establish the complete agreed abstract effect, not only height.
+
+There is also an internal paper contradiction: Table 7 makes Scattered(a,tbl)
+true for a!=tbl, while Table 6's isolation axiom makes it false. The implementation
+currently retains both that table-placement rewrite and table isolation. The
+standing decision to isolate tbl is unchanged; this newly identified rewrite
+conflict requires correction rather than reopening that decision.
+
+## 14. AFR and predicate definitions are inconsistent across the paper
+
+**Paper-side; found by direct reading.** Section 5.1 calls an existential followed
+by a universal AFR despite Definition 5.1 allowing a single quantifier block. It
+also describes the §3 learners as universal-only, contradicting §3.2.1's
+existential classifier and §3.3's general guards. This is additional to the
+Higher/WP closure contradiction already recorded in discrepancy 1.
+
+Higher uses >= in §2.2/Appendix A but > in Definition 5.4. Direct-on's vertical
+bands differ between §2.2, Definition 5.4 and Figure 12. Code uses non-strict
+Higher and 0<=dz<1.5L for direct-on. These definitions need reconciliation;
+neither blind copying nor a claim of exact agreement is justified. The long
+Higher rewrite in Table 7 is also visibly clipped beyond the PDF page boundary.
+
+Definition 5.4 claims finite universal instantiation is exactly as strong as the
+invariant on arbitrary environments. That equivalence is not true in general;
+the sound direction of abstraction and quantifier polarity must be justified.
+
+## 15. Termination is not established by the stated VCs; capped execution differs
+
+**Paper claim plus implementation mismatch.** Theorem 5.7 asserts termination
+from symbolic invariant and motion obligations without a ranking or progress
+premise. Ordinary invariant VCs prove partial correctness, not that the guard
+eventually becomes false.
+
+Independently, generated LoopRegions use the maximum observed iteration count
+as While.max_iters. Runtime silently breaks at that cap while the symbolic exit
+VC assumes the guard is false. This can stop a learned loop prematurely on more
+objects. Budget exhaustion must be an explicit incomplete outcome or part of the
+verified semantics; it is not a substitute for the paper's missing termination
+argument. See A2 in `AUDIT-popl-alignment.md`.
