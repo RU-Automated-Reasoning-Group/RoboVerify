@@ -142,6 +142,9 @@
 >       (`a2ef331` through `f261887`), retained valid Phase F code/formatter changes,
 >       corrected status terminology, and validated the combined implementation.
 >       `main` remains at `4c6db67`; unrelated untracked user files are untouched.
+> - [x] Review fix: quantifier search now generates binders disjoint from program
+>       constants. Renaming a constant to `v0` or `v1` preserves separator success
+>       in classifier and guard modes; all four predicate-search tests pass.
 > - [ ] **Phase F acceptance remains open:** the real Unstack pipeline has not
 >       recovered the complete loop. Its historical demo reaches the postcondition
 >       transiently but fails it at termination (discrepancy 10). Reconcile that

@@ -46,6 +46,8 @@ def enumerate_separator(
     not just the closed formula's output, so it remains valid under quantifiers.
     """
     language = language or Language()
+    constants = tuple(constants)
+    reserved_names = set(constants)
     if mode not in ("classifier", "guard") or not examples:
         raise ValueError("A supported mode and nonempty examples are required")
     if language.max_candidates < 1 or language.timeout_seconds <= 0:
@@ -65,7 +67,13 @@ def enumerate_separator(
             matrix_depth = depth - count
             if matrix_depth < 1:
                 continue
-            variables = tuple(f"v{i}" for i in range(count))
+            # Binder names must stay distinct from the program's free variables.
+            candidates = (f"v{i}" for i in itertools.count())
+            variables = tuple(
+                itertools.islice(
+                    (name for name in candidates if name not in reserved_names), count
+                )
+            )
             references = [ref(name) for name in (*constants, *variables)]
             scenes = [
                 (scene, dict(zip(variables, assignment)))
