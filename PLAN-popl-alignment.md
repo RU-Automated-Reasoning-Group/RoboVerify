@@ -2,8 +2,8 @@
 
 > **Status — read this first.**
 >
-> Branch: `phase-c-trace-inference`. This plan is being executed top to bottom,
-> Phase A first. Progress:
+> Integration branch: `main`; Phase C was developed on `phase-c-trace-inference`.
+> This plan is being executed top to bottom, Phase A first. Progress:
 >
 > **Phase A: all seven items done.** Listed in plan order; commits landed in a
 > different order.
@@ -32,7 +32,7 @@
 >       Table 7 contradiction and the segment-reset omission. Commit `c2f0744`.
 >
 > **Phases A–C are complete. Phase D is next.**
-> Phase B is included in `main`; Phase C is on the topic branch above.
+> Phases A–C are included in `main`.
 > Validation is recorded below; Unstack is subject to a 60-second wall-clock cap.
 >
 > - [x] Explicit numeric table marker and predicate isolation (`b972637`).
