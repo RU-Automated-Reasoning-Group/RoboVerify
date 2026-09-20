@@ -5,11 +5,9 @@
 > Branch: `phase-a-fail-closed`. This plan is being executed top to bottom,
 > Phase A first. Progress:
 >
-> - [x] **A.5** RNG isolation — `preserved_global_rng` in `synthesis/mcmc/synthesis.py`.
->       The frozen-CEM-directions bug was confirmed empirically before fixing
->       (four iterations drew the identical perturbation matrix) and parity still
->       passes. Commit `afd04a6`.
-> - [x] **A.6 / A.7** `POPL2027.pdf` and `PAPER-DISCREPANCIES.md` committed. Commit `c2f0744`.
+> **Phase A: all seven items done.** Listed in plan order; commits landed in a
+> different order.
+>
 > - [x] **A.1 / A.2** Motion verification now reports what it examined:
 >       `lowlevel_verification` fails closed when no loop was checked, and
 >       `start_verification`'s blanket skip became a three-way inert /
@@ -19,7 +17,19 @@
 > - [x] **A.4** Solver timeouts added so `unknown` is reachable rather than a hang;
 >       `check_tautology` keeps the clause instead of asserting, and
 >       `highlevel_verification` now distinguishes *refuted* from *inconclusive*.
->       Commit `9c77f09`.
+>       Commit `9c77f09`. **Deviation from the plan as written:** A.4 specified a
+>       tri-state return for `check_tautology`, but both call sites test
+>       `if not check_tautology(...)`, so `False` already means "keep the clause" —
+>       the conservative answer. A third value would have changed both callers
+>       without changing behaviour, so the boolean contract was kept and the
+>       inconclusive case surfaced as a warning instead.
+> - [x] **A.5** RNG isolation — `preserved_global_rng` in `synthesis/mcmc/synthesis.py`.
+>       The frozen-CEM-directions bug was confirmed empirically before fixing
+>       (four iterations drew the identical perturbation matrix) and parity still
+>       passes. Commit `afd04a6`.
+> - [x] **A.6** `POPL2027.pdf` committed at the repo root. Commit `c2f0744`.
+> - [x] **A.7** `PAPER-DISCREPANCIES.md` created and seeded with the Theorem 5.2 /
+>       Table 7 contradiction and the segment-reset omission. Commit `c2f0744`.
 >
 > **Phase A is complete. Phase B is next** — predicate, vocabulary and parameter
 > alignment. Its first item is the table rework: `tbl` stays a sort element but
