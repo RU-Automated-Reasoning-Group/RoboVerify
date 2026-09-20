@@ -1168,10 +1168,10 @@ class Program:
             )
         )
         ok = True
-        found_while = False
+        checked_loops = 0
         for idx, inst in enumerate(self.instructions):
             if isinstance(inst, While):
-                found_while = True
+                checked_loops += 1
                 print(
                     f"starting low-level verification for while loop with index {idx}"
                 )
@@ -1187,8 +1187,19 @@ class Program:
                 if not loop_ok:
                     ok = False
                     print(f"[FAIL] low-level verification failed for while index {idx}")
-        if not found_while:
-            print("[WARN] low-level verification found no while loops to check")
+        if checked_loops == 0:
+            # Returning True here meant "verified" and "nothing was examined" were
+            # the same answer: this function only ever inspects While nodes, so a
+            # straight-line program passed without a single obligation being
+            # checked. Per-block coverage for non-loop code needs each block's
+            # entry condition as a geometric context, which arrives with the CFG
+            # work; until then this at least refuses to claim a verdict it has not
+            # earned.
+            print(
+                "[FAIL] low-level verification examined no while loops, so nothing "
+                "was checked; not reporting this program as verified"
+            )
+            return False
         return ok
 
 

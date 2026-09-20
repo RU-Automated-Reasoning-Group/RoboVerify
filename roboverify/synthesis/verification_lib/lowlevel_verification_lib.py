@@ -35,6 +35,34 @@ from z3 import (
 import synthesis.api.instructions as instructions
 
 
+class UnsupportedMotionInstruction(Exception):
+    """An instruction reached motion verification that it cannot classify.
+
+    Raised rather than skipped: silently passing over an unrecognised
+    instruction is what let a body be reported as verified when part of it was
+    never examined.
+    """
+
+
+# Carry no geometry, so there is genuinely nothing for the motion level to check.
+# ``Assign`` is the common case: the lowered loop bodies append the loop-carried
+# update (see ``verify_stack_with_learned_invariant``), so this branch is taken on
+# every run.
+INERT_MOTION_INSTRUCTIONS = (instructions.Assign, instructions.Skip)
+
+# Do move the end effector through space, but have no collision encoding here yet.
+# They must fail closed until one exists; passing over them was unsound.
+UNHANDLED_MOTION_INSTRUCTIONS = (
+    instructions.Pick,
+    instructions.PickByName,
+    instructions.Move,
+    instructions.MoveByName,
+    instructions.Release,
+    instructions.ReleaseByName,
+    instructions.PickPlace,
+)
+
+
 def abs_diff(u, v):
     return If(u - v >= 0, u - v, v - u)
 
@@ -357,8 +385,29 @@ class LowLevelContext:
 
         for idx, instruction in enumerate(pickplace_instructions):
             if not isinstance(instruction, instructions.PickPlaceByName):
-                print(f"instruction {idx} is not an PickPlaceByName")
-                continue
+                # Skipping silently used to be a soundness hole: anything that was
+                # not a PickPlaceByName was passed over with a print, including
+                # primitives that really do sweep the end effector through space.
+                if isinstance(instruction, INERT_MOTION_INSTRUCTIONS):
+                    print(
+                        f"instruction {idx} ({type(instruction).__name__}) carries no "
+                        "geometry; nothing to check"
+                    )
+                    continue
+                if isinstance(instruction, UNHANDLED_MOTION_INSTRUCTIONS):
+                    ok = False
+                    print(
+                        f"[FAIL] instruction {idx} ({type(instruction).__name__}) moves "
+                        "the end effector but has no collision encoding; refusing to "
+                        "report this body as verified"
+                    )
+                    continue
+                raise UnsupportedMotionInstruction(
+                    f"instruction {idx} is a {type(instruction).__name__}, which "
+                    "motion verification does not classify as either inert or "
+                    "motion-bearing; add it to one of the two tuples in "
+                    "lowlevel_verification_lib"
+                )
             print(f"\n=== verifying pickplace instruction {idx}: {instruction} ===")
 
             tx, ty, tz = instruction.target_box_names
