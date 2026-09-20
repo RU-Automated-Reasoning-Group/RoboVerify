@@ -10,7 +10,6 @@ from time import perf_counter
 from typing import Optional
 
 import z3
-
 from synthesis.api.instructions import Assign, PickPlaceByName, Skip
 from synthesis.verification_lib.bmc_lib import NoiseSpec, bounded_noise
 from synthesis.verification_lib.lowlevel_verification_lib import (
@@ -37,6 +36,7 @@ class MotionCounterexample:
     noise_values: dict = field(default_factory=dict)
     bindings: dict = field(default_factory=dict)
     entry_positions: dict = field(default_factory=dict)
+    initial_arm: object = None
 
 
 @dataclass(frozen=True)
@@ -464,11 +464,19 @@ def check_abstract_effects(problem):
                 atom = getattr(high, relation)(
                     high.get_consts(left), high.get_consts(right)
                 )
-                expected = problem.context.translate_exact(
-                    wp(put, atom, high), problem.constants
-                )
-                before = problem.context.translate_exact(atom, problem.constants)
-                actual = z3.substitute(before, *replacements)
+                if hasattr(problem, "effect_entry_fields"):
+                    expected = problem.at(
+                        wp(put, atom, high),
+                        fields=problem.effect_entry_fields,
+                        resolve=False,
+                    )
+                    actual = problem.at(atom, resolve=False)
+                else:
+                    expected = problem.context.translate_exact(
+                        wp(put, atom, high), problem.constants
+                    )
+                    before = problem.context.translate_exact(atom, problem.constants)
+                    actual = z3.substitute(before, *replacements)
                 violations.append(actual != expected)
             problem.check(f"effect_{relation}", z3.Or(*violations))
         if problem.contract.target != "tbl":
@@ -515,6 +523,7 @@ def verify_motion_block(
     initial_positions=None,
     entry_positions=None,
     initial_bindings=None,
+    initial_arm=None,
 ):
     start = perf_counter()
     if contract is None:
@@ -529,7 +538,15 @@ def verify_motion_block(
             noise,
         )
     context = context or LowLevelContext(default_L=0.05, use_tbl="tbl" in constants)
-    problem = MotionProblem(
+    from synthesis.api.instructions import Get, MoveByName, PickByName, ReleaseByName
+    from synthesis.verification_lib.primitive_motion import PrimitiveMotionProblem
+
+    primitive = any(
+        isinstance(i, (Get, PickByName, MoveByName, ReleaseByName)) for i in body
+    )
+    problem_type = PrimitiveMotionProblem if primitive else MotionProblem
+    options = {"initial_arm": initial_arm} if primitive else {}
+    problem = problem_type(
         context,
         initial_condition,
         constants,
@@ -540,6 +557,7 @@ def verify_motion_block(
         initial_positions,
         entry_positions,
         initial_bindings,
+        **options,
     )
     if problem.check("initial_consistency").status == "valid":
         problem.execute(body)
