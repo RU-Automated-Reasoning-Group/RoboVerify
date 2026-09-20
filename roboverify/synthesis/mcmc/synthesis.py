@@ -17,6 +17,7 @@ from synthesis.environment.cee_us_env.fpp_construction_env import (
 )
 from synthesis.environment.general_env import GymToGymnasium
 from synthesis.mcmc import cem, cost_func, decision_tree
+from synthesis.mcmc.search_core import acceptance_probability, imitation_objective
 from synthesis.util import on
 from synthesis.verification_lib.bmc_lib import (
     BMCTraceSymbols,
@@ -585,11 +586,7 @@ def MCMC(
 
         # Decide acceptance
         if changed and not equivalence:
-            log_acceptance_ratio = new_cost - current_cost
-            if log_acceptance_ratio >= 0:
-                acceptance_ratio = 1.0
-            else:
-                acceptance_ratio = math.exp(log_acceptance_ratio)
+            acceptance_ratio = acceptance_probability(new_cost - current_cost)
             print("acceptance_ratio is", acceptance_ratio)
             if random.random() < acceptance_ratio:
                 print("new program accepted")
@@ -1452,7 +1449,7 @@ class Runner:
         mmd_value = cost_func.maximum_mean_discrepancy_rbf(
             policy_states, self.expert_states
         )
-        score = -mmd_value
+        score = imitation_objective(mmd_value)
         if self.goal_feature is not None:
             goal_reward, goal_feature_report = goal_feature_reward_at_execution_end(
                 self.goal_feature,

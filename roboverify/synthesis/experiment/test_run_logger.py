@@ -134,3 +134,12 @@ class TestRunLogger(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FinalizedLoggerExceptionTests(unittest.TestCase):
+    def test_finished_context_preserves_original_exception(self):
+        with tempfile.TemporaryDirectory() as root:
+            with self.assertRaisesRegex(RuntimeError, "original failure"):
+                with RunLogger(root, "finished", {}, capture_stdout=False) as logger:
+                    logger.finish("failed")
+                    raise RuntimeError("original failure")

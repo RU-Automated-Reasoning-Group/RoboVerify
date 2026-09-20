@@ -424,6 +424,8 @@ class RunLogger:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> bool:
+        if self._finished:
+            return False
         if exc is not None:
             self.log_exception(exc)
             self.finish("failed", exit_reason=f"{type(exc).__name__}: {exc}")

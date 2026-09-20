@@ -104,12 +104,21 @@ class RunSummary:
         self.cem_sigmas: list = []
         self.cem_zero_delta = 0
         self.cegis_progress = []
+        self.cfg_progress = []
 
         for record in iter_jsonl(run_dir / "metrics.jsonl"):
             step = record.get("iter")
             if since is not None and (step is None or step < since):
                 continue
             self.rows += 1
+            if record.get("phase") == "straightline":
+                self.cfg_progress.append(
+                    {
+                        key: record.get(key)
+                        for key in ("iter", "block_id", "distance", "pool_size")
+                    }
+                )
+                self.cfg_progress = self.cfg_progress[-6:]
             if record.get("phase") in ("symbolic_initial", "symbolic", "motion"):
                 self.cegis_progress.append(
                     {
@@ -245,6 +254,20 @@ class RunSummary:
 
     def diagnostics_lines(self) -> list:
         lines = ["", "diagnostics"]
+        if self.cfg_progress:
+            lines.append(
+                f"  CFG result: {self.result.get('status','running')}  formal verification: {self.result.get('formal_verification','not established')}"
+            )
+            for row in self.cfg_progress:
+                lines.append(
+                    f"  block {row['block_id']} iter {row['iter']}: distance={fmt_number(row['distance'])} pool={row['pool_size']}"
+                )
+            for event in [e for e in self.events if e.get("kind") == "block_result"][
+                -4:
+            ]:
+                lines.append(
+                    f"  {event.get('block_id')}: PostScore={event.get('post_score')} elapsed={fmt_duration(event.get('elapsed'))} ranking={fmt_number(event.get('postscore_seconds'))}s"
+                )
         if self.cegis_progress:
             lines.append(
                 f"  CEGIS result: {self.result.get('status', 'running')}  scope: {self.result.get('proof_scope', 'not established')}"

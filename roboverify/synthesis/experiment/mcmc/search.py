@@ -34,6 +34,7 @@ import numpy as np
 from synthesis.experiment.mcmc import cem as instrumented_cem
 from synthesis.experiment.run_logger import RollingRate, RunLogger
 from synthesis.mcmc import cost_func
+from synthesis.mcmc.search_core import acceptance_probability, imitation_objective
 from synthesis.mcmc.synthesis import (
     BMC_FAILED_COST,
     DEFAULT_GOAL_FEATURE_REWARD_WEIGHT,
@@ -113,7 +114,7 @@ class InstrumentedRunner(Runner):
         mmd_value = cost_func.maximum_mean_discrepancy_rbf(
             policy_states, self.expert_states
         )
-        score = -mmd_value
+        score = imitation_objective(mmd_value)
         self.last_mmd = float(mmd_value)
         self.last_success_rate = float(np.mean(successes)) if len(successes) else None
 
@@ -437,9 +438,8 @@ def MCMC(
         accepted = False
         acceptance_ratio: Optional[float] = None
         if evaluated:
-            log_acceptance_ratio = config.beta * (new_cost - current_cost)
-            acceptance_ratio = (
-                1.0 if log_acceptance_ratio >= 0 else math.exp(log_acceptance_ratio)
+            acceptance_ratio = acceptance_probability(
+                config.beta * (new_cost - current_cost)
             )
             # The acceptance draw must stay the only extra RNG consumption in the
             # loop, and must happen here, so the chain matches the original.
