@@ -9,11 +9,16 @@ from z3 import And, Consts, ForAll, Implies, Not, Or
 import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
 from synthesis.api.instructions import PickPlaceByName
 from synthesis.api.program import Assign, Program, Put, While
+from synthesis.entry.motion_options import add_motion_options, motion_noise_from_args
 from synthesis.entry.run_rollouts import run_program_rollouts
 from synthesis.inference_lib.demo_store import DemoStore, InvInference, tower_vocabulary
 from synthesis.inference_lib.inference import (
     instantiate_invariant,
     serialize_invariant,
+)
+from synthesis.verification_lib.motion_verification import (
+    MotionCheck,
+    MotionVerificationResult,
 )
 
 
@@ -25,6 +30,8 @@ def verify_reverse_program_with_learned_invariant(
     visualize_finite_scene: bool = True,
     visualization_prefix: str = "verify_stack",
     inference_mode: str = "finite",
+    noise=None,
+    motion_timeout_ms: int = 5000,
 ):
     """Infer from recorded loop-head demonstrations and verify the reverse program."""
     # Inference is always done in the infinite-block (DeclareSort) setting.
@@ -132,14 +139,23 @@ def verify_reverse_program_with_learned_invariant(
     )
 
     hl_ok = program.highlevel_verification(precondition, postcondition, context=context)
-    # ll_ok = ll_program.lowlevel_verification()
-    print(f"hl_ok: {hl_ok}")
-    # print(f"hl_ok: {hl_ok}", f"ll_ok: {ll_ok}")
-    # return bool(hl_ok and ll_ok)
+    ll_ok = MotionVerificationResult(
+        [
+            MotionCheck(
+                "coverage",
+                "unsupported",
+                reason="No lowered physical program for this task",
+            )
+        ],
+        noise,
+    )
+    print(f"hl_ok: {hl_ok}", f"ll_ok: {ll_ok}")
+    return bool(hl_ok and ll_ok)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    add_motion_options(parser)
     parser.add_argument(
         "--demo-store",
         required=True,
@@ -174,8 +190,11 @@ if __name__ == "__main__":
         help="Output prefix for generated finite-mode scene images.",
     )
     args = parser.parse_args()
+    noise = motion_noise_from_args(parser, args)
 
     verify_reverse_program_with_learned_invariant(
+        noise=noise,
+        motion_timeout_ms=args.motion_timeout_ms,
         demo_store=DemoStore.load(args.demo_store),
         loop_id=args.loop_id,
         verification_mode=args.verification_mode,

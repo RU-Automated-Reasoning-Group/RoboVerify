@@ -33,7 +33,8 @@ can run from the initial facts) and ``P ∧ ¬goal@T`` is **UNSAT** — i.e.
 step). This matches ``Implies(P, goal)`` / no counterexample, not
 ``SAT(P ∧ goal)``.
 
-Noise is opt-in: ``noise=None`` keeps deterministic nominal transitions. A
+Noise is opt-in: ``noise=None`` omits actuator perturbations. Nominal transitions
+are deterministic except for conservative disturbance of supported blocks. A
 ``NoiseSpec`` adds independent bounded grasp, move and release errors. Verify
 checks all such errors by looking for a counterexample; solve/feasible remain
 existential and do not synthesize parameters robust to every noise choice.
@@ -88,7 +89,7 @@ from synthesis.api.instructions import (
     ReleaseByName,
     Seq,
 )
-from synthesis.util.on import z3_on
+from synthesis.util.on import BLOCK_LENGTH, z3_on
 
 ProgramPart = Union[Instruction, Seq]
 ProgramInput = Union[Sequence[ProgramPart], ProgramPart]
@@ -487,7 +488,26 @@ def _encode_move(
                     sym.by[bj][t + 1] == by,
                     sym.bz[bj][t + 1] == bz,
                 ),
-                _frame_block(sym, bj, t),
+                z3.Or(
+                    # Moving a support may disturb every block above it. We have
+                    # no sound falling/rigid-stack model, so these positions are
+                    # unconstrained rather than falsely frozen in mid-air.
+                    z3.Or(
+                        *(
+                            z3.And(
+                                sym.holding[t] == sym.block_consts[lower],
+                                z3.Abs(sym.bx[bj][t] - sym.bx[lower][t])
+                                < z3.RealVal(str(BLOCK_LENGTH / 2)),
+                                z3.Abs(sym.by[bj][t] - sym.by[lower][t])
+                                < z3.RealVal(str(BLOCK_LENGTH / 2)),
+                                sym.bz[bj][t] > sym.bz[lower][t],
+                            )
+                            for lower in sym.block_names
+                            if lower != bj
+                        )
+                    ),
+                    _frame_block(sym, bj, t),
+                ),
             )
         )
     moved.append(sym.holding[t + 1] == sym.holding[t])
@@ -867,14 +887,14 @@ def bmc_verify(
 ) -> BMCVerificationResult:
     """
     Returns a bool-compatible :class:`BMCVerificationResult` with mode, status,
-    and a counterexample when refuted. **Verify** mode: offsets are fixed to concrete ``Parameter.val``
-    (raises if any required offset is still ``None``).
+    and a counterexample when refuted. Offsets are fixed to concrete
+    ``Parameter.val`` (raises if any required offset is still ``None``).
 
     Let ``P`` be initial ∧ extra ∧ transitions (and optional ``¬goal@0``). Return
-    ``True`` iff ``P`` is satisfiable and ``P ∧ ¬goal@T`` is **UNSAT** — every
+    a truthy result iff ``P`` is satisfiable and ``P ∧ ¬goal@T`` is **UNSAT** — every
     run allowed by ``P`` satisfies the goal at the final time (equivalently
     ``Implies(P, goal@T)`` in the SMT sense). If ``P`` is UNSAT, returns
-    ``False`` (program not executable from the given initials).
+    a falsy ``infeasible`` result (program not executable from these initials).
     """
     sym, s, r_body, r_neg = _bmc_build_and_check_verify(
         program,

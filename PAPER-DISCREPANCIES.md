@@ -114,3 +114,54 @@ adapter. Real-trace Stack inference completes, but the sampled program fails
 verification; observing states and learning a candidate must remain distinct
 from proving inductiveness or task success. Fresh experiments are needed for
 paper claims involving the complete pipeline.
+
+
+---
+
+## 4. Motion proofs depend on a waypoint abstraction, not physical controller dynamics
+
+**Status:** Phase D now checks contract realization and frame preservation in the
+explicit geometric model. Full physical-controller refinement remains unproved.
+
+`PickPlaceByName.eval` drives a feedback controller, while
+`motion_verification.py` executes idealized waypoints with optional bounded errors.
+There is no settling or grasp-failure model. In particular, the existing Stack
+body releases at `1.5 * BLOCK_LENGTH`, which is outside the strict direct-on band
+at the waypoint endpoint; the new contract query refutes it rather than assuming
+that it settles onto the target.
+
+Separately, `_encode_release` in `bmc_lib.py` changes end-effector z but freezes
+nominal block positions, although the physical Release controller lowers a held
+block. D1 intentionally preserves this legacy default. The new noise mode perturbs
+that nominal held-block position; it does not repair the nominal controller model.
+BMC results certify a goal in their encoding, not collision freedom. The separate
+motion verifier checks block-block sweeps; neither certifies arm or table-plane
+collision freedom. Hardware-wide claims need an explicit refinement argument and
+additional geometry/dynamics, not just a bounded-noise flag.
+
+The earlier BMC frame rule also froze blocks resting on a moved support. D2 removes
+that assumption by allowing arbitrary disturbance; MotionVerify refuses to certify
+support manipulation without a dynamics model. This deliberately changes the Move
+encoding even with noise off. An old regression claiming an ungrasped block could
+never move now explicitly excludes contact with the carried support.
+
+## 5. The geometric translator conflated initial and current ON_star
+
+**Status:** fixed in Phase D. The old `_translate_expr` mapped both `ON_star` and
+`ON_star_zero` to the current coordinates. That could strengthen or contradict a
+Reverse invariant that compares two different configurations. The translator now
+uses separate frozen `X0/Y0/Z0` functions for `ON_star_zero`, with a regression in
+which an initial on-relation holds and the current one does not. This follows the
+already-settled initial-state semantics; it introduces no global link axiom.
+
+## 6. The planned swept-AABB fallback is conservative, not equivalent
+
+**Status:** plan correction; no fallback was needed in the Phase D spike.
+
+`encode_collision` uses one shared segment parameter across all axes. A per-axis
+endpoint bounding box can contain points that are never close to the segment at
+any single parameter value (notably on diagonal paths). Replacing the swept-cube
+query with this bounding box can safely overapproximate collisions, but can also
+introduce spurious counterexamples. The exact bilinear query is retained. This is
+a limitation of the plan's proposed fallback, not a reason to silently change the
+collision predicate or report a bounding-box result as exact.

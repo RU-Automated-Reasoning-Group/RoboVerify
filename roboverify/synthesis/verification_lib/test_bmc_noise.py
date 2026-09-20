@@ -78,10 +78,34 @@ class BMCNoise(unittest.TestCase):
         actual = bmc._encode_move(
             sym, 1, 0, 0, 0, z3.RealVal(0), z3.RealVal(0), z3.RealVal(".05")
         )
-        self.assertTrue(move.eq(actual))
+        # D2 deliberately fixes the supported-block frame bug. On the original
+        # flat, unsupported scene the nominal transition is still equivalent.
+        solver = z3.Solver()
+        solver.add(sym.bz["0"][1] == sym.bz["1"][1], z3.Xor(move, actual))
+        self.assertEqual(solver.check(), z3.unsat)
         result = self.verify()
         self.assertTrue(result)
         self.assertEqual(result.mode, "noiseless")
+
+    def test_moving_a_support_does_not_freeze_the_upper_block(self):
+        sym = bmc.build_trace_symbols(("0", "1"), 1)
+        solver = z3.Solver()
+        solver.add(
+            sym.holding[0] == sym.block_consts["0"],
+            sym.bx["0"][0] == 0,
+            sym.by["0"][0] == 0,
+            sym.bz["0"][0] == 0,
+            sym.bx["1"][0] == 0,
+            sym.by["1"][0] == 0,
+            sym.bz["1"][0] == 0.05,
+        )
+        solver.add(
+            bmc._encode_move(
+                sym, 0, 0, 0, 0, z3.RealVal(1), z3.RealVal(0), z3.RealVal(0)
+            )
+        )
+        solver.add(sym.bx["1"][1] != sym.bx["1"][0])
+        self.assertEqual(solver.check(), z3.sat)
 
     def test_verify_fails_when_eps_exceeds_on_tolerance(self):
         for spec in (

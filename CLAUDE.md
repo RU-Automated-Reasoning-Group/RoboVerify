@@ -48,7 +48,7 @@ under `synthesis/entry/` are not meant to be run as bare scripts):
 uv run python -m synthesis.entry.collect_stack_loop_traces --output /tmp/stack-loop-traces.json
 uv run python -m synthesis.entry.verify_stack_with_learned_invariant --demo-store /tmp/stack-loop-traces.json
 uv run python -m synthesis.entry.verify_stack_with_learned_invariant --demo-store /tmp/stack-loop-traces.json --verification-mode finite --num-blocks 4
-uv run python -m synthesis.entry.verify_unstack_with_learned_invariant --demo-store /path/to/unstack-loop-traces.json
+uv run python -m synthesis.entry.verify_unstack_with_learned_invariant --demo-store /path/to/unstack-loop-traces.json --table-surface-height 0.4
 uv run python -m synthesis.entry.verify_reverse_with_learned_invariant --demo-store /path/to/reverse-loop-traces.json
 uv run python -m synthesis.entry.verify_partial_with_learned_invariant --demo-store /path/to/partial-loop-traces.json
 uv run python -m synthesis.entry.verify_2d_with_learned_invariant
@@ -113,6 +113,12 @@ bash format.sh
     (`BMCTraceSymbols`, `encode_step`), then `bmc_feasible`/`bmc_solve`/`bmc_verify` check
     reachability, solve for unknown offsets, or verify a fully-instantiated low-level program
     against a goal.
+  - `motion_verification.py`: explicit placement contracts, frame preservation, and
+    swept-cube checks for lowered loop bodies. Results retain proof mode, failed
+    obligations, counterexamples, and timings. `NoiseSpec` is opt-in, off by default;
+    all tower verification CLIs accept `--motion-noise GRASP MOVE RELEASE`.
+    Missing physical programs (Reverse/Partial) and uncovered instructions fail closed.
+    See [motion verification semantics](roboverify/synthesis/verification_lib/README.md).
   - `lowlevel_verification_lib.py`: geometric low-level context, box-corner/cube drawing
     helpers used to visualize/verify concrete 3D placements.
 

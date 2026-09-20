@@ -31,7 +31,7 @@
 > - [x] **A.7** `PAPER-DISCREPANCIES.md` created and seeded with the Theorem 5.2 /
 >       Table 7 contradiction and the segment-reset omission. Commit `c2f0744`.
 >
-> **Phases A–C are complete. Phase D is in progress.**
+> **Phases A–D are complete. Phase E is next.**
 > Phases A–C are included in `main`.
 > Validation is recorded below; Unstack is subject to a 60-second wall-clock cap.
 >
@@ -69,10 +69,25 @@
 >       counterexample). This uses a newly learned invariant from actual execution,
 >       not the old literal dataset; do not present it as a verified Stack program.
 >       Unstack was not rerun for Phase C and retains the one-minute cap below.
-> - [x] Phase D1 API: opt-in bounded noise and explicit BMC result mode; all 15
->       BMC tests pass, including exact no-noise transition comparison. CLI flags
->       will be connected with the motion verifier in D2.
-> - [ ] Phase D2: placement contracts, frame preservation, counterexamples, and timing.
+> - [x] Phase D1 (`b4bb3c8`): opt-in bounded grasp/move/release noise, explicit
+>       BMC verdict mode and counterexamples. Noise remains off by default.
+> - [x] Phase D2: explicit placement and frame contracts, updated-state swept
+>       collision checks, structured counterexamples, bounded solver queries, and
+>       tower CLI flags. Supported blocks are no longer assumed frozen. Frozen
+>       `ON_star_zero` geometry is distinct from the current loop-head geometry.
+> - [x] All **81 unittest tests pass**, including MCMC parity, contract success and
+>       refutation, support disturbance, noise bounds, and unknown/inconsistent
+>       handling. The legacy untouched-block BMC test now explicitly excludes
+>       support contact, as required by D2's intentional frame correction.
+> - [x] Phase D noisy Stack end-to-end smoke completes: `hl_ok: False`,
+>       `ll_ok: False`, with `collision_0_sym` and `contract` refutations. Reverse
+>       and Partial explicitly report unsupported motion checking (no lowered
+>       physical programs). Unstack was not rerun; its one-minute cap still applies.
+> - [x] Phase E timing gate recorded: exact noisy collision query **0.0032 s**;
+>       full MotionVerify **0.122 s noiseless / 0.107 s noisy**, 34/38 checks on the
+>       concrete existing Stack body. Both refute its release endpoint contract.
+>       The exact swept-cube encoding is retained; no AABB fallback was needed.
+>       These are fixture timings, not a universal bound or hardware proof.
 > - [ ] Phases E–F: not started.
 >
 > **Pre-existing failure, not a regression.**
@@ -533,6 +548,47 @@ re-synthesizes a block per counterexample, which assumes `MotionVerify` is cheap
 of `CEx` and re-synthesize once — and that is a structural change, so make it before the
 loop is built rather than after. Record the number; it sets the iteration budget Phase E can
 afford.
+
+**Completed implementation and scope refinements:**
+- `NoiseSpec` is accepted by all BMC APIs; `bmc_verify` now returns a
+  bool-compatible result with `status`, `mode`, model, and trace symbols. Solve
+  mode remains existential, including noise, and is not robust synthesis.
+- Tower CLI flags: `--motion-noise GRASP MOVE RELEASE` (metres, omitted by default)
+  and `--motion-timeout-ms`. Unstack also requires the physical
+  `--table-surface-height`; relational `tbl` still has no coordinates.
+- `Program.lowlevel_verification` takes explicit per-loop `MotionContract`s and
+  returns per-obligation results. Unknown, inconsistent premises, missing
+  contracts, missing lowered programs, and uncovered motion all fail closed.
+- **Frame clarification:** preserve the original tower's *other* objects, excluding
+  the declared manipulated source and its aliases. Otherwise every legitimate
+  Unstack step would violate its own frame condition simply by moving its source.
+  Unknown support dynamics is overapproximated by unconstrained displaced
+  positions and rejected by a separate support obligation.
+- **Default-encoding clarification:** D1 preserved all three legacy transitions
+  exactly. D2 deliberately weakens Move's frame assumption for supported objects;
+  exact backward identity there would retain the bug this phase must fix. The
+  regression checks exact Pick/Release formulas and equivalent Move formulas on
+  unsupported scenes, plus a displaced-support counterexample.
+- **Remaining abstraction limits:** BMC goal checking retains the old nominal
+  Release convention (block positions frozen while EE z changes). MotionVerify
+  uses idealized waypoints and no settling model; its collision obligations cover
+  blocks, not arm or physical table-plane geometry. Do not describe either as
+  verification of all physical controller executions. These limits, the old
+  `ON_star_zero` translation defect, and the non-equivalence of the proposed AABB
+  fallback are recorded in `PAPER-DISCREPANCIES.md`.
+- Reproduce the timing gate with
+  `uv run python -m synthesis.entry.benchmark_motion_verification` from
+  `roboverify/`. Final measured exact bilinear spike: SAT in 0.0032 s with
+  `eta` bounded by 0.005 m. Full body: 0.122 s noiseless, 0.107 s with all three
+  bounds 0.005 m. The existing release offset of `1.5 * L` fails the strict
+  direct-on band; no example offsets were retuned to make validation pass.
+- **Phase E budget implication:** this fixture does not require batching to make
+  motion checking affordable; begin with per-counterexample refinement and retain
+  elapsed-time reporting. Generalized conditions can still time out, so `unknown`
+  must not trigger refinement as if it were a concrete counterexample. Measure
+  real synthesis/verification ratios before selecting longer-run budgets.
+- API usage and assumptions: `roboverify/synthesis/verification_lib/README.md`.
+  Full suite: 81 tests pass. Required formatter completed; unrelated edits restored.
 
 ---
 

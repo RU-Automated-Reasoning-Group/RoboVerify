@@ -1181,62 +1181,64 @@ class Program:
         default_block_length: float = 0.05,
         constants: Union[List[str], None] = None,
         use_tbl: Union[bool, None] = None,
+        *,
+        contracts=None,
+        noise=None,
+        timeout_ms=5000,
     ):
-        """Motion-level checks.
+        """Check loop motion contracts; unsupported coverage cannot pass.
 
-        ``use_tbl`` says whether the Box sort has a table element, which decides
-        whether the low-level relations isolate it the way the high-level ``tbl``
-        axioms do. Left as ``None`` it is read off ``constants``, so a task that
-        names the table cannot end up checking it as though it were an ordinary
-        block.
+        ``contracts`` maps instruction-path loop IDs to explicit MotionContracts.
+        Result truthiness preserves existing callers while exposing every failed
+        obligation, counterexample, and the selected noise mode.
         """
-        if use_tbl is None:
-            use_tbl = constants is not None and (
-                lowlevel_verification_lib.TABLE_CONST_NAME in constants
-            )
-        solver = (
-            context
-            if context is not None
-            else lowlevel_verification_lib.LowLevelContext(
-                sort_name=sort_name,
-                default_L=default_block_length,
-                use_tbl=use_tbl,
-            )
+        from synthesis.verification_lib.motion_verification import (
+            MotionCheck,
+            MotionVerificationResult,
         )
-        ok = True
-        checked_loops = 0
-        for idx, inst in enumerate(self.instructions):
-            if isinstance(inst, While):
-                checked_loops += 1
-                print(
-                    f"starting low-level verification for while loop with index {idx}"
-                )
-                print(f"invariant: {inst.invariant}")
-                print(f"body: {inst.body}")
-                print(f"instantiated_cond: {inst.instantiated_cond}")
-                loop_ok = solver.start_verification(
-                    self._invariant_condition_exprs(inst.invariant)
-                    + [inst.instantiated_cond],
-                    inst.body,
+
+        constants = constants or []
+        contracts = contracts or {}
+        if use_tbl is None:
+            use_tbl = lowlevel_verification_lib.TABLE_CONST_NAME in constants
+        solver = context or lowlevel_verification_lib.LowLevelContext(
+            sort_name=sort_name,
+            default_L=default_block_length,
+            use_tbl=use_tbl,
+        )
+        result = MotionVerificationResult([], noise)
+        for index, instruction in enumerate(self.instructions):
+            if isinstance(instruction, While):
+                loop_result = solver.start_verification(
+                    self._invariant_condition_exprs(instruction.invariant)
+                    + [instruction.instantiated_cond],
+                    instruction.body,
                     constants=constants,
+                    contract=contracts.get(str(index)),
+                    noise=noise,
+                    block_v=str(index),
+                    timeout_ms=timeout_ms,
                 )
-                if not loop_ok:
-                    ok = False
-                    print(f"[FAIL] low-level verification failed for while index {idx}")
-        if checked_loops == 0:
-            # Returning True here meant "verified" and "nothing was examined" were
-            # the same answer: this function only ever inspects While nodes, so a
-            # straight-line program passed without a single obligation being
-            # checked. Per-block coverage for non-loop code needs each block's
-            # entry condition as a geometric context, which arrives with the CFG
-            # work; until then this at least refuses to claim a verdict it has not
-            # earned.
-            print(
-                "[FAIL] low-level verification examined no while loops, so nothing "
-                "was checked; not reporting this program as verified"
+                result.checks.extend(loop_result.checks)
+                result.checked_blocks += loop_result.checked_blocks
+                result.elapsed_seconds += loop_result.elapsed_seconds
+            elif not isinstance(
+                instruction, lowlevel_verification_lib.INERT_MOTION_INSTRUCTIONS
+            ):
+                result.checks.append(
+                    MotionCheck(
+                        f"instruction_{index}",
+                        "unsupported",
+                        reason="Straight-line motion requires its own entry condition",
+                    )
+                )
+        if result.checked_blocks == 0:
+            result.checks.append(
+                MotionCheck(
+                    "coverage", "unsupported", reason="No motion blocks checked"
+                )
             )
-            return False
-        return ok
+        return result
 
 
 _PICK_MOVE_RELEASE = (Pick, Move, Release)

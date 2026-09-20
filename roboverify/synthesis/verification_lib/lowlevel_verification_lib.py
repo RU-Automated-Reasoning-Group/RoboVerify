@@ -167,6 +167,10 @@ class LowLevelContext:
         self.X = Function("X", self.BoxSort, RealSort())
         self.Y = Function("Y", self.BoxSort, RealSort())
         self.Z = Function("Z", self.BoxSort, RealSort())
+        # Frozen loop-entry geometry is independent of the current loop head.
+        self.X0 = Function("X0", self.BoxSort, RealSort())
+        self.Y0 = Function("Y0", self.BoxSort, RealSort())
+        self.Z0 = Function("Z0", self.BoxSort, RealSort())
         (self.L,) = Reals("L")
 
     def lowlevel_box_equal(self, b1, b2):
@@ -245,6 +249,18 @@ class LowLevelContext:
             reflexive=True,
         )
 
+    def lowlevel_on_star_zero(self, b1, b2):
+        return self._isolate_table(
+            And(
+                Abs(self.X0(b1) - self.X0(b2)) < self.L / 2,
+                Abs(self.Y0(b1) - self.Y0(b2)) < self.L / 2,
+                self.Z0(b1) >= self.Z0(b2),
+            ),
+            b1,
+            b2,
+            reflexive=True,
+        )
+
     def lowlevel_on_direct(self, b1, b2):
         """Geometric reading of *direct* ``on``, mirroring :func:`on.z3_on`.
 
@@ -315,18 +331,22 @@ class LowLevelContext:
 
         p0, p1 are (x, y, z) triples of Z3 Real expressions.
         """
+        return self.encode_collision_at((self.X(a), self.Y(a), self.Z(a)), p0, p1)
+
+    def encode_collision_at(self, position, p0, p1):
+        """The same swept-cube predicate for a block in a later symbolic state."""
         x0, y0, z0 = p0
         x1, y1, z1 = p1
-        t = Real("t")
+        t = FreshConst(RealSort(), prefix="tube_t")
         cx = (1 - t) * x0 + t * x1
         cy = (1 - t) * y0 + t * y1
         cz = (1 - t) * z0 + t * z1
         return And(
             t >= 0,
             t <= 1,
-            Abs(self.X(a) - cx) < self.L,
-            Abs(self.Y(a) - cy) < self.L,
-            Abs(self.Z(a) - cz) < self.L,
+            Abs(position[0] - cx) < self.L,
+            Abs(position[1] - cy) < self.L,
+            Abs(position[2] - cz) < self.L,
         )
 
     def check_solver(
@@ -400,7 +420,7 @@ class LowLevelContext:
                         row.append(cell.ljust(width))
                     print("".join(row))
 
-            # `ON_star`/`ON_star_zero` are translated to `lowlevel_on_star`.
+            # Display current relations; ON_star_zero has separate frozen coordinates.
             print_table(
                 "Relation: ON_star (lowlevel_on_star)  [row ON col]",
                 self.lowlevel_on_star,
@@ -496,117 +516,29 @@ class LowLevelContext:
         return ax
 
     def start_verification(
-        self, initial_condition: List, pickplace_instructions: List, constants: List
-    ) -> bool:
-        s = Solver()
-        s.set(unsat_core=True)
-        # Default block side length.
-        s.add(self.L == RealVal(str(self.default_L)))
-        const_map = self.translate_condition(s, constants, initial_condition)
-        blocks = list(const_map.values())
-        sym = self.get_consts("sym")
-        if self.use_tbl:
-            # `sym` is our own symbol for "some other block the tube might hit",
-            # so saying it is a block is a definition, not an assumption about
-            # the program. Without it the solver may take sym to be the table,
-            # for which the conditions -- which all carry `!= tbl` guards -- say
-            # nothing at all.
-            s.add(sym != self.table_const())
+        self,
+        initial_condition: List,
+        pickplace_instructions: List,
+        constants: List,
+        *,
+        contract=None,
+        noise=None,
+        block_v="0",
+        timeout_ms=5000,
+    ):
+        """Check the explicitly declared block contract, frame, and swept geometry."""
+        from synthesis.verification_lib.motion_verification import verify_motion_block
 
-        print("checking condition satisfiability")
-        ok = True
-        cond_result = self.check_solver(s, blocks, extra_blocks=[(sym, "black", "sym")])
-        if cond_result != sat:
-            ok = False
-            print(
-                f"[FAIL] low-level axioms/initial-condition consistency returned {cond_result}; expected sat"
-            )
-
-        grab_const = None
-        handled_block_id = None
-        current_pos = None
-
-        for idx, instruction in enumerate(pickplace_instructions):
-            if not isinstance(instruction, instructions.PickPlaceByName):
-                # Skipping silently used to be a soundness hole: anything that was
-                # not a PickPlaceByName was passed over with a print, including
-                # primitives that really do sweep the end effector through space.
-                if isinstance(instruction, INERT_MOTION_INSTRUCTIONS):
-                    print(
-                        f"instruction {idx} ({type(instruction).__name__}) carries no "
-                        "geometry; nothing to check"
-                    )
-                    continue
-                if isinstance(instruction, UNHANDLED_MOTION_INSTRUCTIONS):
-                    ok = False
-                    print(
-                        f"[FAIL] instruction {idx} ({type(instruction).__name__}) moves "
-                        "the end effector but has no collision encoding; refusing to "
-                        "report this body as verified"
-                    )
-                    continue
-                raise UnsupportedMotionInstruction(
-                    f"instruction {idx} is a {type(instruction).__name__}, which "
-                    "motion verification does not classify as either inert or "
-                    "motion-bearing; add it to one of the two tuples in "
-                    "lowlevel_verification_lib"
-                )
-            print(f"\n=== verifying pickplace instruction {idx}: {instruction} ===")
-
-            tx, ty, tz = instruction.target_box_names
-            ll_target_x = const_map[str(tx)]
-            ll_target_y = const_map[str(ty)]
-            ll_target_z = const_map[str(tz)]
-
-            if idx == 0:
-                handled_block_id = instruction.grab_box_name
-                grab_key = instruction.grab_box_name
-                grab_const = const_map[str(grab_key)]
-                current_pos = (
-                    self.X(grab_const),
-                    self.Y(grab_const),
-                    self.Z(grab_const),
-                )
-            else:
-                assert instruction.grab_box_name == handled_block_id, (
-                    f"Expected same block {handled_block_id}, "
-                    f"got {instruction.grab_box_name}"
-                )
-
-            end_pos = (
-                self.X(ll_target_x)
-                + RealVal(instruction.target_offset[0].concrete_float("tube x offset")),
-                self.Y(ll_target_y)
-                + RealVal(instruction.target_offset[1].concrete_float("tube y offset")),
-                self.Z(ll_target_z)
-                + RealVal(instruction.target_offset[2].concrete_float("tube z offset")),
-            )
-
-            print(f"  checking tube_{idx}")
-            s.push()
-            s.assert_and_track(
-                self.encode_collision(sym, current_pos, end_pos),
-                f"tube_{idx}",
-            )
-            s.assert_and_track(
-                Not(self.lowlevel_box_equal(sym, grab_const)),
-                f"sym_neq_grab_{idx}",
-            )
-            tube_result = self.check_solver(
-                s,
-                blocks,
-                encoded_tube=(current_pos, end_pos, f"tube_{idx}"),
-                extra_blocks=[(sym, "black", "sym")],
-            )
-            if tube_result != unsat:
-                ok = False
-                print(
-                    f"[FAIL] tube_{idx} satisfiability returned {tube_result}; expected unsat (tube should be false)"
-                )
-            s.pop()
-
-            current_pos = end_pos
-        return ok
+        return verify_motion_block(
+            initial_condition,
+            pickplace_instructions,
+            constants,
+            contract,
+            context=self,
+            noise=noise,
+            block_v=block_v,
+            timeout_ms=timeout_ms,
+        )
 
     def _fresh_skolem_const(self):
         """A Box constant no other term uses, for witnessing an existential."""
@@ -639,7 +571,8 @@ class LowLevelContext:
     ):
         """Recursively translate a high-level z3 expression to low-level.
 
-        ON_star / ON_star_zero -> lowlevel_on_star, Higher -> lowlevel_higher,
+        ON_star -> current geometry, ON_star_zero -> frozen entry geometry,
+        Higher -> lowlevel_higher,
         Scattered -> lowlevel_scattered. Boolean structure is preserved.
 
         The result is *asserted* as an assumption, so it has to be implied by the
@@ -718,8 +651,10 @@ class LowLevelContext:
                     )
                     for c in expr.children()
                 ]
-                if name in ("ON_star", "ON_star_zero"):
+                if name == "ON_star":
                     return self.lowlevel_on_star(children[0], children[1])
+                if name == "ON_star_zero":
+                    return self.lowlevel_on_star_zero(children[0], children[1])
                 if name == "Higher":
                     return self.lowlevel_higher(children[0], children[1])
                 if name == "Scattered":
