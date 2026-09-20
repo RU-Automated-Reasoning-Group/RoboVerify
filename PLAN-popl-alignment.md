@@ -115,8 +115,40 @@
 > - [x] F0 snapshot/replay implementation: GT state plus control/mocap/warm-start
 >       arrays and bindings; reset/replay and next-action checks pass at three
 >       recorded segment starts, including held-object motion. Replay stays default.
-> - [ ] Phase F in progress: F3a predicate terms first, followed by F1/F2/F3b/F4,
->       F0/F5, F6, and the flat F7 quotient. No Phase F completion claimed yet.
+> - [x] F3b/F4 implementation: bounded classifier/guard search; exact separators;
+>       all transition witnesses; CFG-execution negatives; atomic refinement with
+>       absolute partitions and scoped Get witnesses. Legacy datasets retained.
+> - [x] F5/F6 implementation: cached KL/MMD distances, shared acceptance/objective,
+>       annealed search, epsilon pool/PostScore, recursive driver and instrumented CLI.
+>       Small real Unstack run refines once, then exhausts its budget in 15 seconds.
+> - [x] F7 flat implementation: get-bound-aware anti-unification, partial inverse
+>       carry/rebind inference, length-2 matching, extracted body demos, unique
+>       guards, inferred invariants, and observed iteration bounds. The historical
+>       Unstack guard spike derives `b ← b_prime`; physical operands generalize to
+>       names without inventing relational summaries. Ambiguous learned guards
+>       fail at runtime and receive a `guard_unique` VC under the invariant;
+>       extracted iterations share frozen entry geometry.
+> - [x] **131 unittest tests pass** (101 previous + 30 new), **25.686 s**. This
+>       includes simulator reset/replay, MCMC parity, all earlier verification
+>       regressions, refinement, and flat folding. Changed Python files formatted.
+> - [x] Final bounded Unstack smoke with `--quotient`: **14 s**, one successful
+>       refinement, then `budget_exhausted`; formal verification **not run**.
+>       Report: `runs/phase-f/cfg/20260920-044337-f261887-integrated-flat-smoke`.
+>       A second six-slot/six-iteration run with a one-second classifier budget
+>       stopped cleanly after **9 s**, exhausting classifier search before a split:
+>       `runs/phase-f/cfg/20260920-045041-1f052b7-deeper-refinement`.
+>       The final scope-filter adjustment passed all three focused refinement tests.
+> - [x] Concurrent-session reconciliation: reviewed its five incremental commits
+>       (`a2ef331` through `f261887`), retained valid Phase F code/formatter changes,
+>       corrected status terminology, and validated the combined implementation.
+>       `main` remains at `4c6db67`; unrelated untracked user files are untouched.
+> - [ ] **Phase F acceptance remains open:** the real Unstack pipeline has not
+>       recovered the complete loop. Its historical demo reaches the postcondition
+>       transiently but fails it at termination (discrepancy 10). Reconcile that
+>       demonstration/task mismatch before claiming recovery. Symbolic summaries
+>       and the automatic Phase E `NeedsResynthesis` handoff remain unwired for
+>       arbitrary physical candidates; such candidates cannot be verified by
+>       substituting Skip summaries. Nested/starred quotient remains out of scope.
 >
 > **Pre-existing failure, not a regression.**
 > `verify_stack_with_learned_invariant` reports two high-level VC failures
@@ -976,6 +1008,23 @@ or `test_mcmc_parity.py` breaks. First extract the shared decision points —
 `acceptance_probability(delta, T)`, `CandidatePool`, the objective — into `synthesis/mcmc/`,
 have both copies call them, and re-pin parity at the shared-helper level. Each new behavior
 lands as an optional argument defaulting to current behavior.
+
+**Phase F measured gate (2026-09-20 UTC).**
+`uv run python -m synthesis.entry.benchmark_straightline` used a deterministic
+real two-block Pick demonstration. One objective evaluation took **0.244 s**;
+StraightLineSynthesize with PostScore took **0.731 s**, of which **0.240 s** was
+ranking. Keep the pool capped at 10 and rank only on imitation convergence. This
+uses a trivial postcondition to isolate ranking overhead, not a task-success claim.
+The old enumerator spike, with its missing return and broken quantifier accounting
+fixed first, consumed **3.053 s** under a 100,000-candidate/15-second bound and
+returned no separator on the retained Unstack corpus. New search reports bounds
+explicitly and preserves all three historical datasets.
+
+**Implementation choices:** KDE uses cached demo normalization and Gaussian
+kernels so short/singular segment distributions remain evaluable; its distance
+scale is not an old MMD threshold. In addition to the paper's filter-then-rank rule,
+the implementation requires PostScore 1 on the demo seeds before returning block
+success. This is still a candidate, not a final-state or generalization proof.
 
 ### F6 — Algorithm 2 driver and a real entry point (medium)
 

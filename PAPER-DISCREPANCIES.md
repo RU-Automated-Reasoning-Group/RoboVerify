@@ -206,3 +206,43 @@ solves for non-overlapping coordinates that preserve **all four** relation table
 including separate frozen `ON_star_zero`, preserves aliases and the table marker,
 and checks the numeric round trip. Inconsistent or timed-out concretization is
 reported explicitly; an altered model is never silently fed to inference.
+
+
+## 9. Executable Get needs a witness-existence obligation
+
+**Phase F implementation decision.** The plan describes Get as havoc followed by
+assume. That partial-correctness encoding validates a Get with an unsatisfiable
+condition vacuously, whereas `api/instructions.py:Get.eval` raises when there is no
+witness. `api/program.py:wp` therefore requires both existence and correctness for
+all permitted choices: `Exists(x, G) ∧ ForAll(x, G ⇒ Q)`. Tests reject an empty Get.
+The paper should distinguish a blocking assume from successful executable binding.
+
+## 10. The historical Unstack oracle does not establish its final task condition
+
+**Observed in Phase F; not silently repaired.** The program preserved from the old
+`entry/main.py` now lives in `cfg/demo_sources.py:unstack_oracle`. Its body moves the
+chosen top block onto the current block, then advances the current-block binding.
+This differs from the `Put(b_prime, tbl)` verification fixture. On the seed-0,
+three-block Unstack smoke, the demonstration satisfies the initial tower condition
+and reaches the all-unstacked relational predicate transiently, but fails it at
+termination. The bounded report records `pre_holds=1`, `post_reached=1`, and
+`post_at_end=0` for one demonstration.
+
+Algorithm 5's reach-any-state PostScore is retained, but it cannot substitute for
+final-state verification. The pipeline must not label imitation of this oracle a
+verified Unstack solution. Reconcile the intended demo source and task before
+claiming complete Unstack recovery. Report:
+`roboverify/runs/phase-f/cfg/20260920-044337-f261887-integrated-flat-smoke`.
+
+## 11. Learned guard uniqueness is distinct from first-witness execution
+
+**Phase F boundary.** The historical runtime chooses the first satisfying block ID.
+`predicates/guard.py` now rejects any candidate that admits an alternative witness
+on a recorded positive scene, and all witnesses at recorded exits must fail.
+Those finite checks do not prove uniqueness on arbitrary unseen scenes. Loops
+introduced by `cfg/quotient.py` therefore carry a runtime uniqueness requirement;
+`api/guard_eval.py` raises before modifying bindings if several witnesses satisfy
+it. Legacy hand-written loops retain their existing first-witness behavior. Symbolic
+verification includes a separate `guard_unique` obligation under the learned
+invariant; its failure requests resynthesis. Uniqueness is never inferred from a
+separator fitting the demonstrations alone.

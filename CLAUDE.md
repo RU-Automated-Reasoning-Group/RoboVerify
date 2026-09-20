@@ -52,7 +52,7 @@ uv run python -m synthesis.entry.verify_unstack_with_learned_invariant --demo-st
 uv run python -m synthesis.entry.verify_reverse_with_learned_invariant --demo-store /path/to/reverse-loop-traces.json
 uv run python -m synthesis.entry.verify_partial_with_learned_invariant --demo-store /path/to/partial-loop-traces.json
 uv run python -m synthesis.entry.verify_2d_with_learned_invariant
-uv run python -m synthesis.entry.main   # big ad hoc experiment/demo-collection script
+uv run python -m synthesis.entry.synthesize_cfg --smoke   # relational CFG synthesis driver
 ```
 
 Run an *instrumented* MCMC search, which writes a monitorable run directory (see
@@ -153,9 +153,14 @@ bash format.sh
     (`check_bmc_candidate`/`score_candidate_program`), and drives the outer `MCMC(...)` search
     loop. Also has the `make_roboverify_*_env` factories (stack/unstack/reverse/partial/grid/
     pyramid) and video/frame saving utilities.
-  - `decision_tree.py`: learns a single discriminating `ON(b1, b2)`-style feature (via a
-    shallow decision tree) that separates two subsets of demo trajectories — used to split a
-    long demo into stages before running MCMC per-stage.
+  - `decision_tree.py`: a compatibility alias only. `ON_feature` now resolves to
+    `predicates.atoms.GroundON`; the shallow-tree feature learner it used to hold was
+    superseded by the bounded predicate enumerator in `synthesis/predicates/`, which can
+    express quantified separators rather than a single ground `ON(b1, b2)`.
+  - `search_core.py`: the acceptance rule, annealing schedule, imitation objective and
+    epsilon candidate pool shared by the original and instrumented searches — keep the
+    Metropolis ratio here rather than writing it out a second time.
+  - `distance.py`: cached KL/MMD trajectory distances for the candidate pool.
   - `cem.py` / `cost_func.py`: cross-entropy-method parameter optimizer, and KL/MMD-based
     trajectory-distribution distance metrics used as the optimization objective.
 
@@ -168,10 +173,10 @@ bash format.sh
   require explicit `--demo-store` input and follow the same shape: learn an invariant,
   optionally instantiate it into a finite `"enum"` context, build both a high-level (`Put`/
   `Assign`/`While`) and a lowered physical (`PickPlaceByName`) version of the same program, then
-  call `highlevel_verification` and `lowlevel_verification` and report both results. `main.py`
-  is a large, mostly-scratch experiment script (trajectory collection, feature learning,
-  MCMC) rather than a clean library entry point — read it for examples, don't extend it as if
-  it were an API.
+  call `highlevel_verification` and `lowlevel_verification` and report both results.
+  `synthesize_cfg.py` is the instrumented relational CFG synthesis CLI and writes a standard
+  run directory; `main.py` is now only a shim that forwards to it, the scratch experiment
+  script it used to hold having been replaced by that driver.
 
 - **`synthesis/entry/verified_synthesis.py`** — instrumented Phase E Stack driver.
   Runs symbolic refinement before motion repair, retains counterexamples and
@@ -192,12 +197,39 @@ bash format.sh
   bounded reader; `config.py` captures every knob into `config.json`. Under `mcmc/`,
   `search.py`, `cem.py` and `run.py` reimplement only the four functions that need to
   emit records (`MCMC`, `score_candidate_program`, `optimize_program`, `cem_optimize`)
-  and import everything else unchanged from `synthesis.mcmc`, so there is no second
-  copy of `synthesis.py` to keep in sync. `synthesis/mcmc/` itself is untouched, and
-  `test_mcmc_parity.py` pins the two to the same accept/reject sequence.
+  and import the remaining implementation from `synthesis.mcmc`. Both copies share
+  acceptance and objective
+  helpers, and `test_mcmc_parity.py` pins the same accept/reject sequence.
 
-- **`synthesis/topdown/`** — an alternate top-down program synthesis DSL (`dsl.py`,
-  `topdown.py`), separate from the MCMC search path.
+- **`synthesis/predicates/`** — the predicate language and its bounded search.
+  `term.py` holds canonical interned first-order terms, `scene.py` the concrete
+  observation semantics, `enumerate.py` the bottom-up prenex enumerator with explicit
+  depth/binder/candidate/timeout bounds, and `classifier.py`/`guard.py` the two call
+  shapes (`LearnClassifier`, loop-guard synthesis). Search reports `found`, `no_separator`
+  or `budget_exhausted` — an approximate separator is never returned as an exact one.
+
+- **`synthesis/cfg/`** — the relational CFG and the synthesis algorithms over it:
+  `graph.py`/`region.py` (IR), `lower.py` (CFG to `Program`, emitting the scoped `Get`
+  a refinement's existential prefix requires), `refine.py` (Algorithm 3),
+  `straightline.py` (Algorithm 5), `synthesize.py` (the Algorithm 2 recursive driver),
+  `quotient.py`/`kleene.py` (Algorithm 4, flat case only), plus demo recording,
+  segment reset/replay and split validation. Numeric physical operands can be
+  generalized to named operands during folding, but this does not establish a
+  relational summary: symbolic lowering rejects such candidates. Learned guards
+  must have unique witnesses on every training scene and reject ambiguous runtime
+  witnesses. Symbolic verification checks a separate `guard_unique` obligation.
+  Extracted iterations share their invocation's frozen entry geometry.
+
+  Run `uv run python -m synthesis.entry.synthesize_cfg --task unstack --num-blocks 3
+  --smoke --quotient` (on one line) for a bounded integration smoke. `--demos` accepts
+  a lossless `.npz` recording; without it, the driver collects the historical oracle.
+  `--reset-mode replay` is the default, and Unstack has a 60-second process alarm.
+  This synthesizes candidates; formal verification is a separate step. The historical
+  Unstack oracle's final state does not satisfy the task postcondition in the seed-0
+  smoke, so neither collection nor successful imitation establishes task success.
+
+- **`synthesis/topdown/`** — retired. `topdown.py` is a thin compatibility wrapper over
+  the `synthesis/predicates/` enumerator; the hand-rolled BFS and its DSL are gone.
 
 ## Monitoring runs
 
