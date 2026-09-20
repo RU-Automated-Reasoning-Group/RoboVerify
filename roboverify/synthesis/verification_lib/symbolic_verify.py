@@ -63,9 +63,13 @@ def discharge_vc(vc, context, timeout_ms=VC_CHECK_TIMEOUT_MS):
     be manufactured from a solver timeout.
     """
     expr = vc.expr
-    premise, conclusion = (expr.arg(0), expr.arg(1)) if z3.is_implies(expr) else (z3.BoolVal(True), expr)
+    premise, conclusion = (
+        (expr.arg(0), expr.arg(1)) if z3.is_implies(expr) else (z3.BoolVal(True), expr)
+    )
     solver = context.new_solver(timeout_ms)
-    premise_label, conclusion_label = z3.FreshBool("premise"), z3.FreshBool("neg_conclusion")
+    premise_label, conclusion_label = z3.FreshBool("premise"), z3.FreshBool(
+        "neg_conclusion"
+    )
     solver.assert_and_track(premise, premise_label)
     solver.push()
     solver.assert_and_track(z3.Not(conclusion), conclusion_label)
@@ -83,8 +87,15 @@ def discharge_vc(vc, context, timeout_ms=VC_CHECK_TIMEOUT_MS):
     return VCResult(vc, "valid" if answer == z3.sat else "vacuous", queries=2)
 
 
-def symbolic_verify(build_problem, *, min_blocks=2, max_blocks=4, timeout_ms=5000,
-                    prove_unbounded=True, constants=()):
+def symbolic_verify(
+    build_problem,
+    *,
+    min_blocks=2,
+    max_blocks=4,
+    timeout_ms=5000,
+    prove_unbounded=True,
+    constants=(),
+):
     """Find the smallest finite counterexample, then optionally prove generically.
 
     ``build_problem(n)`` returns (program, pre, post, context); ``n=None`` requests
@@ -93,7 +104,8 @@ def symbolic_verify(build_problem, *, min_blocks=2, max_blocks=4, timeout_ms=500
     search, since a later model could no longer be called the smallest.
     """
     from synthesis.verification_lib.counterexamples import (
-        UnrealizableCounterexample, model_to_loop_head,
+        UnrealizableCounterexample,
+        model_to_loop_head,
     )
 
     if not 1 <= min_blocks <= max_blocks:
@@ -104,15 +116,26 @@ def symbolic_verify(build_problem, *, min_blocks=2, max_blocks=4, timeout_ms=500
     all_checks = []
     for size in sizes:
         program, pre, post, context = build_problem(size)
-        checks = [discharge_vc(vc, context, timeout_ms) for vc in program.VC_gen(pre, post, context)]
-        result = SymbolicVerificationResult(checks, context=context, num_blocks=size,
-                                            scope="unbounded" if size is None else f"finite:{size}")
+        checks = [
+            discharge_vc(vc, context, timeout_ms)
+            for vc in program.VC_gen(pre, post, context)
+        ]
+        result = SymbolicVerificationResult(
+            checks,
+            context=context,
+            num_blocks=size,
+            scope="unbounded" if size is None else f"finite:{size}",
+        )
         if not result:
             if result.model is not None and size is not None:
                 try:
                     result.loop_head_state = model_to_loop_head(
-                        context, result.model, result.failure.vc.loop_id, constants,
-                        timeout_ms=timeout_ms)
+                        context,
+                        result.model,
+                        result.failure.vc.loop_id,
+                        constants,
+                        timeout_ms=timeout_ms,
+                    )
                 except UnrealizableCounterexample as exc:
                     result.reason = str(exc)
             return result

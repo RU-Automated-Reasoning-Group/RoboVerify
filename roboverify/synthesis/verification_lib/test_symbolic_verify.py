@@ -15,17 +15,28 @@ class SymbolicVerdictTests(unittest.TestCase):
 
     def test_false_invariant_has_invalid_establishment_and_vacuous_loop_vcs(self):
         loop = While(z3.BoolVal(True), [], [Skip()], z3.BoolVal(False))
-        vcs = Program(1, [loop]).VC_gen(z3.BoolVal(True), z3.BoolVal(True), self.context)
+        vcs = Program(1, [loop]).VC_gen(
+            z3.BoolVal(True), z3.BoolVal(True), self.context
+        )
         self.assertEqual([v.kind for v in vcs], ["establish", "preserve", "exit"])
-        self.assertEqual([discharge_vc(v, self.context).status for v in vcs],
-                         ["invalid", "vacuous", "vacuous"])
+        self.assertEqual(
+            [discharge_vc(v, self.context).status for v in vcs],
+            ["invalid", "vacuous", "vacuous"],
+        )
         self.assertEqual(discharge_vc(vcs[1], self.context).queries, 1)
 
     def test_semantic_vacuity_and_nonvacuous_validity(self):
         a = self.context.get_consts("a")
         reflexive = self.context.ON_star(a, a)
-        self.assertEqual(discharge_vc(VC("body", None, z3.Implies(z3.Not(reflexive), False)), self.context).status, "vacuous")
-        verdict = discharge_vc(VC("body", None, z3.Implies(True, reflexive)), self.context)
+        self.assertEqual(
+            discharge_vc(
+                VC("body", None, z3.Implies(z3.Not(reflexive), False)), self.context
+            ).status,
+            "vacuous",
+        )
+        verdict = discharge_vc(
+            VC("body", None, z3.Implies(True, reflexive)), self.context
+        )
         self.assertEqual(verdict.status, "valid")
         self.assertEqual(verdict.queries, 2)
 
@@ -44,7 +55,9 @@ class SymbolicVerdictTests(unittest.TestCase):
         context.new_solver.return_value = Mock(spec=z3.Solver())
         solver = context.new_solver.return_value
         solver.check.side_effect = [z3.unsat, z3.unsat]
-        solver.unsat_core.side_effect = lambda: [solver.assert_and_track.call_args.args[1]]
+        solver.unsat_core.side_effect = lambda: [
+            solver.assert_and_track.call_args.args[1]
+        ]
         verdict = discharge_vc(VC("preserve", "0", z3.Implies(False, False)), context)
         self.assertEqual(verdict.status, "vacuous")
         self.assertEqual(verdict.queries, 2)
@@ -53,7 +66,9 @@ class SymbolicVerdictTests(unittest.TestCase):
         a, b = z3.Consts("a b", self.context.BoxSort)
         inner = While(a != b, [], [Skip()], z3.BoolVal(True))
         outer = While(a != b, [a], [inner], a == b)
-        vcs = Program(2, [Assign("a", "b"), outer]).VC_gen(z3.BoolVal(True), z3.BoolVal(True), self.context)
+        vcs = Program(2, [Assign("a", "b"), outer]).VC_gen(
+            z3.BoolVal(True), z3.BoolVal(True), self.context
+        )
         self.assertEqual([v.loop_id for v in vcs], ["1", "1.0", "1.0", "1", "1"])
         self.assertEqual(discharge_vc(vcs[0], self.context).status, "valid")
         # Exit has no free chosen witness: it negates Exists(a, a != b).
@@ -69,16 +84,28 @@ class CounterexampleTests(unittest.TestCase):
 
     def context(self, count, use_tbl=False):
         CounterexampleTests.counter += 1
-        return HighLevelContext(mode="enum", num_blocks=count,
-                                sort_name=f"Scene{self.counter}", use_tbl=use_tbl)
+        return HighLevelContext(
+            mode="enum",
+            num_blocks=count,
+            sort_name=f"Scene{self.counter}",
+            use_tbl=use_tbl,
+        )
 
     def test_positions_and_aliases_preserve_current_and_entry_geometry(self):
-        from synthesis.verification_lib.counterexamples import model_to_loop_head, state_holds
+        from synthesis.verification_lib.counterexamples import (
+            model_to_loop_head,
+            state_holds,
+        )
+
         ctx = self.context(3, True)
         a, b, table = ctx.enum_blocks
         solver = ctx.new_solver(1000)
-        solver.add(ctx.get_consts("tbl") == table, ctx.get_consts("b") == b,
-                   ctx.get_consts("b0") == b, ctx.get_consts("b_prime") == a)
+        solver.add(
+            ctx.get_consts("tbl") == table,
+            ctx.get_consts("b") == b,
+            ctx.get_consts("b0") == b,
+            ctx.get_consts("b_prime") == a,
+        )
         for x in (a, b):
             for y in (a, b):
                 same = x.eq(y)
@@ -95,7 +122,11 @@ class CounterexampleTests(unittest.TestCase):
         self.assertIn("tbl", row.positions)
 
     def test_unrealizable_higher_model_is_not_added_as_a_scene(self):
-        from synthesis.verification_lib.counterexamples import UnrealizableCounterexample, model_to_loop_head
+        from synthesis.verification_lib.counterexamples import (
+            UnrealizableCounterexample,
+            model_to_loop_head,
+        )
+
         ctx = self.context(2)
         a, b = ctx.enum_blocks
         solver = ctx.new_solver(1000)
@@ -106,13 +137,16 @@ class CounterexampleTests(unittest.TestCase):
 
     def test_smallest_counterexample_and_bounded_scope(self):
         from synthesis.verification_lib.symbolic_verify import symbolic_verify
+
         seen = []
+
         def build(size):
             seen.append(size)
             ctx = self.context(size)
             a, b, c = z3.Consts("a b c", ctx.BoxSort)
             post = z3.Exists([a, b], z3.ForAll([c], z3.Or(c == a, c == b)))
             return Program(1, [Skip()]), z3.BoolVal(True), post, ctx
+
         result = symbolic_verify(build, max_blocks=4, prove_unbounded=False)
         self.assertEqual(result.num_blocks, 3)
         self.assertEqual(seen, [2, 3])

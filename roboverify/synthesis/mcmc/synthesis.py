@@ -135,9 +135,7 @@ def mutate_program(
         if old_operands:
             operand_index = random.randint(0, len(old_operands) - 1)
             operand_spec = old_operands[operand_index]
-            proposed_operand = random.choice(
-                available_operands[operand_spec["type"]]
-            )
+            proposed_operand = random.choice(available_operands[operand_spec["type"]])
             mutation_info["details"].append(
                 f"operand index {operand_index} ({operand_spec['type']}): "
                 f"old={operand_spec.get('val', operand_spec)!r} "
@@ -167,13 +165,10 @@ def mutate_program(
             new_program.instructions[i],
         )
         mutation_info["details"].append(
-            f"swap slots {i} and {j}: "
-            f"{before_i!s} <-> {before_j!s}"
+            f"swap slots {i} and {j}: " f"{before_i!s} <-> {before_j!s}"
         )
         if i == j:
-            mutation_info["details"].append(
-                "same slot selected twice; swap is a no-op"
-            )
+            mutation_info["details"].append("same slot selected twice; swap is a no-op")
         else:
             mutation_info["changed"] = True
     elif sampled_mutation == 3:
@@ -199,13 +194,9 @@ def mutate_program(
             operands = new_instruction.get_operand()
             operand_choices = []
             for operand_i in range(len(operands)):
-                chosen = random.choice(
-                    available_operands[operands[operand_i]["type"]]
-                )
+                chosen = random.choice(available_operands[operands[operand_i]["type"]])
                 operands[operand_i]["val"] = chosen
-                operand_choices.append(
-                    f"{operands[operand_i]['type']}={chosen!r}"
-                )
+                operand_choices.append(f"{operands[operand_i]['type']}={chosen!r}")
             new_instruction.set_operand(operands)
             new_program.instructions[index] = new_instruction
             mutation_info["details"].append(
@@ -221,9 +212,7 @@ def mutate_program(
 
 def program_instructions_for_bmc(p: program.Program) -> list:
     """Drop ``Skip`` tokens so BMC sees only executable instructions."""
-    return [
-        ins for ins in p.instructions if not isinstance(ins, program.Skip)
-    ]
+    return [ins for ins in p.instructions if not isinstance(ins, program.Skip)]
 
 
 def roboverify_bmc_initial_constraints() -> Callable[[BMCTraceSymbols], list]:
@@ -231,9 +220,7 @@ def roboverify_bmc_initial_constraints() -> Callable[[BMCTraceSymbols], list]:
 
     def make_init(sym: BMCTraceSymbols) -> list:
         sep = 2.0 * on.BLOCK_LENGTH
-        xy_positions = {
-            b: (float(i) * sep, 0.0) for i, b in enumerate(sym.block_names)
-        }
+        xy_positions = {b: (float(i) * sep, 0.0) for i, b in enumerate(sym.block_names)}
         return default_table_initial_state(sym, xy_positions=xy_positions)
 
     return make_init
@@ -377,6 +364,8 @@ def score_candidate_program(
     bmc_label: str = "candidate program",
     video_dir: Optional[str] = None,
     video_fps: int = 30,
+    motion_penalty=None,
+    motion_penalty_weight: float = 1.0,
 ) -> tuple[float, program.Program, bool, str, str]:
     """Optionally require BMC feasibility, then CEM-optimize ``p``."""
     bmc_passed, bmc_report = check_bmc_candidate(
@@ -408,6 +397,8 @@ def score_candidate_program(
         seeds=seeds,
         goal_feature=goal_feature,
         goal_feature_reward_weight=goal_feature_reward_weight,
+        motion_penalty=motion_penalty,
+        motion_penalty_weight=motion_penalty_weight,
     )
     print_goal_feature_reward(bmc_label, goal_feature_report)
     checks_passed = candidate_checks_passed(
@@ -452,6 +443,8 @@ def MCMC(
     goal_feature_reward_weight: float = DEFAULT_GOAL_FEATURE_REWARD_WEIGHT,
     save_candidate_videos: bool = True,
     video_fps: int = 30,
+    motion_penalty=None,
+    motion_penalty_weight: float = 1.0,
 ):
     # Ensure save_dir exists
     os.makedirs(save_dir, exist_ok=True)
@@ -460,25 +453,31 @@ def MCMC(
     initial_video_dir = (
         os.path.join(save_dir, "initial", "videos") if save_candidate_videos else None
     )
-    current_cost, current_program, current_checks_passed, current_bmc_report, current_goal_report = (
-        score_candidate_program(
-            current_program,
-            expert_states,
-            num_seeds,
-            num_block,
-            cem_N,
-            cem_K,
-            cem_iterations,
-            seeds=seeds,
-            bmc_goal=bmc_goal,
-            bmc_initial_constraints=bmc_initial_constraints,
-            bmc_failed_cost=bmc_failed_cost,
-            goal_feature=goal_feature,
-            goal_feature_reward_weight=goal_feature_reward_weight,
-            bmc_label="initial program",
-            video_dir=initial_video_dir,
-            video_fps=video_fps,
-        )
+    (
+        current_cost,
+        current_program,
+        current_checks_passed,
+        current_bmc_report,
+        current_goal_report,
+    ) = score_candidate_program(
+        current_program,
+        expert_states,
+        num_seeds,
+        num_block,
+        cem_N,
+        cem_K,
+        cem_iterations,
+        seeds=seeds,
+        bmc_goal=bmc_goal,
+        bmc_initial_constraints=bmc_initial_constraints,
+        bmc_failed_cost=bmc_failed_cost,
+        goal_feature=goal_feature,
+        goal_feature_reward_weight=goal_feature_reward_weight,
+        bmc_label="initial program",
+        video_dir=initial_video_dir,
+        video_fps=video_fps,
+        motion_penalty=motion_penalty,
+        motion_penalty_weight=motion_penalty_weight,
     )
     print(
         "evaluated with cost",
@@ -497,9 +496,9 @@ def MCMC(
             current_program, available_operands, available_instructions
         )
 
-        equivalence = executable_instructions(current_program) == executable_instructions(
-            new_program
-        )
+        equivalence = executable_instructions(
+            current_program
+        ) == executable_instructions(new_program)
         mutation_report = format_mutation_report(
             mutation_info,
             current_program,
@@ -519,29 +518,33 @@ def MCMC(
         candidate_video_dir: Optional[str] = None
         if changed and not equivalence:
             candidate_video_dir = (
-                os.path.join(iter_folder, "videos")
-                if save_candidate_videos
-                else None
+                os.path.join(iter_folder, "videos") if save_candidate_videos else None
             )
-            new_cost, new_program, new_checks_passed, new_bmc_report, new_goal_report = (
-                score_candidate_program(
-                    new_program,
-                    expert_states,
-                    num_seeds,
-                    num_block,
-                    cem_N,
-                    cem_K,
-                    cem_iterations,
-                    seeds=seeds,
-                    bmc_goal=bmc_goal,
-                    bmc_initial_constraints=bmc_initial_constraints,
-                    bmc_failed_cost=bmc_failed_cost,
-                    goal_feature=goal_feature,
-                    goal_feature_reward_weight=goal_feature_reward_weight,
-                    bmc_label=f"iter {i} candidate",
-                    video_dir=candidate_video_dir,
-                    video_fps=video_fps,
-                )
+            (
+                new_cost,
+                new_program,
+                new_checks_passed,
+                new_bmc_report,
+                new_goal_report,
+            ) = score_candidate_program(
+                new_program,
+                expert_states,
+                num_seeds,
+                num_block,
+                cem_N,
+                cem_K,
+                cem_iterations,
+                seeds=seeds,
+                bmc_goal=bmc_goal,
+                bmc_initial_constraints=bmc_initial_constraints,
+                bmc_failed_cost=bmc_failed_cost,
+                goal_feature=goal_feature,
+                goal_feature_reward_weight=goal_feature_reward_weight,
+                bmc_label=f"iter {i} candidate",
+                video_dir=candidate_video_dir,
+                video_fps=video_fps,
+                motion_penalty=motion_penalty,
+                motion_penalty_weight=motion_penalty_weight,
             )
             print(
                 "evaluated with cost",
@@ -660,6 +663,8 @@ def optimize_program(
     seeds: Optional[list] = None,
     goal_feature=None,
     goal_feature_reward_weight: float = DEFAULT_GOAL_FEATURE_REWARD_WEIGHT,
+    motion_penalty=None,
+    motion_penalty_weight: float = 1.0,
 ) -> tuple[float, program.Program, float, str]:
     f = Runner(
         p,
@@ -669,6 +674,8 @@ def optimize_program(
         seeds=seeds,
         goal_feature=goal_feature,
         goal_feature_reward_weight=goal_feature_reward_weight,
+        motion_penalty=motion_penalty,
+        motion_penalty_weight=motion_penalty_weight,
     )
     initial_parameters = p.register_trainable_parameter()
     iterations = cem_iterations if initial_parameters else 0
@@ -679,6 +686,7 @@ def optimize_program(
         N=cem_N,
         K=cem_K,
         init_mu=initial_parameters,
+        num_workers=0 if motion_penalty is not None else None,
     )
     p.update_trainable_parameter(best_parameter)
     if goal_feature is not None:
@@ -886,9 +894,13 @@ def make_roboverify_env(
     if task == "stack":
         return make_roboverify_stack_env(num_blocks=num_blocks, render_mode=render_mode)
     if task == "unstack":
-        return make_roboverify_unstack_env(num_blocks=num_blocks, render_mode=render_mode)
+        return make_roboverify_unstack_env(
+            num_blocks=num_blocks, render_mode=render_mode
+        )
     if task == "reverse":
-        return make_roboverify_reverse_env(num_blocks=num_blocks, render_mode=render_mode)
+        return make_roboverify_reverse_env(
+            num_blocks=num_blocks, render_mode=render_mode
+        )
     if task in ("partial_stack", "partial"):
         return make_roboverify_partial_stack_env(
             num_blocks=num_blocks, render_mode=render_mode
@@ -902,9 +914,7 @@ def make_roboverify_env(
     raise ValueError(f"unsupported RoboVerify task: {task!r}")
 
 
-def save_frames_as_video(
-    frames: list, output_path: str, *, fps: int = 30
-) -> None:
+def save_frames_as_video(frames: list, output_path: str, *, fps: int = 30) -> None:
     """Write a list of RGB frames to an mp4 file."""
     if not frames:
         return
@@ -1197,9 +1207,7 @@ def rollout_demos_from_initial_states(
 
     for rollout_idx, initial_state in enumerate(initial_states):
         demo_idx = (
-            demo_indices[rollout_idx]
-            if demo_indices is not None
-            else rollout_idx
+            demo_indices[rollout_idx] if demo_indices is not None else rollout_idx
         )
         set_np_seed(demo_idx)
         env = make_roboverify_env(task, num_blocks=num_blocks)
@@ -1237,9 +1245,7 @@ def rollout_demos_from_initial_states(
             if not traj_imgs:
                 continue
             demo_idx = (
-                demo_indices[rollout_idx]
-                if demo_indices is not None
-                else rollout_idx
+                demo_indices[rollout_idx] if demo_indices is not None else rollout_idx
             )
             demo_video_dir = os.path.join(video_dir, f"demo_{demo_idx:04d}")
             save_frames_as_video(
@@ -1414,7 +1420,14 @@ class Runner:
         seeds: Optional[list] = None,
         goal_feature=None,
         goal_feature_reward_weight: float = DEFAULT_GOAL_FEATURE_REWARD_WEIGHT,
+        motion_penalty=None,
+        motion_penalty_weight: float = 1.0,
     ):
+        if not np.isfinite(motion_penalty_weight) or motion_penalty_weight < 0:
+            raise ValueError("Motion penalty weight must be finite and nonnegative")
+        self.motion_penalty = motion_penalty
+        self.motion_penalty_weight = motion_penalty_weight
+        self.last_motion_penalty = 0
         self.p = program
         self.expert_states = np.array(expert_states)
         self.slices: list[Any] = [slice(None)] * self.expert_states.ndim
@@ -1449,4 +1462,7 @@ class Runner:
             self.last_goal_feature_reward = goal_reward
             self.last_goal_feature_report = goal_feature_report
             score += self.goal_feature_reward_weight * goal_reward
+        if self.motion_penalty is not None:
+            self.last_motion_penalty = self.motion_penalty(p)
+            score -= self.motion_penalty_weight * self.last_motion_penalty
         return score

@@ -1,4 +1,5 @@
 import multiprocessing as mp
+from contextlib import nullcontext
 
 import numpy as np
 
@@ -28,13 +29,15 @@ def cem_optimize(
     mu_list, score_list = [mu], [f(mu)]
 
     # Create pool outside loop for efficiency
-    with mp.Pool(processes=num_workers) as pool:
+    with (
+        nullcontext(None) if num_workers == 0 else mp.Pool(processes=num_workers)
+    ) as pool:
         for _ in range(iterations):
             # Sample candidate solutions
             samples = np.random.randn(N, dim) * sigma + mu
 
             # Parallel evaluation of f(x)
-            scores = pool.map(f, samples)
+            scores = list(map(f, samples)) if pool is None else pool.map(f, samples)
 
             scores = np.array(scores)
             print("scores", sorted(scores))

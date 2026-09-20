@@ -1000,23 +1000,44 @@ class Program:
                 instruction = instructions[index]
                 path = f"{prefix}.{index}" if prefix else str(index)
                 if isinstance(instruction, While):
-                    invariant = And(*self._invariant_condition_exprs(instruction.invariant))
+                    invariant = And(
+                        *self._invariant_condition_exprs(instruction.invariant)
+                    )
                     # Preservation binds a particular existential guard witness;
                     # exit negates the entire existential, not that one witness.
                     result[0:0] = collect(instruction.body, invariant, path) + [
-                        VC("preserve", path, Implies(
-                            And(instruction.instantiated_cond, invariant),
-                            wp(to_seq(instruction.body), invariant, context))),
-                        VC("exit", path, Implies(
-                            And(Not(instruction.cond), invariant), post)),
+                        VC(
+                            "preserve",
+                            path,
+                            Implies(
+                                And(instruction.instantiated_cond, invariant),
+                                wp(to_seq(instruction.body), invariant, context),
+                            ),
+                        ),
+                        VC(
+                            "exit",
+                            path,
+                            Implies(And(Not(instruction.cond), invariant), post),
+                        ),
                     ]
                 post = wp(instruction, post, context)
             return result
 
-        first_loop = next((str(i) for i, inst in enumerate(self.instructions)
-                           if isinstance(inst, While)), None)
-        return [VC("establish" if first_loop is not None else "body", first_loop,
-                   Implies(P, self.wp(Q, context)))] + collect(self.instructions, Q)
+        first_loop = next(
+            (
+                str(i)
+                for i, inst in enumerate(self.instructions)
+                if isinstance(inst, While)
+            ),
+            None,
+        )
+        return [
+            VC(
+                "establish" if first_loop is not None else "body",
+                first_loop,
+                Implies(P, self.wp(Q, context)),
+            )
+        ] + collect(self.instructions, Q)
 
     def wp(self, Q, context):
         seq_instruction = to_seq(self.instructions)
@@ -1068,8 +1089,6 @@ class Program:
                 prov_clauses.extend(inst.invariant_provenance)
         setattr(solver, "_learned_clause_provenance", prov_clauses)
         vcs = self.VC_gen(P, Q, solver)
-        outer_md_var = _outer_while_direct_body_move_down_var(self.instructions)
-        ok = True
 
         img_dir: Optional[Path] = None
         ce_dir = counterexample_image_dir
@@ -1117,7 +1136,8 @@ class Program:
         # print("=====================")
 
         from synthesis.verification_lib.symbolic_verify import (
-            SymbolicVerificationResult, discharge_vc,
+            SymbolicVerificationResult,
+            discharge_vc,
         )
 
         checks = []
@@ -1275,8 +1295,8 @@ def wp(seq_instruction, Q, context):
 
     def inv_expr(inv):
         # Invariant may be a Z3 expr or a list of ProvenancedClause-like objects.
-        if isinstance(inv, list) and inv and hasattr(inv[0], "expr"):
-            return And(*[c.expr for c in inv])
+        if isinstance(inv, list):
+            return And(*[c.expr if hasattr(c, "expr") else c for c in inv])
         return inv
 
     if isinstance(seq_instruction, Skip):
@@ -1350,8 +1370,8 @@ def VC_aux(seq_instruction, Q, context) -> List:
 
     def inv_expr(inv):
         # Invariant may be a Z3 expr or a list of ProvenancedClause-like objects.
-        if isinstance(inv, list) and inv and hasattr(inv[0], "expr"):
-            return And(*[c.expr for c in inv])
+        if isinstance(inv, list):
+            return And(*[c.expr if hasattr(c, "expr") else c for c in inv])
         return inv
 
     if isinstance(seq_instruction, Seq):

@@ -20,8 +20,11 @@ def stacks_to_positions(stacks, *, block_length=0.05, table_height=0.4):
         for level, name in enumerate(stack):
             if name in positions:
                 raise ValueError(f"Duplicate block {name!r}")
-            positions[name] = [1.2 + column * 3 * block_length, 0.75,
-                               table_height + (level + 0.5) * block_length]
+            positions[name] = [
+                1.2 + column * 3 * block_length,
+                0.75,
+                table_height + (level + 0.5) * block_length,
+            ]
     return positions
 
 
@@ -39,8 +42,10 @@ def state_holds(expr, state):
         if z3.is_var(term):
             return bound[z3.get_var_index(term)]
         if z3.is_quantifier(term):
-            values = (evaluate(term.body(), tuple(reversed(xs)) + bound)
-                      for xs in itertools.product(universe, repeat=term.num_vars()))
+            values = (
+                evaluate(term.body(), tuple(reversed(xs)) + bound)
+                for xs in itertools.product(universe, repeat=term.num_vars())
+            )
             return all(values) if term.is_forall() else any(values)
         args = [evaluate(a, bound) for a in term.children()]
         if z3.is_and(term):
@@ -58,10 +63,12 @@ def state_holds(expr, state):
         name = str(term.decl().name())
         if not args:
             return state.constants[name]
-        predicates = {"ON_star": on.on_star_implementation,
-                      "ON_star_zero": on.on_star_implementation,
-                      "Higher": on.higher_implementation,
-                      "Scattered": on.scattered_implementation}
+        predicates = {
+            "ON_star": on.on_star_implementation,
+            "ON_star_zero": on.on_star_implementation,
+            "Higher": on.higher_implementation,
+            "Scattered": on.scattered_implementation,
+        }
         if name not in predicates:
             raise ValueError(f"Unsupported predicate: {name}")
         positions = state.entry_positions if name == "ON_star_zero" else state.positions
@@ -80,54 +87,101 @@ def model_to_loop_head(context, model, loop_id, constants, *, timeout_ms=5000):
     if context.mode != "enum":
         raise UnrealizableCounterexample("A finite model is required")
     objects = context.enum_blocks
-    table = model.eval(context.get_consts("tbl"), model_completion=True) if context.use_tbl else None
-    names = {str(obj): ("tbl" if table is not None and obj.eq(table) else f"x{i+1}")
-             for i, obj in enumerate(objects)}
+    table = (
+        model.eval(context.get_consts("tbl"), model_completion=True)
+        if context.use_tbl
+        else None
+    )
+    names = {
+        str(obj): ("tbl" if table is not None and obj.eq(table) else f"x{i+1}")
+        for i, obj in enumerate(objects)
+    }
     physical = [obj for obj in objects if names[str(obj)] != "tbl"]
     solver = z3.Solver()
     solver.set(timeout=timeout_ms)
-    xyz = {str(obj): tuple(z3.FreshReal(f"current_{axis}") for axis in "xyz") for obj in physical}
-    entry = {str(obj): tuple(z3.FreshReal(f"entry_{axis}") for axis in "xyz") for obj in physical}
+    xyz = {
+        str(obj): tuple(z3.FreshReal(f"current_{axis}") for axis in "xyz")
+        for obj in physical
+    }
+    entry = {
+        str(obj): tuple(z3.FreshReal(f"entry_{axis}") for axis in "xyz")
+        for obj in physical
+    }
     length = z3.RealVal("0.05")
     for coords in (xyz, entry):
         for pos in coords.values():
             solver.add(pos[2] >= z3.RealVal("0.425"))
         for a, b in itertools.combinations(coords.values(), 2):
-            solver.add(z3.Or(*(z3.Abs(x-y) >= length for x, y in zip(a, b))))
+            solver.add(z3.Or(*(z3.Abs(x - y) >= length for x, y in zip(a, b))))
     for a, b in itertools.product(physical, repeat=2):
         p, q = xyz[str(a)], xyz[str(b)]
         p0, q0 = entry[str(a)], entry[str(b)]
+
         def on_star(u, v):
-            return z3.And(z3.Abs(u[0]-v[0]) < length/2,
-                          z3.Abs(u[1]-v[1]) < length/2, u[2] >= v[2])
-        formulas = (on_star(p, q), on_star(p0, q0), p[2] >= q[2],
-                    z3.Or(z3.Abs(p[0]-q[0]) >= 2*length, z3.Abs(p[1]-q[1]) >= 2*length))
-        for relation, formula in zip((context.ON_star, context.ON_star_zero, context.Higher, context.Scattered), formulas):
+            return z3.And(
+                z3.Abs(u[0] - v[0]) < length / 2,
+                z3.Abs(u[1] - v[1]) < length / 2,
+                u[2] >= v[2],
+            )
+
+        formulas = (
+            on_star(p, q),
+            on_star(p0, q0),
+            p[2] >= q[2],
+            z3.Or(z3.Abs(p[0] - q[0]) >= 2 * length, z3.Abs(p[1] - q[1]) >= 2 * length),
+        )
+        for relation, formula in zip(
+            (context.ON_star, context.ON_star_zero, context.Higher, context.Scattered),
+            formulas,
+        ):
             solver.add(formula == model.eval(relation(a, b), model_completion=True))
     answer = solver.check()
     if answer != z3.sat:
-        reason = solver.reason_unknown() if answer == z3.unknown else "relation tables have no non-overlapping geometric realization"
+        reason = (
+            solver.reason_unknown()
+            if answer == z3.unknown
+            else "relation tables have no non-overlapping geometric realization"
+        )
         raise UnrealizableCounterexample(reason)
     geometric = solver.model()
+
     def positions(coords):
-        result = {names[key]: [float(geometric.eval(v).as_fraction()) for v in values]
-                  for key, values in coords.items()}
+        result = {
+            names[key]: [float(geometric.eval(v).as_fraction()) for v in values]
+            for key, values in coords.items()
+        }
         if context.use_tbl:
             result["tbl"] = on.TABLE
         return result
-    bindings = {name: names[str(model.eval(context.get_consts(name), model_completion=True))]
-                for name in constants}
+
+    bindings = {
+        name: names[str(model.eval(context.get_consts(name), model_completion=True))]
+        for name in constants
+    }
     if context.use_tbl:
         bindings["tbl"] = "tbl"
-    state = LoopHeadState(loop_id or "entry", positions(xyz), positions(entry), bindings)
+    state = LoopHeadState(
+        loop_id or "entry", positions(xyz), positions(entry), bindings
+    )
     # Float conversion must not cross a strict predicate boundary.
-    for relation in (context.ON_star, context.ON_star_zero, context.Higher, context.Scattered):
+    for relation in (
+        context.ON_star,
+        context.ON_star_zero,
+        context.Higher,
+        context.Scattered,
+    ):
         for a, b in itertools.product(objects, repeat=2):
             aliases = dict(state.constants, _lhs=names[str(a)], _rhs=names[str(b)])
-            row = LoopHeadState(state.loop_id, state.positions, state.entry_positions, aliases)
-            actual = state_holds(relation(context.get_consts("_lhs"), context.get_consts("_rhs")), row)
+            row = LoopHeadState(
+                state.loop_id, state.positions, state.entry_positions, aliases
+            )
+            actual = state_holds(
+                relation(context.get_consts("_lhs"), context.get_consts("_rhs")), row
+            )
             if actual != z3.is_true(model.eval(relation(a, b), model_completion=True)):
-                raise UnrealizableCounterexample("Float conversion changed a predicate boundary")
+                raise UnrealizableCounterexample(
+                    "Float conversion changed a predicate boundary"
+                )
     return state
 
 
@@ -154,11 +208,16 @@ def symbolic_successor(state, instructions, *, table_surface_height=0.4):
             if target == "tbl":
                 old = row.positions[source]
                 # Place on a fresh, separated table column.
-                x = max(p[0] for name, p in row.positions.items() if name != "tbl") + 0.15
+                x = (
+                    max(p[0] for name, p in row.positions.items() if name != "tbl")
+                    + 0.15
+                )
                 row.positions[source] = [x, old[1], table_surface_height + 0.025]
             else:
                 x, y, z = row.positions[target]
                 row.positions[source] = [x, y, z + on.BLOCK_LENGTH]
         elif not isinstance(instruction, Skip):
-            raise UnrealizableCounterexample(f"Unsupported symbolic replay: {type(instruction).__name__}")
+            raise UnrealizableCounterexample(
+                f"Unsupported symbolic replay: {type(instruction).__name__}"
+            )
     return LoopHeadState(row.loop_id, row.positions, row.entry_positions, row.constants)

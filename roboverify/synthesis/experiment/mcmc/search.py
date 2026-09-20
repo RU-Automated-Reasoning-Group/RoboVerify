@@ -125,6 +125,9 @@ class InstrumentedRunner(Runner):
             self.last_goal_feature_report = goal_report
             score += self.goal_feature_reward_weight * goal_reward
 
+        if self.motion_penalty is not None:
+            self.last_motion_penalty = self.motion_penalty(candidate)
+            score -= self.motion_penalty_weight * self.last_motion_penalty
         self.last_score = float(score)
         return score
 
@@ -191,6 +194,8 @@ def optimize_program(
     goal_feature_reward_weight: float = DEFAULT_GOAL_FEATURE_REWARD_WEIGHT,
     cem_init_std: float = 0.1,
     refresh_best_metrics: bool = True,
+    motion_penalty=None,
+    motion_penalty_weight: float = 1.0,
 ) -> tuple:
     """CEM-optimize ``p``'s float offsets and report what happened.
 
@@ -212,6 +217,8 @@ def optimize_program(
         task=task,
         goal_feature=goal_feature,
         goal_feature_reward_weight=goal_feature_reward_weight,
+        motion_penalty=motion_penalty,
+        motion_penalty_weight=motion_penalty_weight,
     )
     initial_parameters = p.register_trainable_parameter()
     iterations = cem_iterations if initial_parameters else 0
@@ -224,6 +231,7 @@ def optimize_program(
         K=cem_K,
         init_mu=initial_parameters,
         init_std=cem_init_std,
+        num_workers=0 if motion_penalty is not None else None,
     )
     p.update_trainable_parameter(best_parameter)
 
@@ -251,6 +259,8 @@ def score_candidate_program(
     goal_feature_reward_weight: float = DEFAULT_GOAL_FEATURE_REWARD_WEIGHT,
     cem_init_std: float = 0.1,
     refresh_best_metrics: bool = True,
+    motion_penalty=None,
+    motion_penalty_weight: float = 1.0,
 ) -> CandidateResult:
     """Require BMC feasibility if configured, then optimize ``p``'s parameters."""
     bmc_feasible, bmc_report = check_bmc_candidate(
@@ -283,6 +293,8 @@ def score_candidate_program(
         goal_feature_reward_weight=goal_feature_reward_weight,
         cem_init_std=cem_init_std,
         refresh_best_metrics=refresh_best_metrics,
+        motion_penalty=motion_penalty,
+        motion_penalty_weight=motion_penalty_weight,
     )
 
     return CandidateResult(
@@ -317,6 +329,8 @@ def MCMC(
     bmc_initial_constraints=None,
     goal_feature=None,
     refresh_best_metrics: bool = True,
+    motion_penalty=None,
+    motion_penalty_weight: float = 1.0,
 ) -> MCMCResult:
     """Run the instrumented search, writing records through ``logger``."""
     num_seeds = config.num_seeds if config.num_seeds is not None else len(seeds or [])
@@ -344,6 +358,8 @@ def MCMC(
             goal_feature_reward_weight=config.goal_feature_reward_weight,
             cem_init_std=config.cem_init_std,
             refresh_best_metrics=refresh_best_metrics,
+            motion_penalty=motion_penalty,
+            motion_penalty_weight=motion_penalty_weight,
         )
 
     def save_checkpoint(candidate, subdir: str) -> None:

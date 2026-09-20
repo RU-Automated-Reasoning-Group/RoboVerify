@@ -109,6 +109,8 @@ class MotionProblem:
         block_v,
         timeout_ms,
         initial_positions=None,
+        entry_positions=None,
+        initial_bindings=None,
     ):
         if timeout_ms <= 0:
             raise ValueError("Motion solver timeout must be positive")
@@ -150,6 +152,23 @@ class MotionProblem:
             self.solver.add(self.physical(name))
             self.solver.add(
                 *(a == z3.RealVal(str(b)) for a, b in zip(self.initial[name], xyz))
+            )
+
+        for name, xyz in (entry_positions or {}).items():
+            if name not in self.initial or len(xyz) != 3:
+                raise ValueError(f"Unknown entry-scene object: {name!r}")
+            obj = self.constants[name]
+            self.solver.add(
+                *(
+                    axis(obj) == z3.RealVal(str(value))
+                    for axis, value in zip((context.X0, context.Y0, context.Z0), xyz)
+                )
+            )
+        for name, target in (initial_bindings or {}).items():
+            if name not in self.constants or target not in self.constants:
+                raise ValueError("Unknown counterexample alias")
+            self.solver.add(
+                context.lowlevel_box_equal(self.constants[name], self.constants[target])
             )
 
     def same(self, a, b):
@@ -428,6 +447,8 @@ def verify_motion_block(
     block_v="0",
     timeout_ms=5000,
     initial_positions=None,
+    entry_positions=None,
+    initial_bindings=None,
 ):
     start = perf_counter()
     if contract is None:
@@ -451,6 +472,8 @@ def verify_motion_block(
         block_v,
         timeout_ms,
         initial_positions,
+        entry_positions,
+        initial_bindings,
     )
     if problem.check("initial_consistency").status == "valid":
         problem.execute(body)

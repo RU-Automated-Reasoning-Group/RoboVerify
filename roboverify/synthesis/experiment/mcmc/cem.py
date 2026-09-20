@@ -15,6 +15,7 @@ relative to ``np.random.randn`` is load-bearing -- do not reorder it.
 """
 
 import multiprocessing as mp
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
@@ -90,10 +91,14 @@ def cem_optimize(
     if iterations > 0:
         # The pool is only created when there is work for it; the original opened
         # one unconditionally, which forks workers even for a parameterless program.
-        with mp.Pool(processes=num_workers) as pool:
+        with (
+            nullcontext(None) if num_workers == 0 else mp.Pool(processes=num_workers)
+        ) as pool:
             for iteration in range(iterations):
                 samples = np.random.randn(N, dim) * sigma + mu
-                scores = np.array(pool.map(f, samples))
+                scores = np.array(
+                    list(map(f, samples)) if pool is None else pool.map(f, samples)
+                )
                 stats.evals += len(samples)
 
                 order = np.argsort(scores)
