@@ -19,6 +19,67 @@ from synthesis.inference_lib.inference import (
 from synthesis.verification_lib.motion_verification import MotionContract
 
 
+def build_unstack_programs(context, learned_invariant=True, learned_invariant_lists=None):
+    """Existing verification fixture, independent of inference and CLI setup."""
+    b_prime, b, c, b0, tbl = Consts("b_prime b c b0 tbl", context.BoxSort)
+    instructions = [
+        Assign("b", "b0"),
+        While(
+            instantiated_cond=And(
+                b_prime != tbl,
+                ForAll(
+                    [c],
+                    Implies(
+                        And(
+                            c != tbl,
+                            Or(context.ON_star(b0, b_prime), context.ON_star(c, b0)),
+                        ),
+                        context.ON_star(b_prime, c),
+                    ),
+                ),
+            ),
+            guard_exists_vars=[b_prime],
+            body=[Put("b_prime", "tbl"), Assign("b", "b_prime")],
+            invariant=learned_invariant,
+        ),
+    ]
+    program = Program(2, instructions=instructions)
+
+    BOX_LENGTH = 0.05
+    ll_instruction = deepcopy(instructions)
+    ll_instruction[1].body = [
+        PickPlaceByName(
+            grab_box_name="b_prime",
+            target_box_name_x="b_prime",
+            target_box_name_y="b_prime",
+            target_box_name_z="b_prime",
+            target_offset=[0.0, 0.0, 4 * BOX_LENGTH],
+            release=False,
+        ),
+        PickPlaceByName(
+            grab_box_name="b_prime",
+            target_box_name_x="b",
+            target_box_name_y="b",
+            target_box_name_z="b_prime",
+            target_offset=[-3.0 * BOX_LENGTH, 0.0, 4 * BOX_LENGTH],
+            release=False,
+        ),
+        PickPlaceByName(
+            grab_box_name="b_prime",
+            target_box_name_x="b",
+            target_box_name_y="b",
+            target_box_name_z="b",
+            target_offset=[-3.0 * BOX_LENGTH, 0.0, 0.0],
+            release=True,
+        ),
+    ]
+    ll_instruction[1].invariant = learned_invariant_lists
+    ll_instruction[1].body.append(Assign("b", "b_prime"))
+    ll_program = Program(2, instructions=ll_instruction)
+
+    return program, ll_program
+
+
 def verify_unstack_program_with_learned_invariant(
     demo_store: DemoStore,
     loop_id: str = "1",
@@ -83,61 +144,8 @@ def verify_unstack_program_with_learned_invariant(
             learned_spec, context, known_const_names=["b0", "b", "tbl"]
         )
 
-    b_prime, b, c, b0, tbl = Consts("b_prime b c b0 tbl", context.BoxSort)
-    instructions = [
-        Assign("b", "b0"),
-        While(
-            instantiated_cond=And(
-                b_prime != tbl,
-                ForAll(
-                    [c],
-                    Implies(
-                        And(
-                            c != tbl,
-                            Or(context.ON_star(b0, b_prime), context.ON_star(c, b0)),
-                        ),
-                        context.ON_star(b_prime, c),
-                    ),
-                ),
-            ),
-            guard_exists_vars=[b_prime],
-            body=[Put("b_prime", "tbl"), Assign("b", "b_prime")],
-            invariant=learned_invariant,
-        ),
-    ]
-    program = Program(2, instructions=instructions)
-
-    BOX_LENGTH = 0.05
-    ll_instruction = deepcopy(instructions)
-    ll_instruction[1].body = [
-        PickPlaceByName(
-            grab_box_name="b_prime",
-            target_box_name_x="b_prime",
-            target_box_name_y="b_prime",
-            target_box_name_z="b_prime",
-            target_offset=[0.0, 0.0, 4 * BOX_LENGTH],
-            release=False,
-        ),
-        PickPlaceByName(
-            grab_box_name="b_prime",
-            target_box_name_x="b",
-            target_box_name_y="b",
-            target_box_name_z="b_prime",
-            target_offset=[-3.0 * BOX_LENGTH, 0.0, 4 * BOX_LENGTH],
-            release=False,
-        ),
-        PickPlaceByName(
-            grab_box_name="b_prime",
-            target_box_name_x="b",
-            target_box_name_y="b",
-            target_box_name_z="b",
-            target_offset=[-3.0 * BOX_LENGTH, 0.0, 0.0],
-            release=True,
-        ),
-    ]
-    ll_instruction[1].invariant = learned_invariant_lists
-    ll_instruction[1].body.append(Assign("b", "b_prime"))
-    ll_program = Program(2, instructions=ll_instruction)
+    program, ll_program = build_unstack_programs(context, learned_invariant, learned_invariant_lists)
+    b0 = context.get_consts("b0")
 
     m, n = Consts("m n", context.BoxSort)
     (tbl,) = Consts("tbl", context.BoxSort)

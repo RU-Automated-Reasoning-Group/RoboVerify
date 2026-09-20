@@ -10,6 +10,9 @@ class Term:
     args: tuple = ()
     value: object = None
 
+    def __deepcopy__(self, memo):
+        return self
+
     @property
     def depth(self):
         return 1 + max((arg.depth for arg in self.args), default=0)

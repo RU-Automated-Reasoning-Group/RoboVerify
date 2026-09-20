@@ -108,6 +108,13 @@
 >       `uv run python -m synthesis.experiment.report --run runs/phase-e/cegis/latest`.
 > - [x] F3a: canonical interned predicate terms, observation scenes, and numeric/Z3
 >       differential checks (three tests pass).
+> - [x] F1/F2 foundations: structured regions and CFG lowering, absolute demo
+>       segments, shared guards and Get, scope analysis, temporal split validation.
+>       Lowered Unstack and the existing fixture agree in a finite three-element
+>       comparison; no new unbounded Unstack verdict is claimed.
+> - [x] F0 snapshot/replay implementation: GT state plus control/mocap/warm-start
+>       arrays and bindings; reset/replay and next-action checks pass at three
+>       recorded segment starts, including held-object motion. Replay stays default.
 > - [ ] Phase F in progress: F3a predicate terms first, followed by F1/F2/F3b/F4,
 >       F0/F5, F6, and the flat F7 quotient. No Phase F completion claimed yet.
 >

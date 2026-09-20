@@ -39,6 +39,7 @@ import synthesis.verification_lib.lowlevel_verification_lib as lowlevel_verifica
 from synthesis.api.instructions import (
     Assign,
     GoalAssign,
+    Get,
     Instruction,
     MarkGoal,
     Move,
@@ -936,9 +937,18 @@ class Program:
         else:
             self.instructions = [Skip() for _ in range(self.length)]
 
-    def eval(self, env, return_img: bool = False, *, on_loop_head=None):
+    def eval(self, env, return_img: bool = False, *, on_loop_head=None, on_state=None):
         """evaluate the program in the environment and return the trajectories"""
-        traj = [env.reset()[0]]
+        initial_obs = env.reset()[0]
+        if on_state is None:
+            traj = [initial_obs]
+        else:
+            class RecordedTrajectory(list):
+                def append(self, observation):
+                    super().append(observation)
+                    on_state(observation)
+            traj = RecordedTrajectory()
+            traj.append(initial_obs)
         if return_img:
             imgs = [env.render()]
         for index, line in enumerate(self.instructions):
@@ -1305,6 +1315,11 @@ def wp(seq_instruction, Q, context):
         return wp(seq_instruction.s1, wp(seq_instruction.s2, Q, context), context)
     elif isinstance(seq_instruction, While):
         return inv_expr(seq_instruction.invariant)
+    elif isinstance(seq_instruction, Get):
+        variables = [context.get_consts(str(v)) for v in seq_instruction.guard_exists_vars]
+        condition = seq_instruction.instantiated_cond
+        # A runtime Get without a witness raises: total execution requires existence.
+        return And(Exists(variables, condition), ForAll(variables, Implies(condition, Q)))
     elif isinstance(seq_instruction, Assign):
         return substitute(
             Q,

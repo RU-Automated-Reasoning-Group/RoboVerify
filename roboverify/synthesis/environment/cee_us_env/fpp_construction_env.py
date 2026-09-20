@@ -853,6 +853,10 @@ class FetchPickAndPlaceConstruction(
         super().set_GT_state(mj_state)
 
     def set_state_from_observation(self, observation):
+        """Compatibility alias for approximate visualization, not segment reset."""
+        return self.set_observation_for_visualization(observation)
+
+    def set_observation_for_visualization(self, observation):
         # This is a dummy function to only visualize the object dynamics!
         mj_state = np.zeros_like(np.concatenate((super().get_GT_state(), self.goal)))
         mj_state[-self.goal_space_size :] = observation[-self.goal_space_size :].copy()

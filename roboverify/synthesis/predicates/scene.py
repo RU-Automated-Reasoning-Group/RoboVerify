@@ -21,6 +21,10 @@ class Scene:
         if set(self.entry_positions) != set(self.positions):
             raise ValueError("Current and frozen geometry must describe the same universe")
 
+    def __deepcopy__(self, memo):
+        # Preserve identity of the relational table marker.
+        return Scene(self.positions, self.bindings, self.entry_positions)
+
 
 def scene_from_obs(obs, num_blocks, bindings=None, *, include_table=False, entry_obs=None):
     positions = {i: on.get_block_pos(obs, i).copy() for i in range(num_blocks)}

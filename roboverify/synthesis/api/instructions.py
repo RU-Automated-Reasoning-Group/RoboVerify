@@ -905,160 +905,13 @@ class While(Instruction):
         return [on_util.get_block_pos(obs, i) for i in range(num_blocks)]
 
     def _eval_z3_guard(self, z3_expr, bindings, all_block_pos):
-        """Evaluate a restricted subset of Z3 Bool formulas under concrete bindings.
-
-        - `bindings` maps variable names (str) -> block index (int)
-        - `all_block_pos` is a list of xyz arrays for each block id
-        """
-
-        def eval_term(term, bound_vals):
-            if z3.is_var(term):
-                return bound_vals[z3.get_var_index(term)]
-            if z3.is_app(term) and term.num_args() == 0:
-                # Free constant like `b0`, `b`, `b_prime`, `tbl` (if present).
-                name = term.decl().name()
-                if name in bindings:
-                    return bindings[name]
-                raise KeyError(
-                    f"While guard evaluation could not resolve symbol {name!r}; "
-                    f"available: {sorted(bindings.keys())}"
-                )
-            raise TypeError(f"Unsupported Z3 term in guard: {term}")
-
-        def eval_bool(expr, bound_vals):
-            if z3.is_true(expr):
-                return True
-            if z3.is_false(expr):
-                return False
-            if z3.is_quantifier(expr):
-                body = expr.body()
-                k = expr.num_vars()
-                # De Bruijn index 0 is the innermost variable; Z3 exposes it the same way.
-                all_ids = list(range(len(all_block_pos)))
-
-                def rec(i, cur):
-                    if i == k:
-                        return eval_bool(body, cur)
-                    if expr.is_forall():
-                        for bid in all_ids:
-                            if not rec(i + 1, cur + [bid]):
-                                return False
-                        return True
-                    # Exists
-                    for bid in all_ids:
-                        if rec(i + 1, cur + [bid]):
-                            return True
-                    return False
-
-                return rec(0, bound_vals)
-
-            if not z3.is_app(expr):
-                raise TypeError(f"Unsupported Z3 guard node: {expr}")
-
-            op = expr.decl().kind()
-            if op == z3.Z3_OP_NOT:
-                return not eval_bool(expr.arg(0), bound_vals)
-            if op == z3.Z3_OP_AND:
-                return all(
-                    eval_bool(expr.arg(i), bound_vals) for i in range(expr.num_args())
-                )
-            if op == z3.Z3_OP_OR:
-                return any(
-                    eval_bool(expr.arg(i), bound_vals) for i in range(expr.num_args())
-                )
-            if op == z3.Z3_OP_IMPLIES:
-                a = eval_bool(expr.arg(0), bound_vals)
-                b = eval_bool(expr.arg(1), bound_vals)
-                return (not a) or b
-            if op == z3.Z3_OP_IFF:
-                a = eval_bool(expr.arg(0), bound_vals)
-                b = eval_bool(expr.arg(1), bound_vals)
-                return a == b
-            if op == z3.Z3_OP_EQ:
-                return eval_term(expr.arg(0), bound_vals) == eval_term(
-                    expr.arg(1), bound_vals
-                )
-            if op == z3.Z3_OP_DISTINCT:
-                vals = [
-                    eval_term(expr.arg(i), bound_vals) for i in range(expr.num_args())
-                ]
-                return len(set(vals)) == len(vals)
-
-            # Uninterpreted predicates from our verification context.
-            name = expr.decl().name()
-            if name in {"ON_star", "ON_star_zero"}:
-                a = eval_term(expr.arg(0), bound_vals)
-                b = eval_term(expr.arg(1), bound_vals)
-                return on_util.on_star_implementation(
-                    all_block_pos[a], all_block_pos[b]
-                )
-            if name == "Higher":
-                a = eval_term(expr.arg(0), bound_vals)
-                b = eval_term(expr.arg(1), bound_vals)
-                return on_util.higher_implementation(all_block_pos[a], all_block_pos[b])
-            if name == "Scattered":
-                a = eval_term(expr.arg(0), bound_vals)
-                b = eval_term(expr.arg(1), bound_vals)
-                return on_util.scattered_implementation(
-                    all_block_pos[a], all_block_pos[b]
-                )
-            raise TypeError(
-                f"Unsupported Z3 operator/predicate in guard: {name} ({expr})"
-            )
-
-        return eval_bool(z3_expr, [])
+        from synthesis.api.guard_eval import evaluate_z3
+        from synthesis.predicates.scene import Scene
+        return evaluate_z3(z3_expr, Scene(dict(enumerate(all_block_pos)), bindings))
 
     def _find_and_bind_guard_exists(self, env, traj) -> bool:
-        """Try to satisfy `instantiated_cond` by choosing guard_exists_vars.
-
-        If satisfiable, mutate `env.symbolic_name_to_box_id` to bind the chosen
-        existential variables (by name) to concrete block IDs, and return True.
-        """
-        mapping = getattr(env, "symbolic_name_to_box_id", None)
-        if mapping is None or not isinstance(mapping, dict):
-            raise ValueError(
-                "While.eval requires env.symbolic_name_to_box_id to exist as a dict[str, int]."
-            )
-
-        obs = traj[-1]
-        num_blocks = self._get_num_blocks(env, obs)
-
-        all_block_pos = self._build_block_positions(obs, num_blocks)
-        all_ids = list(range(num_blocks))
-
-        # Base bindings come from current symbolic mapping.
-        base_bindings = {str(k): int(v) for k, v in mapping.items()}
-
-        # Support multiple existential vars by nested iteration.
-        guard_names = [
-            v.decl().name() if hasattr(v, "decl") else str(v)
-            for v in self.guard_exists_vars
-        ]
-
-        def rec(i, cur_bindings):
-            if i == len(guard_names):
-                return (
-                    cur_bindings
-                    if self._eval_z3_guard(
-                        self.instantiated_cond, cur_bindings, all_block_pos
-                    )
-                    else None
-                )
-            name_i = guard_names[i]
-            for bid in all_ids:
-                nxt = dict(cur_bindings)
-                nxt[name_i] = bid
-                sol = rec(i + 1, nxt)
-                if sol is not None:
-                    return sol
-            return None
-
-        sol = rec(0, base_bindings)
-        if sol is None:
-            return False
-        for name in guard_names:
-            mapping[name] = int(sol[name])
-        return True
+        from synthesis.api.guard_eval import find_and_bind
+        return find_and_bind(self, env, traj)
 
     def eval(
         self, env, traj, return_image=False, *, on_loop_head=None, loop_id="loop"
@@ -1070,6 +923,12 @@ class While(Instruction):
         an earlier rollout. Exit states and iterations beyond max_iters are not
         learning rows.
         """
+        from synthesis.predicates.scene import scene_from_obs
+        self._guard_entry_positions = scene_from_obs(
+            traj[-1], self._get_num_blocks(env, traj[-1]),
+            getattr(env, "symbolic_name_to_box_id", {}),
+            include_table="tbl" in getattr(env, "symbolic_name_to_box_id", {}),
+        ).positions
         if on_loop_head is not None:
             from synthesis.inference_lib.demo_store import (
                 LoopHeadState,
@@ -1254,3 +1113,23 @@ class Seq:
 
     def __str__(self):
         return f"Seq({self.s1}, {self.s2})"
+
+
+class Get(Instruction):
+    """Bind one or more names once; absence of a witness is an explicit failure."""
+    def __init__(self, var, cond, exists_vars=None, *, guard_term=None):
+        self.var = var
+        self.instantiated_cond = cond
+        self.guard_exists_vars = list(exists_vars) if exists_vars is not None else [var]
+        self.guard_term = guard_term
+
+    _get_num_blocks = While._get_num_blocks
+
+    def eval(self, env, traj, return_image=False):
+        from synthesis.api.guard_eval import NoGuardWitness, find_and_bind
+        if not find_and_bind(self, env, traj):
+            raise NoGuardWitness(f"No witness for {self.instantiated_cond}")
+        return []
+
+    def __str__(self):
+        return f"get({self.var}, {self.instantiated_cond})"
