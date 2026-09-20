@@ -17,6 +17,7 @@ class Edge:
     label: object
     binds: frozenset = frozenset()
     kills: frozenset = frozenset()
+    binding_condition: object = None
 
 
 @dataclass
@@ -33,8 +34,15 @@ class RelationalCFG:
 
     @classmethod
     def initial(cls, demos, pre, post, scope=()):
-        return cls({"v0": Node("v0")}, [Edge("entry", "v0", pre), Edge("v0", "exit", post)],
-                   ["v0"], DemoAssignment({"v0": list(demos)}), pre, post, initial_scope=frozenset(scope))
+        return cls(
+            {"v0": Node("v0")},
+            [Edge("entry", "v0", pre), Edge("v0", "exit", post)],
+            ["v0"],
+            DemoAssignment({"v0": list(demos)}),
+            pre,
+            post,
+            initial_scope=frozenset(scope),
+        )
 
     def incoming(self, node):
         return [e for e in self.edges if e.target == node]
@@ -43,11 +51,15 @@ class RelationalCFG:
         return [e for e in self.edges if e.source == node]
 
     def validate_structure(self):
-        if len(set(self.order)) != len(self.order) or set(self.order) != set(self.nodes):
+        if len(set(self.order)) != len(self.order) or set(self.order) != set(
+            self.nodes
+        ):
             raise ValueError("Every CFG node must occur once in the region order")
         known = set(self.nodes) | {self.entry, self.exit}
         if any(e.source not in known or e.target not in known for e in self.edges):
             raise ValueError("Edge references an unknown node")
         expected = list(zip([self.entry] + self.order, self.order + [self.exit]))
         if [(e.source, e.target) for e in self.edges] != expected:
-            raise ValueError("Only single-entry chains with structured loop regions are supported")
+            raise ValueError(
+                "Only single-entry chains with structured loop regions are supported"
+            )
