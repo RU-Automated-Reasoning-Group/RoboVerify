@@ -2,6 +2,17 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Work in progress
+
+`PLAN-popl-alignment.md` is the active plan: bringing this code into line with
+`POPL2027.pdf`, verification soundness first. **Read its status header before starting
+work** — it records which stages are done, which is next, and which design questions are
+already settled. `PAPER-DISCREPANCIES.md` logs places where the paper is wrong or
+underspecified; add to it rather than "fixing" the code to match the paper.
+
+Standing decision from that plan: **the paper is an artifact under test, not a
+specification.** Where paper and code disagree, neither automatically wins.
+
 ## What this project is
 
 RoboVerify synthesizes and *formally verifies* robot manipulation programs (block
@@ -23,7 +34,12 @@ for the pinned dependency set — `torch`, `z3-solver`, `mujoco-py`, `gymnasium`
 ```bash
 cd roboverify
 unset LD_PRELOAD   # avoids "Failed to initialize OpenGL Runtime" before running any sim code
+export LD_LIBRARY_PATH="$HOME/.mujoco/mujoco210/bin:/usr/lib/nvidia"   # mujoco_py refuses to import without both paths
 ```
+
+Both lines are required. Without `LD_LIBRARY_PATH`, `import mujoco_py` raises
+`Missing path to your environment variable` and anything touching the simulator —
+including `synthesis.experiment.test_mcmc_parity` — cannot run.
 
 Run a script as a module (required — the `synthesis` package uses relative imports and files
 under `synthesis/entry/` are not meant to be run as bare scripts):
