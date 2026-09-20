@@ -2,7 +2,7 @@
 
 > **Status — read this first.**
 >
-> Branch: `phase-e-cegis` (based on committed Phase D); Phases A–C are integrated into `main`.
+> Branch: `main`; Phases A–E are integrated via fast-forward from `phase-e-cegis`.
 > This plan is being executed top to bottom, Phase A first. Progress:
 >
 > **Phase A: all seven items done.** Listed in plan order; commits landed in a
@@ -32,7 +32,7 @@
 >       Table 7 contradiction and the segment-reset omission. Commit `c2f0744`.
 >
 > **Phases A–E are complete within the scope and deviations recorded below. Phase F is next.**
-> Phases A–C are included in `main`.
+> Phases A–E are included in `main`.
 > Validation is recorded below; Unstack is subject to a 60-second wall-clock cap.
 >
 > - [x] Explicit numeric table marker and predicate isolation (`b972637`).
@@ -106,7 +106,7 @@
 >       on **establishment at two blocks**. Countermodel/invariant saved; no motion
 >       stage or verified Stack claim. Read via
 >       `uv run python -m synthesis.experiment.report --run runs/phase-e/cegis/latest`.
-> - [ ] Phase F: not started. Phase D/E remain on topic branches, not in `main`.
+> - [ ] Phase F: not started. Start its work on a new topic branch from `main`.
 >
 > **Pre-existing failure, not a regression.**
 > `verify_stack_with_learned_invariant` reports two high-level VC failures
