@@ -936,20 +936,25 @@ class Program:
         else:
             self.instructions = [Skip() for _ in range(self.length)]
 
-    def eval(self, env, return_img: bool = False):
+    def eval(self, env, return_img: bool = False, *, on_loop_head=None):
         """evaluate the program in the environment and return the trajectories"""
         traj = [env.reset()[0]]
         if return_img:
             imgs = [env.render()]
-        for line in self.instructions:
-            line_imgs = line.eval(env, traj, return_img)
+        for index, line in enumerate(self.instructions):
+            kwargs = {}
+            if on_loop_head is not None and isinstance(line, While):
+                kwargs = dict(on_loop_head=on_loop_head, loop_id=str(index))
+            line_imgs = line.eval(env, traj, return_img, **kwargs)
             if return_img:
                 imgs.extend(line_imgs)
         if return_img:
             return traj, imgs
         return traj
 
-    def eval_from_observation(self, env, initial_obs, return_img: bool = False):
+    def eval_from_observation(
+        self, env, initial_obs, return_img: bool = False, *, on_loop_head=None
+    ):
         """Evaluate the program starting from ``initial_obs`` instead of reset."""
         inner = getattr(env, "env", env)
         if not hasattr(inner, "set_state_from_observation"):
@@ -961,8 +966,11 @@ class Program:
         traj = [initial_obs.copy()]
         if return_img:
             imgs = [env.render()]
-        for line in self.instructions:
-            line_imgs = line.eval(env, traj, return_img)
+        for index, line in enumerate(self.instructions):
+            kwargs = {}
+            if on_loop_head is not None and isinstance(line, While):
+                kwargs = dict(on_loop_head=on_loop_head, loop_id=str(index))
+            line_imgs = line.eval(env, traj, return_img, **kwargs)
             if return_img:
                 imgs.extend(line_imgs)
         if return_img:
@@ -1403,10 +1411,12 @@ def VC_aux(seq_instruction, Q, context) -> List:
     assert False, "Unrecognized seq instruction for VC_aux"
 
 
-def run_stack_example_with_only_ON_star():
+def run_stack_example_with_only_ON_star(demo_store, loop_id="1"):
     context = highlevel_verification_lib.HighLevelContext(mode="declare")
-    inferred_invariant, candidate_lists = (
-        synthesis.inference_lib.inference.run_proposal_example(context=context)
+    from synthesis.inference_lib.demo_store import InvInference, tower_vocabulary
+
+    inferred_invariant, candidate_lists = InvInference(
+        demo_store, loop_id, tower_vocabulary("stack"), context
     )
     b_prime, b, n, b0, a = Consts("b_prime b n b0 a", context.BoxSort)
     instructions = [

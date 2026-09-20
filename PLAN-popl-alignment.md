@@ -2,7 +2,7 @@
 
 > **Status — read this first.**
 >
-> Branch: `phase-b-predicate-alignment`. This plan is being executed top to bottom,
+> Branch: `phase-c-trace-inference`. This plan is being executed top to bottom,
 > Phase A first. Progress:
 >
 > **Phase A: all seven items done.** Listed in plan order; commits landed in a
@@ -31,7 +31,7 @@
 > - [x] **A.7** `PAPER-DISCREPANCIES.md` created and seeded with the Theorem 5.2 /
 >       Table 7 contradiction and the segment-reset omission. Commit `c2f0744`.
 >
-> **Phase B implementation is complete. Phase C is next.**
+> **Phase B implementation is complete and included in `main`. Phase C is in progress.**
 > Validation is recorded below; Unstack is subject to a 60-second wall-clock cap.
 >
 > - [x] Explicit numeric table marker and predicate isolation (`b972637`).
@@ -53,7 +53,10 @@
 > - [x] Stack infinite and finite (4 blocks): both retain `hl_ok: False`,
 >       `ll_ok: True`, with the same VC 0/1 refutations documented below.
 > - [x] MCMC smoke comparison: all runs complete; results and budgets below.
-> - [ ] Phases C–F: not started.
+> - [x] Phase C trace store, adapter, and runtime callbacks: nine regression tests
+>       pass, including golden Stack invariant equivalence and per-iteration snapshots.
+> - [ ] Phase C entry-point migration, simulator validation, and documentation in progress.
+> - [ ] Phases D–F: not started.
 >
 > **Pre-existing failure, not a regression.**
 > `verify_stack_with_learned_invariant` reports two high-level VC failures

@@ -1060,17 +1060,47 @@ class While(Instruction):
             mapping[name] = int(sol[name])
         return True
 
-    def eval(self, env, traj, return_image=False) -> List:
-        # Runtime execution: evaluate the synthesized (Z3) guard by searching over
-        # concrete blocks, and bind the existential variable(s) into the env mapping.
+    def eval(
+        self, env, traj, return_image=False, *, on_loop_head=None, loop_id="loop"
+    ) -> List:
+        """Execute the loop, optionally reporting a snapshot before each body.
+
+        The callback receives a LoopHeadState after existential guard binding.
+        The entry snapshot belongs to this invocation, not the whole program or
+        an earlier rollout. Exit states and iterations beyond max_iters are not
+        learning rows.
+        """
+        if on_loop_head is not None:
+            from synthesis.inference_lib.demo_store import (
+                LoopHeadState,
+                observation_positions,
+            )
+
+            num_blocks = self._get_num_blocks(env, traj[-1])
+            entry_positions = observation_positions(traj[-1], num_blocks)
         imgs: List = []
         iters = 0
         while self._find_and_bind_guard_exists(env, traj):
             iters += 1
             if iters > self.max_iters:
                 break
-            for instr in self.body:
-                imgs.extend(instr.eval(env, traj, return_image=return_image))
+            if on_loop_head is not None:
+                on_loop_head(
+                    LoopHeadState.from_observation(
+                        loop_id,
+                        traj[-1],
+                        entry_positions,
+                        env.symbolic_name_to_box_id,
+                        num_blocks,
+                    )
+                )
+            for index, instr in enumerate(self.body):
+                kwargs = {}
+                if on_loop_head is not None and isinstance(instr, While):
+                    kwargs = dict(
+                        on_loop_head=on_loop_head, loop_id=f"{loop_id}.{index}"
+                    )
+                imgs.extend(instr.eval(env, traj, return_image=return_image, **kwargs))
         return imgs
 
     def register_trainable_parameter(self, parameters: List):
