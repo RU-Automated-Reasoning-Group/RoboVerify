@@ -1,4 +1,3 @@
-import pdb
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional
 
@@ -82,11 +81,12 @@ class Parameter:
         parameters.append(self.numeric_val())
 
     def update(self, new_parameter: List[float]):
-        if self.pos is not None:
-            self.val = new_parameter[self.pos]
-        else:
-            pdb.set_trace()
-            raise ValueError
+        if self.pos is None:
+            raise ValueError(
+                "Parameter.update called before register: this parameter has no "
+                "slot in the trainable vector, so there is nothing to update"
+            )
+        self.val = new_parameter[self.pos]
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Parameter):

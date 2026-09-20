@@ -1,5 +1,4 @@
 import itertools
-import pdb
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -12,6 +11,25 @@ from synthesis.inference_lib import quant_enum_merge
 from synthesis.util import on
 
 z3.set_option("smt.core.minimize", "true")
+
+
+class InferenceDataError(Exception):
+    """Invariant inference was handed data it cannot interpret.
+
+    Raised where a predicate's arguments cannot be resolved to object names via
+    the variable and constant mappings -- a malformed dataset or a vocabulary
+    that does not match the states it is being evaluated against.
+    """
+
+
+class SeparationInfeasible(Exception):
+    """No formula in the vocabulary separates the S and U rows.
+
+    This is a *normal* outcome, not a defect: after a counterexample-guided
+    round adds a conflicting row, the current vocabulary may genuinely admit no
+    separating predicate. Callers are expected to catch it and widen the
+    vocabulary or drop the clause, which is why it must not halt the process.
+    """
 
 
 @dataclass(frozen=True)
@@ -363,10 +381,11 @@ def compute_data(
                 var_mapping[arg1] if arg1 in var_mapping else constants_mapping[arg1]
             )
             if not (isinstance(block1_name, str) and isinstance(block2_name, str)):
-                pdb.set_trace()
-            assert isinstance(block1_name, str) and isinstance(block2_name, str)
+                raise InferenceDataError(
+                    f"cannot resolve both arguments of {predicate} to object names; "
+                    f"got {block1_name!r} and {block2_name!r}"
+                )
             # if block1_name == "tbl" or block2_name == "tbl":
-            # pdb.set_trace()
             data.append(
                 on.on_star_implementation(
                     state[block1_name],
@@ -397,10 +416,11 @@ def compute_data(
                 var_mapping[arg1] if arg1 in var_mapping else constants_mapping[arg1]
             )
             if not (isinstance(block1_name, str) and isinstance(block2_name, str)):
-                pdb.set_trace()
-            assert isinstance(block1_name, str) and isinstance(block2_name, str)
+                raise InferenceDataError(
+                    f"cannot resolve both arguments of {predicate} to object names; "
+                    f"got {block1_name!r} and {block2_name!r}"
+                )
             # if block1_name == "tbl" or block2_name == "tbl":
-            # pdb.set_trace()
             data.append(
                 on.higher_implementation(
                     state[block1_name],
@@ -416,10 +436,11 @@ def compute_data(
                 var_mapping[arg1] if arg1 in var_mapping else constants_mapping[arg1]
             )
             if not (isinstance(block1_name, str) and isinstance(block2_name, str)):
-                pdb.set_trace()
-            assert isinstance(block1_name, str) and isinstance(block2_name, str)
+                raise InferenceDataError(
+                    f"cannot resolve both arguments of {predicate} to object names; "
+                    f"got {block1_name!r} and {block2_name!r}"
+                )
             # if block1_name == "tbl" or block2_name == "tbl":
-            # pdb.set_trace()
             data.append(
                 on.scattered_implementation(
                     state[block1_name],
@@ -542,10 +563,11 @@ def compute_data_with_function(
             block1_name = _resolve_term_to_object_name(arg0)
             block2_name = _resolve_term_to_object_name(arg1)
             if not (isinstance(block1_name, str) and isinstance(block2_name, str)):
-                pdb.set_trace()
-            assert isinstance(block1_name, str) and isinstance(block2_name, str)
+                raise InferenceDataError(
+                    f"cannot resolve both arguments of {predicate} to object names; "
+                    f"got {block1_name!r} and {block2_name!r}"
+                )
             # if block1_name == "tbl" or block2_name == "tbl":
-            # pdb.set_trace()
             data.append(
                 on.on_star_implementation(
                     state[block1_name],
@@ -568,10 +590,11 @@ def compute_data_with_function(
             block1_name = _resolve_term_to_object_name(arg0)
             block2_name = _resolve_term_to_object_name(arg1)
             if not (isinstance(block1_name, str) and isinstance(block2_name, str)):
-                pdb.set_trace()
-            assert isinstance(block1_name, str) and isinstance(block2_name, str)
+                raise InferenceDataError(
+                    f"cannot resolve both arguments of {predicate} to object names; "
+                    f"got {block1_name!r} and {block2_name!r}"
+                )
             # if block1_name == "tbl" or block2_name == "tbl":
-            # pdb.set_trace()
             data.append(
                 on.higher_implementation(
                     state[block1_name],
@@ -583,10 +606,11 @@ def compute_data_with_function(
             block1_name = _resolve_term_to_object_name(arg0)
             block2_name = _resolve_term_to_object_name(arg1)
             if not (isinstance(block1_name, str) and isinstance(block2_name, str)):
-                pdb.set_trace()
-            assert isinstance(block1_name, str) and isinstance(block2_name, str)
+                raise InferenceDataError(
+                    f"cannot resolve both arguments of {predicate} to object names; "
+                    f"got {block1_name!r} and {block2_name!r}"
+                )
             # if block1_name == "tbl" or block2_name == "tbl":
-            # pdb.set_trace()
             data.append(
                 on.scattered_implementation(
                     state[block1_name],
@@ -664,8 +688,10 @@ def learn_from_partition(S: Set, U: Set):
         print("model is", model)
         chosen = [i for i in range(n) if model[sel[i]].as_long() == 1]
         return chosen
-    else:
-        pdb.set_trace()
+    raise SeparationInfeasible(
+        f"no subset of the {n} candidate predicates separates the "
+        f"{len(S)} S-rows from the {len(U)} U-rows (optimizer returned {result})"
+    )
 
 
 def construct_truth_table_and_extract_expression_for_phi(
@@ -860,13 +886,28 @@ def add_universal_and_existential_quantifiers(
     return result
 
 
+TAUTOLOGY_CHECK_TIMEOUT_MS = 10_000
+
+
 def check_tautology(
-    clause: z3.ExprRef, context: highlevel_verification_lib.HighLevelContext
+    clause: z3.ExprRef,
+    context: highlevel_verification_lib.HighLevelContext,
+    timeout_ms: int = TAUTOLOGY_CHECK_TIMEOUT_MS,
 ) -> bool:
-    """Check whether clause can be directly derived from the axioms we already have
-    Returns True if the caluse is a tautology
+    """Is ``clause`` derivable from the domain axioms alone?
+
+    True means provably a tautology, so the caller drops the clause as carrying
+    no information. An inconclusive solver answer returns False -- both call
+    sites read that as "keep the clause", which is the conservative direction:
+    keeping a redundant clause costs a little solver time later, whereas
+    dropping one we failed to prove redundant would weaken the invariant.
+
+    The timeout makes that inconclusive case reachable at all. Without it a
+    hard quantified query can hang, which in a counterexample-guided loop means
+    the whole run wedges with no diagnosis.
     """
     solver = z3.Solver()
+    solver.set("timeout", timeout_ms)
 
     # add all axioms
     active_context = _ensure_context(context)
@@ -883,10 +924,13 @@ def check_tautology(
     if result == z3.unsat:
         # can be derived from axioms
         return True
-    elif result == z3.sat:
+    if result == z3.sat:
         return False
-    else:
-        assert False, f"unknown z3 result {result}"
+    print(
+        f"[WARN] tautology check was inconclusive ({result}) for {clause}; "
+        "keeping the clause"
+    )
+    return False
 
 
 def forall_exists_learn_from_partition(all_S: List[Set], all_U: List[Set]):
@@ -960,7 +1004,10 @@ def forall_exists_learn_from_partition(all_S: List[Set], all_U: List[Set]):
     ]
 
     if not valid_partitions:
-        pdb.set_trace()
+        raise SeparationInfeasible(
+            "no witness permutation yielded a usable partition constraint, so "
+            "there is nothing for the optimizer to separate"
+        )
 
     opt.add(z3.Or(*valid_partitions))
 
@@ -970,8 +1017,10 @@ def forall_exists_learn_from_partition(all_S: List[Set], all_U: List[Set]):
     result = opt.check()
 
     if result != z3.sat:
-        pdb.set_trace()
-        # return None
+        raise SeparationInfeasible(
+            "no subset of the candidate predicates separates the forall-exists "
+            f"partitions (optimizer returned {result})"
+        )
 
     model = opt.model()
 
@@ -1599,8 +1648,6 @@ def loop_inference(
     # print("model is")
     # print(solver.model())
     # print("Unsat Core:", solver.unsat_core())
-    # import pdb
-    # pdb.set_trace()
     # highlevel_verification.add_unstack_b0_bottom_loop_invarinat(solver, b0)  # not
     # solver.assert_and_track(z3.Not(z3.ForAll([x], z3.Implies(ON_star(x, b0), x != b))), "not_b_neq_b0")
     # solver.assert_and_track(ON_star(x, b0), "on_b0")
