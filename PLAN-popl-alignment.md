@@ -10,21 +10,24 @@
 >       (four iterations drew the identical perturbation matrix) and parity still
 >       passes. Commit `afd04a6`.
 > - [x] **A.6 / A.7** `POPL2027.pdf` and `PAPER-DISCREPANCIES.md` committed. Commit `c2f0744`.
-> - [ ] **A.1** `Program.lowlevel_verification` — distinguish "passed" from "never
->       checked". *In progress: nothing written yet; next edit is here.*
-> - [ ] **A.2** `start_verification` — replace the blanket `continue` with a
->       three-way inert / motion-unhandled / unknown classification.
+> - [x] **A.1 / A.2** Motion verification now reports what it examined:
+>       `lowlevel_verification` fails closed when no loop was checked, and
+>       `start_verification`'s blanket skip became a three-way inert /
+>       motion-unhandled / unknown classification. Commit `97a196d`.
 > - [ ] **A.3** `pdb.set_trace()` → typed exceptions (9 sites in `inference.py`,
->       1 in `instructions.py`).
+>       1 in `instructions.py`). ***Next.*** Nothing written yet.
 > - [ ] **A.4** Solver `unknown` handling in `check_tautology` and
 >       `highlevel_verification`.
 > - [ ] Phases B–F: not started.
 >
-> **Running the tests needs two environment variables, not one.** `CLAUDE.md`
-> documents `unset LD_PRELOAD`; MuJoCo also needs
-> `export LD_LIBRARY_PATH="$HOME/.mujoco/mujoco210/bin:/usr/lib/nvidia"`, or
-> `mujoco_py` refuses to import. Without it
-> `synthesis.experiment.test_mcmc_parity` cannot run at all.
+> **Pre-existing failure, not a regression.**
+> `verify_stack_with_learned_invariant` reports two high-level VC failures
+> (`[FAIL] VC 0 check 2 returned sat`, same for VC 1). Confirmed identical before
+> and after the A.1/A.2 change by stashing and re-running, so it predates this
+> work. Phase E's counterexample-guided loop is what is meant to address it —
+> do not treat it as damage from Phase A.
+>
+> **Setup:** see `AGENTS.md`. Two environment variables are needed, not one.
 >
 > Conflicts 1–7 near the end of this document are **all adjudicated** — do not
 > reopen them. Conflict 1 is paper-side with no code action and is recorded in
