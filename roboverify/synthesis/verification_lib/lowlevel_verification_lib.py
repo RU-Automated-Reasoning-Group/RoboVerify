@@ -8,7 +8,11 @@ from scipy.spatial import ConvexHull
 from z3 import (
     Z3_OP_DISTINCT,
     Z3_OP_EQ,
+    Z3_OP_IMPLIES,
+    Z3_OP_ITE,
+    Z3_OP_NOT,
     Z3_OP_UNINTERPRETED,
+    Z3_OP_XOR,
     Abs,
     And,
     BoolVal,
@@ -154,6 +158,9 @@ class LowLevelContext:
         # no table would add an unconstrained sort element that weakens every
         # condition for nothing.
         self.use_tbl = use_tbl
+        # Monotonic across the whole context: two existentials must not be given
+        # the same witness just because they sit in different conditions.
+        self._skolem_counter = 0
         self._build_symbols()
 
     def _build_symbols(self):
@@ -593,34 +600,99 @@ class LowLevelContext:
             current_pos = end_pos
         return ok
 
-    def _translate_expr(self, expr, lowlevel_constants, const_map, bindings):
+    def _fresh_skolem_const(self):
+        """A Box constant no other term uses, for witnessing an existential."""
+        name = f"sk_{self._skolem_counter}"
+        self._skolem_counter += 1
+        return self.get_consts(name)
+
+    @staticmethod
+    def _child_polarities(expr, polarity):
+        """Polarity each argument of *expr* is translated under.
+
+        ``True`` positive, ``False`` negative, ``None`` both (as under an
+        ``Iff``), where neither quantifier rule is valid.
+        """
+        num_args = expr.num_args()
+        flipped = None if polarity is None else not polarity
+        kind = expr.decl().kind()
+        if kind == Z3_OP_NOT:
+            return [flipped] * num_args
+        if kind == Z3_OP_IMPLIES:
+            return [flipped] + [polarity] * (num_args - 1)
+        if kind == Z3_OP_XOR:
+            return [None] * num_args
+        if kind == Z3_OP_ITE:
+            return [None] + [polarity] * (num_args - 1)
+        return [polarity] * num_args
+
+    def _translate_expr(
+        self, expr, lowlevel_constants, const_map, bindings, polarity=True
+    ):
         """Recursively translate a high-level z3 expression to low-level.
 
-        ForAll is eliminated by enumerating all combinations of lowlevel_constants.
         ON_star / ON_star_zero -> lowlevel_on_star, Higher -> lowlevel_higher,
         Scattered -> lowlevel_scattered. Boolean structure is preserved.
+
+        The result is *asserted* as an assumption, so it has to be implied by the
+        original rather than equivalent to it: anything unsatisfiable under a
+        weaker assumption is unsatisfiable under the real one. That is what fixes
+        the treatment of each quantifier, and it depends on polarity:
+
+        * ``ForAll`` at positive polarity becomes the finite conjunction over
+          ``lowlevel_constants``, which the real universally quantified formula
+          implies -- the Box sort is a ``DeclareSort`` and therefore infinite, so
+          this is a weakening and not an equivalence.
+        * ``Exists`` at positive polarity is Skolemized: fresh constants, one per
+          occurrence. Since the enclosing universals have already been expanded
+          into separate conjuncts by the time we get here, each instantiation
+          gets its own witness, which is what a Skolem *function* of those
+          universals would give. This is satisfiability-preserving, so it is
+          exact rather than merely sound. The finite disjunction over the named
+          constants would instead be *stronger* than the existential -- it
+          demands the witness be one of the constants we happened to name -- and
+          could make a check come out unsat that is not.
+
+        Under a negation both rules invert into strengthenings, so a quantifier
+        at negative or mixed polarity is refused rather than translated.
 
         bindings: list where bindings[de_bruijn_index] = concrete lowlevel constant.
         """
         if is_var(expr):
             return bindings[get_var_index(expr)]
 
-        if is_quantifier(expr) and expr.is_forall():
+        if is_quantifier(expr):
+            if polarity is not True:
+                raise NotImplementedError(
+                    "quantifier under a negation in a low-level condition: "
+                    f"{expr}. Both quantifier rules turn into strengthenings at "
+                    "this polarity, which would let the check assume more than "
+                    "the condition states; refusing to translate it"
+                )
             num_vars = expr.num_vars()
             body = expr.body()
-            conjuncts = []
-            for assignment in product(lowlevel_constants, repeat=num_vars):
-                # de Bruijn: var_name(i) has index (num_vars - 1 - i) in body
-                new_prefix = [None] * num_vars
-                for i in range(num_vars):
-                    new_prefix[num_vars - 1 - i] = assignment[i]
-                new_bindings = new_prefix + bindings
-                conjuncts.append(
-                    self._translate_expr(
-                        body, lowlevel_constants, const_map, new_bindings
+            if expr.is_forall():
+                conjuncts = []
+                for assignment in product(lowlevel_constants, repeat=num_vars):
+                    # de Bruijn: var_name(i) has index (num_vars - 1 - i) in body
+                    new_prefix = [None] * num_vars
+                    for i in range(num_vars):
+                        new_prefix[num_vars - 1 - i] = assignment[i]
+                    new_bindings = new_prefix + bindings
+                    conjuncts.append(
+                        self._translate_expr(
+                            body, lowlevel_constants, const_map, new_bindings, polarity
+                        )
                     )
-                )
-            return And(*conjuncts)
+                return And(*conjuncts)
+
+            witnesses = [self._fresh_skolem_const() for _ in range(num_vars)]
+            new_prefix = [None] * num_vars
+            for i in range(num_vars):
+                new_prefix[num_vars - 1 - i] = witnesses[i]
+            return self._translate_expr(
+                body, lowlevel_constants, const_map, new_prefix + bindings, polarity
+            )
 
         if is_app(expr):
             decl = expr.decl()
@@ -633,7 +705,9 @@ class LowLevelContext:
                     raise ValueError(f"Unknown constant in translation: {name}")
 
                 children = [
-                    self._translate_expr(c, lowlevel_constants, const_map, bindings)
+                    self._translate_expr(
+                        c, lowlevel_constants, const_map, bindings, polarity
+                    )
                     for c in expr.children()
                 ]
                 if name in ("ON_star", "ON_star_zero"):
@@ -646,14 +720,18 @@ class LowLevelContext:
 
             if decl.kind() == Z3_OP_EQ:
                 children = [
-                    self._translate_expr(c, lowlevel_constants, const_map, bindings)
+                    self._translate_expr(
+                        c, lowlevel_constants, const_map, bindings, polarity
+                    )
                     for c in expr.children()
                 ]
                 return self.lowlevel_box_equal(children[0], children[1])
 
             if decl.kind() == Z3_OP_DISTINCT:
                 children = [
-                    self._translate_expr(c, lowlevel_constants, const_map, bindings)
+                    self._translate_expr(
+                        c, lowlevel_constants, const_map, bindings, polarity
+                    )
                     for c in expr.children()
                 ]
                 # Mirror the `==` translation: prefer "distinct position" for box terms.
@@ -672,9 +750,10 @@ class LowLevelContext:
                 except Exception:
                     return decl(*children)
 
+            child_polarities = self._child_polarities(expr, polarity)
             children = [
-                self._translate_expr(c, lowlevel_constants, const_map, bindings)
-                for c in expr.children()
+                self._translate_expr(c, lowlevel_constants, const_map, bindings, pol)
+                for c, pol in zip(expr.children(), child_polarities)
             ]
             return decl(*children)
 
