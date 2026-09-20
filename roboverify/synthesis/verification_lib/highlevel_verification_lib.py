@@ -34,6 +34,12 @@ class InvariantSpec:
     data: Dict[str, Any]
 
 
+# Bounds a single VC query. Generous on purpose: this must not turn a slow but
+# currently-passing verification condition into a failure, only stop an
+# unbounded hang.
+VC_CHECK_TIMEOUT_MS = 300_000
+
+
 class HighLevelContext:
     def __init__(
         self,
@@ -650,12 +656,20 @@ class HighLevelContext:
         formula=None,
         visualize_model: bool = True,
         viz_tag: Optional[str] = None,
+        timeout_ms: int = VC_CHECK_TIMEOUT_MS,
     ):
         """Check satisfiability under axioms without negating formula.
 
         Returns (z3_result, model_or_none). The model is present only when result is sat.
+
+        The timeout bounds a query that the quantified axioms can otherwise make
+        run indefinitely. It is deliberately generous: a verification condition
+        that needs longer than this is not usable inside a counterexample-guided
+        loop anyway, and returning ``unknown`` at least says so instead of
+        wedging the run with no diagnosis.
         """
         s = Solver()
+        s.set("timeout", timeout_ms)
         if self.verification_mode == "goals":
             self.add_axiom_goal_nested(s)
         else:

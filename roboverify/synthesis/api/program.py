@@ -1115,7 +1115,21 @@ class Program:
                 )
                 if check2 != unsat:
                     ok = False
-                    print(f"[FAIL] VC {idx} check 2 returned {check2}; expected unsat")
+                    # sat and unknown are both failures but not the same event:
+                    # sat is a genuine refutation carrying a counterexample to
+                    # learn from, unknown is the solver giving up and says
+                    # nothing about validity. Phase E turns this into a typed
+                    # verdict; for now at least name which one happened.
+                    if check2 == sat:
+                        print(
+                            f"[FAIL] VC {idx} check 2 returned sat; expected unsat "
+                            "(refuted: the conclusion does not follow)"
+                        )
+                    else:
+                        print(
+                            f"[FAIL] VC {idx} check 2 returned {check2}; expected "
+                            "unsat (inconclusive: solver gave up, validity unknown)"
+                        )
                     if check2 == sat and model2 is not None:
                         print_where_conclusion_fails(
                             solver,
