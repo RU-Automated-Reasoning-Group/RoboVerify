@@ -39,6 +39,20 @@ def stack_body(release_height=0.05, release=True):
     ]
 
 
+def rooted_tower_conditions(*, root="b0", target="b", use_tbl=False):
+    """Declare the fixture's root, including the absence of unnamed blocks below it."""
+    context = HighLevelContext(use_tbl=use_tbl)
+    r, y = context.get_consts(root), context.get_consts(target)
+    u = z3.FreshConst(context.BoxSort, prefix="fixture_below")
+    conditions = [
+        context.ON_star(y, r),
+        z3.ForAll([u], z3.Implies(context.ON_star(r, u), u == r)),
+    ]
+    if use_tbl:
+        conditions.append(r != context.get_consts("tbl"))
+    return conditions
+
+
 class MotionVerification(unittest.TestCase):
     def setUp(self):
         # A source below the target layer admits the full current Put abstraction.
@@ -55,7 +69,10 @@ class MotionVerification(unittest.TestCase):
     def verify(self, body=None, **kwargs):
         with contextlib.redirect_stdout(io.StringIO()):
             return verify_motion_block(
-                [],
+                kwargs.pop(
+                    "initial_condition",
+                    rooted_tower_conditions(use_tbl="tbl" in self.constants),
+                ),
                 stack_body() if body is None else body,
                 self.constants,
                 self.contract,
@@ -72,7 +89,7 @@ class MotionVerification(unittest.TestCase):
         self.assertGreater(result.elapsed_seconds, 0)
 
     def test_root_drift_is_rejected_even_when_local_placement_passes(self):
-        self.scene.update(a=[0.3, 0, 0], b=[0.024, 0, 0.05], b0=[0, 0, 0])
+        self.scene.update(a=[0.3, 0, 0], b=[0.012, 0, 0.05], b0=[0, 0, 0])
         body = [
             waypoint("a", "a", "a", "a", [0, 0, 0.2], release=False),
             waypoint("a", "b", "b", "b", [0.024, 0, 0.2], release=False),
@@ -84,6 +101,48 @@ class MotionVerification(unittest.TestCase):
         self.assertEqual(statuses["alignment"], "refuted")
         self.assertEqual(statuses["effect_ON_star"], "refuted")
         self.assertFalse(result)
+
+    def test_unproved_contract_root_hint_is_not_trusted(self):
+        self.contract = MotionContract("a", "b", frame_base="a")
+        result = self.verify()
+        self.assertTrue(result, str(result))
+        root = next(c for c in result.checks if c.obligation == "root_selection")
+        self.assertIn("root=b0;", root.reason)
+
+    def test_missing_symbolic_root_does_not_fall_back_to_scene_or_name(self):
+        result = self.verify(initial_condition=[])
+        self.assertFalse(result)
+        root = next(c for c in result.checks if c.obligation == "root_selection")
+        self.assertEqual(root.status, "unsupported")
+
+    def test_input_outside_declared_tight_alignment_is_inconsistent(self):
+        self.scene.update(b=[0.02, 0, 0.05], b0=[0, 0, 0])
+        result = self.verify()
+        self.assertFalse(result)
+        self.assertEqual(result.checks[0].status, "inconsistent")
+
+    def test_new_placement_alignment_is_checked_not_assumed(self):
+        body = stack_body(0.06)
+        body[-1] = waypoint("a", "b", "b", "b", [0.015, 0, 0.06], release=True)
+        result = self.verify(body)
+        statuses = {c.obligation: c.status for c in result.checks}
+        self.assertEqual(statuses["initial_consistency"], "valid")
+        self.assertEqual(statuses["contract"], "valid")
+        self.assertEqual(statuses["alignment"], "refuted")
+
+    def test_alignment_covers_bounded_motion_noise(self):
+        body = stack_body(0.06)
+        body[-1] = waypoint("a", "b", "b", "b", [0.012, 0, 0.06], release=True)
+        self.assertTrue(self.verify(body))
+        result = self.verify(body, noise=NoiseSpec(0, 0.001, 0))
+        statuses = {c.obligation: c.status for c in result.checks}
+        self.assertEqual(statuses["contract"], "valid")
+        self.assertEqual(statuses["alignment"], "refuted")
+        self.assertTrue(
+            next(
+                c for c in result.counterexamples if c.obligation == "alignment"
+            ).noise_values
+        )
 
     def test_table_placement_requires_symbolic_separation_effect(self):
         self.constants.append("tbl")
@@ -128,7 +187,7 @@ class MotionVerification(unittest.TestCase):
     def test_supported_tower_block_is_not_assumed_stationary(self):
         self.scene["b0"] = list(self.scene["a"])
         self.scene["sym"] = [0.3, 0, 0.05]
-        result = self.verify()
+        result = self.verify(initial_condition=rooted_tower_conditions(root="b"))
         self.assertFalse(result)
         cex = next(c for c in result.counterexamples if c.obligation == "frame")
         self.assertNotEqual(cex.final_positions["sym"], cex.mu_k["sym"])

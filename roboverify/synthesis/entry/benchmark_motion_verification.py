@@ -38,13 +38,27 @@ def benchmark():
         "epsilon": 0.005,
         "encoding": "exact swept cube, bilinear",
     }
-    _, program = build_stack_programs(HighLevelContext(mode="declare"))
+    high = HighLevelContext(mode="declare")
+    _, program = build_stack_programs(high)
+    root, target = high.get_consts("b0"), high.get_consts("b")
+    member = z3.FreshConst(high.BoxSort, prefix="benchmark_member")
+    # Numeric positions alone do not establish the symbolic root criterion.
+    conditions = [
+        target == root,
+        z3.ForAll(
+            [member],
+            z3.Implies(
+                high.ON_star(root, member),
+                member == root,
+            ),
+        ),
+    ]
     body = program.instructions[1].body
     scene = {"b0": [0, 0, 0], "b": [0, 0, 0], "b_prime": [0.3, 0, 0], "sym": [2, 2, 0]}
     calls = []
     for noise in (None, NoiseSpec(0.005, 0.005, 0.005)):
         result = verify_motion_block(
-            [],
+            conditions,
             body,
             ["b0", "b", "b_prime"],
             MotionContract("b_prime", "b"),

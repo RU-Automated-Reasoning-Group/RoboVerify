@@ -49,13 +49,30 @@ No match exits the loop; standalone Get still requires witness existence.
 Supported synthesis scope remains structured chains and recovered flat loops.
 Placement summaries are proposed from the outgoing ON relation or the final
 transport reference, then checked against all ON*/Higher/Scattered WP effects.
-Alignment currently uses the contract's designated reference (the integrated
-path chooses b0, otherwise the first sorted physical name); it does not prove
-root selection. A1 remains open for justified root selection and the established,
-preserved tight root-relative invariant. Once that invariant holds, checking new
-placements against the same root suffices by the triangle inequality; separate
+Root discovery follows §5.5: enumerate in-scope physical names `r` and prove
+`forall u. ON*(target,u) => ON*(u,r)`, including unnamed objects. The integrated
+path uses `P = wp(remaining symbolic body, postcondition)` under the established
+entry/invariant/guard context transported through prior symbolic instructions.
+It also proves that context establishes P; a desired invariant alone cannot
+manufacture a root. Standalone motion checking uses its declared entry conditions.
+No named root, an inconsistent context, or solver unknown prevents certification;
+`b0`, name order, concrete coordinates, and `frame_base` hints are not evidence.
+
+**Input assumption:** existing towers satisfy tight root-relative alignment in
+both horizontal coordinates, `abs(F(member)-F(root)) < L/4`. This is explicit
+quantified geometry, not a consequence inferred from ON*'s looser `L/2` bound.
+Contradictory concrete input scenes fail consistency. Fresh loop contexts carry
+this additional geometric invariant alongside the learned relational invariant.
+Before each placement, `alignment_entry` checks the destination tower's bound;
+after motion, `alignment` checks the placed block against the proved root for
+all allowed noise. The input assumption is never inserted on a placement's
+output. The frame VC preserves every non-manipulated object, including the root;
+support checks reject removing a root with blocks above it. A separated table
+placement creates a singleton. Together these preserve the tight invariant.
+Changing references requires proving the new root and its entry alignment.
+The triangle inequality gives strict pairwise distance `< L/2`; separate
 all-pairs placement checks are unnecessary. See discrepancy 12 for the proof and
-remaining obligations. Existing complete-effect checks remain in force.
+user decision. Complete ON*/Higher/Scattered effect checks remain in force.
 A transfer may span adjacent blocks. A Get/assignment/control boundary inside an
 unfinished transfer, multiple placements in one unsplit block, unknown primitive,
 or unsupported summary produces an explicit unsupported result. The existing

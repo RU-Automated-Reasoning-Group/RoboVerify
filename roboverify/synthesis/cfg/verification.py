@@ -8,6 +8,7 @@ Unsupported summary shapes remain explicit failures.
 from copy import deepcopy
 
 import z3
+
 from synthesis.api.instructions import (
     Assign,
     Get,
@@ -18,19 +19,24 @@ from synthesis.api.instructions import (
     Skip,
 )
 from synthesis.cfg.bindings import require_closed
-from synthesis.cfg.lower import lower
+from synthesis.cfg.lower import lower, lower_region
 from synthesis.cfg.region import BlockRegion, LoopRegion
+from synthesis.cfg.scope import scope
 from synthesis.predicates.term import to_z3
 from synthesis.verification_lib.lowlevel_verification_lib import LowLevelContext
 from synthesis.verification_lib.motion_verification import (
     MotionCheck,
     MotionContract,
     MotionVerificationResult,
+    assume_input_alignment,
     check_abstract_effects,
+    check_alignment,
     check_contract_realization,
     check_frame_preservation,
+    prepare_alignment,
 )
 from synthesis.verification_lib.primitive_motion import PrimitiveMotionProblem
+from synthesis.verification_lib.root_selection import RootContext
 
 
 def propose_summaries(cfg, context):
@@ -167,10 +173,12 @@ def verify_cfg_motion(
         return MotionVerificationResult(
             [MotionCheck("coverage", "unsupported", reason="No object bindings")], noise
         )
-    base = "b0" if "b0" in constants else physical_names[0]
-    dummy = MotionContract(base, base, base, table_surface_height)
+    # Placeholder source/target for the state machine; no reference root is chosen.
+    dummy = MotionContract(
+        physical_names[0], physical_names[0], table_surface_height=table_surface_height
+    )
 
-    def fresh(conditions, path, positions=None, arm=None):
+    def fresh(conditions, path, positions=None, arm=None, available=()):
         p = PrimitiveMotionProblem(
             low,
             conditions,
@@ -183,6 +191,8 @@ def verify_cfg_motion(
             initial_arm=arm,
             enforce_source=False,
         )
+        p.root_context = RootContext(context, z3.And(*conditions), timeout_ms)
+        assume_input_alignment(p, p.root_context.initial_roots(available))
         p.check("initial_consistency")
         return p
 
@@ -198,26 +208,26 @@ def verify_cfg_motion(
             for c in p.checks[offset:]
         )
 
-    def walk(graph, p, prefix=""):
+    def walk(graph, p, prefix="", *, postcondition=None, tail=()):
         nonlocal count
         pending = None
-        for name in graph.order:
+        scopes = scope(graph)
+        for index, name in enumerate(graph.order):
             path = prefix + name
             edge, region = graph.incoming(name)[0], graph.nodes[name].region
             p.block_v = path
             offset = len(p.checks)
+            available = set(scopes[name])
             if edge.binds:
                 names = sorted(edge.binds)
-                p.execute(
-                    [
-                        Get(
-                            names[0],
-                            to_z3(edge.binding_condition, context),
-                            [context.get_consts(n) for n in names],
-                            guard_term=edge.binding_condition,
-                        )
-                    ]
+                binding = Get(
+                    names[0],
+                    to_z3(edge.binding_condition, context),
+                    [context.get_consts(n) for n in names],
+                    guard_term=edge.binding_condition,
                 )
+                p.execute([binding])
+                p.root_context.history.append(binding)
             if isinstance(region, LoopRegion):
                 if p.held_name is not None:
                     checks.append(
@@ -226,7 +236,9 @@ def verify_cfg_motion(
                         )
                     )
                     return p
-                p.execute([Assign(a, b) for a, b in region.init])
+                initializers = [Assign(a, b) for a, b in region.init]
+                p.execute(initializers)
+                p.root_context.history.extend(initializers)
                 append_new(p, offset, path)
                 guard = to_z3(region.guard, context)
                 inv = region.invariant
@@ -235,23 +247,81 @@ def verify_cfg_motion(
                     if isinstance(inv, list)
                     else inv
                 )
-                child = fresh([inv, guard], path)
+                child = fresh(
+                    [inv, guard], path, available=region.body_cfg.initial_scope
+                )
                 append_new(child, 0, path)
-                walk(region.body_cfg, child, path + "/")
+                walk(
+                    region.body_cfg,
+                    child,
+                    path + "/",
+                    postcondition=inv,
+                    tail=tuple(Assign(a, b) for a, b in region.update),
+                )
                 exists_vars = [context.get_consts(n) for n in region.exists_vars]
                 no_guard = (
                     z3.Not(z3.Exists(exists_vars, guard))
                     if exists_vars
                     else z3.Not(guard)
                 )
-                p = fresh([inv, no_guard], path + "/exit")
+                p = fresh(
+                    [inv, no_guard],
+                    path + "/exit",
+                    available=available | {a for a, _ in region.init},
+                )
                 append_new(p, 0, path + "/exit")
                 continue
             count += 1
+            remaining = list(region.symbolic or ())
+            for following in graph.order[index + 1 :]:
+                following_edge = graph.incoming(following)[0]
+                if following_edge.binds:
+                    bound = sorted(following_edge.binds)
+                    remaining.append(
+                        Get(
+                            bound[0],
+                            to_z3(following_edge.binding_condition, context),
+                            [context.get_consts(n) for n in bound],
+                        )
+                    )
+                remaining.extend(lower_region(graph.nodes[following].region, context))
+            remaining.extend(tail)
             for instruction in region.physical:
                 if isinstance(instruction, PickByName):
-                    pending = (dict(p.current), p.fields)
+                    proposed = next((i for i in remaining if isinstance(i, Put)), None)
+                    if proposed is None:
+                        raise ValueError("Pick has no completed symbolic placement")
+                    p.contract = MotionContract(
+                        p.bindings[proposed.upper_block],
+                        p.bindings[proposed.base_block],
+                        table_surface_height=table_surface_height,
+                    )
+                    prepare_alignment(
+                        p,
+                        p.root_context,
+                        available,
+                        target=proposed.base_block,
+                        continuation=remaining,
+                        postcondition=postcondition,
+                    )
+                    pending = (
+                        dict(p.current),
+                        p.fields,
+                        p.contract,
+                        p.alignment_root,
+                        proposed,
+                    )
                 p.execute([instruction])
+                if isinstance(instruction, (Get, Assign)):
+                    p.root_context.history.append(deepcopy(instruction))
+                    if isinstance(instruction, Get):
+                        available.update(map(str, instruction.guard_exists_vars))
+                    else:
+                        available.add(instruction.left)
+                    if remaining and isinstance(remaining[0], type(instruction)):
+                        remaining.pop(0)
+                elif isinstance(instruction, ReleaseByName) and pending is not None:
+                    p.root_context.history.append(pending[4])
             puts = [i for i in region.symbolic or () if isinstance(i, Put)]
             if puts:
                 if len(puts) != 1 or pending is None:
@@ -263,19 +333,14 @@ def verify_cfg_motion(
                         )
                     )
                     return p
-                put = puts[0]
-                contract = MotionContract(
-                    p.bindings[put.upper_block],
-                    p.bindings[put.base_block],
-                    base,
-                    table_surface_height,
-                )
                 old_initial = p.initial
-                p.initial, p.effect_entry_fields = pending
-                p.contract = contract
+                p.initial, p.effect_entry_fields, p.contract, p.alignment_root, _ = (
+                    pending
+                )
                 check_contract_realization(p)
                 check_frame_preservation(p)
                 check_abstract_effects(p)
+                check_alignment(p)
                 p.initial = old_initial
                 pending = None
             p.check("transition_consistency")
@@ -288,6 +353,9 @@ def verify_cfg_motion(
                     reason="Unreleased object at CFG exit",
                 )
             )
+        if tail:
+            p.execute(tail)
+            p.root_context.history.extend(tail)
         return p
 
     try:
@@ -300,9 +368,10 @@ def verify_cfg_motion(
             "entry",
             initial_positions,
             initial_arm,
+            available=cfg.initial_scope,
         )
         append_new(p, 0, "entry")
-        walk(cfg, p)
+        walk(cfg, p, postcondition=to_z3(cfg.postcondition, context))
     except (ValueError, KeyError, TypeError) as exc:
         checks.append(MotionCheck("coverage", "unsupported", reason=str(exc)))
     return MotionVerificationResult(checks, noise, count)

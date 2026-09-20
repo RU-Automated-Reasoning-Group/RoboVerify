@@ -275,11 +275,13 @@ This corrects the uniqueness restriction; matching demonstrations alone still do
 not prove that a learned guard or its body is correct.
 
 
-## 12. Alignment checks added, but root discovery and the proof premises remain open
+## 12. Root discovery and tight alignment premises — implemented with an explicit input assumption
 
-**Status after follow-up review:** the original drift counterexample is rejected,
-but selecting a justified root is still an implementation gap. The paper's
-alignment argument also needs an explicit maintained geometric invariant.
+**Status after the user decision:** implemented. Existing input towers are assumed
+to satisfy tight root-relative alignment. Every new placement must establish that
+bound by a motion VC. The agreed root-only induction remains valid; this resolves
+the code gap and makes its geometric premise explicit, rather than deriving it
+from the weaker ON* predicate.
 
 **Original audit finding.** Section 5.5, equations (6)/(7), and Appendix J require
 root-relative alignment. Phase D2 omitted this obligation. With block length .05,
@@ -287,13 +289,21 @@ root x=0, top x=.024, and the new block at x=.048, local placement and the origi
 motion checks passed although geometric ON*(new,root) was false. The added
 alignment and complete-effect checks now reject this scene; see
 `roboverify/synthesis/verification_lib/test_motion_verification.py`,
-`test_root_drift_is_rejected_even_when_local_placement_passes`.
+`test_root_drift_is_rejected_even_when_local_placement_passes`. That regression
+now starts with a tightly aligned top at x=.012 and places at x=.036, so it
+checks failure of the constructed tower within the newly declared input domain.
 
-**Remaining code gap.** `cfg/verification.py:verify_cfg_motion` picks `b0`, or the
-first sorted non-table name, as the reference. `motion_verification.py` checks
-alignment against the contract's `frame_base` when the target is geometrically
-above it. This is not the paper's symbolic root discovery, and the name fallback
-does not establish that the reference is a root. Do not call A1 fully complete.
+**Current implementation.** `verification_lib/root_selection.py` searches in-scope
+names and proves the paper's universally quantified bottom-root criterion.
+`cfg/verification.py` supplies the remaining symbolic body's WP and transports
+established entry/invariant/guard facts through the symbolic prefix. It first
+proves the WP applies in that context; it does not assume the desired invariant.
+This contextual proof may use established facts in addition to P. Standalone
+motion calls prove the root directly from their supplied entry conditions.
+An unproved/inconsistent/unknown result cannot select a name fallback. The old
+`b0`/first-name selection and conditional designated-reference check are removed.
+`frame_base` is retained for compatibility and populated with the proved reference;
+a caller's hint is never trusted as a proof.
 
 **Paper root rule, p. 30, lines 1433–1439.** With P = wp(pi_phi, I), seek a named
 r such that P implies: for every u below y, u is above r. Under reflexivity,
@@ -320,8 +330,8 @@ with 2 * delta_F <= N_F.
 The proof is:
 
 1. **Base.** A singleton tower S={r} satisfies Aligned because its displacement
-   from its root is zero. An arbitrary pre-existing tower instead needs a proof
-   that its permitted initial configurations satisfy Aligned.
+   from its root is zero. For pre-existing towers, the user has explicitly
+   selected Aligned as an input assumption defining the permitted configurations.
 2. **Existing members.** Before insertion, assume Aligned(S,r). Preserve the root
    and existing members' positions, or otherwise prove that their bounds remain
    true after the operation.
@@ -342,30 +352,34 @@ remain separate obligations. Removing members preserves Aligned for the remainin
 subset if its reference is retained. Replacing/moving the reference or merging
 chains requires re-establishing the relevant bounds.
 
-**Remaining concerns, narrowed after the discussion.** The concern is about
-supplying the lemma's premises in the verification algorithm, not its induction
-step or the sufficiency of checking the root:
+**Resolved obligations and implementation boundary.**
 
-- **Root justification (code gap):** replace the b0/name-order choice with a proved
-  root for the relevant chain. Discharge the root rule under an established,
-  satisfiable entry context, covering arbitrary relevant objects. Failure to
-  identify a root, or solver unknown, cannot silently select a fallback.
-- **Establishment (proof/encoding obligation):** show Aligned for every admitted
-  initial tower. Definition 5.4's ON* translation gives the looser N_F bound;
-  it does not imply the tight delta_F premise. A singleton construction discharges
-  the base case, but cannot be presumed for arbitrary initial towers.
-- **Preservation and loop contexts (proof/encoding obligation):** carry or
-  re-establish Aligned when the While rule introduces fresh geometry from the
-  invariant. Frame checks must preserve old bounds relative to the SAME root;
-  any root change requires a new justification. Retaining only ON*'s N_F bound
-  loses the inductive premise even if a preceding concrete placement established it.
-- **Tolerance consistency:** explicitly require 2*delta_F <= N_F, with matching
-  strict/non-strict conventions. The current L/4 root and L/2 pairwise choices
-  are consistent numerically; that alone does not discharge the other premises.
+- **Root justification:** quantified proof covers arbitrary unnamed objects and
+  scoped aliases; missing or inconclusive proofs prevent certification.
+- **Establishment:** input towers are assumed Aligned, as requested by the user.
+  `assume_input_alignment` adds a quantified constraint on fresh entry geometry
+  for proved input roots. It does not claim ON* implies the tighter bound.
+  Concrete inputs violating the assumption fail consistency. A Get/Assign may
+  expose another input root before any Put; after a Put the verifier does not
+  insert fresh assumptions on the constructed geometry.
+- **Preservation:** `alignment_entry` checks the destination tower before motion;
+  `alignment` checks the new member against its proved root after motion,
+  including bounded noise. The frame VC fixes all other objects, including the
+  root, and support checks reject moving an occupied support. Removing a top
+  member preserves the remaining bounds; separated table placement starts a
+  singleton. These justify carrying tight alignment into fresh loop contexts
+  as an additional geometric invariant. A changed reference must pass root and
+  entry-alignment checks again. The verifier does not accept arbitrary root
+  replacement or chain merging on the strength of a name.
+- **Tolerance consistency:** the implementation uses strict delta=L/4 and N=L/2
+  in each horizontal coordinate, giving strict pairwise separation below N.
+  Local direct-on, vertical support, collisions, and exact relation effects
+  remain separate VCs; alignment alone does not certify the whole placement.
 
-These may be discharged by an explicit geometric invariant or another proof of
-all required geometric effects. They do not justify rejecting the paper's
-root-based approach or adding all-pairs placement checks as a mandatory repair.
+Regression tests cover an unrelated `b0`, unnamed lower objects, scoped roots,
+WP applicability and assignments, solver unknown/inconsistency, bad input
+alignment, local-success/global-drift rejection, bounded noise, and fresh loop
+contexts. No saved demonstrations or experimental results are required.
 
 **Why the initial tight premise matters.** The following example does NOT satisfy
 Aligned initially, so it is not a counterexample to the agreed induction. A concrete
@@ -489,8 +503,9 @@ validation decision is recorded in discrepancy 17.
 
 Audit A1 added the complete ON*/Higher/Scattered effect and designated-reference
 alignment checks, rejecting the original discrepancy 12–13 counterexamples.
-Follow-up review reopens A1's root discovery and alignment-premise justification
-(see entry 12); the earlier completion claim was too broad. Discrepancy 15's
+Follow-up implementation now proves root discovery and preserves tight alignment
+under the user-declared input-tower assumption (entry 12). The earlier completion
+claim preceded those obligations; the new implementation closes them. Discrepancy 15's
 silent loop-cap exit is fixed; termination still is not proved.
 
 For discrepancy 18, the new primitive model explicitly excludes intended

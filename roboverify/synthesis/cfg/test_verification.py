@@ -67,6 +67,98 @@ class CFGVerificationTests(unittest.TestCase):
         self.assertEqual(type(cfg.nodes["v0"].region.symbolic[0]).__name__, "Skip")
         self.assertEqual(type(cfg.nodes["v1"].region.symbolic[0]).__name__, "Put")
 
+    def test_root_selection_ignores_unrelated_b0_in_integrated_verifier(self):
+        from synthesis.predicates.term import implies
+
+        a, b, decoy, base, u = map(ref, ("a", "b", "b0", "z_base", "u"))
+        pre = conjunction(
+            forall(
+                ["u"], disjunction(*(atom("eq", u, n) for n in (a, b, decoy, base)))
+            ),
+            forall(["u"], implies(atom("ON_star", base, u), atom("eq", u, base))),
+            atom("ON_star", b, base),
+            negate(atom("eq", b, base)),
+            atom("Scattered", a, b),
+            atom("Scattered", a, base),
+            atom("Scattered", decoy, b),
+            atom("Scattered", decoy, base),
+            atom("Scattered", decoy, a),
+            atom("Higher", base, a),
+            negate(atom("Higher", a, base)),
+        )
+        cfg = RelationalCFG.initial(
+            [], pre, atom("ON_star", a, b), ("a", "b", "b0", "z_base")
+        )
+        cfg.nodes["v0"].region = BlockRegion(None, tuple(primitives()))
+        ctx = HighLevelContext()
+        propose_summaries(cfg, ctx)
+        result = verify_cfg_motion(
+            cfg,
+            ctx,
+            initial_positions={
+                "a": [0.3, 0, -0.1],
+                "b": [0, 0, 0.05],
+                "z_base": [0, 0, 0],
+                "b0": [2, 2, 0],
+            },
+            initial_arm=[0.3, 0, 0.2],
+        )
+        self.assertTrue(result, str(result))
+        roots = [c for c in result.checks if c.obligation.endswith("/root_selection")]
+        self.assertEqual(len(roots), 1)
+        self.assertIn("root=z_base;", roots[0].reason)
+        self.assertTrue(
+            any(
+                c.obligation.endswith("/alignment") and c.status == "valid"
+                for c in result.checks
+            )
+        )
+
+    def test_fresh_loop_context_retains_input_alignment_and_checks_new_placement(self):
+        from synthesis.api.instructions import MoveByName
+        from synthesis.cfg.region import LoopRegion
+        from synthesis.predicates.term import implies, to_z3
+
+        ctx = HighLevelContext()
+        a, b, b0, u = map(ref, ("a", "b", "b0", "u"))
+        invariant = conjunction(
+            forall(["u"], disjunction(atom("eq", u, a), atom("eq", u, b))),
+            atom("eq", b, b0),
+            negate(atom("eq", a, b)),
+            forall(["u"], implies(atom("ON_star", b, u), atom("eq", u, b))),
+        )
+        guard = conjunction(
+            atom("Scattered", a, b), atom("Higher", b, a), negate(atom("Higher", a, b))
+        )
+        for displacement, expected in ((0.0, "valid"), (0.015, "refuted")):
+            with self.subTest(displacement=displacement):
+                body = placement_cfg()
+                instructions = list(body.nodes["v0"].region.physical)
+                instructions[-2] = MoveByName(
+                    "b", "b", "b", target_offset=[displacement, 0, 0.05]
+                )
+                body.nodes["v0"].region = BlockRegion(None, tuple(instructions))
+                cfg = RelationalCFG.initial(
+                    [], conjunction(invariant, guard), boolean(True), ("a", "b", "b0")
+                )
+                cfg.nodes["v0"].region = LoopRegion(
+                    guard,
+                    (),
+                    (body.nodes["v0"].region,),
+                    invariant=to_z3(invariant, ctx),
+                    body_cfg=body,
+                )
+                propose_summaries(cfg, ctx)
+                result = verify_cfg_motion(cfg, ctx)
+                roots = [
+                    c for c in result.checks if c.obligation.endswith("/root_selection")
+                ]
+                self.assertEqual([c.status for c in roots], ["valid"])
+                alignment = [
+                    c for c in result.checks if c.obligation.endswith("/alignment")
+                ]
+                self.assertEqual([c.status for c in alignment], [expected])
+
     def test_unsupported_summary_is_not_replaced_with_skip(self):
         cfg = placement_cfg()
         cfg.edges[-1] = Edge("v0", "exit", boolean(True))

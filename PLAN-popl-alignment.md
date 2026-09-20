@@ -4,6 +4,18 @@
 >
 > Branch: `phase-f-synthesis`; Phases A–E are integrated into `main`.
 >
+> **A1 root/alignment follow-up completed and tested.**
+> User decision: existing input towers satisfy tight root-relative alignment.
+> Root discovery now proves the paper's quantified criterion using established
+> entry facts and symbolic WP; no name fallback. Input alignment is an explicit
+> geometric assumption, while `alignment_entry`, post-motion `alignment`, and
+> frame VCs preserve it through built placements and fresh loop contexts.
+> Missing roots, inconsistent premises and unknown proofs prevent certification.
+> Full suite: **186 unittest tests pass in 47.048 seconds**, including simulator
+> tests and 13 new root/alignment regressions. The motion benchmark retains its
+> expected contract/effect failures and exposes noise-induced alignment failure.
+> Changed Python files pass isort/black; git diff whitespace checks pass.
+>
 > **Entry 11 correction — completed and tested.**
 > User clarification: demonstrations select one permitted witness; other choices
 > are not negative examples. Guards may admit multiple witnesses. Learning keeps
@@ -17,26 +29,23 @@
 > straight-segment collision query. The proposed endpoint bounding-box fallback
 > was never implemented; its original equivalence claim below has been corrected.
 >
-> **Audit remediation: A1 reopened after root/alignment review; other completed items retain their status.** The user requested fixes for
+> **Audit remediation: A1–A11 and D1–D3 implemented and tested within the documented model.** The user requested fixes for
 > all eleven findings in [AUDIT-popl-alignment.md](AUDIT-popl-alignment.md), plus
 > the demo-independent follow-ups below. Check this checklist for current status;
 > the audit describes the pre-fix baseline. Mark an item complete only with tests
 > and a recorded implementation, not merely a proposed solution.
 >
-> - [ ] **A1 (reopened):** MotionVerify checks ON*/Higher/Scattered outcomes against Put WP,
->       plus root alignment; the table Scattered rewrite preserves isolation.
->       Exact quantified effects fail closed. Both audit geometries are rejected;
->       31 motion/CEGIS tests pass. A newly exposed paper Higher mismatch is
->       rejected explicitly (discrepancy 16), not silently rewritten.
->       **Agreed proof:** root-only checking suffices. If all tower members are
->       within delta of the same root, a new member within delta preserves that
->       invariant; triangle inequality gives pairwise distance <= 2*delta <= N.
->       **Remaining:** prove root selection, establish tight bounds for admitted
->       initial towers, preserve/carry those bounds through loop-context resets
->       and root changes, and retain consistent tolerances. Entry 12 documents
->       the induction and these obligations. The lemma is valid; all-pairs
->       placement checks are not required. Documentation-only follow-up; the
->       controller/verifier implementation is unchanged.
+> - [x] **A1:** MotionVerify checks ON*/Higher/Scattered
+>       outcomes against Put WP, plus proved-root alignment; the table Scattered
+>       rewrite preserves isolation. Exact quantified effects fail closed. The
+>       known Higher mismatch remains explicitly rejected (discrepancy 16).
+>       Root selection quantifies over unnamed objects and uses scoped candidates,
+>       an established entry context, and the remaining symbolic WP. Input towers
+>       satisfy the tight bound by the user's declared model assumption. Every
+>       constructed placement proves `< L/4` relative to its root under allowed
+>       noise; frame/support checks and loop contexts preserve that invariant.
+>       Triangle inequality gives pairwise distance `< L/2`, without additional
+>       all-pairs placement checks. Entry 12 records the proof and assumption.
 > - [x] **A2:** Runtime budget exhaustion raises `LoopBudgetExceeded`; generated
 >       loops no longer derive an execution cap from demo counts. Explicit caps
 >       remain optional and collectors report incomplete outcomes. Nineteen
@@ -95,7 +104,8 @@
 > synthesis connections and remaining algorithm coverage. Each coherent change
 > is committed on `phase-f-synthesis`; unrelated untracked files stay untouched.
 > Baseline: 133 tests passed; five audit probes exposed uncovered issues.
-> **Final remediation validation: 170 unittest tests pass in 37.430 seconds.**
+> **Original remediation validation: 170 unittest tests passed in 37.430 seconds;
+> current root/alignment follow-up: 186 pass in 47.048 seconds.**
 > Changed Python files passed the same isort/black commands used by format.sh;
 > formatting was scoped to changed files to protect unrelated user files. The
 > integrated CLI's help/argument wiring and git diff whitespace checks pass.

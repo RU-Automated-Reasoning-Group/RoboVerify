@@ -5,11 +5,12 @@ A block supported by the manipulated block is allowed arbitrary displacement;
 we refuse to certify such a manipulation rather than silently freezing it.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from time import perf_counter
 from typing import Optional
 
 import z3
+
 from synthesis.api.instructions import Assign, PickPlaceByName, Skip
 from synthesis.verification_lib.bmc_lib import NoiseSpec, bounded_noise
 from synthesis.verification_lib.lowlevel_verification_lib import (
@@ -23,7 +24,7 @@ from synthesis.verification_lib.lowlevel_verification_lib import (
 class MotionContract:
     source: str
     target: str
-    frame_base: str = "b0"
+    frame_base: Optional[str] = None
     table_surface_height: Optional[float] = None
 
 
@@ -116,7 +117,7 @@ class MotionProblem:
             raise ValueError("Motion solver timeout must be positive")
         if "sym" in constants:
             raise ValueError("sym is reserved for the arbitrary other block")
-        required = {contract.source, contract.target, contract.frame_base}
+        required = {contract.source, contract.target}
         if not required.issubset(set(constants)):
             raise ValueError(
                 f"Contract constants missing from layout: {required - set(constants)}"
@@ -253,10 +254,8 @@ class MotionProblem:
 
     def execute(self, body):
         source = self.contract.source
-        if source not in self.current or self.contract.frame_base not in self.current:
-            raise ValueError(
-                "Contract source and frame_base must name physical constants"
-            )
+        if source not in self.current:
+            raise ValueError("Contract source must name a physical constant")
         moved_count = 0
         for index, instruction in enumerate(body):
             if isinstance(instruction, Skip):
@@ -294,14 +293,7 @@ class MotionProblem:
                 return  # A block contract covers one declared manipulated object.
             self.check(
                 f"physical_{index}",
-                z3.Not(
-                    z3.And(
-                        *(
-                            self.physical(n)
-                            for n in [grab, self.contract.frame_base, *targets]
-                        )
-                    )
-                ),
+                z3.Not(z3.And(*(self.physical(n) for n in [grab, *targets]))),
             )
             start = self.current[grab]
             if not self.held:
@@ -479,35 +471,132 @@ def check_abstract_effects(problem):
                     actual = z3.substitute(before, *replacements)
                 violations.append(actual != expected)
             problem.check(f"effect_{relation}", z3.Or(*violations))
-        if problem.contract.target != "tbl":
-            root = problem.initial[problem.contract.frame_base]
-            target = problem.initial[problem.contract.target]
-            placed = problem.current[source]
-            # N=L/2 in ON*. A root radius below N/2 implies pairwise drift below N.
-            aligned = z3.And(
-                *(z3.Abs(placed[i] - root[i]) < problem.context.L / 4 for i in (0, 1))
-            )
-            problem.check(
-                "alignment",
-                z3.And(_on_star(target, root, problem.context.L), z3.Not(aligned)),
-            )
     finally:
         problem.solver.pop()
 
 
 def check_frame_preservation(problem):
-    """Protect the initial tower except for the explicitly manipulated source."""
-    contract = problem.contract
-    base = problem.initial[contract.frame_base]
+    """Keep all non-manipulated objects fixed, including the proved root."""
     violations = []
     for name, initial in problem.initial.items():
         protected = z3.And(
             problem.physical(name),
-            z3.Not(problem.same(name, contract.source)),
-            _on_star(initial, base, problem.context.L),
+            z3.Not(problem.same(name, problem.contract.source)),
         )
         violations.append(z3.And(protected, _different(initial, problem.current[name])))
     return problem.check("frame", z3.Or(*violations))
+
+
+def _aligned(point, root, length):
+    # Strict root radius delta=L/4 implies strict pairwise bound N=L/2.
+    return z3.And(*(z3.Abs(point[i] - root[i]) < length / 4 for i in (0, 1)))
+
+
+def assume_input_alignment(problem, roots):
+    """Declared input-tower assumption, applied only to fresh entry geometry.
+
+    The quantified member covers unnamed blocks. Later placements must establish
+    alignment by VCs; they must never add this assumption to their output state.
+    """
+    assumed = getattr(problem, "assumed_alignment_roots", set())
+    problem.assumed_alignment_roots = assumed
+    for name in roots:
+        if name in assumed:
+            continue
+        assumed.add(name)
+        root = problem.constants[name]
+        member = z3.FreshConst(problem.context.BoxSort, prefix="aligned_input")
+        point = tuple(
+            axis(member)
+            for axis in (problem.context.X, problem.context.Y, problem.context.Z)
+        )
+        origin = problem.initial[name]
+        problem.solver.add(
+            z3.ForAll(
+                [member],
+                z3.Implies(
+                    z3.And(
+                        z3.Not(problem.context._is_table(member)),
+                        problem.context.lowlevel_on_star(member, root),
+                    ),
+                    _aligned(point, origin, problem.context.L),
+                ),
+            )
+        )
+
+
+def prepare_alignment(
+    problem,
+    root_context,
+    candidates,
+    *,
+    target=None,
+    continuation=(),
+    postcondition=None,
+):
+    """Select/prove a root before motion; an unproved hint is never a fallback."""
+    if problem.contract.target == "tbl":
+        problem.alignment_root = None  # A separated table placement starts a singleton.
+        return
+    from synthesis.api.instructions import Put
+
+    # Get/Assign may expose another input root without changing object positions.
+    # Once a Put has occurred, alignment must follow from checked motion, never
+    # a newly inserted assumption on an already-built tower.
+    if not any(isinstance(i, Put) for i in root_context.history):
+        assume_input_alignment(
+            problem,
+            [problem.bindings[name] for name in root_context.initial_roots(candidates)],
+        )
+        problem.check("alignment_assumption_consistency")
+    result = root_context.select(
+        target or problem.contract.target,
+        candidates,
+        continuation=continuation,
+        postcondition=postcondition,
+    )
+    problem.checks.append(
+        MotionCheck(
+            "root_selection",
+            (
+                "valid"
+                if result.status == "valid"
+                else "unsupported" if result.status == "unproved" else result.status
+            ),
+            reason=("root=" + result.root + "; " if result.root else "")
+            + result.reason,
+        )
+    )
+    problem.alignment_root = problem.bindings[result.root] if result.root else None
+    if result.root is not None:
+        problem.contract = replace(problem.contract, frame_base=problem.alignment_root)
+        root = problem.current[problem.alignment_root]
+        violations = [
+            z3.And(
+                problem.physical(name),
+                _on_star(point, root, problem.context.L),
+                z3.Not(_aligned(point, root, problem.context.L)),
+            )
+            for name, point in problem.current.items()
+        ]
+        problem.check("alignment_entry", z3.Or(*violations))
+
+
+def check_alignment(problem):
+    """The placed block must meet the tight bound relative to the proved base."""
+    if problem.contract.target == "tbl" or problem.alignment_root is None:
+        return
+    root = problem.current[problem.alignment_root]
+    problem.check(
+        "alignment",
+        z3.Not(
+            _aligned(
+                problem.current[problem.contract.source],
+                root,
+                problem.context.L,
+            )
+        ),
+    )
 
 
 def verify_motion_block(
@@ -524,6 +613,9 @@ def verify_motion_block(
     entry_positions=None,
     initial_bindings=None,
     initial_arm=None,
+    symbolic_context=None,
+    symbolic_body=None,
+    postcondition=None,
 ):
     start = perf_counter()
     if contract is None:
@@ -559,7 +651,22 @@ def verify_motion_block(
         initial_bindings,
         **options,
     )
+    from synthesis.verification_lib.highlevel_verification_lib import HighLevelContext
+    from synthesis.verification_lib.root_selection import RootContext
+
+    high = symbolic_context or HighLevelContext(
+        sort_name=context.sort_name, use_tbl=context.use_tbl
+    )
+    roots = RootContext(high, z3.And(*initial_condition), timeout_ms)
+    assume_input_alignment(problem, roots.initial_roots(constants))
     if problem.check("initial_consistency").status == "valid":
+        prepare_alignment(
+            problem,
+            roots,
+            constants,
+            continuation=symbolic_body or (),
+            postcondition=postcondition,
+        )
         problem.execute(body)
         # Include a second consistency check: transition equations or aliases must
         # never make all postcondition queries vacuously true.
@@ -567,6 +674,7 @@ def verify_motion_block(
             check_contract_realization(problem)
             check_frame_preservation(problem)
             check_abstract_effects(problem)
+            check_alignment(problem)
     return MotionVerificationResult(problem.checks, noise, 1, perf_counter() - start)
 
 

@@ -101,6 +101,8 @@ uv run python -m synthesis.entry.benchmark_motion_verification
 ```
 
 The benchmark uses the existing three-waypoint Stack body, not a tuned replacement.
+Its synthetic entry conditions explicitly establish the destination tower root;
+numeric coordinates alone do not substitute for symbolic root discovery.
 Its final `1.5 * L` release offset fails the strict direct-on height band, even
 though its noiseless paths are clear in the concrete fixture. The solver spike
 keeps the exact bilinear swept-cube encoding. The endpoint bounding-box fallback
@@ -110,3 +112,10 @@ recorded in `PLAN-popl-alignment.md`.
 
 Phase E adds [counterexample-guided refinement](CEGIS.md), typed symbolic results,
 monotone invariant learning, and fixed-environment motion penalties.
+
+Motion placement verification proves a scoped root with the §5.5 quantified
+criterion. Existing towers are assumed tightly aligned (`< L/4` in X and Y);
+new placements must prove the same bound against that root, including noise.
+A name hint cannot bypass root discovery. See
+[verification scope](../cfg/VERIFICATION.md) for the input assumption, loop
+invariant, and failure behavior.

@@ -1,6 +1,7 @@
 import unittest
 
 import z3
+
 from synthesis.api.instructions import MoveByName, PickByName, ReleaseByName
 from synthesis.verification_lib.lowlevel_verification_lib import LowLevelContext
 from synthesis.verification_lib.motion_verification import (
@@ -8,6 +9,7 @@ from synthesis.verification_lib.motion_verification import (
     verify_motion_block,
 )
 from synthesis.verification_lib.primitive_motion import PrimitiveMotionProblem
+from synthesis.verification_lib.test_motion_verification import rooted_tower_conditions
 
 
 def primitives(height=0.05):
@@ -25,7 +27,7 @@ class PrimitiveMotionTests(unittest.TestCase):
 
     def verify(self, body):
         return verify_motion_block(
-            [],
+            rooted_tower_conditions(),
             body,
             ["a", "b", "b0"],
             MotionContract("a", "b"),
