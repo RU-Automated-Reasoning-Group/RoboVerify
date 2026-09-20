@@ -366,3 +366,28 @@ argument. The current audit work must not silently replace either model.
 Appendix G p. 57 also reverses the wording of Validate's rejection test relative
 to §3.5 p. 19 ("If this fails" versus "If this holds"). The explicit temporal
 validation decision is recorded in discrepancy 17.
+
+### Remediation status after the direct paper rereading
+
+Audit A1 closes discrepancies 12–13's missing checks: placement must satisfy the
+complete ON*/Higher/Scattered effect and consistent root alignment. The earlier
+passing counterexamples are now regressions that must be rejected. Discrepancy
+15's silent loop-cap exit is fixed; termination still is not proved.
+
+For discrepancy 18, the new primitive model explicitly excludes intended
+Pick/Release contact with the selected object, models the empty gripper as a
+point, and checks supported Release versus an arbitrary unsupported fall. This
+is a stated modeling resolution, not a proof of the simulator's controller.
+Inspection of `ReleaseByName.eval` shows that it opens the gripper first and then
+moves the empty arm vertically; the earlier wording in discrepancy 4 about it
+lowering a held block was inaccurate. Simulator settling after opening and the
+primitive model's support assumption still need a physical refinement argument.
+
+Algorithm 6 now operates on the actual synthesized CFG. It preserves the
+existing documented abstract counterexample-replay decision (discrepancy 7),
+checks strict learning progress, and surfaces entry/exit coverage failures as
+requests for validated demonstrations. It does not assume that a failing
+establishment VC proves the program itself is wrong. Motion repair can change
+instruction structure while retaining the complete symbolic program. Success is
+reported as `verified_model`, expressly excluding a total-correctness or hardware
+claim. See `roboverify/synthesis/cfg/VERIFICATION.md`.

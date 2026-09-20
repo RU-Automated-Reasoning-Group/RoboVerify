@@ -30,7 +30,8 @@ from synthesis.cfg.straightline import (
     segment_rollout,
     straight_line_synthesize,
 )
-from synthesis.cfg.synthesize import synthesize_cfg
+from synthesis.cfg.verified_synthesis import verified_synthesis
+from synthesis.entry.motion_options import add_motion_options, motion_noise_from_args
 from synthesis.experiment.run_logger import RunLogger
 from synthesis.mcmc.synthesis import (
     make_roboverify_env,
@@ -40,21 +41,30 @@ from synthesis.mcmc.synthesis import (
 )
 from synthesis.predicates.language import Language
 from synthesis.predicates.scene import evaluate
-from synthesis.predicates.term import atom, boolean, conjunction, forall, implies, ref
+from synthesis.predicates.term import (
+    atom,
+    boolean,
+    conjunction,
+    disjunction,
+    forall,
+    implies,
+    ref,
+)
+from synthesis.verification_lib.bmc_lib import NoiseSpec
 from synthesis.verification_lib.highlevel_verification_lib import HighLevelContext
 
 
 def task_spec(task):
     x, y, b0 = ref("x"), ref("y"), ref("b0")
     if task == "unstack":
-        return forall(["x"], atom("ON_star", x, b0)), forall(
-            ["x", "y"], implies(atom("ON_star", x, y), atom("eq", x, y))
-        )
+        return forall(
+            ["x"], disjunction(atom("eq", x, ref("tbl")), atom("ON_star", x, b0))
+        ), forall(["x", "y"], implies(atom("ON_star", x, y), atom("eq", x, y)))
     return boolean(True), forall(["x"], atom("ON_star", x, b0))
 
 
 def run(args, logger):
-    context = HighLevelContext()
+    context = HighLevelContext(use_tbl=args.task == "unstack")
     if args.demos:
         traces = load_traces(args.demos)
     else:
@@ -96,7 +106,11 @@ def run(args, logger):
             0,
             len(t.states) - 1,
             t,
-            {"b0": 0, **{f"o{j}": j for j in range(t.num_blocks)}},
+            {
+                "b0": 0,
+                **{f"o{j}": j for j in range(t.num_blocks)},
+                **({"tbl": "tbl"} if context.use_tbl else {}),
+            },
         )
         for i, t in enumerate(traces)
     ]
@@ -117,7 +131,9 @@ def run(args, logger):
             reason="Provide recordings satisfying the initial and final task conditions",
         )
         return 2
-    cfg = RelationalCFG.initial(segments, pre, post, ("b0",))
+    cfg = RelationalCFG.initial(
+        segments, pre, post, ("b0", "tbl") if context.use_tbl else ("b0",)
+    )
     budget = SearchBudget(
         iterations=args.iterations,
         cem_iterations=args.cem_iterations,
@@ -138,7 +154,7 @@ def run(args, logger):
         segment_rollout, env_factory=env_factory, reset_mode=args.reset_mode
     )
 
-    def realize(node, demos, post):
+    def realize(node, demos, post, penalty=None):
         if isinstance(node.region, LoopRegion):
             physical = Program(
                 len(lower_region(node.region, context, physical=True)),
@@ -175,6 +191,7 @@ def run(args, logger):
             budget=budget,
             logger=logger,
             block_id=node.name,
+            penalty=penalty,
         )
         logger.log_event(
             "block_result",
@@ -217,7 +234,31 @@ def run(args, logger):
             language=Language(timeout_seconds=args.predicate_seconds),
             infer_invariant=infer_invariant,
         )
-    result = synthesize_cfg(
+    extra_paths = iter(args.additional_demos)
+
+    def provide_demos(request):
+        path = next(extra_paths, None)
+        if path is None:
+            return None
+        extra = load_traces(path)
+        if any(t.task != args.task for t in extra):
+            raise ValueError("Additional demonstrations must use the same task")
+        return [
+            DemoSegment(
+                i,
+                0,
+                len(t.states) - 1,
+                t,
+                {"b0": 0, **({"tbl": "tbl"} if context.use_tbl else {})},
+            )
+            for i, t in enumerate(extra, start=len(segments))
+        ]
+
+    def repair(node, demos, post, penalty):
+        region, ok = realize(node, demos, post, penalty=penalty)
+        return region if ok else None
+
+    result = verified_synthesis(
         cfg,
         realize,
         partial(
@@ -226,7 +267,24 @@ def run(args, logger):
             env_factory=env_factory,
             reset_mode=args.reset_mode,
         ),
+        context,
         quotient=quotient_fn,
+        demo_provider=provide_demos,
+        repair_motion=repair,
+        symbolic_iterations=args.symbolic_iterations,
+        motion_iterations=args.motion_iterations,
+        timeout_ms=args.verification_timeout_ms,
+        learner=args.learner,
+        relations=args.invariant_relations,
+        variables=args.invariant_variables,
+        motion_options={
+            "initial_arm": args.initial_arm,
+            "noise": (
+                NoiseSpec(*args.motion_noise) if args.motion_noise is not None else None
+            ),
+            "timeout_ms": args.motion_timeout_ms,
+            "table_surface_height": args.table_surface_height,
+        },
         max_refinements=args.refinements,
         language=Language(timeout_seconds=args.predicate_seconds),
         logger=logger,
@@ -269,9 +327,11 @@ def run(args, logger):
         logger.write_artifact("program.txt", str(program))
     logger.finish(
         result.status,
-        rounds=result.rounds,
-        failed_block=result.failed_block,
-        formal_verification="not_run",
+        stages=result.history,
+        reason=result.reason,
+        formal_verification=result.status,
+        symbolic=str(result.symbolic),
+        motion=str(result.motion),
         demonstration_checks=demo_checks,
         task=args.task,
     )
@@ -315,8 +375,30 @@ def main(argv=None):
         choices=("ON_star", "ON_star_zero", "Higher", "Scattered", "equality"),
     )
     parser.add_argument("--invariant-variables", type=int, default=2)
+    add_motion_options(parser)
+    parser.add_argument(
+        "--table-surface-height",
+        type=float,
+        help="Physical table height required for table-placement contracts",
+    )
+    parser.add_argument(
+        "--additional-demos",
+        nargs="*",
+        default=[],
+        help="Recordings supplied for verification-requested resynthesis",
+    )
+    parser.add_argument("--symbolic-iterations", type=int, default=10)
+    parser.add_argument("--motion-iterations", type=int, default=10)
+    parser.add_argument("--verification-timeout-ms", type=int, default=5000)
+    parser.add_argument(
+        "--initial-arm",
+        type=float,
+        nargs=3,
+        help="Explicit initial arm position for the geometric verification model",
+    )
     parser.add_argument("--smoke", action="store_true")
     args = parser.parse_args(argv)
+    motion_noise_from_args(parser, args)
     if args.smoke:
         args.iterations, args.cem_iterations, args.cem_samples, args.cem_elites = (
             2,
@@ -330,6 +412,10 @@ def main(argv=None):
         or args.slots < 1
         or args.iterations < 0
         or args.refinements < 0
+        or args.symbolic_iterations < 0
+        or args.motion_iterations < 0
+        or args.verification_timeout_ms <= 0
+        or args.invariant_variables < 1
     ):
         parser.error("Invalid block, slot, or iteration budget")
 

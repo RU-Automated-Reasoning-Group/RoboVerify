@@ -11,7 +11,6 @@ from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 
 import z3
-
 from synthesis.inference_lib.demo_store import DemoStore, LoopHeadState
 from synthesis.verification_lib.counterexamples import (
     UnrealizableCounterexample,
@@ -340,7 +339,7 @@ class PenStore:
         # Multiple failed obligations in the same environment cost one penalty.
         environment = {
             key: payload[key]
-            for key in ("block_v", "mu_k", "bindings", "entry_positions")
+            for key in ("block_v", "mu_k", "bindings", "entry_positions", "initial_arm")
         }
         key = json.dumps(environment, sort_keys=True)
         if key in self._keys:

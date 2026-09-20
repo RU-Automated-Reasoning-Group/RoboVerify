@@ -50,7 +50,7 @@ class DemoValidationTests(unittest.TestCase):
         logger = Mock()
         with patch(
             "synthesis.entry.synthesize_cfg.load_traces", return_value=[trace]
-        ), patch("synthesis.entry.synthesize_cfg.synthesize_cfg") as search:
+        ), patch("synthesis.entry.synthesize_cfg.verified_synthesis") as search:
             self.assertEqual(run(args, logger), 2)
         search.assert_not_called()
         self.assertEqual(logger.finish.call_args.args[0], "invalid_demonstrations")

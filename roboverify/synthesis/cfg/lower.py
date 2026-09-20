@@ -15,7 +15,17 @@ def lower_region(region, context, *, physical=False):
             raise ValueError("Physical candidate has no established relational summary")
         if physical and not region.physical:
             raise ValueError("Region has no physical implementation")
-        return deepcopy(list(region.physical if physical else region.symbolic))
+        instructions = deepcopy(list(region.physical if physical else region.symbolic))
+        for i, instruction in enumerate(instructions):
+            if isinstance(instruction, Get) and instruction.guard_term is not None:
+                names = [str(v) for v in instruction.guard_exists_vars]
+                instructions[i] = Get(
+                    names[0],
+                    to_z3(instruction.guard_term, context),
+                    [context.get_consts(n) for n in names],
+                    guard_term=instruction.guard_term,
+                )
+        return instructions
     if not isinstance(region, LoopRegion):
         raise ValueError("Cannot lower an unresolved region")
     if region.invariant is None:

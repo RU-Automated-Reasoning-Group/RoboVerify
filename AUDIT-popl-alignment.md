@@ -2,13 +2,16 @@
 
 Remediation tracking: the A1–A11 and D1–D3 checklist in
 [PLAN-popl-alignment.md](PLAN-popl-alignment.md) records fixes and validation.
-This document preserves the findings at the audited baseline.
+This document preserves the findings at the audited baseline. The remediation
+checklist is now complete within its agreed flat-loop scope; 170 tests pass.
+See [verification scope](roboverify/synthesis/cfg/VERIFICATION.md) for model
+assumptions, unsupported cases, and the still-open real-demonstration acceptance.
 
 Audit date: 2026-09-20. Reviewed implementation: `132cfee`, branch
 `phase-f-synthesis`. The working tree initially contained only the three previously
 known unrelated untracked paths.
 
-**The paper's complete synthesis/verification algorithm is not implemented yet.
+**At the audited baseline, the paper's complete synthesis/verification algorithm was not implemented.
 Correct demonstrations alone will not close the gaps.** There are both missing
 connections and reproducible correctness defects. The earlier statement that only
 learning success remained uncertain was too strong.

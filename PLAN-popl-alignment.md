@@ -4,7 +4,7 @@
 >
 > Branch: `phase-f-synthesis`; Phases A–E are integrated into `main`.
 >
-> **Audit remediation authorized and in progress.** The user requested fixes for
+> **Audit remediation implemented and tested within the agreed flat-loop scope.** The user requested fixes for
 > all eleven findings in [AUDIT-popl-alignment.md](AUDIT-popl-alignment.md), plus
 > the demo-independent follow-ups below. Check this checklist for current status;
 > the audit describes the pre-fix baseline. Mark an item complete only with tests
@@ -28,8 +28,16 @@
 >       bindings, repeats folding to a fixed point, and refines unresolved bodies
 >       inside their own CFG. Synthetic tests cover different iteration counts
 >       and preserving the outer loop during body refinement.
-> - [ ] **A6:** Connect synthesized CFGs to verification and counterexample repair.
-> - [ ] **A7:** Verify synthesized primitives and propagate block contexts.
+> - [x] **A6:** The synthesis CLI verifies the same CFG/task through finite and
+>       unbounded symbolic checks, preservation-driven invariant relearning,
+>       persisted demo requests and resynthesis, then counterexample-penalized
+>       structural motion repair. Repairs must preserve the entire abstract program.
+>       Abstract replay and unsupported summaries remain explicit; no fixture swap.
+> - [x] **A7:** Pick/Move/Release have explicit geometric state and collision
+>       obligations, including support/fall handling. CFG blocks share geometry,
+>       arm and held-object state; loop entry/exit reset to invariant contexts.
+>       Grasp contact and the point-gripper model are documented assumptions,
+>       not claims about MuJoCo/controller dynamics.
 > - [x] **A8:** Numeric objects close through consistent in-scope aliases or typed
 >       Get bindings before search; mutation preserves Get prefixes and uses only
 >       runtime scope. Block exports participate in must-reach analysis, and scoring
@@ -47,8 +55,10 @@
 > - [x] **D1:** Initial/final conditions gate synthesis; transient success is
 >       diagnosed separately, and invalid/empty recordings are rejected with
 >       per-demo reasons. Four tests include the CLI rejection before search.
-> - [ ] **D2:** Validate loop recovery and synthesis/verification integration using
->       synthetic examples independent of historical demonstrations (A3–A8).
+> - [x] **D2:** Synthetic acceptance tests cover loop extraction/body refinement,
+>       actual candidate verification, invariant counterexamples, demo-request
+>       resynthesis, structural motion repair and rejection of changed summaries.
+>       All use generated scenes, not saved demonstrations or experimental targets.
 > - [x] **D3:** Optimizer parity now generates a deterministic Pick/Move trace
 >       in memory, without saved demos or skip-on-missing-data. All parity tests
 >       pass; repository test search finds no saved-demo loading dependency.
@@ -56,13 +66,19 @@
 > **Paper reading checkpoint (2026-09-20):** Read POPL2027.pdf §§2.2–2.3,
 > 3–5 (Algorithms 1–6), Appendix A Table 7, and Appendices E/G/K/L directly;
 > Algorithm 6 was also checked on rendered page 34. Experiments are not used as
-> requirements or regression targets. Remaining A6–A8 work follows those algorithm
-> obligations, with contradictions recorded in PAPER-DISCREPANCIES.md.
+> requirements or regression targets. A6–A8 follow those algorithm
+> obligations within the documented model, with contradictions recorded in PAPER-DISCREPANCIES.md.
 >
 > Verification-first order: A1/A2 and the reproduced A3/A4 defects, then the
 > synthesis connections and remaining algorithm coverage. Each coherent change
 > is committed on `phase-f-synthesis`; unrelated untracked files stay untouched.
 > Baseline: 133 tests passed; five audit probes exposed uncovered issues.
+> **Final remediation validation: 170 unittest tests pass in 37.430 seconds.**
+> Changed Python files passed the same isort/black commands used by format.sh;
+> formatting was scoped to changed files to protect unrelated user files. The
+> integrated CLI's help/argument wiring and git diff whitespace checks pass.
+> Proof scope and remaining unsupported cases are documented in
+> [cfg/VERIFICATION.md](roboverify/synthesis/cfg/VERIFICATION.md).
 > Full learning acceptance on new task-correct demonstrations remains distinct
 > from completion of these implementation and synthetic-validation items.
 > This plan is being executed top to bottom, Phase A first. Progress:
@@ -216,10 +232,11 @@
 > - [ ] **Phase F acceptance remains open:** the real Unstack pipeline has not
 >       recovered the complete loop. Its historical demo reaches the postcondition
 >       transiently but fails it at termination (discrepancy 10). Reconcile that
->       demonstration/task mismatch before claiming recovery. Symbolic summaries
->       and the automatic Phase E `NeedsResynthesis` handoff remain unwired for
->       arbitrary physical candidates; such candidates cannot be verified by
->       substituting Skip summaries. Nested/starred quotient remains out of scope.
+>       demonstration/task mismatch before claiming recovery. The automatic
+>       verification/resynthesis handoff is now connected for supported flat CFGs;
+>       arbitrary unsupported physical candidates fail explicitly. The Higher
+>       abstraction discrepancy can refute otherwise reasonable controllers.
+>       Nested/starred quotient and controller dynamics remain out of scope.
 >
 > **Pre-existing failure, not a regression.**
 > `verify_stack_with_learned_invariant` reports two high-level VC failures
