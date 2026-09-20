@@ -1,3 +1,4 @@
+import contextlib
 import math
 import os
 import pickle
@@ -691,6 +692,37 @@ def set_np_seed(seed: int):
     random.seed(seed)
 
 
+@contextlib.contextmanager
+def preserved_global_rng():
+    """Restore the global ``numpy``/``random`` state when the block exits.
+
+    Rollouts must reseed the global RNG per demo: the environment draws its
+    initial layout from ``numpy.random``, and a policy rollout is only
+    comparable to its demonstration if both start from the same state. That
+    property is load-bearing -- the KL/MMD objective is meaningless without it.
+
+    The problem is that the seeding also clobbers the *caller's* stream, and
+    the caller is the optimizer. ``cem_optimize`` draws its perturbations with
+    ``np.random.randn(N, dim)`` in the parent process and then calls ``f(mu)``
+    in the parent at the end of every iteration; ``f`` runs rollouts, which
+    reset the global RNG to a state fixed by the last demo seed. Every
+    iteration therefore began from the same state and drew the *identical*
+    N x dim perturbation matrix, so CEM re-explored one frozen set of
+    directions for the whole optimization instead of sampling fresh ones.
+
+    Wrapping the rollout loops keeps both properties: each rollout still gets
+    its demo seed, and whatever stream the caller was drawing from is handed
+    back untouched.
+    """
+    np_state = np.random.get_state()
+    py_state = random.getstate()
+    try:
+        yield
+    finally:
+        np.random.set_state(np_state)
+        random.setstate(py_state)
+
+
 # Shared RoboVerifyStack settings for demo collection and MCMC evaluation.
 ROBOVERIFY_STACK_ENV_KWARGS = {
     "sparse": False,
@@ -1031,6 +1063,7 @@ def roboverify_env_success(env, final_obs) -> bool:
     return bool(inner._is_success(final_obs))
 
 
+@preserved_global_rng()
 def rollout_demos(
     p: program.Program,
     num_demo: int,
@@ -1090,6 +1123,7 @@ def rollout_demos(
     return individual_traj, states, successes, imgs
 
 
+@preserved_global_rng()
 def save_program_seed_videos(
     p: program.Program,
     *,
@@ -1129,6 +1163,7 @@ def save_program_seed_videos(
     return saved_paths
 
 
+@preserved_global_rng()
 def rollout_demos_from_initial_states(
     p: program.Program,
     initial_states: list,
