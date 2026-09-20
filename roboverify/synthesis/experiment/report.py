@@ -103,12 +103,29 @@ class RunSummary:
         self.cem_deltas: list = []
         self.cem_sigmas: list = []
         self.cem_zero_delta = 0
+        self.cegis_progress = []
 
         for record in iter_jsonl(run_dir / "metrics.jsonl"):
             step = record.get("iter")
             if since is not None and (step is None or step < since):
                 continue
             self.rows += 1
+            if record.get("phase") in ("symbolic_initial", "symbolic", "motion"):
+                self.cegis_progress.append(
+                    {
+                        key: record.get(key)
+                        for key in (
+                            "iter",
+                            "phase",
+                            "n_states",
+                            "n_clauses",
+                            "n_penalties",
+                            "verified",
+                            "invariant_sexpr_path",
+                        )
+                    }
+                )
+                self.cegis_progress = self.cegis_progress[-8:]
             self.curve.append((step, record.get("cost"), record.get("best_cost")))
             reason = record.get("bmc_reason")
             if reason:
@@ -228,6 +245,30 @@ class RunSummary:
 
     def diagnostics_lines(self) -> list:
         lines = ["", "diagnostics"]
+        if self.cegis_progress:
+            lines.append(
+                f"  CEGIS result: {self.result.get('status', 'running')}  scope: {self.result.get('proof_scope', 'not established')}"
+            )
+            for row in self.cegis_progress:
+                lines.append(
+                    f"  {row['phase']} {row['iter']}: states={row['n_states']} clauses={row['n_clauses']} penalties={row['n_penalties']} verified={row['verified']}"
+                )
+            latest = next(
+                (
+                    r
+                    for r in reversed(self.cegis_progress)
+                    if r.get("invariant_sexpr_path")
+                ),
+                None,
+            )
+            if latest:
+                lines.append(f"  invariant: {latest['invariant_sexpr_path']}")
+            if self.result.get("failed_vc"):
+                lines.append(
+                    f"  failed VC: {self.result['failed_vc']} at {self.result.get('num_blocks')} blocks"
+                )
+            if self.result.get("reason"):
+                lines.append(f"  reason: {self.result['reason']}")
         if self.reasons:
             top = "  ".join(
                 f"{name} {count}" for name, count in self.reasons.most_common(6)

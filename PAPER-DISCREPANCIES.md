@@ -165,3 +165,44 @@ query with this bounding box can safely overapproximate collisions, but can also
 introduce spurious counterexamples. The exact bilinear query is retained. This is
 a limitation of the plan's proposed fallback, not a reason to silently change the
 collision predicate or report a bounding-box result as exact.
+
+## 7. Algorithm 6's invariant progression needs a precise failure state and learner
+
+**Observed during Phase E.** A preservation VC counterexample satisfies the old
+invariant at the input of the body. Adding that same state to positive `D_V` cannot
+force enlargement; the body successor must violate the invariant. An exit VC
+counterexample already satisfies the invariant but violates the postcondition;
+weakening the invariant cannot exclude it. Phase E replays the supported symbolic
+`Put`/`Assign` body to construct a successor and checks that it is newly uncovered.
+It stops explicitly on exit failures instead of cycling on duplicate positives.
+This replay is an abstract contract execution, not a MuJoCo trajectory or a proof
+about controller settling. Nested loops and CFG trace propagation await Phase F.
+
+The acceptance wording "start at False and always converge" also conflicts with
+the decided entry-failure branch: satisfiable entry conditions cannot establish
+`False`. Phase E first learns from supplied demonstrations, logging `False` as
+iteration zero. With no examples it raises `NeedsResynthesis` as required by the
+plan. An establishment failure alone does **not** prove the program is incorrect;
+it can also mean that the candidate invariant excludes initial states. The existing
+branch decision remains in effect until the program-synthesis integration exists.
+
+The legacy partition/minimization learner has no checked monotonicity contract.
+The new default CEGIS learner uses the same Phase C vocabulary and scenes but
+retains allowed Boolean truth-table rows under universal quantification. Adding
+rows provably weakens this finite-vocabulary formula. Each accepted update also
+checks old-invariant implication and has a newly covered positive witness. The
+legacy `InvInference` remains selectable, with the same progress checks. This is
+an implementation choice driven by the stated monotone-progress requirement, not
+an attempt to reproduce Table 3's expressions or iteration count.
+
+## 8. A finite relational countermodel need not describe a physical scene
+
+**Observed during Phase E.** The `Higher` axioms allow two different blocks with
+neither `Higher(a,b)` nor `Higher(b,a)`; real heights cannot realize that table.
+`Scattered` can likewise differ from the geometry of a canonical ON* drawing.
+Consequently, `_extract_direct_on`/`_build_stacks` alone do not close the
+counterexample-to-demonstration edge claimed by the plan. The Phase E converter
+solves for non-overlapping coordinates that preserve **all four** relation tables,
+including separate frozen `ON_star_zero`, preserves aliases and the table marker,
+and checks the numeric round trip. Inconsistent or timed-out concretization is
+reported explicitly; an altered model is never silently fed to inference.

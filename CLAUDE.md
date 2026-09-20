@@ -113,6 +113,12 @@ bash format.sh
     (`BMCTraceSymbols`, `encode_step`), then `bmc_feasible`/`bmc_solve`/`bmc_verify` check
     reachability, solve for unknown offsets, or verify a fully-instantiated low-level program
     against a goal.
+  - `symbolic_verify.py`: labeled VC results, exact vacuity detection, increasing-size
+    finite counterexample search and optional unbounded proof. `counterexamples.py`
+    realizes relation tables as geometry or explicitly refuses the model.
+  - `cegis.py`: bounded symbolic/motion refinement, monotone finite-vocabulary
+    learning, `NeedsResynthesis` for entry failures, and counterexample penalties.
+    See [Phase E workflow](roboverify/synthesis/verification_lib/CEGIS.md).
   - `motion_verification.py`: explicit placement contracts, frame preservation, and
     swept-cube checks for lowered loop bodies. Results retain proof mode, failed
     obligations, counterexamples, and timings. `NoiseSpec` is opt-in, off by default;
@@ -166,6 +172,10 @@ bash format.sh
   is a large, mostly-scratch experiment script (trajectory collection, feature learning,
   MCMC) rather than a clean library entry point — read it for examples, don't extend it as if
   it were an API.
+
+- **`synthesis/entry/verified_synthesis.py`** — instrumented Phase E Stack driver.
+  Runs symbolic refinement before motion repair, retains counterexamples and
+  invariant progression, and records failure/finite proof scope explicitly.
 
 - **`synthesis/environment/`** — MuJoCo/Gymnasium environments (Fetch pick-and-place block
   construction, ant maze, etc.), largely vendored/adapted from CEE-US and

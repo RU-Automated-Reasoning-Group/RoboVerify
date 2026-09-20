@@ -31,7 +31,7 @@
 > - [x] **A.7** `PAPER-DISCREPANCIES.md` created and seeded with the Theorem 5.2 /
 >       Table 7 contradiction and the segment-reset omission. Commit `c2f0744`.
 >
-> **Phases A–D are complete. Phase E is in progress.**
+> **Phases A–E are complete within the scope and deviations recorded below. Phase F is next.**
 > Phases A–C are included in `main`.
 > Validation is recorded below; Unstack is subject to a 60-second wall-clock cap.
 >
@@ -88,11 +88,25 @@
 >       concrete existing Stack body. Both refute its release endpoint contract.
 >       The exact swept-cube encoding is retained; no AABB fallback was needed.
 >       These are fixture timings, not a universal bound or hardware proof.
-> - [x] Phase E.1–E.2: labeled VCs; valid/invalid/vacuous/unknown verdicts;
+> - [x] Phase E.1–E.2 (`f7628c9`): labeled VCs; valid/invalid/vacuous/unknown verdicts;
 >       local core minimization; smallest finite model search and relation-preserving
 >       geometric counterexample conversion. Eight focused tests pass.
-> - [ ] Phase E.3 symbolic/motion CEGIS and objective integration in progress.
->       Phase F remains not started.
+> - [x] Phase E.3 (`08fed18`): bounded symbolic and motion CEGIS, monotone finite-vocabulary
+>       learner, `NeedsResynthesis` entry-failure branch, accumulated motion penalties,
+>       original/instrumented optimizer integration, and RunLogger progression.
+>       Motion refinement preserves contracts/control structure and searches offsets.
+> - [x] All **101 unittest tests pass** (81 existing + 20 Phase E), including
+>       strict enlargement from False and unbounded VC discharge on a symbolic fixture,
+>       genuine motion-counterexample repair/recheck, fixed-environment penalties,
+>       and existing simulator/MCMC parity. Full suite: **22.858 s**.
+>       `bash format.sh` completed; unrelated formatter changes were restored.
+> - [x] Real-trace Stack CEGIS smoke: three seed-0 Phase C rows, sizes 2–4,
+>       five symbolic iterations allowed, 3-second query timeout, 60-second process
+>       cap. Stops after **17 s**, first learned invariant, with **NeedsResynthesis**
+>       on **establishment at two blocks**. Countermodel/invariant saved; no motion
+>       stage or verified Stack claim. Read via
+>       `uv run python -m synthesis.experiment.report --run runs/phase-e/cegis/latest`.
+> - [ ] Phase F: not started. Phase D/E remain on topic branches, not in `main`.
 >
 > **Pre-existing failure, not a regression.**
 > `verify_stack_with_learned_invariant` reports two high-level VC failures
@@ -660,6 +674,50 @@ afford.
    progression, which is what makes it comparable to the paper's Tables 2 and 3.
 
 ---
+
+### Phase E implementation scope and deviations
+
+- **Verdicts:** `VC(kind, loop_id, expr)` plus valid/invalid/vacuous/unknown results.
+  Unsat cores only prove vacuity when the negated conclusion is absent; otherwise
+  premise satisfiability is checked. Minimization is local, not import-order global.
+  `Program.highlevel_verification` returns a Boolean-compatible structured result.
+- **Countermodels:** increasing finite sizes precede an optional unbounded check.
+  Bounded success is explicitly labeled. Geometric realization must preserve all
+  relation tables, aliases, and frozen geometry; an unrealizable model stops with
+  a diagnosis. A canonical tower drawing alone is insufficient (discrepancy 8).
+- **Starting at False:** log False, then bootstrap from supplied positive traces.
+  No traces means the decided `NeedsResynthesis` branch, not unconditional
+  convergence. Preservation refinement adds a newly uncovered *successor* after
+  the symbolic body; an exit counterexample cannot be repaired by weakening and
+  stops explicitly. The acceptance property is tested on a satisfiable assignment
+  loop, with two strict expansions followed by an unbounded proof; this is not a
+  claim that the current tower programs converge (discrepancy 7).
+- **Learner:** the default CEGIS learner uses the Phase C vocabulary and `DemoStore`,
+  retaining allowed Boolean rows under universal quantification. This gives direct
+  monotonicity; every accepted update also proves implication from the old formula
+  and covers a previously uncovered state. Legacy `InvInference` remains selectable
+  with the same checks. This changes the learning representation, not the geometric
+  predicates or Phase C verification entry points.
+- **Replay:** the symbolic phase executes supported `Put`/`Assign`/`Skip` placement
+  contracts to construct successors, preserving loop-entry geometry. It does not
+  simulate physical controller motion. Only one non-nested loop is supported before
+  F1 supplies a CFG and trace propagation. Terminal loop heads can be added even
+  when their guard is false; those states are necessary to check exit.
+- **Motion:** `PenStore` deduplicates environments per block. Penalized scores
+  subtract weight times the count of failing environments. Both optimizer paths
+  accept this term; Z3-bearing CEM uses serial evaluation. The standalone repair
+  optimizer accepts a demonstration score; absent one, penalty-only repair must
+  be explicitly requested in the CLI. Every repair is reverified globally.
+  Conditions, contracts, summaries, control flow, bindings, waypoint operands,
+  and release structure remain fixed; only offsets are synthesized here.
+  Instruction-structure search awaits Phase F's block IR.
+- **Entry point:** `synthesis.entry.verified_synthesis` integrates Stack and records
+  both refinement stages with RunLogger. Models, scenes, and full invariant
+  S-expressions are artifacts; metrics contain paths to keep run inspection bounded.
+  The report shows the last eight refinement steps. Other single-loop tasks can use
+  the library interfaces; no Unstack rerun was performed and its 60-second cap stands.
+
+See `roboverify/synthesis/verification_lib/CEGIS.md` for APIs and runnable commands.
 
 ## Phase F — Synthesis half (§3, Algorithms 1–5)
 
