@@ -2,7 +2,7 @@
 
 > **Status — read this first.**
 >
-> Branch: `main`; Phases A–E are integrated via fast-forward from `phase-e-cegis`.
+> Branch: `phase-f-synthesis`; Phases A–E are integrated into `main`.
 > This plan is being executed top to bottom, Phase A first. Progress:
 >
 > **Phase A: all seven items done.** Listed in plan order; commits landed in a
@@ -31,7 +31,7 @@
 > - [x] **A.7** `PAPER-DISCREPANCIES.md` created and seeded with the Theorem 5.2 /
 >       Table 7 contradiction and the segment-reset omission. Commit `c2f0744`.
 >
-> **Phases A–E are complete within the scope and deviations recorded below. Phase F is next.**
+> **Phases A–E are complete within the scope and deviations recorded below. Phase F is in progress.**
 > Phases A–E are included in `main`.
 > Validation is recorded below; Unstack is subject to a 60-second wall-clock cap.
 >
@@ -106,7 +106,10 @@
 >       on **establishment at two blocks**. Countermodel/invariant saved; no motion
 >       stage or verified Stack claim. Read via
 >       `uv run python -m synthesis.experiment.report --run runs/phase-e/cegis/latest`.
-> - [ ] Phase F: not started. Start its work on a new topic branch from `main`.
+> - [x] F3a: canonical interned predicate terms, observation scenes, and numeric/Z3
+>       differential checks (three tests pass).
+> - [ ] Phase F in progress: F3a predicate terms first, followed by F1/F2/F3b/F4,
+>       F0/F5, F6, and the flat F7 quotient. No Phase F completion claimed yet.
 >
 > **Pre-existing failure, not a regression.**
 > `verify_stack_with_learned_invariant` reports two high-level VC failures
