@@ -1,10 +1,10 @@
 """Classifier-guided CFG splitting and absolute demo partitioning in lockstep."""
 
 import itertools
-from copy import deepcopy
+from copy import copy, deepcopy
 
 from synthesis.cfg.graph import Edge, Node
-from synthesis.cfg.validate import first_true, last_true, validate_split
+from synthesis.cfg.validate import first_true, validate_cfg, validate_split
 from synthesis.predicates.classifier import learn_classifier
 from synthesis.predicates.scene import Scene, evaluate, scene_from_obs
 from synthesis.predicates.term import open_existentials
@@ -12,17 +12,20 @@ from synthesis.predicates.term import open_existentials
 
 def scene_at(segment, t):
     state = segment.trace.states[t]
+    bindings = dict(segment.bindings)
+    if t == segment.t_end and segment.final_bindings is not None:
+        bindings.update(segment.final_bindings)
     if isinstance(state, Scene):
         return Scene(
             state.positions,
-            dict(state.bindings, **segment.bindings),
-            state.entry_positions,
+            dict(state.bindings, **bindings),
+            segment.trace.states[segment.entry_index].entry_positions,
         )
     return scene_from_obs(
         state,
         segment.trace.num_blocks,
-        segment.bindings,
-        include_table="tbl" in segment.bindings,
+        bindings,
+        include_table="tbl" in bindings,
         entry_obs=segment.trace.states[segment.entry_index],
     )
 
@@ -59,12 +62,9 @@ def refine_cfg(cfg, node, negative, available_scope, *, language=None, on_split=
     starts, finishes, splits = {}, {}, []
     for index, segment in enumerate(segments):
         starts[index] = first_true(segment, lambda s: evaluate(predicate, s), scene_at)
-        # The incoming condition's finishing index is bounded to before this split.
-        finishes[index] = (
-            segment.t_start
-            if incoming[0].source == cfg.entry
-            else last_true(segment, lambda s: evaluate(incoming[0].label, s), scene_at)
-        )
+        # Previous milestone was established at this segment's entry. Its
+        # continued truth is not a reason to reject later progress.
+        finishes[index] = segment.t_start
         cut = starts[index]
         if cut is None or not segment.t_start < cut < segment.t_end:
             result.status = "validate_reject"
@@ -92,6 +92,15 @@ def refine_cfg(cfg, node, negative, available_scope, *, language=None, on_split=
     left, right = node + ".0", node + ".1"
     if left in cfg.nodes or right in cfg.nodes:
         raise ValueError("Refinement node collision")
+    original = cfg
+    cfg = copy(original)
+    cfg.nodes, cfg.edges, cfg.order = (
+        dict(original.nodes),
+        list(original.edges),
+        list(original.order),
+    )
+    cfg.demos = copy(original.demos)
+    cfg.demos.segments = dict(original.demos.segments)
     position = cfg.order.index(node)
     cfg.order[position : position + 1] = [left, right]
     del cfg.nodes[node]
@@ -125,6 +134,10 @@ def refine_cfg(cfg, node, negative, available_scope, *, language=None, on_split=
     del cfg.demos.segments[node]
     cfg.demos.segments[left] = [a for a, b in splits]
     cfg.demos.segments[right] = [b for a, b in splits]
+    if not validate_cfg(cfg):
+        result.status = "validate_reject"
+        return result
+    original.__dict__.update(cfg.__dict__)
     if on_split is not None:
         on_split(node, left, right, splits)
     return result

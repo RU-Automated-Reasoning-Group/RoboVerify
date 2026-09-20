@@ -333,3 +333,36 @@ Audit A1 also adds a root-alignment check with radius L/4, consistent with the
 existing pairwise ON* bound L/2, and fixes Scattered's table-isolation rewrite.
 The two original geometric audit probes are now rejected. This does not prove
 physical settling, arm collision avoidance, or total loop termination.
+
+## 17. Temporal validation when milestones persist
+
+Algorithm 2's last-old-true/first-new-true ordering rejects useful consecutive
+milestones whenever the older relation remains true after the next one is
+established (for example, placing another block on an existing tower). The CFG
+implementation instead requires strictly advancing first establishment times,
+starting from the previously assigned cut. It validates every segment's entry,
+exit, Get witness and adjacency across the complete CFG before committing a
+split or fold. Persistent truth is allowed; zero progress and mismatched cuts
+are rejected. Synthetic tests cover both cases. This is an explicit resolution
+of the temporal ambiguity, not a claim to implement that literal paper formula.
+
+## 18. Primitive motion formulas do not justify the stated Pick/Release claims
+
+**Direct rereading of §5.5, PDF pp. 27–29.** Formula (5) excludes only the
+pre-held object from collision checks. Pick starts with no held object and ends
+at its target block's center (up to grasp noise). Taking the collision witness
+to be that target and t=1 satisfies all three strict L bounds at zero noise.
+The claim that a grasp-noise bound below L avoids this self-collision is false
+under the written formula. Intended grasp contact needs an explicit exception
+or a different gripper geometry; it cannot be silently counted as collision-free.
+
+Release leaves a supported block in place and havocs an unsupported block's
+position, while moving the arm to a release-height offset. This is not the
+simulator controller's lowering trajectory (discrepancy 4). A primitive verifier
+must state which semantics it checks, preserve unsupported/falling outcomes,
+and cannot transfer such a result to hardware without a controller refinement
+argument. The current audit work must not silently replace either model.
+
+Appendix G p. 57 also reverses the wording of Validate's rejection test relative
+to §3.5 p. 19 ("If this fails" versus "If this holds"). The explicit temporal
+validation decision is recorded in discrepancy 17.

@@ -2,7 +2,6 @@ import unittest
 from unittest.mock import Mock
 
 import numpy as np
-
 from synthesis.api.instructions import Skip
 from synthesis.api.program import Program
 from synthesis.cfg.demos import DemoSegment, DemoTrace
@@ -116,6 +115,44 @@ class SearchTests(unittest.TestCase):
                             np.testing.assert_array_equal(
                                 states[2].entry_positions[key], position
                             )
+
+    def test_failed_loop_body_is_refined_without_replacing_the_loop(self):
+        from unittest.mock import patch
+
+        import z3
+        from synthesis.cfg.region import LoopRegion
+        from synthesis.predicates.enumerate import SearchResult
+        from synthesis.predicates.term import negate
+
+        low = Scene({0: (0, 0, 0), 1: (0.2, 0, 0)}, {"a": 1, "b": 0})
+        high = Scene({0: (0, 0, 0), 1: (0.2, 0, 0.1)}, low.bindings)
+        placed = Scene({0: (0, 0, 0), 1: (0, 0, 0.05)}, low.bindings)
+        segment = DemoSegment(0, 0, 2, DemoTrace((low, high, placed)))
+        post = atom("ON", ref("a"), ref("b"))
+        body = RelationalCFG.initial([segment], boolean(True), post, ("a", "b"))
+        loop = LoopRegion(
+            boolean(True), (), (), invariant=z3.BoolVal(True), body_cfg=body
+        )
+        graph = RelationalCFG.initial([segment], boolean(True), post)
+        graph.nodes["v0"].region = loop
+
+        def realize(node, demos, post):
+            if isinstance(node.region, LoopRegion):
+                return node.region, True
+            return BlockRegion((Skip(0),), (Skip(0),)), node.name != "v0"
+
+        feature = negate(atom("Higher", ref("b"), ref("a")))
+        with patch(
+            "synthesis.cfg.refine.learn_classifier",
+            return_value=SearchResult("found", feature),
+        ):
+            result = synthesize_cfg(
+                graph, realize, lambda graph: [low], max_refinements=2
+            )
+        self.assertTrue(result)
+        self.assertIs(graph.nodes["v0"].region, loop)
+        self.assertEqual(loop.body_cfg.order, ["v0.0", "v0.1"])
+        self.assertEqual(len(loop.body), 2)
 
     def test_driver_runs_all_blocks_and_retains_failure(self):
         cfg = RelationalCFG.initial([], boolean(True), boolean(True))

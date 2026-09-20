@@ -73,3 +73,67 @@ class RefineTests(unittest.TestCase):
         self.assertEqual(len(edge.binds), 1)
         name = next(iter(edge.binds))
         self.assertEqual(cfg.demos.for_node("v0.1")[0].bindings[name], 1)
+
+
+class WholeCFGValidationTests(unittest.TestCase):
+    def test_neighbor_boundary_mismatch_is_rejected(self):
+        from synthesis.cfg.demos import DemoAssignment
+        from synthesis.cfg.graph import Edge, Node
+        from synthesis.cfg.validate import validate_cfg
+
+        low = Scene({0: (0, 0, 0), 1: (0.2, 0, 0)}, {"a": 1, "b": 0})
+        high = Scene({0: (0, 0, 0), 1: (0, 0, 0.05)}, low.bindings)
+        trace = DemoTrace((low, high, high, high))
+        post = atom("ON", ref("a"), ref("b"))
+        cfg = RelationalCFG(
+            {"left": Node("left"), "right": Node("right")},
+            [
+                Edge("entry", "left", boolean(True)),
+                Edge("left", "right", post),
+                Edge("right", "exit", boolean(True)),
+            ],
+            ["left", "right"],
+            DemoAssignment(
+                {
+                    "left": [DemoSegment(0, 0, 1, trace)],
+                    "right": [DemoSegment(0, 2, 3, trace)],
+                }
+            ),
+        )
+        self.assertFalse(validate_cfg(cfg))
+        cfg.demos.segments["right"] = [DemoSegment(0, 1, 3, trace)]
+        self.assertTrue(validate_cfg(cfg))
+
+    def test_persistent_previous_milestone_does_not_prevent_progress(self):
+        from synthesis.cfg.demos import DemoAssignment
+        from synthesis.cfg.graph import Edge, Node
+        from synthesis.predicates.term import negate
+
+        low = Scene({0: (0, 0, 0), 1: (0.2, 0, 0)}, {"a": 1, "b": 0})
+        lifted = Scene({0: (0, 0, 0), 1: (0.2, 0, 0.1)}, low.bindings)
+        placed = Scene({0: (0, 0, 0), 1: (0, 0, 0.05)}, low.bindings)
+        trace = DemoTrace((low, lifted, placed, placed))
+        first = negate(atom("Higher", ref("b"), ref("a")))
+        second = atom("ON", ref("a"), ref("b"))
+        cfg = RelationalCFG(
+            {"left": Node("left"), "right": Node("right")},
+            [
+                Edge("entry", "left", boolean(True)),
+                Edge("left", "right", first),
+                Edge("right", "exit", boolean(True)),
+            ],
+            ["left", "right"],
+            DemoAssignment(
+                {
+                    "left": [DemoSegment(0, 0, 1, trace)],
+                    "right": [DemoSegment(0, 1, 3, trace)],
+                }
+            ),
+        )
+        with patch(
+            "synthesis.cfg.refine.learn_classifier",
+            return_value=SearchResult("found", second),
+        ):
+            result = refine_cfg(cfg, "right", [low], {"a", "b"})
+        self.assertTrue(result)
+        self.assertEqual(cfg.order, ["left", "right.0", "right.1"])

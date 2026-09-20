@@ -139,23 +139,6 @@ def run(args, logger):
 
     def realize(node, demos, post):
         if isinstance(node.region, LoopRegion):
-            from synthesis.cfg.graph import Node
-
-            body = []
-            for index, (child, examples, label) in enumerate(
-                zip(
-                    node.region.body, node.region.body_demos, node.region.postconditions
-                )
-            ):
-                repaired, ok = realize(
-                    Node(f"{node.name}.body{index}", child), list(examples), label
-                )
-                if not ok:
-                    return node.region, False
-                body.append(repaired)
-            if len(body) != len(node.region.body):
-                return node.region, False
-            node.region.body = tuple(body)
             physical = Program(
                 len(lower_region(node.region, context, physical=True)),
                 lower_region(node.region, context, physical=True),
@@ -225,46 +208,16 @@ def run(args, logger):
 
     quotient_fn = None
     if args.quotient:
+        from synthesis.cfg.invariants import infer_loop_invariant
         from synthesis.cfg.quotient import quotient
-        from synthesis.cfg.refine import scene_at
-        from synthesis.inference_lib.demo_store import (
-            DemoStore,
-            InferenceVocabulary,
-            LoopHeadState,
+
+        infer_invariant = partial(
+            infer_loop_invariant,
+            context=context,
+            learner=args.learner,
+            relations=args.invariant_relations,
+            variables=args.invariant_variables,
         )
-        from synthesis.verification_lib.cegis import MonotoneInvariantLearner
-
-        def infer_invariant(rows, guard, scope):
-            store = DemoStore()
-            names = sorted(
-                set(scope) & set.intersection(*(set(row.bindings) for row in rows))
-            )
-            for row in rows:
-                scene = scene_at(row, row.t_start)
-                ids = {key: f"x{key}" for key in scene.positions if key != "tbl"}
-                store.add(
-                    LoopHeadState(
-                        "loop",
-                        {ids[k]: v for k, v in scene.positions.items() if k != "tbl"},
-                        {
-                            ids[k]: v
-                            for k, v in scene.entry_positions.items()
-                            if k != "tbl"
-                        },
-                        {
-                            n: ids[row.bindings[n]]
-                            for n in names
-                            if row.bindings[n] in ids
-                        },
-                    )
-                )
-            return MonotoneInvariantLearner()(
-                store,
-                "loop",
-                InferenceVocabulary(2, ("ON_star", "eq"), tuple(names)),
-                context,
-            )
-
         quotient_fn = partial(
             quotient,
             language=Language(timeout_seconds=args.predicate_seconds),
@@ -361,6 +314,13 @@ def main(argv=None):
     parser.add_argument(
         "--quotient", action="store_true", help="Enable conservative flat-loop folding"
     )
+    parser.add_argument("--learner", choices=("legacy", "monotone"), default="legacy")
+    parser.add_argument(
+        "--invariant-relations",
+        nargs="+",
+        choices=("ON_star", "ON_star_zero", "Higher", "Scattered", "equality"),
+    )
+    parser.add_argument("--invariant-variables", type=int, default=2)
     parser.add_argument("--smoke", action="store_true")
     args = parser.parse_args(argv)
     if args.smoke:

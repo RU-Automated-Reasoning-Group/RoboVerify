@@ -24,15 +24,23 @@
 > - [x] **A4:** Every adjacent substitution must have the same partial carry
 >       composition; mismatched/noninjective extensions stop matching. Nine
 >       quotient tests pass, including three new synthetic regressions.
-> - [ ] **A5:** Complete flat loop extraction, folding and body refinement.
+> - [x] **A5:** Flat folding rescans suffixes for complete iterations, retains exit
+>       bindings, repeats folding to a fixed point, and refines unresolved bodies
+>       inside their own CFG. Synthetic tests cover different iteration counts
+>       and preserving the outer loop during body refinement.
 > - [ ] **A6:** Connect synthesized CFGs to verification and counterexample repair.
 > - [ ] **A7:** Verify synthesized primitives and propagate block contexts.
 > - [ ] **A8:** Close object bindings and restrict mutation to runtime scope.
 > - [x] **A9:** Search includes zero-binder classifiers and direct ON by default;
 >       ground separation and intermediate-object adjacency regressions pass
 >       together with the existing search/refinement tests (nine tests).
-> - [ ] **A10:** Validate temporal partitions across the CFG.
-> - [ ] **A11:** Expose the intended invariant learner/vocabulary and terminal heads.
+> - [x] **A10:** Splits/folds validate all entries, exits, witnesses and adjacent
+>       cuts atomically. Persistent milestones use strict progress from the
+>       previous cut; the paper ambiguity is recorded as discrepancy 17.
+> - [x] **A11:** Loop inference includes terminal heads and frozen entry geometry;
+>       the CLI exposes legacy/monotone learning, relation vocabulary and variable
+>       count, with legacy as default. Equality naming is normalized. The combined
+>       loop/refinement/search/learning regressions pass (23 tests).
 > - [x] **D1:** Initial/final conditions gate synthesis; transient success is
 >       diagnosed separately, and invalid/empty recordings are rejected with
 >       per-demo reasons. Four tests include the CLI rejection before search.
@@ -41,6 +49,12 @@
 > - [x] **D3:** Optimizer parity now generates a deterministic Pick/Move trace
 >       in memory, without saved demos or skip-on-missing-data. All parity tests
 >       pass; repository test search finds no saved-demo loading dependency.
+>
+> **Paper reading checkpoint (2026-09-20):** Read POPL2027.pdf §§2.2–2.3,
+> 3–5 (Algorithms 1–6), Appendix A Table 7, and Appendices E/G/K/L directly;
+> Algorithm 6 was also checked on rendered page 34. Experiments are not used as
+> requirements or regression targets. Remaining A6–A8 work follows those algorithm
+> obligations, with contradictions recorded in PAPER-DISCREPANCIES.md.
 >
 > Verification-first order: A1/A2 and the reproduced A3/A4 defects, then the
 > synthesis connections and remaining algorithm coverage. Each coherent change

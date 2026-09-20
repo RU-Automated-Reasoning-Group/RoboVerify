@@ -58,7 +58,7 @@ def execute_cfg(cfg, context, env_factory, *, reset_mode="replay"):
                         segment.trace.num_blocks,
                         bindings,
                         include_table="tbl" in bindings,
-                        entry_obs=first,
+                        entry_obs=segment.trace.states[segment.entry_index],
                     )
                 )
 

@@ -120,7 +120,6 @@ if __name__ == "__main__":
 class FullQuotientTests(unittest.TestCase):
     def test_full_flat_fold_learns_unique_guard_and_lowers_carried_assignment(self):
         import z3
-
         from synthesis.api.instructions import Assign, While
         from synthesis.cfg.demos import DemoAssignment, DemoSegment, DemoTrace
         from synthesis.cfg.graph import Edge, Node, RelationalCFG
@@ -161,6 +160,19 @@ class FullQuotientTests(unittest.TestCase):
         )
         cfg = RelationalCFG(nodes, edges, names, demos, initial_scope=frozenset(["b0"]))
         from copy import deepcopy
+
+        unresolved = deepcopy(cfg)
+        for node in unresolved.nodes.values():
+            node.region = None
+        self.assertTrue(
+            quotient(
+                unresolved, infer_invariant=lambda rows, g, scope: z3.BoolVal(True)
+            )
+        )
+        discovered = unresolved.nodes[unresolved.order[0]].region
+        self.assertIsNone(discovered.body[0].symbolic)
+        self.assertEqual(len(discovered.body_cfg.demos.for_node("body0")), 3)
+        self.assertEqual(len(discovered.exit_demos), 1)
 
         from synthesis.api.instructions import Pick, PickByName
 

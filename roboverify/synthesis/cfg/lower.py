@@ -3,7 +3,6 @@
 from copy import deepcopy
 
 import z3
-
 from synthesis.api.instructions import Assign, Get, While
 from synthesis.api.program import Program
 from synthesis.cfg.region import BlockRegion, LoopRegion
@@ -21,11 +20,15 @@ def lower_region(region, context, *, physical=False):
         raise ValueError("Cannot lower an unresolved region")
     if region.invariant is None:
         raise ValueError("Loop lowering requires an explicit inferred invariant")
-    body = [
-        instruction
-        for child in region.body
-        for instruction in lower_region(child, context, physical=physical)
-    ]
+    body = (
+        list(lower(region.body_cfg, context, physical=physical).instructions)
+        if region.body_cfg is not None
+        else [
+            instruction
+            for child in region.body
+            for instruction in lower_region(child, context, physical=physical)
+        ]
+    )
     body.extend(Assign(a, b) for a, b in region.update)
     guard = to_z3(region.guard, context)
     loop = While(

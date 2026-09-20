@@ -9,7 +9,19 @@ def scope(cfg):
         if expanded == reachable:
             break
         reachable = expanded
+    from synthesis.cfg.region import LoopRegion
+
+    exports = {
+        name: (
+            {left for left, _ in node.region.init}
+            if isinstance(node.region, LoopRegion)
+            else set()
+        )
+        for name, node in cfg.nodes.items()
+    }
     universe = set(cfg.initial_scope)
+    for names in exports.values():
+        universe.update(names)
     for edge in cfg.edges:
         universe.update(edge.binds)
     values = {v: set(universe) if v in reachable else set() for v in vertices}
@@ -19,7 +31,8 @@ def scope(cfg):
         changed = False
         for vertex in sorted(reachable - {cfg.entry}):
             paths = [
-                (values[e.source] | set(e.binds)) - set(e.kills)
+                (values[e.source] | exports.get(e.source, set()) | set(e.binds))
+                - set(e.kills)
                 for e in cfg.incoming(vertex)
                 if e.source in reachable
             ]

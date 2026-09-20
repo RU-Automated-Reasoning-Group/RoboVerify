@@ -21,6 +21,8 @@ class LoopRegion:
     body_demos: tuple = ()
     require_unique_guard: bool = False
     iteration_limit: object = None
+    body_cfg: object = None
+    exit_demos: tuple = ()
 
     @property
     def max_iters(self):

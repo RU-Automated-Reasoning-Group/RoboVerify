@@ -23,6 +23,7 @@ class DemoSegment:
     bindings: dict = field(default_factory=dict)
     parent: object = None
     entry_index: int = None
+    final_bindings: object = None
 
     def __post_init__(self):
         if not 0 <= self.t_start <= self.t_end < len(self.trace.states):
@@ -58,6 +59,7 @@ class DemoSegment:
                 self.bindings,
                 self,
                 self.entry_index,
+                self.final_bindings,
             ),
         )
 

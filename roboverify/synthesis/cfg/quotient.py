@@ -1,6 +1,6 @@
 """Flat adjacent-fragment quotient with witnessed bindings and unique guards."""
 
-from copy import deepcopy
+from copy import copy, deepcopy
 from dataclasses import dataclass
 
 from synthesis.api.instructions import (
@@ -12,8 +12,9 @@ from synthesis.api.instructions import (
     ReleaseByName,
     Skip,
 )
-from synthesis.cfg.demos import DemoSegment
-from synthesis.cfg.graph import Edge, Node
+from synthesis.cfg.demos import DemoAssignment, DemoSegment
+from synthesis.cfg.graph import Edge, Node, RelationalCFG
+from synthesis.cfg.iterations import extract_iterations
 from synthesis.cfg.kleene import (
     Letter,
     Template,
@@ -28,7 +29,7 @@ from synthesis.cfg.region import BlockRegion, LoopRegion
 from synthesis.cfg.scope import scope as graph_scope
 from synthesis.predicates.guard import loop_guard_synthesis
 from synthesis.predicates.scene import Scene, evaluate
-from synthesis.predicates.term import conjunction, ref, substitute
+from synthesis.predicates.term import conjunction, exists, negate, ref, substitute
 
 
 @dataclass
@@ -39,7 +40,7 @@ class Repetition:
     template: object
 
 
-def find_repetition(labels):
+def find_repetition(labels, excluded=frozenset()):
     word = (
         tuple(labels)
         if labels and isinstance(labels[0], Letter)
@@ -47,6 +48,8 @@ def find_repetition(labels):
     )
     for width in range(1, len(word) // 2 + 1):
         for start in range(len(word) - 2 * width + 1):
+            if (start, width) in excluded:
+                continue
             template = anti_unify(
                 word[start : start + width], word[start + width : start + 2 * width]
             )
@@ -76,39 +79,6 @@ def find_repetition(labels):
     return None
 
 
-def extract_iterations(segments_by_node, start, width, count):
-    """Group contiguous recorded segments, keeping original absolute indices."""
-    groups = []
-    for iteration in range(count):
-        columns = segments_by_node[
-            start + iteration * width : start + (iteration + 1) * width
-        ]
-        keys = [(s.demo_idx, s.t_start) for s in columns[0]]
-        if any(len(column) != len(keys) for column in columns):
-            raise ValueError("Unaligned iteration demonstrations")
-        result = []
-        for row in zip(*columns):
-            if any(
-                s.demo_idx != row[0].demo_idx or s.trace is not row[0].trace
-                for s in row
-            ):
-                raise ValueError("Mismatched demonstration provenance")
-            if any(a.t_end != b.t_start for a, b in zip(row, row[1:])):
-                raise ValueError("Iteration fragments are not contiguous")
-            result.append(
-                DemoSegment(
-                    row[0].demo_idx,
-                    row[0].t_start,
-                    row[-1].t_end,
-                    row[0].trace,
-                    row[0].bindings,
-                    row[0],
-                )
-            )
-        groups.append(result)
-    return groups
-
-
 def _rename_instruction(instruction, names):
     result = deepcopy(instruction)
     fields = {
@@ -134,31 +104,13 @@ def _rename_instruction(instruction, names):
     return result
 
 
-def quotient(cfg, *, language=None, infer_invariant=None):
-    """One flat collapse. Missing data/guard/invariant leaves the graph unchanged."""
-    cfg.validate_structure()
-    word = []
-    for node in cfg.order:
-        edge = cfg.outgoing(node)[0]
-        word.append(
-            Letter(
-                (
-                    edge.binding_condition
-                    if edge.binding_condition is not None
-                    else edge.label
-                ),
-                edge.binds,
-                isinstance(cfg.nodes[node].region, LoopRegion),
-            )
-        )
-    repetition = find_repetition(word)
-    if repetition is None:
-        return False
+def _fold(cfg, repetition, language, infer_invariant):
     r = repetition
     carry, rebound = carried_bindings(r.template)
     if not carry or not rebound:
         return False
-    occupied = set(graph_scope(cfg)[cfg.order[r.start]])
+    available = set(graph_scope(cfg)[cfg.order[r.start]])
+    occupied = set(available)
 
     def fresh(preferred):
         name = preferred
@@ -167,179 +119,171 @@ def quotient(cfg, *, language=None, infer_invariant=None):
         occupied.add(name)
         return name
 
-    names = {name: fresh("b" if i == 0 else f"b{i}") for i, name in enumerate(carry)}
+    names = {key: fresh("b" if i == 0 else f"b{i}") for i, key in enumerate(carry)}
     names.update(
         {
-            name: fresh("b_prime" if i == 0 else f"b_prime{i}")
-            for i, name in enumerate(rebound)
+            key: fresh("b_prime" if i == 0 else f"b_prime{i}")
+            for i, key in enumerate(rebound)
         }
     )
-    # Reject cyclic parallel updates: sequential Assign would change their meaning.
     updates = tuple((names[a], names[b]) for a, b in carry.items())
     if any(
         right in {a for a, _ in updates[:i]} for i, (_, right) in enumerate(updates)
     ):
         return False
-    try:
-        groups = extract_iterations(
-            [cfg.demos.for_node(n) for n in cfg.order],
-            r.start,
-            r.width,
-            len(r.substitutions),
-        )
-    except ValueError:
-        return False
-    if not groups or any(not group for group in groups):
-        return False
-    entries = {s.demo_idx: s.t_start for s in groups[0]}
-    for group in groups:
-        for segment in group:
-            segment.entry_index = entries[segment.demo_idx]
-    positive, exits, loop_segments = [], [], []
-    for iteration, (group, mapping) in enumerate(zip(groups, r.substitutions)):
-        for segment in group:
-            head = scene_at(segment, segment.t_start)
-            try:
-                bindings = {
-                    names[key]: head.bindings[value.value]
-                    for key, value in mapping.items()
-                }
-            except KeyError:
-                return False
-            head = Scene(
-                head.positions, dict(head.bindings, **bindings), head.entry_positions
-            )
-            positive.append(
-                (head, {names[key]: bindings[names[key]] for key in rebound})
-            )
-            loop_segments.append(
-                DemoSegment(
-                    segment.demo_idx,
-                    segment.t_start,
-                    segment.t_end,
-                    segment.trace,
-                    dict(segment.bindings, **bindings),
-                    segment,
-                    entries[segment.demo_idx],
-                )
-            )
-            if iteration == len(groups) - 1:
-                final = scene_at(segment, segment.t_end)
-                for left, right in updates:
-                    bindings[left] = bindings[right]
-                exits.append(
-                    Scene(
-                        final.positions,
-                        dict(final.bindings, **bindings),
-                        final.entry_positions,
-                    )
-                )
-    scope = set(graph_scope(cfg)[cfg.order[r.start]]) | set(names[key] for key in carry)
-    hint = conjunction(
-        *(
-            substitute(
-                letter.predicate, {key: ref(value) for key, value in names.items()}
-            )
-            for letter in r.template.word
-        )
-    )
-    learned = loop_guard_synthesis(
-        positive,
-        exits,
-        tuple(names[k] for k in rebound),
-        scope,
-        language=language,
-        candidates=(hint,),
-    )
-    if not learned or infer_invariant is None:
-        return False
-    invariant = infer_invariant(loop_segments, learned.term, scope)
-    if invariant is None:
-        return False
-    inverse = {value.value: names[key] for key, value in r.template.first.items()}
-    body = []
-    for node in cfg.order[r.start : r.start + r.width]:
-        region = cfg.nodes[node].region
-        if not isinstance(region, BlockRegion):
-            return False
-        try:
-            # Numeric candidates may become named physical loop bodies, but do not
-            # acquire a relational summary merely by matching demonstrations.
-            rows = cfg.demos.for_node(node)
-            aliases = {}
-            for key, variable in inverse.items():
-                ids = {scene_at(row, row.t_start).bindings[key] for row in rows}
-                if len(ids) == 1:
-                    aliases[ids.pop()] = variable
-            for key in sorted(scope - set(names.values())):
-                ids = {scene_at(row, row.t_start).bindings[key] for row in rows}
-                if len(ids) == 1:
-                    aliases.setdefault(ids.pop(), key)
-            body.append(
-                BlockRegion(
-                    (
-                        None
-                        if region.symbolic is None
-                        else tuple(
-                            _rename_instruction(i, inverse) for i in region.symbolic
-                        )
-                    ),
-                    tuple(
-                        _rename_instruction(name_operands(i, aliases), inverse)
-                        for i in region.physical
-                    ),
-                )
-            )
-        except (KeyError, ValueError):
-            return False
     init = tuple((names[key], r.template.first[key].value) for key in carry)
     posts = tuple(
         substitute(letter.predicate, {key: ref(value) for key, value in names.items()})
         for letter in r.template.word
     )
-    body_demos = []
-    for slot in range(r.width):
-        examples = []
-        for iteration, mapping in enumerate(r.substitutions):
-            original = cfg.demos.for_node(
-                cfg.order[r.start + iteration * r.width + slot]
+    rebound_names = tuple(names[key] for key in rebound)
+    examples = cfg.demos.for_node(cfg.order[r.start])
+    if not examples:
+        return False
+    extracted = []
+    for row in examples:
+        try:
+            bindings = dict(row.bindings)
+            initial = scene_at(row, row.t_start)
+            bindings.update({left: initial.bindings[right] for left, right in init})
+            suffix = DemoSegment(
+                row.demo_idx,
+                row.t_start,
+                len(row.trace.states) - 1,
+                row.trace,
+                bindings,
+                row,
+                row.t_start,
             )
-            for segment in original:
-                head = scene_at(segment, segment.t_start)
-                bindings = {
-                    names[key]: head.bindings[value.value]
-                    for key, value in mapping.items()
-                }
-                examples.append(
-                    DemoSegment(
-                        segment.demo_idx,
-                        segment.t_start,
-                        segment.t_end,
-                        segment.trace,
-                        dict(segment.bindings, **bindings),
-                        segment,
-                        entries[segment.demo_idx],
-                    )
+            iterations = extract_iterations(suffix, posts, rebound_names, updates)
+        except (KeyError, ValueError):
+            return False
+        if not iterations.bodies:
+            return False
+        extracted.append(iterations)
+    positive, heads, exits = [], [], []
+    body_demos = [[] for _ in posts]
+    loop_demos = []
+    for row, iterations in zip(examples, extracted):
+        for body in iterations.bodies:
+            head = body[0]
+            heads.append(head)
+            positive.append(
+                (
+                    scene_at(head, head.t_start),
+                    {n: head.bindings[n] for n in rebound_names},
                 )
-        body_demos.append(tuple(examples))
+            )
+            for slot, segment in enumerate(body):
+                body_demos[slot].append(segment)
+        terminal = iterations.terminal
+        exits.append(scene_at(terminal, terminal.t_start))
+        loop_demos.append(
+            DemoSegment(
+                row.demo_idx,
+                row.t_start,
+                terminal.t_end,
+                row.trace,
+                iterations.bodies[0][0].bindings,
+                row,
+                row.t_start,
+                terminal.bindings,
+            )
+        )
+    loop_scope = available | {left for left, _ in init}
+    learned = loop_guard_synthesis(
+        positive,
+        exits,
+        rebound_names,
+        loop_scope,
+        language=language,
+        candidates=(conjunction(*posts),),
+    )
+    if not learned:
+        return False
+    terminals = tuple(it.terminal for it in extracted)
+    invariant = (
+        None
+        if infer_invariant is None
+        else infer_invariant(heads + list(terminals), learned.term, loop_scope)
+    )
+    inverse = {value.value: names[key] for key, value in r.template.first.items()}
+    body = []
+    for slot, node in enumerate(cfg.order[r.start : r.start + r.width]):
+        old = cfg.nodes[node].region
+        region = BlockRegion(None)
+        if isinstance(old, BlockRegion):
+            try:
+                aliases = {}
+                for name in sorted(loop_scope | set(rebound_names)):
+                    ids = {
+                        scene_at(
+                            it.bodies[0][slot], it.bodies[0][slot].t_start
+                        ).bindings[name]
+                        for it in extracted
+                    }
+                    if len(ids) == 1:
+                        aliases.setdefault(ids.pop(), name)
+                region = BlockRegion(
+                    (
+                        None
+                        if old.symbolic is None
+                        else tuple(
+                            _rename_instruction(i, inverse) for i in old.symbolic
+                        )
+                    ),
+                    tuple(
+                        _rename_instruction(name_operands(i, aliases), inverse)
+                        for i in old.physical
+                    ),
+                )
+            except (KeyError, ValueError):
+                # Structural discovery does not require a reusable controller.
+                pass
+        body.append(region)
+    body_names = [f"body{i}" for i in range(len(body))]
+    body_edges = [Edge("entry", body_names[0], learned.term)]
+    body_edges.extend(
+        Edge(name, body_names[i + 1] if i + 1 < len(body_names) else "exit", posts[i])
+        for i, name in enumerate(body_names)
+    )
+    body_cfg = RelationalCFG(
+        dict(zip(body_names, (Node(n, b) for n, b in zip(body_names, body)))),
+        body_edges,
+        body_names,
+        DemoAssignment(dict(zip(body_names, body_demos))),
+        learned.term,
+        posts[-1],
+        initial_scope=frozenset(loop_scope | set(rebound_names)),
+    )
     region = LoopRegion(
         learned.term,
-        tuple(names[k] for k in rebound),
+        rebound_names,
         tuple(body),
         init,
         updates,
         invariant,
-        tuple(len(groups) for _ in groups[0]),
+        tuple(len(it.bodies) for it in extracted),
         posts,
-        tuple(body_demos),
+        tuple(tuple(rows) for rows in body_demos),
         require_unique_guard=True,
+        body_cfg=body_cfg,
+        exit_demos=terminals,
     )
-    first, last = r.start, r.start + r.width * len(groups)
+    first, last = r.start, r.start + r.width * len(r.substitutions)
     removed = cfg.order[first:last]
     new = removed[0] + ".loop"
     incoming, outgoing = cfg.incoming(removed[0])[0], cfg.outgoing(removed[-1])[0]
-    edge_index = cfg.edges.index(incoming)
-    cfg.edges[edge_index : edge_index + len(removed) + 1] = [
+    exit_label = negate(exists(rebound_names, learned.term))
+    trial = copy(cfg)
+    trial.nodes, trial.order, trial.edges = (
+        dict(cfg.nodes),
+        list(cfg.order),
+        list(cfg.edges),
+    )
+    trial.demos = DemoAssignment(dict(cfg.demos.segments))
+    index = trial.edges.index(incoming)
+    trial.edges[index : index + len(removed) + 1] = [
         Edge(
             incoming.source,
             new,
@@ -351,29 +295,91 @@ def quotient(cfg, *, language=None, infer_invariant=None):
         Edge(
             new,
             outgoing.target,
-            outgoing.label,
-            outgoing.binds,
-            outgoing.kills,
-            outgoing.binding_condition,
+            cfg.postcondition if outgoing.target == cfg.exit else exit_label,
         ),
     ]
-    cfg.order[first:last] = [new]
-    for node in removed:
-        del cfg.nodes[node]
-        del cfg.demos.segments[node]
-    cfg.nodes[new] = Node(new, region)
-    cfg.demos.segments[new] = [
-        DemoSegment(
-            first.demo_idx,
-            first.t_start,
-            last.t_end,
-            first.trace,
-            first.bindings,
-            first,
-        )
-        for first, last in zip(groups[0], groups[-1])
-    ]
+    trial.order[first:last] = [new]
+    for name in removed:
+        del trial.nodes[name]
+        del trial.demos.segments[name]
+    trial.nodes[new] = Node(new, region)
+    trial.demos.segments[new] = loop_demos
+    # The loop may explain more of a demo than the original detected pair.
+    # Repartition its continuation from the newly recovered terminal head.
+    cursors = [it.terminal.t_end for it in extracted]
+    for name in trial.order[first + 1 :]:
+        rows = []
+        old_rows = trial.demos.for_node(name)
+        if len(old_rows) != len(examples):
+            return False
+        post = trial.outgoing(name)[0].label
+        for i, (old, it) in enumerate(zip(old_rows, extracted)):
+            bindings = dict(old.bindings, **it.terminal.bindings)
+            remaining = DemoSegment(
+                old.demo_idx,
+                cursors[i],
+                len(old.trace.states) - 1,
+                old.trace,
+                bindings,
+                old,
+                old.entry_index,
+            )
+            end = (
+                remaining.t_end
+                if trial.outgoing(name)[0].target == cfg.exit
+                else next(
+                    (
+                        t
+                        for t in range(cursors[i] + 1, remaining.t_end + 1)
+                        if evaluate(post, scene_at(remaining, t))
+                    ),
+                    None,
+                )
+            )
+            if end is None:
+                return False
+            rows.append(
+                DemoSegment(
+                    old.demo_idx,
+                    cursors[i],
+                    end,
+                    old.trace,
+                    bindings,
+                    old,
+                    old.entry_index,
+                )
+            )
+            cursors[i] = end
+        trial.demos.segments[name] = rows
+    from synthesis.cfg.validate import validate_cfg
+
+    if not validate_cfg(trial):
+        return False
+    cfg.__dict__.update(trial.__dict__)
     return True
+
+
+def quotient(cfg, *, language=None, infer_invariant=None):
+    """Collapse flat repetitions to a fixed point; failed matches leave no edits."""
+    cfg.validate_structure()
+    changed, excluded = False, set()
+    while True:
+        word = [
+            Letter(
+                e.binding_condition if e.binding_condition is not None else e.label,
+                e.binds,
+                isinstance(cfg.nodes[name].region, LoopRegion),
+            )
+            for name in cfg.order
+            for e in cfg.outgoing(name)
+        ]
+        repetition = find_repetition(word, excluded)
+        if repetition is None:
+            return changed
+        if _fold(cfg, repetition, language, infer_invariant):
+            changed, excluded = True, set()
+        else:
+            excluded.add((repetition.start, repetition.width))
 
 
 Quotient = quotient

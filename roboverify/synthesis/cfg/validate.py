@@ -36,4 +36,49 @@ def validate_split(starts, finishes, *, entry=False):
     )
 
 
-Validate = validate_split
+def validate_cfg(cfg):
+    """Validate the complete recorded partition, including neighboring blocks.
+
+    Labels are milestones: an earlier predicate may remain true after progress.
+    The new milestone must first hold at its cut, not after the old one becomes
+    false. Bindings and absolute boundaries are checked on both sides of each cut.
+    """
+    from collections import Counter
+
+    from synthesis.cfg.refine import scene_at
+    from synthesis.predicates.scene import evaluate
+
+    cfg.validate_structure()
+    for name in cfg.order:
+        incoming, outgoing = cfg.incoming(name)[0], cfg.outgoing(name)[0]
+        rows = cfg.demos.for_node(name)
+        if not rows:
+            return False
+        for row in rows:
+            try:
+                if not evaluate(incoming.label, scene_at(row, row.t_start)):
+                    return False
+                if incoming.binding_condition is not None and not evaluate(
+                    incoming.binding_condition, scene_at(row, row.t_start)
+                ):
+                    return False
+                if not evaluate(outgoing.label, scene_at(row, row.t_end)):
+                    return False
+                if outgoing.target != cfg.exit:
+                    first = first_true(
+                        row, lambda state: evaluate(outgoing.label, state), scene_at
+                    )
+                    if first != row.t_end or row.t_end <= row.t_start:
+                        return False
+            except (KeyError, ValueError):
+                return False
+        if outgoing.target != cfg.exit:
+            following = cfg.demos.for_node(outgoing.target)
+            ends = Counter((id(r.trace), r.demo_idx, r.t_end) for r in rows)
+            starts = Counter((id(r.trace), r.demo_idx, r.t_start) for r in following)
+            if ends != starts:
+                return False
+    return True
+
+
+Validate = validate_cfg

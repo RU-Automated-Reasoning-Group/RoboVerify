@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 from synthesis.cfg.refine import refine_cfg
+from synthesis.cfg.region import LoopRegion
 from synthesis.cfg.scope import scope
 
 
@@ -47,6 +48,33 @@ def synthesize_cfg(
         failed = None
         for name in cfg.order:
             node = cfg.nodes[name]
+            if isinstance(node.region, LoopRegion) and node.region.body_cfg is not None:
+                nested = synthesize_cfg(
+                    node.region.body_cfg,
+                    realize,
+                    execute,
+                    max_refinements=max_refinements,
+                    language=language,
+                    logger=logger,
+                )
+                if not nested:
+                    return SynthesisResult(
+                        cfg,
+                        nested.status,
+                        round_id,
+                        f"{name}/{nested.failed_block}",
+                        nested.reason,
+                    )
+                body_cfg = node.region.body_cfg
+                node.region.body = tuple(
+                    body_cfg.nodes[n].region for n in body_cfg.order
+                )
+                node.region.postconditions = tuple(
+                    body_cfg.outgoing(n)[0].label for n in body_cfg.order
+                )
+                node.region.body_demos = tuple(
+                    tuple(body_cfg.demos.for_node(n)) for n in body_cfg.order
+                )
             region, ok = realize(
                 node, cfg.demos.for_node(name), cfg.outgoing(name)[0].label
             )
@@ -59,6 +87,14 @@ def synthesize_cfg(
             return SynthesisResult(cfg, "synthesized", round_id)
         if round_id == max_refinements:
             return SynthesisResult(cfg, "budget_exhausted", round_id, failed)
+        if isinstance(cfg.nodes[failed].region, LoopRegion):
+            return SynthesisResult(
+                cfg,
+                "loop_execution_failed",
+                round_id,
+                failed,
+                "Loop guard/body needs repair; retain the discovered loop",
+            )
         negatives = execute(cfg)
         result = refine_cfg(
             cfg, failed, negatives, scope(cfg)[failed], language=language
