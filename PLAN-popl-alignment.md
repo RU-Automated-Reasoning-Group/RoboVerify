@@ -4,6 +4,10 @@
 >
 > Branch: `phase-f-synthesis`; Phases A–E are integrated into `main`.
 >
+> **Documentation correction (discrepancy 6):** D2 retains the paper's shared-`t`
+> straight-segment collision query. The proposed endpoint bounding-box fallback
+> was never implemented; its original equivalence claim below has been corrected.
+>
 > **Audit remediation implemented and tested within the agreed flat-loop scope.** The user requested fixes for
 > all eleven findings in [AUDIT-popl-alignment.md](AUDIT-popl-alignment.md), plus
 > the demo-independent follow-ups below. Check this checklist for current status;
@@ -681,10 +685,16 @@ deferred until you actually want paper-strict checking. Take the concrete 3-inst
 body at
 [verify_stack_with_learned_invariant.py:70](roboverify/synthesis/entry/verify_stack_with_learned_invariant.py:70),
 hand-build one collision query with `η ∈ [-0.005, 0.005]³` added to `end_pos`, and time
-`s.check()`. **Pre-planned fallback:** the swept AABB of a segment is the AABB of its
-endpoints, so `encode_collision` can be rewritten quantifier-free and *linear* as a
-per-axis `Abs(X(a) - midpoint) < L + halfspan` test — a single-function change that drops
-the query into LRA while keeping `η` free.
+`s.check()`. **Decision after the spike:** retain the shared-`t` straight-segment
+collision query; no fallback was needed or implemented. The original proposal to
+replace it with one axis-aligned bounding box enclosing the entire movement was
+not an equivalent rewrite. That box includes space outside a diagonal swept path,
+so overlap can report a collision that never occurs along the modeled trajectory.
+A correctly enclosing box could provide a conservative clearance check, but an
+overlap would require the original query to establish a collision. The paper's
+§5.5 collision predicate and the retained code both require overlap on all axes
+at the same segment parameter `t`. Discrepancy 6 records this plan correction,
+not a defect in that paper formula or its implementation.
 
 **Test:** extend `test_bmc_lib.py` with `test_default_encoding_unchanged` (no `NoiseSpec`
 ⇒ identical constraints to today) and, marked as the opt-in path,

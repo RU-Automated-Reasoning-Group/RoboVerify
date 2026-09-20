@@ -154,17 +154,28 @@ uses separate frozen `X0/Y0/Z0` functions for `ON_star_zero`, with a regression 
 which an initial on-relation holds and the current one does not. This follows the
 already-settled initial-state semantics; it introduces no global link axiom.
 
-## 6. The planned swept-AABB fallback is conservative, not equivalent
+## 6. Plan correction: an endpoint bounding box is not an equivalent collision check
 
-**Status:** plan correction; no fallback was needed in the Phase D spike.
+**Status:** documentation corrected; the proposed fallback was never implemented.
+This entry identifies a plan error, not an error in the paper's shared-parameter
+collision formula or the code implementing that formula.
 
-`encode_collision` uses one shared segment parameter across all axes. A per-axis
-endpoint bounding box can contain points that are never close to the segment at
-any single parameter value (notably on diagonal paths). Replacing the swept-cube
-query with this bounding box can safely overapproximate collisions, but can also
-introduce spurious counterexamples. The exact bilinear query is retained. This is
-a limitation of the plan's proposed fallback, not a reason to silently change the
-collision predicate or report a bounding-box result as exact.
+- **Paper:** §5.5, p. 29 defines collision using one segment parameter `t` shared
+  across X, Y and Z. All three overlap conditions must hold at the same position
+  along the straight trajectory.
+- **Code:** `encode_collision_at` in
+  `roboverify/synthesis/verification_lib/lowlevel_verification_lib.py` retains that
+  shared-`t` query for the moving-cube model. No endpoint-box fallback is used.
+- **Plan:** D2 originally proposed replacing the query with one axis-aligned box
+  enclosing the entire movement and incorrectly treated this as equivalent. The
+  original paragraph is now corrected; the Phase D spike did not require a fallback.
+
+For diagonal motion, the enclosing box contains space outside the swept path.
+An obstacle there can overlap the box without colliding with the moving cube.
+A correctly enclosing box can therefore prove clearance when it is clear, but
+overlap alone cannot establish a collision. The retained query is exact for its
+straight-moving cube model; this does not establish physical-controller behavior
+or resolve the separate Pick-contact issue in discrepancy 18.
 
 ## 7. Algorithm 6's invariant progression needs a precise failure state and learner
 
