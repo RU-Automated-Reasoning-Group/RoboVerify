@@ -33,12 +33,14 @@
 >       together with the existing search/refinement tests (nine tests).
 > - [ ] **A10:** Validate temporal partitions across the CFG.
 > - [ ] **A11:** Expose the intended invariant learner/vocabulary and terminal heads.
-> - [ ] **D1:** Validate demonstrations against their initial/final task conditions;
->       reject invalid inputs with actionable diagnostics before synthesis.
+> - [x] **D1:** Initial/final conditions gate synthesis; transient success is
+>       diagnosed separately, and invalid/empty recordings are rejected with
+>       per-demo reasons. Four tests include the CLI rejection before search.
 > - [ ] **D2:** Validate loop recovery and synthesis/verification integration using
 >       synthetic examples independent of historical demonstrations (A3–A8).
-> - [ ] **D3:** Remove saved-demo dependencies from automated tests. The user's
->       latest request authorizes this previously deferred follow-up.
+> - [x] **D3:** Optimizer parity now generates a deterministic Pick/Move trace
+>       in memory, without saved demos or skip-on-missing-data. All parity tests
+>       pass; repository test search finds no saved-demo loading dependency.
 >
 > Verification-first order: A1/A2 and the reproduced A3/A4 defects, then the
 > synthesis connections and remaining algorithm coverage. Each coherent change

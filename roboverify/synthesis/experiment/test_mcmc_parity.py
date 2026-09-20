@@ -9,14 +9,13 @@ Run with::
 
     uv run python -m unittest synthesis.experiment.test_mcmc_parity -v
 
-The parity case drives MuJoCo and takes a couple of minutes; it skips itself when
-no demo directory is available.
+The parity case generates a small deterministic simulator trace in memory. It
+compares optimizer behavior and makes no claim that the trace solves a tower task.
 """
 
 import os
 import tempfile
 import unittest
-from pathlib import Path
 
 from synthesis.api import program
 from synthesis.experiment.config import MCMCConfig
@@ -24,7 +23,6 @@ from synthesis.experiment.mcmc import search
 from synthesis.experiment.run_logger import RunLogger
 from synthesis.mcmc import synthesis as original
 
-DEMO_DIR = os.environ.get("ROBOVERIFY_DEMO_DIR", "demos")
 PARITY_SEED = 4242
 NUM_BLOCKS = 4
 PROGRAM_SLOTS = 4
@@ -72,17 +70,21 @@ class TestBMCReasonClassification(unittest.TestCase):
 
 
 def load_expert_states():
-    trajectories, seeds, num_blocks = original.load_demo_trajectories(DEMO_DIR)
-    trajectories = trajectories[:1]
-    seeds = list(seeds[:1])
-    expert_states = [state for traj in trajectories for state in traj]
-    return expert_states, seeds, num_blocks
+    """Fresh motion data; no saved demonstrations or task oracle required."""
+    seed = 29
+    with original.preserved_global_rng():
+        original.set_np_seed(seed)
+        env = original.make_roboverify_stack_env(num_blocks=NUM_BLOCKS)
+        try:
+            probe = program.Program(
+                2, [program.Pick(0), program.Move(0, 0, 0, target_offset=[0, 0, 0.1])]
+            )
+            states = probe.eval(env)
+        finally:
+            env.close()
+    return states, [seed], NUM_BLOCKS
 
 
-@unittest.skipUnless(
-    Path(DEMO_DIR, "all_trajectories.pkl").exists(),
-    f"no demo trajectories in {DEMO_DIR!r}",
-)
 class TestMCMCParity(unittest.TestCase):
     """The instrumented search must reproduce the original's cost sequence."""
 
