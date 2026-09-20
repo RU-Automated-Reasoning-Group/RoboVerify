@@ -45,11 +45,12 @@ Run a script as a module (required — the `synthesis` package uses relative imp
 under `synthesis/entry/` are not meant to be run as bare scripts):
 
 ```bash
-uv run python -m synthesis.entry.verify_stack_with_learned_invariant
-uv run python -m synthesis.entry.verify_stack_with_learned_invariant --verification-mode finite --num-blocks 4
-uv run python -m synthesis.entry.verify_unstack_with_learned_invariant
-uv run python -m synthesis.entry.verify_reverse_with_learned_invariant
-uv run python -m synthesis.entry.verify_partial_with_learned_invariant
+uv run python -m synthesis.entry.collect_stack_loop_traces --output /tmp/stack-loop-traces.json
+uv run python -m synthesis.entry.verify_stack_with_learned_invariant --demo-store /tmp/stack-loop-traces.json
+uv run python -m synthesis.entry.verify_stack_with_learned_invariant --demo-store /tmp/stack-loop-traces.json --verification-mode finite --num-blocks 4
+uv run python -m synthesis.entry.verify_unstack_with_learned_invariant --demo-store /path/to/unstack-loop-traces.json
+uv run python -m synthesis.entry.verify_reverse_with_learned_invariant --demo-store /path/to/reverse-loop-traces.json
+uv run python -m synthesis.entry.verify_partial_with_learned_invariant --demo-store /path/to/partial-loop-traces.json
 uv run python -m synthesis.entry.verify_2d_with_learned_invariant
 uv run python -m synthesis.entry.main   # big ad hoc experiment/demo-collection script
 ```
@@ -68,6 +69,8 @@ Run tests (unittest, not pytest):
 
 ```bash
 uv run python -m unittest synthesis.verification_lib.test_bmc_lib -v
+uv run python -m unittest synthesis.inference_lib.test_demo_store -v   # trace adapter and golden equivalence
+uv run python -m unittest synthesis.experiment.test_loop_traces -v     # three MuJoCo loop iterations
 uv run python -m unittest synthesis.experiment.test_run_logger -v      # fast, no simulator
 uv run python -m unittest synthesis.experiment.test_mcmc_parity -v     # drives MuJoCo
 ```
@@ -113,6 +116,16 @@ bash format.sh
   - `lowlevel_verification_lib.py`: geometric low-level context, box-corner/cube drawing
     helpers used to visualize/verify concrete 3D placements.
 
+- **`synthesis/inference_lib/demo_store.py`** — loop-head demonstration storage and
+  adaptation to invariant inference. `Program.eval(..., on_loop_head=store.add)`
+  records one `LoopHeadState` after each successful guard binding, before the body.
+  All physical blocks are copied, including ones with no symbolic alias; every row
+  keeps its invocation's entry geometry for `ON_star_zero`. Loop IDs are instruction
+  paths (`"1"` for a loop following an initial assignment). `DemoStore.save/load`
+  round-trips JSON without Z3 objects and preserves the relational table marker.
+  `InvInference(store, loop_id, vocab, context)` reuses the existing learner.
+  See [the trace workflow](roboverify/synthesis/inference_lib/README.md).
+
 - **`synthesis/inference_lib/inference.py`** — invariant learning. Given positive traces
   (expert demos) and negative traces (random/failed programs), builds a boolean-formula
   vocabulary over the block predicates, partitions per-timestep states into truth-table rows,
@@ -140,7 +153,7 @@ bash format.sh
   the MCMC reward/feature code call into these rather than duplicating geometry logic.
 
 - **`synthesis/entry/`** — runnable pipelines. `verify_{stack,unstack,reverse,partial,2d}_with_learned_invariant.py`
-  all follow the same shape: run inference in a `"declare"` context to learn an invariant,
+  require explicit `--demo-store` input and follow the same shape: learn an invariant,
   optionally instantiate it into a finite `"enum"` context, build both a high-level (`Put`/
   `Assign`/`While`) and a lowered physical (`PickPlaceByName`) version of the same program, then
   call `highlevel_verification` and `lowlevel_verification` and report both results. `main.py`

@@ -31,7 +31,8 @@
 > - [x] **A.7** `PAPER-DISCREPANCIES.md` created and seeded with the Theorem 5.2 /
 >       Table 7 contradiction and the segment-reset omission. Commit `c2f0744`.
 >
-> **Phase B implementation is complete and included in `main`. Phase C is in progress.**
+> **Phases A–C are complete. Phase D is next.**
+> Phase B is included in `main`; Phase C is on the topic branch above.
 > Validation is recorded below; Unstack is subject to a 60-second wall-clock cap.
 >
 > - [x] Explicit numeric table marker and predicate isolation (`b972637`).
@@ -53,9 +54,21 @@
 > - [x] Stack infinite and finite (4 blocks): both retain `hl_ok: False`,
 >       `ll_ok: True`, with the same VC 0/1 refutations documented below.
 > - [x] MCMC smoke comparison: all runs complete; results and budgets below.
-> - [x] Phase C trace store, adapter, and runtime callbacks: nine regression tests
->       pass, including golden Stack invariant equivalence and per-iteration snapshots.
-> - [ ] Phase C entry-point migration, simulator validation, and documentation in progress.
+> - [x] Phase C trace store, adapter, and runtime callbacks (`e492688`). Snapshots
+>       retain every physical block, current bindings, and per-invocation entry geometry.
+> - [x] Phase C entry-point migration: all four tower verifiers now require explicit
+>       `--demo-store` input; literals are test-only golden fixtures. A Stack collector
+>       and JSON persistence supply a runnable execution-to-inference workflow.
+> - [x] All **60 unittest tests pass** (49 existing + 11 Phase C), including golden
+>       Stack invariant equivalence, entry-point wiring, snapshot isolation, and
+>       three loop-head rows from a real three-iteration MuJoCo rollout. Formatting
+>       completed; unrelated formatter changes were restored.
+> - [x] Real-trace CLI smoke: seed 0, four blocks, three iterations. Collection and
+>       inference complete. Rollout success is **False**; finite Stack verification
+>       reports **`hl_ok: False`, `ll_ok: False`** (VC 0/1 refutations and a tube_0
+>       counterexample). This uses a newly learned invariant from actual execution,
+>       not the old literal dataset; do not present it as a verified Stack program.
+>       Unstack was not rerun for Phase C and retains the one-minute cap below.
 > - [ ] Phases D–F: not started.
 >
 > **Pre-existing failure, not a regression.**
@@ -428,6 +441,28 @@ The literal `run_proposal_example` / `run_unstack_example` / `run_reverse_exampl
 **Test:** adapter output reproduces the `run_proposal_example` literals exactly; the
 invariant learned from adapter output is z3-equivalent to the golden one; a 3-iteration
 rollout yields 3 loop-head rows, not 1.
+
+**Completed implementation notes:**
+- `Program.eval`, `Program.eval_from_observation`, and `run_program_rollouts` forward
+  an optional `on_loop_head` callback; `store.add` records a copied `LoopHeadState`.
+  Program loop IDs are instruction paths (`"1"` for the existing tower loop).
+- `DemoStore.save/load` persists plain JSON, with symbolic constant names resolved
+  against the requested inference context by `to_inference_inputs`. Empty datasets
+  and missing bindings fail explicitly. Core inference algorithms remain unchanged.
+- **Fixture clarification:** the legacy Stack example supplies four empty entry
+  dictionaries but only two current states/bindings; `compute_dataset` consumes two
+  rows through `zip`. Tests reproduce those current states/bindings exactly and
+  prove learned-invariant equivalence with Z3. New traces retain complete, aligned
+  entry states; Stack's vocabulary does not read `ON_star_zero`. The legacy Partial
+  fixture similarly has four entry dictionaries for five states and silently drops
+  the fifth. These historical fixtures remain unchanged as evidence, not live input.
+- All four tower entry points take explicit trace input. The bundled collection CLI
+  executes the existing physical Stack program; other tasks can record their own
+  executable programs through the same callback. This stage does not synthesize
+  missing task programs or repair the existing Reverse/Partial verification templates.
+- Workflow and callback contract: `roboverify/synthesis/inference_lib/README.md`.
+  Simulator test: `synthesis.experiment.test_loop_traces`; adapter/golden tests:
+  `synthesis.inference_lib.test_demo_store`. The full suite has 60 passing tests.
 
 ---
 

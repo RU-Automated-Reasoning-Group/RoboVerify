@@ -10,21 +10,23 @@ import synthesis.verification_lib.highlevel_verification_lib as highlevel_verifi
 from synthesis.api.instructions import PickPlaceByName
 from synthesis.api.program import Assign, Program, Put, While
 from synthesis.entry.run_rollouts import run_program_rollouts
+from synthesis.inference_lib.demo_store import DemoStore, InvInference, tower_vocabulary
 from synthesis.inference_lib.inference import (
     instantiate_invariant,
-    run_unstack_example,
     serialize_invariant,
 )
 
 
 def verify_unstack_program_with_learned_invariant(
+    demo_store: DemoStore,
+    loop_id: str = "1",
     verification_mode: str = "infinite",
     num_blocks: int = 4,
     visualize_finite_scene: bool = True,
     visualization_prefix: str = "verify_stack",
     inference_mode: str = "finite",
 ):
-    """Infer invariant from examples and verify the stack program."""
+    """Infer from recorded loop-head demonstrations and verify the unstack program."""
     # Inference is always done in the infinite-block (DeclareSort) setting.
     if inference_mode == "finite":
         block_names = [f"b{9 + i}" for i in range(num_blocks)]
@@ -38,15 +40,15 @@ def verify_unstack_program_with_learned_invariant(
             visualize_enum_scene=visualize_finite_scene,
             visualization_prefix=visualization_prefix,
         )
-        learned_invariant, learned_invariant_lists = run_unstack_example(
-            context=inference_context
+        learned_invariant, learned_invariant_lists = InvInference(
+            demo_store, loop_id, tower_vocabulary("unstack"), inference_context
         )
     else:
         inference_context = highlevel_verification_lib.HighLevelContext(
             mode="declare", use_tbl=True, exists_top=True
         )
-        learned_invariant, learned_invariant_lists = run_unstack_example(
-            context=inference_context
+        learned_invariant, learned_invariant_lists = InvInference(
+            demo_store, loop_id, tower_vocabulary("unstack"), inference_context
         )
 
     if verification_mode == "finite":
@@ -161,6 +163,16 @@ def verify_unstack_program_with_learned_invariant(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
+        "--demo-store",
+        required=True,
+        help="JSON loop-head traces saved by DemoStore.save().",
+    )
+    parser.add_argument(
+        "--loop-id",
+        default="1",
+        help="Instruction path of the recorded loop (default: 1).",
+    )
+    parser.add_argument(
         "--verification-mode",
         choices=["infinite", "finite"],
         default="infinite",
@@ -186,6 +198,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     verify_unstack_program_with_learned_invariant(
+        demo_store=DemoStore.load(args.demo_store),
+        loop_id=args.loop_id,
         verification_mode=args.verification_mode,
         num_blocks=args.num_blocks,
         visualize_finite_scene=not args.disable_scene_viz,

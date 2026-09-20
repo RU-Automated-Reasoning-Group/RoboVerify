@@ -89,3 +89,28 @@ reconstructing from the observation would need IK.
 
 A revision should either state the assumption (demonstrations are replayed, or full simulator
 state is recorded) or drop the claim that scoring happens from segment-initial states.
+
+
+---
+
+## 3. The §4 demonstration input was literal data, including truncated datasets
+
+**Status:** the Phase C data path now records real loop-head states; the old
+examples survive only as golden fixtures. This does not establish the paper's
+end-to-end synthesis or verification claims.
+
+Before Phase C, the four tower inference examples in `inference.py` passed
+hand-written dictionaries to `loop_inference`, rather than execution traces.
+Their unchanged bodies now live in
+`roboverify/synthesis/inference_lib/golden_tower_fixtures.py`:
+`run_proposal_example` supplies four empty initial states but two current states;
+`run_partial_stack_example` supplies four initial states but five current states.
+The `zip` in `compute_dataset` silently truncates these inputs, dropping Partial's
+fifth state entirely. These examples therefore cannot support claims about
+learning from all observed loop iterations.
+
+Phase C adds explicit aligned snapshots and a tested execution-to-inference
+adapter. Real-trace Stack inference completes, but the sampled program fails
+verification; observing states and learning a candidate must remain distinct
+from proving inductiveness or task success. Fresh experiments are needed for
+paper claims involving the complete pipeline.

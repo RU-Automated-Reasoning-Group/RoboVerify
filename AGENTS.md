@@ -21,7 +21,8 @@ Run everything as a module from `roboverify/` — the `synthesis` package uses r
 imports and files under `synthesis/entry/` are not runnable as bare scripts:
 
 ```bash
-uv run python -m synthesis.entry.verify_stack_with_learned_invariant
+uv run python -m synthesis.entry.collect_stack_loop_traces --output /tmp/stack-loop-traces.json
+uv run python -m synthesis.entry.verify_stack_with_learned_invariant --demo-store /tmp/stack-loop-traces.json
 uv run python -m unittest synthesis.verification_lib.test_bmc_lib -v
 uv run python -m unittest synthesis.experiment.test_run_logger -v     # fast, no simulator
 uv run python -m unittest synthesis.experiment.test_mcmc_parity -v    # drives MuJoCo

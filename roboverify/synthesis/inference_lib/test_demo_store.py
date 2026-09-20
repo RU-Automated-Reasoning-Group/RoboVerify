@@ -1,6 +1,7 @@
 """Trace collection and compatibility with the literal Stack inference inputs."""
 
 import contextlib
+import importlib
 import io
 import tempfile
 import unittest
@@ -195,6 +196,31 @@ class InferenceAdapter(unittest.TestCase):
             LoopHeadState("x", {"x1": [0, 0, 0]}, {"x1": [0, 0, 0]}, {"b": "missing"})
         with self.assertRaisesRegex(ValueError, "Invalid position"):
             observation_positions(np.zeros(10), 3)
+
+
+class TraceEntryPoints(unittest.TestCase):
+    def test_each_tower_entry_uses_explicit_store_and_its_vocabulary(self):
+        store = DemoStore()
+
+        class ReachedInference(Exception):
+            pass
+
+        for task in ("stack", "unstack", "reverse", "partial"):
+            with self.subTest(task=task):
+                module = importlib.import_module(
+                    f"synthesis.entry.verify_{task}_with_learned_invariant"
+                )
+                entry = getattr(module, f"verify_{task}_program_with_learned_invariant")
+                kwargs = {} if task == "stack" else {"inference_mode": "infinite"}
+                with patch.object(
+                    module, "InvInference", side_effect=ReachedInference
+                ) as infer:
+                    with self.assertRaises(ReachedInference):
+                        entry(store, loop_id="recorded-loop", **kwargs)
+                args = infer.call_args.args
+                self.assertIs(args[0], store)
+                self.assertEqual(args[1], "recorded-loop")
+                self.assertEqual(args[2], tower_vocabulary(task))
 
 
 if __name__ == "__main__":
