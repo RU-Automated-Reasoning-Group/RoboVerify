@@ -370,11 +370,16 @@ class Move(Instruction):
         return imgs
 
     def register_trainable_parameter(self, parameter: List[float]):
-        for p in self.target_offset[2:]:
+        # All three components: the x and y offsets were sliced off here, which
+        # left CEM optimizing only the release height and pinned every lateral
+        # placement at whatever the mutation happened to propose. `MoveByName`,
+        # which is the same instruction with symbolic operands, always exposed
+        # all three.
+        for p in self.target_offset:
             p.register(parameter)
 
     def update_trainable_parameter(self, new_parameter: List[float]):
-        for p in self.target_offset[2:]: # only update the z offset
+        for p in self.target_offset:
             p.update(new_parameter)
 
     def get_operand(self):
