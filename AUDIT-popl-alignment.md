@@ -2,8 +2,11 @@
 
 Remediation tracking: the A1–A11 and D1–D3 checklist in
 [PLAN-popl-alignment.md](PLAN-popl-alignment.md) records fixes and validation.
-This document preserves the findings at the audited baseline. The remediation
-checklist is now complete within its agreed flat-loop scope; 170 tests pass.
+This document preserves the findings at the audited baseline. A1 has been reopened
+for justified root selection and establishment/preservation of the tight geometric
+alignment invariant; the other completed items retain their status. Entry 12 of
+[PAPER-DISCREPANCIES.md](PAPER-DISCREPANCIES.md) records the valid root-only induction
+and the remaining obligations. The last implementation validation passed 173 tests.
 See [verification scope](roboverify/synthesis/cfg/VERIFICATION.md) for model
 assumptions, unsupported cases, and the still-open real-demonstration acceptance.
 

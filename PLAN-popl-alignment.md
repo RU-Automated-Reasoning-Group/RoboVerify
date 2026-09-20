@@ -28,11 +28,15 @@
 >       Exact quantified effects fail closed. Both audit geometries are rejected;
 >       31 motion/CEGIS tests pass. A newly exposed paper Higher mismatch is
 >       rejected explicitly (discrepancy 16), not silently rewritten.
->       **Remaining:** replace name-based reference selection with justified root
->       discovery and account for the tight alignment invariant needed by the
->       paper's lemma. Entry 12 records the root criterion and a counterexample
->       to assuming that loose existing-chain bounds suffice. Analysis only in
->       this follow-up; the controller/verifier implementation is unchanged.
+>       **Agreed proof:** root-only checking suffices. If all tower members are
+>       within delta of the same root, a new member within delta preserves that
+>       invariant; triangle inequality gives pairwise distance <= 2*delta <= N.
+>       **Remaining:** prove root selection, establish tight bounds for admitted
+>       initial towers, preserve/carry those bounds through loop-context resets
+>       and root changes, and retain consistent tolerances. Entry 12 documents
+>       the induction and these obligations. The lemma is valid; all-pairs
+>       placement checks are not required. Documentation-only follow-up; the
+>       controller/verifier implementation is unchanged.
 > - [x] **A2:** Runtime budget exhaustion raises `LoopBudgetExceeded`; generated
 >       loops no longer derive an execution cap from demo counts. Explicit caps
 >       remain optional and collectors report incomplete outcomes. Nineteen

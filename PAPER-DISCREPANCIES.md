@@ -305,15 +305,71 @@ unrestricted u. O includes a fresh arbitrary witness, so finite instantiation ca
 cover unnamed objects only with the corresponding universal-validity argument;
 checking a single concrete assignment is insufficient.
 
-**Paper alignment proof gap, pp. 29–32 and Appendix J.** Lemma 5.5/J.1 correctly
-assumes every old element is within delta of the SAME root, then bounds pairwise
-distance by 2*delta <= N. Definition 5.4's translated ON* supplies only the looser
-N bound. Checking a newly placed element within delta does not establish the
-lemma's hypothesis for an arbitrary existing tower. The While rule also resets
-the geometry to the translated invariant, so tighter bounds must be included
-there or separately established and preserved; root changes require justification.
+**Agreed root-alignment induction, pp. 29–32 and Appendix J.** Checking a new
+block against the root is sufficient. There is no need to compare it separately
+with every existing block, provided the following invariant is established and
+maintained. For tower members S, a common root r, and each horizontal coordinate
+F in {X, Y}, let
 
-A concrete horizontal counterexample, in units of delta with N=2, has existing
+```text
+Aligned(S, r) := for every a in S and F in {X, Y},
+                    |F(a) - F(r)| <= delta_F
+with 2 * delta_F <= N_F.
+```
+
+The proof is:
+
+1. **Base.** A singleton tower S={r} satisfies Aligned because its displacement
+   from its root is zero. An arbitrary pre-existing tower instead needs a proof
+   that its permitted initial configurations satisfy Aligned.
+2. **Existing members.** Before insertion, assume Aligned(S,r). Preserve the root
+   and existing members' positions, or otherwise prove that their bounds remain
+   true after the operation.
+3. **New member.** Check only `|F(x)-F(r)| <= delta_F` for the newly placed x.
+   Together with step 2, this establishes Aligned(S union {x},r).
+4. **Pairwise consequence.** For any two members a,b of the enlarged tower,
+   the triangle inequality gives
+   `|F(a)-F(b)| <= |F(a)-F(r)| + |F(b)-F(r)| <= 2*delta_F <= N_F`.
+   This includes every new-to-old pair without individual placement checks.
+5. **Iteration.** Step 3 preserves the SAME root-relative invariant, so the
+   argument repeats for any finite number of insertions. With strict bounds,
+   the corresponding strict triangle-inequality conclusion applies.
+
+This is the paper's valid Lemma 5.5/J.1 mechanism: tight root-relative bounds
+imply looser pairwise bounds. It does not require pairwise distances <= delta_F,
+nor prove vertical ordering, collision freedom, or physical stability; those
+remain separate obligations. Removing members preserves Aligned for the remaining
+subset if its reference is retained. Replacing/moving the reference or merging
+chains requires re-establishing the relevant bounds.
+
+**Remaining concerns, narrowed after the discussion.** The concern is about
+supplying the lemma's premises in the verification algorithm, not its induction
+step or the sufficiency of checking the root:
+
+- **Root justification (code gap):** replace the b0/name-order choice with a proved
+  root for the relevant chain. Discharge the root rule under an established,
+  satisfiable entry context, covering arbitrary relevant objects. Failure to
+  identify a root, or solver unknown, cannot silently select a fallback.
+- **Establishment (proof/encoding obligation):** show Aligned for every admitted
+  initial tower. Definition 5.4's ON* translation gives the looser N_F bound;
+  it does not imply the tight delta_F premise. A singleton construction discharges
+  the base case, but cannot be presumed for arbitrary initial towers.
+- **Preservation and loop contexts (proof/encoding obligation):** carry or
+  re-establish Aligned when the While rule introduces fresh geometry from the
+  invariant. Frame checks must preserve old bounds relative to the SAME root;
+  any root change requires a new justification. Retaining only ON*'s N_F bound
+  loses the inductive premise even if a preceding concrete placement established it.
+- **Tolerance consistency:** explicitly require 2*delta_F <= N_F, with matching
+  strict/non-strict conventions. The current L/4 root and L/2 pairwise choices
+  are consistent numerically; that alone does not discharge the other premises.
+
+These may be discharged by an explicit geometric invariant or another proof of
+all required geometric effects. They do not justify rejecting the paper's
+root-based approach or adding all-pairs placement checks as a mandatory repair.
+
+**Why the initial tight premise matters.** The following example does NOT satisfy
+Aligned initially, so it is not a counterexample to the agreed induction. A concrete
+horizontal example, in units of delta with N=2, has existing
 block centers bottom-to-top [0, -1, -2, -1, 0]. Every adjacent displacement is 1,
 all old pairwise distances are at most 2, and the true root is the first block.
 Place a new top block at +1: its distance to both target and root is 1, but its

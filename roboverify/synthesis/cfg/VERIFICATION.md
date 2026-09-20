@@ -49,6 +49,13 @@ No match exits the loop; standalone Get still requires witness existence.
 Supported synthesis scope remains structured chains and recovered flat loops.
 Placement summaries are proposed from the outgoing ON relation or the final
 transport reference, then checked against all ON*/Higher/Scattered WP effects.
+Alignment currently uses the contract's designated reference (the integrated
+path chooses b0, otherwise the first sorted physical name); it does not prove
+root selection. A1 remains open for justified root selection and the established,
+preserved tight root-relative invariant. Once that invariant holds, checking new
+placements against the same root suffices by the triangle inequality; separate
+all-pairs placement checks are unnecessary. See discrepancy 12 for the proof and
+remaining obligations. Existing complete-effect checks remain in force.
 A transfer may span adjacent blocks. A Get/assignment/control boundary inside an
 unfinished transfer, multiple placements in one unsplit block, unknown primitive,
 or unsupported summary produces an explicit unsupported result. The existing
