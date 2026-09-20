@@ -145,6 +145,12 @@
 > - [x] Review fix: quantifier search now generates binders disjoint from program
 >       constants. Renaming a constant to `v0` or `v1` preserves separator success
 >       in classifier and guard modes; all four predicate-search tests pass.
+> - [x] Review fix: PostScore and the CLI loop check share recorded-entry geometry
+>       via `DemoSegment.entry_index`, including Scene-based rollouts without
+>       mutating snapshots. Regression covers both false successes and false failures
+>       when loop entry differs from the segment start and global trace start.
+>       **133 unittest tests pass** (131 previous + 2 regression tests), **26.045 s**.
+>       Both regressions reproduced the bugs before the fixes; changed files formatted.
 > - [ ] **Phase F acceptance remains open:** the real Unstack pipeline has not
 >       recovered the complete loop. Its historical demo reaches the postcondition
 >       transiently but fails it at termination (discrepancy 10). Reconcile that

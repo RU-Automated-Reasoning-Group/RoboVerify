@@ -68,6 +68,55 @@ class SearchTests(unittest.TestCase):
         )
         self.assertFalse(failed.ok)
 
+    def test_postscore_uses_recorded_loop_entry_instead_of_segment_start(self):
+        def observation(stacked):
+            obs = np.zeros(43)
+            obs[10:13] = (0, 0, 0.425)
+            obs[22:25] = (0, 0, 0.475) if stacked else (0.2, 0, 0.425)
+            return obs
+
+        bindings = {"a": 1, "b": 0}
+        post = atom("ON_star_zero", ref("a"), ref("b"))
+        candidate = Program(1, [Skip(0)])
+        for as_scene in (False, True):
+            for initially_stacked in (False, True):
+                with self.subTest(
+                    as_scene=as_scene, initially_stacked=initially_stacked
+                ):
+                    entry = observation(initially_stacked)
+                    current = observation(not initially_stacked)
+                    states = (current, entry, current, current)
+                    if as_scene:
+                        from synthesis.predicates.scene import scene_from_obs
+
+                        states = tuple(scene_from_obs(s, 2, bindings) for s in states)
+                    # Index 0 is outside this invocation, and index 2 is its later
+                    # body segment: neither is the frozen loop-entry geometry.
+                    segment = DemoSegment(
+                        0,
+                        2,
+                        3,
+                        DemoTrace(states, num_blocks=2),
+                        bindings,
+                        entry_index=1,
+                    )
+                    result = straight_line_synthesize(
+                        [segment],
+                        post,
+                        candidate,
+                        lambda p, r: p,
+                        rollout=lambda p, s: list(s.states),
+                        budget=SearchBudget(iterations=0, distance="mmd"),
+                    )
+                    self.assertEqual(result.distance, 0.0)
+                    self.assertEqual(result.ok, initially_stacked)
+                    self.assertEqual(result.post_score, float(initially_stacked))
+                    if as_scene:
+                        for key, position in states[2].positions.items():
+                            np.testing.assert_array_equal(
+                                states[2].entry_positions[key], position
+                            )
+
     def test_driver_runs_all_blocks_and_retains_failure(self):
         cfg = RelationalCFG.initial([], boolean(True), boolean(True))
         region = BlockRegion((Skip(0),), (Skip(0),))

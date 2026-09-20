@@ -79,6 +79,28 @@ def segment_rollout(program, segment, env_factory, reset_mode="replay"):
             env.close()
 
 
+def postcondition_reached(states, segment, post):
+    """Evaluate rollout states with this invocation's recorded frozen geometry."""
+    entry_positions = scene_at(segment, segment.entry_index).entry_positions
+    for state in states:
+        scene = (
+            state
+            if isinstance(state, Scene)
+            else scene_from_obs(
+                state,
+                segment.trace.num_blocks,
+                segment.bindings,
+                include_table="tbl" in segment.bindings,
+            )
+        )
+        # Copy rather than mutate caller-owned Scene snapshots. Rollout positions
+        # and bindings are current; ON_star_zero always uses the recorded entry.
+        scene = Scene(scene.positions, scene.bindings, entry_positions)
+        if evaluate(post, scene):
+            return True
+    return False
+
+
 def straight_line_synthesize(
     segments,
     post,
@@ -150,21 +172,7 @@ def straight_line_synthesize(
     def post_score(candidate):
         success = []
         for states, segment in zip(trajectories(candidate), segments):
-            scenes = [
-                (
-                    state
-                    if isinstance(state, Scene)
-                    else scene_from_obs(
-                        state,
-                        segment.trace.num_blocks,
-                        segment.bindings,
-                        include_table="tbl" in segment.bindings,
-                        entry_obs=states[0],
-                    )
-                )
-                for state in states
-            ]
-            success.append(any(evaluate(post, scene) for scene in scenes))
+            success.append(postcondition_reached(states, segment, post))
         return float(np.mean(success))
 
     current = deepcopy(initial_program)

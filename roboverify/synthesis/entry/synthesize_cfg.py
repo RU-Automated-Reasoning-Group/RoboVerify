@@ -25,6 +25,7 @@ from synthesis.cfg.region import BlockRegion, LoopRegion
 from synthesis.cfg.reset import collect_recording
 from synthesis.cfg.straightline import (
     SearchBudget,
+    postcondition_reached,
     segment_rollout,
     straight_line_synthesize,
 )
@@ -37,7 +38,7 @@ from synthesis.mcmc.synthesis import (
     set_np_seed,
 )
 from synthesis.predicates.language import Language
-from synthesis.predicates.scene import evaluate, scene_from_obs
+from synthesis.predicates.scene import evaluate
 from synthesis.predicates.term import atom, boolean, conjunction, forall, implies, ref
 from synthesis.verification_lib.highlevel_verification_lib import HighLevelContext
 
@@ -160,11 +161,7 @@ def run(args, logger):
                 lower_region(node.region, context, physical=True),
             )
             return node.region, all(
-                any(
-                    evaluate(post, scene_from_obs(obs, s.trace.num_blocks, s.bindings))
-                    for obs in rollout(physical, s)
-                )
-                for s in demos
+                postcondition_reached(rollout(physical, s), s, post) for s in demos
             )
         initial = generate_random_program(
             args.slots, range(args.num_blocks), random.Random(args.seed)
