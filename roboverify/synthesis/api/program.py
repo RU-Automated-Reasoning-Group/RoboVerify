@@ -2,11 +2,10 @@ import itertools
 import os
 import random
 from copy import deepcopy
-
-import numpy as np
 from pathlib import Path
 from typing import List, Optional, Sequence, Union
 
+import numpy as np
 from z3 import (
     Z3_OP_UNINTERPRETED,
     And,
@@ -1173,12 +1172,27 @@ class Program:
         sort_name: str = "Box",
         default_block_length: float = 0.05,
         constants: Union[List[str], None] = None,
+        use_tbl: Union[bool, None] = None,
     ):
+        """Motion-level checks.
+
+        ``use_tbl`` says whether the Box sort has a table element, which decides
+        whether the low-level relations isolate it the way the high-level ``tbl``
+        axioms do. Left as ``None`` it is read off ``constants``, so a task that
+        names the table cannot end up checking it as though it were an ordinary
+        block.
+        """
+        if use_tbl is None:
+            use_tbl = constants is not None and (
+                lowlevel_verification_lib.TABLE_CONST_NAME in constants
+            )
         solver = (
             context
             if context is not None
             else lowlevel_verification_lib.LowLevelContext(
-                sort_name=sort_name, default_L=default_block_length
+                sort_name=sort_name,
+                default_L=default_block_length,
+                use_tbl=use_tbl,
             )
         )
         ok = True

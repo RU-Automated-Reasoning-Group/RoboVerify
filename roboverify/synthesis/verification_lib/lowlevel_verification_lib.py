@@ -63,6 +63,12 @@ UNHANDLED_MOTION_INSTRUCTIONS = (
 )
 
 
+#: Name of the Box-sort element standing for the table. The relational level
+#: gives it no geometry -- the axioms isolate it from all three relations -- so
+#: the predicates below test for it by identity instead of by coordinates.
+TABLE_CONST_NAME = "tbl"
+
+
 def abs_diff(u, v):
     return If(u - v >= 0, u - v, v - u)
 
@@ -134,9 +140,20 @@ def draw_encoded_tube(ax, p0, p1, halfwidth, color="purple", alpha=0.12):
 
 
 class LowLevelContext:
-    def __init__(self, sort_name: str = "Box", default_L: float = 1.0):
+    def __init__(
+        self,
+        sort_name: str = "Box",
+        default_L: float = 1.0,
+        use_tbl: bool = False,
+    ):
         self.sort_name = sort_name
         self.default_L = default_L
+        # Mirrors HighLevelContext.use_tbl: the tbl axioms are only asserted when
+        # the task actually has a table, and the relations below are only
+        # narrowed when those axioms are in force. Turning it on for a task with
+        # no table would add an unconstrained sort element that weakens every
+        # condition for nothing.
+        self.use_tbl = use_tbl
         self._build_symbols()
 
     def _build_symbols(self):
@@ -151,23 +168,126 @@ class LowLevelContext:
             self.X(b1) == self.X(b2), self.Y(b1) == self.Y(b2), self.Z(b1) == self.Z(b2)
         )
 
-    def lowlevel_on(self, b1, b2):
+    def table_const(self):
+        """The ``tbl`` element of the Box sort.
+
+        ``Consts`` interns by name and sort, so this is the same term the
+        high-level ``tbl`` axioms and the translated conditions refer to.
+        """
+        return self.get_consts(TABLE_CONST_NAME)
+
+    def _is_table(self, b):
+        """Whether the box term *b* denotes the table.
+
+        The Box sort is a ``DeclareSort`` with no unique-names assumption, so
+        this is a real constraint rather than a syntactic test: two differently
+        named constants may denote the same element unless something rules it
+        out. When the task has no table, there is no such element and the
+        question does not arise.
+        """
+        if not self.use_tbl:
+            return BoolVal(False)
+        return b == self.table_const()
+
+    def _isolate_table(self, geometry, b1, b2, reflexive: bool):
+        """Wrap a geometric relation so the table is isolated from it.
+
+        The high-level axioms (``on_tbl``, ``higher_tbl``, ``scattered_not_tbl``)
+        make every pair involving ``tbl`` false, except that ``ON*`` and
+        ``Higher`` are reflexive and so hold at ``(tbl, tbl)``. Without this the
+        table's ``X``/``Y``/``Z`` are unconstrained reals the solver may place
+        anywhere, so a translated condition could claim a block is on the table,
+        or that the table is above a block, purely by choosing coordinates.
+
+        The isolation has to live in the relation rather than in an added axiom:
+        asserting ``higher_tbl`` on top of a purely geometric ``Higher`` forces
+        ``Z(x) < Z(tbl)`` and ``Z(tbl) < Z(x)`` at once, which makes every
+        condition set unsatisfiable.
+        """
+        if not self.use_tbl:
+            return geometry
+        neither_is_table = And(
+            Not(self._is_table(b1)),
+            Not(self._is_table(b2)),
+        )
+        if not reflexive:
+            return And(neither_is_table, geometry)
         return Or(
+            And(self._is_table(b1), self._is_table(b2)),
+            And(neither_is_table, geometry),
+        )
+
+    def lowlevel_on_star(self, b1, b2):
+        """Geometric reading of ``ON*``, mirroring ``on.on_star_implementation``."""
+        return self._isolate_table(
             And(
                 Abs(self.X(b1) - self.X(b2)) < self.L / 2,
                 Abs(self.Y(b1) - self.Y(b2)) < self.L / 2,
                 self.Z(b1) >= self.Z(b2),
             ),
+            b1,
+            b2,
+            reflexive=True,
+        )
+
+    def lowlevel_on_direct(self, b1, b2):
+        """Geometric reading of *direct* ``on``, mirroring :func:`on.z3_on`.
+
+        Same xy tolerance as :meth:`lowlevel_on_star` but a bounded vertical gap
+        ``0 <= dz < 1.5 L``, so it says *b1 rests on b2* rather than *b1 is
+        somewhere up that stack*. Phase D's contract-realization obligation --
+        that a synthesized body actually establishes ``on(b', b)`` -- cannot be
+        stated without it.
+
+        A block resting on the table is not expressible here and is not meant to
+        be: that is a fact about the table's surface height, which belongs to the
+        motion level. ``on_direct`` is contained in ``ON*``, which ``on_tbl``
+        already makes false for the table, so it is not reflexive at the table
+        either.
+        """
+        return self._isolate_table(
+            And(
+                Abs(self.X(b1) - self.X(b2)) < self.L / 2,
+                Abs(self.Y(b1) - self.Y(b2)) < self.L / 2,
+                self.Z(b1) - self.Z(b2) >= 0,
+                self.Z(b1) - self.Z(b2) < RealVal(1.5) * self.L,
+            ),
+            b1,
+            b2,
+            reflexive=False,
         )
 
     def lowlevel_higher(self, b1, b2):
-        # b1 is higher than b2
-        return self.Z(b1) >= self.Z(b2)
+        """b1 is at least as high as b2; mirrors ``on.higher_implementation``."""
+        return self._isolate_table(
+            self.Z(b1) >= self.Z(b2),
+            b1,
+            b2,
+            reflexive=True,
+        )
 
     def lowlevel_scattered(self, t1, t2):
-        return Or(
-            Abs(self.X(t1) - self.X(t2)) > 2 * self.L,
-            Abs(self.Y(t1) - self.Y(t2)) > 2 * self.L,
+        """Mirrors ``on.scattered_implementation``.
+
+        ``scattered_not_tbl`` plus symmetry and irreflexivity make every pair
+        involving the table false, with no reflexive case.
+
+        The separation test is non-strict, matching both
+        ``on.scattered_implementation`` and the rejection sampler in
+        ``fpp_construction_env._reset_sim_roboverify_stack``, which accepts a
+        layout as soon as ``dx >= 2L or dy >= 2L``. It was strict here, so a
+        layout the environment can actually produce -- separated by exactly
+        ``2L`` -- counted as scattered for the invariant that was learned and
+        not scattered for the checker that had to discharge it.
+        """
+        return self._isolate_table(
+            Or(
+                Abs(self.X(t1) - self.X(t2)) >= 2 * self.L,
+                Abs(self.Y(t1) - self.Y(t2)) >= 2 * self.L,
+            ),
+            t1,
+            t2,
+            reflexive=False,
         )
 
     def get_consts(self, symbol: str):
@@ -265,9 +385,10 @@ class LowLevelContext:
                         row.append(cell.ljust(width))
                     print("".join(row))
 
-            # `ON_star`/`ON_star_zero` are translated to `lowlevel_on`.
+            # `ON_star`/`ON_star_zero` are translated to `lowlevel_on_star`.
             print_table(
-                "Relation: ON_star (lowlevel_on)  [row ON col]", self.lowlevel_on
+                "Relation: ON_star (lowlevel_on_star)  [row ON col]",
+                self.lowlevel_on_star,
             )
             print_table(
                 "Relation: Higher (lowlevel_higher)  [row >= col]", self.lowlevel_higher
@@ -369,6 +490,13 @@ class LowLevelContext:
         const_map = self.translate_condition(s, constants, initial_condition)
         blocks = list(const_map.values())
         sym = self.get_consts("sym")
+        if self.use_tbl:
+            # `sym` is our own symbol for "some other block the tube might hit",
+            # so saying it is a block is a definition, not an assumption about
+            # the program. Without it the solver may take sym to be the table,
+            # for which the conditions -- which all carry `!= tbl` guards -- say
+            # nothing at all.
+            s.add(sym != self.table_const())
 
         print("checking condition satisfiability")
         ok = True
@@ -469,7 +597,7 @@ class LowLevelContext:
         """Recursively translate a high-level z3 expression to low-level.
 
         ForAll is eliminated by enumerating all combinations of lowlevel_constants.
-        ON_star / ON_star_zero -> lowlevel_on, Higher -> lowlevel_higher,
+        ON_star / ON_star_zero -> lowlevel_on_star, Higher -> lowlevel_higher,
         Scattered -> lowlevel_scattered. Boolean structure is preserved.
 
         bindings: list where bindings[de_bruijn_index] = concrete lowlevel constant.
@@ -509,7 +637,7 @@ class LowLevelContext:
                     for c in expr.children()
                 ]
                 if name in ("ON_star", "ON_star_zero"):
-                    return self.lowlevel_on(children[0], children[1])
+                    return self.lowlevel_on_star(children[0], children[1])
                 if name == "Higher":
                     return self.lowlevel_higher(children[0], children[1])
                 if name == "Scattered":
