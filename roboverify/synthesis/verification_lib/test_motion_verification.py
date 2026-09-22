@@ -56,7 +56,7 @@ def rooted_tower_conditions(*, root="b0", target="b", use_tbl=False):
 class MotionVerification(unittest.TestCase):
     def setUp(self):
         # Baseline clearance fixture; dedicated tests cover an initially level
-        # source and the remaining reverse-direction Higher mismatch.
+        # source and equal-height peers in separate supported towers.
         self.scene = {
             "a": [0.3, 0, -0.1],
             "b": [0, 0, 0],
@@ -163,9 +163,9 @@ class MotionVerification(unittest.TestCase):
         self.assertEqual(statuses["effect_Higher"], "valid")
         self.assertTrue(result, str(result))
 
-    def test_rule_six_equal_height_mismatch_is_not_a_motion_proof(self):
+    def test_rule_six_accepts_equal_height_peers_in_supported_towers(self):
         # Two separate supported tower tops share the new source's height.
-        # Unchanged rule 6 incorrectly rejects Higher(source, either top).
+        # Neither is strictly below the other, so both comparisons must hold.
         self.scene.update(
             a=[0.3, 0, 0],
             c=[1, 1, 0.05],
@@ -174,11 +174,37 @@ class MotionVerification(unittest.TestCase):
             dbase=[2, 2, 0],
         )
         self.constants.extend(["c", "cbase", "dbase"])
-        result = self.verify()
+        unconstrained = self.verify()
+        self.assertEqual(
+            next(
+                c.status
+                for c in unconstrained.checks
+                if c.obligation == "effect_Higher"
+            ),
+            "refuted",
+        )
+        self.assertFalse(unconstrained)
+        high = HighLevelContext()
+        u = z3.FreshConst(high.BoxSort, prefix="scene_block")
+        # Bound unnamed blocks to this scene's two occupied height levels.
+        # Named coordinates alone do not constrain the universal effect query.
+        levels = z3.ForAll(
+            [u],
+            z3.Or(
+                *[
+                    z3.And(
+                        high.Higher(u, high.get_consts(name)),
+                        high.Higher(high.get_consts(name), u),
+                    )
+                    for name in ("b", "c")
+                ]
+            ),
+        )
+        result = self.verify(initial_condition=[*rooted_tower_conditions(), levels])
         statuses = {c.obligation: c.status for c in result.checks}
         self.assertEqual(statuses["contract"], "valid")
-        self.assertEqual(statuses["effect_Higher"], "refuted")
-        self.assertFalse(result)
+        self.assertEqual(statuses["effect_Higher"], "valid")
+        self.assertTrue(result, str(result))
 
     def test_table_scattered_wp_preserves_isolation(self):
         from synthesis.api.instructions import Put

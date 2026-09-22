@@ -271,7 +271,7 @@ argument; invariant and motion VCs establish partial correctness. See A2 in
 
 ## 16. The Higher rewrite can disagree with geometric placement
 
-**Partially resolved: put-on-block rule 2 corrected by user decision.**
+**Partially resolved: put-on-block rules 2 and 6 corrected by user decision.**
 Table 7's original clause for `Put(a,b)` and `Higher(c,a)`, with `c` distinct
 from `a,b`, uses `Exists(t, t!=a and Higher(a,t) and Higher(t,b))`.
 It ignores c's height: initially level a,b,c make t=b a witness even though
@@ -286,25 +286,43 @@ The implementation now uses **`Higher(c,b) and not Higher(b,c)`** in rule 2.
 Both conjuncts are retained: the symbolic axioms do not enforce unconditional
 physical-pair comparability, and the positive conjunct excludes the isolated
 table marker. This is an intentional correction to the paper, not a claim that
-Table 7 already states the correct rule. No other Higher clause was changed.
+Table 7 already states the correct rule.
 
 Completed regressions prove the rule against arbitrary integer height levels
 (independent of the source's old height), preserve table isolation, and accept
-the formerly rejected level-source motion. A separate motion regression retains
-rejection of the remaining rule 6 discrepancy below.
+the formerly rejected level-source motion.
 
-**Still open — rule 6, `Higher(a,c)`.** Its universal clause rejects another
-object t at c's height above b. For example, c and d can be tops of separate
-supported towers at `z(b)+L`. Placing a on b makes a,c,d level, but t=d falsifies
-the rule for `Higher(a,c)`. This remains a counterexample under the agreed
-supported-height assumptions. The paper's long clause is clipped at the PDF's
-right edge; the complete formula reviewed here is the implementation's.
+**Resolved in code — rule 6, `Higher(a,c)`.** Its former universal clause rejected
+another object t at c's height above b. For example, c and d can be tops of
+separate supported towers at `z(b)+L`. Placing a on b makes a,c,d level, but t=d
+falsified the old rule for `Higher(a,c)`. The user-approved correction is:
 
-**Still open — auxiliary-variable capture.** Higher rewrites introduce a fixed
-`Const("t", BoxSort)`. In the table rule for `Higher(a,t)`, an existing object
-named t can be captured, producing `ForAll(t, t!=tbl => Higher(t,t))` instead
-of comparison against that fixed object. Fresh/capture-avoiding binders remain
-a separate implementation fix; rule 2's replacement does not resolve it.
+```text
+Higher'(a,c) = Higher(b,c) OR
+  (Higher(c,b) AND
+   ForAll(t, (Higher(c,t) AND NOT Higher(t,c)) => Higher(b,t)))
+```
+
+The antecedent now means strictly lower height, not distinct object identity.
+Equal-height peers do not obstruct the comparison. If c is above b by two or
+more levels, its complete support chain supplies an intermediate-height witness,
+so the universal fails; at exactly one level it holds. Together with the first
+disjunct this is equivalent to `z(c)<=z(b)+L` under the agreed assumptions.
+The rule 6 auxiliary variable is now fresh. Regressions cover 75 supported-layer
+configurations, duplicate-height objects including one named t, table isolation,
+renaming a quantified t, and the formerly rejected equal-height tower motion.
+That motion fixture explicitly constrains unnamed blocks to its two height
+levels; named coordinates alone leave arbitrary intermediate heights possible.
+Without those premises the effect check still rejects the fixture. This change
+does not install a global supported-height axiom in motion verification.
+The paper's long clause is clipped at the PDF's right edge; the complete old
+formula reviewed here is the implementation's. The paper still needs updating.
+
+**Still open — table-rewrite auxiliary-variable capture.** The table Higher
+rewrite still introduces a fixed `Const("t", BoxSort)`. In the table rule for
+`Higher(a,t)`, an existing object named t can be captured, producing
+`ForAll(t, t!=tbl => Higher(t,t))` instead of comparison against that fixed
+object. That separate table-rewrite fix is not included in the rule 6 change.
 
 The review's floating-block/missing-layer examples are outside the agreed model,
 not additional discrepancies. In particular, table Higher rules 3 and 4 have

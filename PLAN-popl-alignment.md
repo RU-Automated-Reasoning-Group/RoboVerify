@@ -4,17 +4,22 @@
 >
 > Branch: `phase-f-synthesis`; Phases A–E are integrated into `main`.
 >
-> **Entry 16 rule 2 corrected and tested.**
+> **Entry 16 rules 2 and 6 corrected and tested.**
 > User-approved rewrite for `Put(a,b)`: for c distinct from a,b,
 > `Higher'(c,a) = Higher(c,b) and not Higher(b,c)`.
-> The user confirms uniform upright blocks on one flat table, exact support,
-> and complete towers: heights lie on a common L-spaced grid. Rule 2 preserves
-> table isolation and accepts the former level-source counterexample.
-> Rule 6's equal-height error and fixed-t variable capture remain open in
+> Rule 6 now tests strictly lower height rather than unequal object identity:
+> `Higher'(a,c) = Higher(b,c) or (Higher(c,b) and
+> ForAll(t, (Higher(c,t) and not Higher(t,c)) => Higher(b,t)))`.
+> Its auxiliary t is fresh. The user confirms uniform upright blocks on one
+> flat table, exact support, and complete towers: heights lie on a common
+> L-spaced grid. Regressions cover equal-height peers, complete support layers,
+> table isolation, and an existing free or quantified object named t.
+> The table Higher rewrite's separate fixed-t capture remains open in
 > [discrepancy 16](PAPER-DISCREPANCIES.md#16-the-higher-rewrite-can-disagree-with-geometric-placement).
-> Focused symbolic/motion regressions: **27 tests pass in 11.694 seconds**.
-> Full suite: **189 unittest tests pass in 46.804 seconds**, including simulator
+> Full suite: **191 unittest tests pass in 50.106 seconds**, including simulator
 > tests. Changed Python files pass isort/black; git diff whitespace checks pass.
+> Motion fixtures supply quantified height premises for unnamed blocks;
+> no global supported-height axiom was added to the motion verifier.
 >
 > **Discrepancy housekeeping:** resolved entries 5, 6, 11, 12 and the implementation
 > part of 13 are recorded in [PAPER-RESOLUTIONS.md](PAPER-RESOLUTIONS.md), with IDs
@@ -56,8 +61,8 @@
 > - [x] **A1:** MotionVerify checks ON*/Higher/Scattered
 >       outcomes against Put WP, plus proved-root alignment; the table Scattered
 >       rewrite preserves isolation. Exact quantified effects fail closed. The
->       Higher rule 2 is corrected; the remaining rule 6 mismatch is explicitly
->       rejected (discrepancy 16).
+>       Higher rules 2 and 6 are corrected under the supported-height model;
+>       exact effects still gate motion acceptance (discrepancy 16).
 >       Root selection quantifies over unnamed objects and uses scoped candidates,
 >       an established entry context, and the remaining symbolic WP. Input towers
 >       satisfy the tight bound by the user's declared model assumption. Every
@@ -126,7 +131,8 @@
 > Baseline: 133 tests passed; five audit probes exposed uncovered issues.
 > **Original remediation validation: 170 unittest tests passed in 37.430 seconds;
 > root/alignment follow-up: 186 pass in 47.048 seconds;
-> current rule 2 follow-up: 189 pass in 46.804 seconds.**
+> rule 2 follow-up: 189 pass in 46.804 seconds;
+> current rule 6 follow-up: 191 pass in 50.106 seconds.**
 > Changed Python files passed the same isort/black commands used by format.sh;
 > formatting was scoped to changed files to protect unrelated user files. The
 > integrated CLI's help/argument wiring and git diff whitespace checks pass.

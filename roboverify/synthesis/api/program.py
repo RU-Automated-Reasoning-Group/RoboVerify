@@ -740,9 +740,7 @@ def _put_base_is_tbl(seq_instruction: Put) -> bool:
 
 
 def rewrite_for_put_for_higher(expr, b_prime, b, context, binders=None):
-    """Rewrite every possible occurrence of alpha<higher> beta to
-    Or(alpha<higher>beta, And(alpha<higher>b_prime, b<higher>beta))
-    """
+    """Rewrite Higher after placement on a block in the supported-height model."""
     if binders is None:
         binders = []
 
@@ -780,7 +778,7 @@ def rewrite_for_put_for_higher(expr, b_prime, b, context, binders=None):
             m, n = expr.children()
             m = _resolve_box_var(m, binders)
             n = _resolve_box_var(n, binders)
-            t = Const("t", context.BoxSort)
+            t = FreshConst(context.BoxSort, prefix="higher_below")
             return Or(
                 And(m != b_prime, m != b, n != b_prime, n != b, context.Higher(m, n)),
                 And(
@@ -807,7 +805,12 @@ def rewrite_for_put_for_higher(expr, b_prime, b, context, binders=None):
                             And(
                                 context.Higher(n, b),
                                 Implies(
-                                    And(t != n, context.Higher(n, t)),
+                                    # Equal-height peers are not intermediate
+                                    # levels in the supported tower of n.
+                                    And(
+                                        context.Higher(n, t),
+                                        Not(context.Higher(t, n)),
+                                    ),
                                     context.Higher(b, t),
                                 ),
                             ),
