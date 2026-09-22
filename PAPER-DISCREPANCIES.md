@@ -360,33 +360,60 @@ remaining abstraction mismatches are rejected and solver unknown is inconclusive
 
 ## 17. Temporal validation acceptance and the incorrect rejection sentence
 
-**User clarification:** for ordinary transitions, satisfying
-`i_s(d, psi) <= i_f(d, phi)` is an **acceptance requirement**, including equality.
-Here i_s is the first occurrence of the next predicate and i_f is the actual
-last occurrence of the previous predicate in the relevant demonstration segment.
-A gap with first-new > last-old must be rejected; a persistent previous predicate
-can satisfy the requirement. The earlier claim that the intended paper rule
-rejects ordinary persistent stacking milestones was incorrect and is withdrawn.
+**User-adopted interpretation — implemented:** refining an original block with
+incoming condition P and outgoing target Q introduces intermediate condition C:
 
-**Paper correction required:** in section 3.5, p. 19, replace "If this holds"
-with "If this fails" in the sentence that rejects the split. Appendix G, p. 57,
-already uses the intended rejection direction. The inequality itself is correct.
+```text
+Before: P -> v0 -> Q
+After:  P -> v1 --C--> v2 -> Q
+```
 
-**Ordinary-transition implementation corrected and tested:** validation now
-compares the actual first-new and last-old scans, both during proposed refinement
-and across the recorded CFG, including transitions to the final postcondition.
-Previously it substituted the segment start for last-old and checked only strict
-cut progression. Nonempty splits, boundary adjacency, entry/exit predicates and
-Get binding checks remain separate structural obligations. A failed refinement
-must leave the original CFG and demonstration assignment unchanged. Seven new
-regressions cover equality, persistence, gaps, missing occurrences, whole-CFG
-coverage and atomic rejection. Full suite: 211 tests pass in 50.593 seconds.
+An edge condition is the source block's exit condition and the destination
+block's entry condition, consistent with §2.3's outgoing-edge summaries.
+Thus v1 establishes C and v2 establishes Q. Neither incoming P nor intermediate
+C must persist until the next condition is reached; P and C, or C and Q, need
+not hold simultaneously.
 
-The special entry clause `i_s(d, psi)=0` needs clarification about whether psi
-means the incoming entry condition or the new split predicate: requiring a new
-interior split predicate at its segment start would preclude that split. Pending
-that clarification, the existing entry checks are unchanged; no resolution of
-this separate clause is claimed.
+The acceptance comparison is `first(C) <= last(Q)` on **each original unsplit
+segment assigned to v0**. Q means the original outgoing target, not incoming P.
+Both occurrences must exist. Do not reinterpret this as overlap between the
+incoming and outgoing predicates of each child segment.
+
+The recorded segment must also satisfy P at its start and Q at its end, with
+first(C) strictly inside. These stronger boundary requirements already imply
+the inequality: last(Q) is the original end and first(C) is earlier. The explicit
+comparison remains in the implementation to state the intended rule. Equality
+passes that comparison alone; it does not override the strict interior-cut rule.
+Initial and later blocks use the same checks. At entry, the **precondition**
+holds at local time zero; requiring C there would contradict an interior split.
+
+**Code correction complete:** `refine_cfg` scans C and the original outgoing Q
+on the original segment. `validate_cfg` checks edge conditions at shared
+boundaries, witnesses and adjacency without imposing incoming/outgoing overlap.
+Intermediate edges retain first-occurrence cuts, and final targets must hold at
+the recorded end. Failed refinements leave the original CFG and demonstration
+assignment unchanged. Regressions cover destroyed incoming/intermediate
+conditions, entry and offset segments, target reestablishment, missing boundary
+conditions, invalid cuts and atomic rejection. Focused validation: 25 tests pass.
+Full suite: **215 tests pass in 50.735 seconds**, including simulator tests.
+
+**Paper corrections still required:**
+
+- In §3.5, p. 19, replace "If this holds" with "If this fails" in the rejection
+  sentence; Appendix G, p. 57, already has the intended direction.
+- Name the original target Q and new intermediate C explicitly. The notation
+  `v_phi --psi--> v_psi` does not clearly communicate their roles alongside
+  §2.3's outgoing-edge summaries.
+- State that first(C)/last(Q) are measured on the original unsplit segment;
+  applying the comparison independently to the child segments is different.
+- Clarify that the entry-time requirement concerns the precondition, while C
+  defines a later interior cut. Record that the stronger boundary checks imply
+  the comparison.
+
+These are clarifications adopted with the user, not a claim that the current
+paper already specifies this interpretation unambiguously. The previous
+incoming/next-condition overlap restriction and pending entry question are
+superseded by this decision.
 
 ## 18. Primitive motion formulas do not justify the stated Pick/Release claims
 

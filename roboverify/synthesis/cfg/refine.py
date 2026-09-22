@@ -61,17 +61,17 @@ def refine_cfg(cfg, node, negative, available_scope, *, language=None, on_split=
     binders, condition = open_existentials(
         predicate, "g_" + node.replace(".", "_"), available_scope
     )
-    starts, finishes, splits = {}, {}, []
+    cut_times, target_last_times, splits = {}, {}, []
     for index, segment in enumerate(segments):
-        starts[index] = first_true(segment, lambda s: evaluate(predicate, s), scene_at)
-        # The acceptance inequality uses the predicate's actual last occurrence,
-        # independently of the structural requirement for an interior cut.
-        finishes[index] = (
-            segment.t_start
-            if incoming[0].source == cfg.entry
-            else last_true(segment, lambda s: evaluate(incoming[0].label, s), scene_at)
+        cut_times[index] = first_true(
+            segment, lambda s: evaluate(predicate, s), scene_at
         )
-        cut = starts[index]
+        # Compare the new cut C with the original block target Q on the original
+        # segment. The incoming predicate P may be destroyed before C is reached.
+        target_last_times[index] = last_true(
+            segment, lambda s: evaluate(outgoing[0].label, s), scene_at
+        )
+        cut = cut_times[index]
         if cut is None or not segment.t_start < cut < segment.t_end:
             result.status = "validate_reject"
             return result
@@ -92,7 +92,7 @@ def refine_cfg(cfg, node, negative, available_scope, *, language=None, on_split=
                 raise ValueError("Classifier witness disappeared during splitting")
             after.bindings.update(witness)
         splits.append((before, after))
-    if not validate_split(starts, finishes, entry=incoming[0].source == cfg.entry):
+    if not validate_split(cut_times, target_last_times):
         result.status = "validate_reject"
         return result
     left, right = node + ".0", node + ".1"

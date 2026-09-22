@@ -4,16 +4,19 @@
 >
 > Branch: `phase-f-synthesis`; Phases A–E are integrated into `main`.
 >
-> **Entry 17 ordinary-transition correction implemented and tested.**
-> User clarified that first-new <= last-old
-> is required for acceptance, including equality. Section 3.5's "If this holds"
-> rejection sentence is wrong; change it to "If this fails", as in Appendix G.
-> Ordinary-transition checks now scan actual predicate occurrences rather than
-> substituting a cut boundary. Focused refinement/IR validation: 21 tests pass.
-> The separate entry clause is awaiting clarification; existing entry checks
-> remain unchanged. **211 unittest tests pass in 50.593 seconds**, including
-> simulator tests and seven new temporal regressions. Changed Python files pass
-> isort/black; git diff whitespace checks pass.
+> **Entry 17 refinement semantics implemented and tested.**
+> Split `P -> v0 -> Q` into `P -> v1 --C--> v2 -> Q`: compare first(C)
+> with last(Q) on each original unsplit demonstration segment. Q is the
+> original outgoing target, not incoming P. P must hold at entry, C first holds
+> strictly inside the segment, and Q must hold at its end. These boundary checks
+> already imply first(C) <= last(Q); the explicit comparison is retained.
+> Neither P nor C must persist until the next condition. Entry and later blocks
+> use the same rule; the entry precondition holds at local time zero, not C.
+> The paper needs the rejection-sentence correction and clearer predicate/domain
+> notation. Focused refinement/IR validation: **25 tests pass**. Full suite:
+> **215 unittest tests pass in 50.735 seconds**, including simulator tests.
+> Changed Python files pass isort/black; git diff whitespace checks pass. See
+> [entry 17](PAPER-DISCREPANCIES.md#17-temporal-validation-acceptance-and-the-incorrect-rejection-sentence).
 >
 > **Entry 16 follow-up decision:** the identified code fixes are complete under
 > the agreed supported-tower model. Update the paper's Table 7 Higher rules 2
@@ -136,8 +139,10 @@
 >       ground separation and intermediate-object adjacency regressions pass
 >       together with the existing search/refinement tests (nine tests).
 > - [x] **A10:** Splits/folds validate all entries, exits, witnesses and adjacent
->       cuts atomically. Entry 17 corrects ordinary-transition acceptance to
->       first-new <= actual last-old; strict interior cuts are a separate check.
+>       cuts atomically. Entry 17 compares first(C) <= last(Q) on the original
+>       segment, where Q is the original outgoing target. Strict interior cuts
+>       and P-at-entry/Q-at-end checks apply uniformly, without requiring overlap
+>       between incoming and outgoing predicates.
 > - [x] **A11:** Loop inference includes terminal heads and frozen entry geometry;
 >       the CLI exposes legacy/monotone learning, relation vocabulary and variable
 >       count, with legacy as default. Equality naming is normalized. The combined
@@ -168,7 +173,7 @@
 > rule 2 follow-up: 189 pass in 46.804 seconds;
 > rule 6 follow-up: 191 pass in 50.106 seconds;
 > shared-freshness follow-up: 204 pass in 50.680 seconds;
-> current ordinary temporal-validation follow-up: 211 pass in 50.593 seconds.**
+> current original-target refinement follow-up: 215 pass in 50.735 seconds.**
 > Changed Python files passed the same isort/black commands used by format.sh;
 > formatting was scoped to changed files to protect unrelated user files. The
 > integrated CLI's help/argument wiring and git diff whitespace checks pass.
@@ -1058,8 +1063,9 @@ observation-based setter still earns its keep.
 ### F1 — CFG + `D_V` IR and lowering (medium)
 
 `DemoSegment` is the load-bearing type: `demo_idx`, **absolute** `t_start`/`t_end`, `states`,
-`bindings: dict[str,int]`, `parent`. Absolute indices are mandatory — Validate (§3.5)
-compares `i_s(d,ψ)` against `i_f(d,φ)` across *different* blocks' segment sets, and
+`bindings: dict[str,int]`, `parent`. Absolute indices preserve cut positions and
+shared boundaries across repeated refinements. Under the entry 17 clarification,
+Validate compares first(C) with last(Q) on each original unsplit segment.
 `split_demo_at_feature` ([decision_tree.py:102](roboverify/synthesis/mcmc/decision_tree.py:102))
 returns bare `demo[:split_idx+1]` / `demo[split_idx+1:]` slices, so after a second split the
 absolute timestep is unrecoverable. `bindings` records which object was bound on the
@@ -1088,18 +1094,26 @@ is expressive enough and that verification is unaffected.
 
 ### F2 — `Validate` §3.5 (small)
 
-User-adjudicated acceptance: for ordinary transitions require
-`i_s(d,psi) <= i_f(d,phi)` on the relevant recorded segments; reject absent
-occurrences or first-new > last-old. Equality and persistent milestones pass.
-Section 3.5's "If this holds" rejection sentence is a paper error; Appendix G's
-"If this fails" is intended. See [entry 17](PAPER-DISCREPANCIES.md#17-temporal-validation-acceptance-and-the-incorrect-rejection-sentence)
-for the separate entry-clause clarification still pending.
+User-adjudicated refinement semantics: split `P -> v0 -> Q` into
+`P -> v1 --C--> v2 -> Q`. On each original unsplit demonstration segment,
+require `first(C) <= last(Q)`, where C is the new intermediate predicate and Q
+is the original block's outgoing target. Reject absent occurrences or a new cut
+after the last target occurrence. Do not compare C with incoming P, or impose
+an overlap requirement on neighboring edge predicates.
 
+P must hold at the segment start, first(C) must be strictly interior, and Q must
+hold at the segment end. These stronger boundary requirements already imply the
+inequality. Entry and later blocks use the same rule: the entry precondition,
+not the new split predicate, holds at local time zero. P may be destroyed before
+C is reached, and C may be destroyed before Q is reached.
+
+Section 3.5's "If this holds" rejection sentence needs "If this fails", as in
+Appendix G. Its predicate notation and segment domain also need clarification;
+see [entry 17](PAPER-DISCREPANCIES.md#17-temporal-validation-acceptance-and-the-incorrect-rejection-sentence).
 Use `first_true`/`last_true` in `synthesis/cfg/validate.py` over absolute indices.
 Validate recorded boundaries, predicates, bindings and adjacency across the CFG
-before atomically committing refinement or folding. Requiring two nonempty split
-segments is distinct from the first-new/last-old acceptance condition. Tests use
-synthetic segments; validation requires no ML, MuJoCo, or solver calls.
+before atomically committing refinement or folding. Tests use synthetic scenes,
+without saved demonstrations or simulator execution.
 
 ### F3 — Predicate language and enumerator (medium; no prerequisites)
 
