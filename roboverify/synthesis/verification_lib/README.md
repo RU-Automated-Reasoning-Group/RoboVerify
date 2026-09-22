@@ -123,8 +123,8 @@ Its final `1.5 * L` release offset fails the strict direct-on height band, even
 though its noiseless paths are clear in the concrete fixture. The solver spike
 keeps the exact bilinear swept-cube encoding. The endpoint bounding-box fallback
 would be a conservative overapproximation for diagonal paths, not an equivalent
-rewrite; it has not been needed or implemented. Timings and the Phase E gate are
-recorded in `PLAN-popl-alignment.md`.
+rewrite; it has not been needed or implemented. Use the benchmark to measure
+current performance; historical timings are not regression targets.
 
 Phase E adds [counterexample-guided refinement](CEGIS.md), typed symbolic results,
 monotone invariant learning, and fixed-environment motion penalties.

@@ -1,12 +1,12 @@
 # Agent guide and architecture
 
 `AGENTS.md` is the single, tool-neutral guide for coding agents in this repository.
-Read the environment, current-work and convention sections before making changes;
+Read the environment, project-status and convention sections before making changes;
 use the architecture and workflow sections for the affected subsystem.
 [README.md](README.md) indexes the remaining project documentation.
 
 - [Environment](#environment)
-- [Current work](#work-in-progress--read-before-starting)
+- [Project status and decisions](#project-status-and-decisions--read-before-starting)
 - [Conventions](#conventions)
 - [Project overview](#what-this-project-is)
 - [Commands and workflows](#commands-and-workflows)
@@ -40,31 +40,42 @@ bash format.sh                                                        # isort th
 
 Tests are `unittest`, not pytest. No linter is configured.
 
-## Work in progress — read before starting
+## Project status and decisions — read before starting
 
-`PLAN-popl-alignment.md` is the active plan: bringing this code into line with the POPL
-submission (`POPL2027.pdf`), verification soundness first. **Its status header records
-which stages are done, which is in progress, and which design questions are already
-settled.** Start there, and update that header as you go — it is the only handoff channel
-between sessions.
+Read [README.md](README.md#project-status) for current project status and
+[PAPER-DISCREPANCIES.md](PAPER-DISCREPANCIES.md) for numbered findings, settled
+reasoning and remaining actions. Implementation is complete within the supported
+scope; validated demonstrations and end-to-end learning acceptance remain open.
+Update the relevant status or entry when it changes, rather than maintaining a
+separate implementation-plan history.
 
-Two standing decisions from that plan, so they are not re-litigated:
+- **The paper is an artifact under test, not a specification.** Neither paper nor
+  code automatically wins a disagreement. Do not change code solely because the
+  paper says so, and do not use its experimental numbers as regression targets.
+- **Discrepancies get logged, not silently fixed.** Preserve entry IDs and the
+  distinction between implementation defects, paper corrections and model limits.
+- Keep Unstack end-to-end invocations under the user's **60-second wall-clock
+  limit**. A timeout or exhausted budget is not successful verification.
 
-- **The paper is an artifact under test, not a specification.** It was written by the same
-  people as the code and may describe intended rather than implemented behaviour. Where
-  the two disagree, neither automatically wins. Do not change code whose only
-  justification is "the paper says so," and do not treat the paper's reported numbers as
-  regression targets.
-- **Discrepancies get logged, not silently fixed.** `PAPER-DISCREPANCIES.md` records places
-  where the paper is wrong or underspecified, to be worked once the code is sound. Add to
-  it when you find another.
+### Settled implementation decisions
 
-The plan's conflicts table (items 1–7) is fully adjudicated. Treat those as decided.
+These seven original decisions are settled, not a new task list. Related proofs
+and paper corrections are recorded in the numbered review entries.
+
+| # | Decision |
+| --- | --- |
+| 1 | Higher WP rules introduce quantifiers; do not force the paper's original AFR-closure claim by changing valid code. The corrected rules and theorem issue are entries 16 and 1. |
+| 2 | Use KL where convergence/epsilon thresholds depend on its scale; retain MMD as an option, cache demo density and bound sampling costs. MMD and KL thresholds are not interchangeable. |
+| 3 | Straight-line search optimizes imitation distance, then ranks the near-best pool by PostScore. Retain legacy weighted-goal scoring for comparison. The default pool limit is 10; rank at convergence. |
+| 4 | Keep premise consistency checks and distinguish valid, invalid, vacuous and unknown. An unsat core is a shortcut only when it establishes inconsistent premises. |
+| 5 | Top is removed from the predicate vocabulary. |
+| 6 | ON_star_zero is frozen entry geometry. Tasks using it equate it with current ON* in the precondition, never through a global link axiom (entry 5). |
+| 7 | Optimize all three Move coordinates. Reassess CEM budgets when dimensionality changes; a single smoke run does not justify new defaults. |
 
 ## Conventions
 
-- All real work lives under `roboverify/`; the repository root holds notes, plans and
-  experiment logs.
+- All real work lives under `roboverify/`; the repository root holds project
+  guidance, the paper and review decisions.
 - Commit in meaningful increments, one coherent change per commit, rather than one large
   commit at the end.
 - Work on a topic branch; do not commit directly to `main`.
@@ -85,12 +96,11 @@ from example traces) and low-level (bounded model checking / geometric reasoning
 box coordinates).
 
 Implementation lives under `roboverify/`; the repository root holds onboarding,
-the active plan, the paper and its discrepancy/decision records.
+project status, the paper and its review/decision record.
 
 ## Commands and workflows
 
-Use the environment and module commands above. For a full-suite command, see
-[the plan](PLAN-popl-alignment.md#validation-and-acceptance).
+Use the environment and module commands above; the full-suite command is below.
 
 - [Trace workflow](roboverify/synthesis/inference_lib/README.md): collection and inference.
 - [Motion API](roboverify/synthesis/verification_lib/README.md): geometric checks and noise.
@@ -100,6 +110,27 @@ Use the environment and module commands above. For a full-suite command, see
 Instrumented MCMC entry point: `uv run python -m synthesis.experiment.mcmc.run`.
 Use `--smoke --demo-dir demos` for a bounded search, or task/iteration options for
 longer runs. Read the resulting directory through the report tool described below.
+
+### Validation
+
+From `roboverify/`, with the simulator environment above configured:
+
+```bash
+uv run python - <<'PYTEST'
+from pathlib import Path
+import unittest
+modules = sorted('.'.join(p.with_suffix('').parts)
+                 for p in Path('synthesis').rglob('test_*.py'))
+result = unittest.TextTestRunner(verbosity=2).run(
+    unittest.defaultTestLoader.loadTestsFromNames(modules))
+raise SystemExit(not result.wasSuccessful())
+PYTEST
+```
+
+Run focused tests for changed behavior and the appropriate broader checks. Scope
+formatting to changed files (`uvx isort --profile black`, then `uvx black`) and run
+`git diff --check`. Documentation-only edits need reference checks, not simulator
+runs. Tests use synthetic scenes or generated traces, not saved demonstration files.
 
 ## Architecture
 
@@ -209,7 +240,7 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   `--demo-store` input, learn an invariant and check a high-level Put/Assign/While
   program, optionally in a finite `"enum"` context. Stack/Unstack also check a
   lowered physical body; Reverse/Partial report unsupported motion because they
-  lack one. The separate 2D entry point is outside the tower-task plan.
+  lack one. The separate 2D entry point is outside the supported tower-task scope.
   `synthesize_cfg.py` is the instrumented relational CFG synthesis CLI and writes a standard
   run directory; `main.py` is now only a shim that forwards to it, the scratch experiment
   script it used to hold having been replaced by that driver.
