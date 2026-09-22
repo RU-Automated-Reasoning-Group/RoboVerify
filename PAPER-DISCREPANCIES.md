@@ -20,82 +20,61 @@ Entry 13 below retains only the paper's missing block-domain clarification.
 Original IDs are stable; do not renumber entries after moving resolved material.
 Add new findings with the next unused ID and cite code locations and paper pages.
 
+## Remaining work at a glance
+
+| Entries | Current disposition |
+| --- | --- |
+| 1, 2, 8, 9, 13, 14 | Paper/formalization clarifications; implemented behavior is recorded in each entry. |
+| 3, 10 | Validate or replace demonstrations before making end-to-end learning claims. |
+| 4 | Physical-controller refinement remains outside the agreed geometric model. |
+| 7 | Document the implemented successor/progress and entry/exit feedback semantics. |
+| 15 | Runtime cap mismatch fixed; a total-termination proof is outside scope. |
+| 16 | Code fixes complete; update paper rules. General height premises deferred until needed. |
+| 17, 18 | Implementation complete; paper edits remain. |
+
 ---
 
 ## 1. Theorem 5.2 contradicts the paper's own Table 7 (`R_Higher`)
 
-**Status:** paper-side. The implementation is faithful; the paper needs the fix.
+**Status: paper correction.** The theorem's no-new-quantifiers argument conflicts
+with the written Table 7. This is distinct from the Higher rule fixes in entry 16;
+the current code no longer reproduces the old table verbatim.
 
-Theorem 5.2 (Closure under wp) claims that for every abstract action `put(b',b)` /
-`put(b',tbl)` and every AFR formula `Q`, `wp(a, Q)` is AFR. Its stated justification is that
-the rewrite operators work
+Theorem 5.2 claims closure of AFR under WP, justified by rewrites introducing no
+quantifiers. Definition 5.1 allows a single quantifier block over a quantifier-free
+matrix, but the paper's Higher rule 2 introduces an existential and rule 6 and the
+table-placement rule introduce universals. For example, the written rule 2 can
+introduce a genuine forall/exists alternation into a universally quantified post.
+The claimed justification therefore fails for the paper's own rules.
 
-> "without introducing any quantifier … each operator only ever combines existing
-> quantifier-free atoms with ∧, ∨, and substitution of the action's named objects."
+The corrected implementation removes rule 2's existential but retains fresh
+universal auxiliaries in rule 6 and the table case. Their effect on quantifier
+prefixes depends on the surrounding formula and polarity; do not infer AFR
+closure just because the old existential was removed. See
+`rewrite_for_put_for_higher` and `rewrite_for_put_on_tbl_for_Higher` in
+`roboverify/synthesis/api/program.py`.
 
-But the paper's own Table 7 defines `R_Higher` for `put(b',b)` with **eight disjuncts, two of
-which introduce a fresh quantified variable `t`**:
-
-- disjunct 2: `m≠b' ∧ m≠b ∧ n=b' ∧ ∃t. t≠n ∧ Higher(n,t) ∧ Higher(t,b)`
-- disjunct 6: `m=b' ∧ n≠b' ∧ n≠b ∧ (Higher(b,n) ∨ ∀t. …)`
-
-and `R_Higher` for `put(b',tbl)` likewise introduces `∀t. t ≠ tbl ⇒ Higher(t,n)`.
-
-Definition 5.1 admits AFR only as QFR, or a single quantifier block over a **quantifier-free**
-matrix. Rewriting a `Higher` atom inside `Q = ∀u,v. ψ` therefore yields `∀u,v. ψ'` whose
-matrix contains `∃t` — not AFR. It also creates genuine `∀∃` alternation, which is what
-Theorem 5.3 exists to characterise. So the theorem's **statement** fails, not merely its
-proof sketch.
-
-The implementation reproduces Table 7 disjunct for disjunct:
-
-- `rewrite_for_put_for_higher` — `roboverify/synthesis/api/program.py:779-811`
-  (`Exists([t], …)` at `:785`, `ForAll([t], …)` at `:798`)
-- `rewrite_for_put_on_tbl_for_Higher` — `roboverify/synthesis/api/program.py:670`
-
-Scope is narrow: `R_⟨on*⟩` is purely propositional and `R_Scattered` is five quantifier-free
-disjuncts, so `Higher` is the only offender, and `:670`, `:785`, `:798` are the only
-quantifier introductions anywhere in the wp path.
-
-**Repair options for the paper**, in rough order of least disruption:
-
-1. Weaken Theorem 5.2 to hold modulo the `Higher` rewrite, and handle `Higher` under
-   Theorem 5.3's conditional-decidability treatment.
-2. Widen Definition 5.1's AFR to permit a non-alternating inner quantifier block, and check
-   that Theorem 5.3's polarity argument still goes through.
-3. Replace Table 7's `R_Higher` with a genuinely quantifier-free rule, if one exists — this
-   would also change the implementation.
-
-Worth settling before the AFR fragment checker is written, since it determines what the
-checker should flag.
+Revise the closure/decidability statement using the corrected rules: either give
+an appropriate fragment and proof or qualify the Higher case. No code should be
+changed solely to force the original theorem's claim.
 
 ## 2. Rollouts from segment-initial states are required but never addressed
 
-**Status:** paper-side omission; the code needs work regardless.
+**Status: implementation complete in F0; paper omission remains.** Algorithm 5's
+PostScore requires rollouts from each assigned segment's start, including starts
+inside a demonstration. An observation alone does not contain the full arm,
+velocity, control and contact-solver state needed to reproduce that execution.
+The old observation setter restores a visualization, not a faithful segment start.
 
-Algorithm 5 defines
+`roboverify/synthesis/cfg/reset.py` now records full simulator state, auxiliary
+control/mocap/warm-start arrays and symbolic bindings. It supports direct reset
+and deterministic replay; replay remains the default. Tests compare the resulting
+state and subsequent action. Observation-only recordings without a replay source
+are rejected. Solver-generated scenes are a separate geometric-concretization
+path, not recorded states that can be restored.
 
-> `PostScore(π, D_v, φ) = Pr_{s₀∼D_v}[π rolled out from s₀ reaches a state s ⊨ φ]`
-
-annotated "fraction of rollouts from demonstration-initial states reaching φ" (§3.4 repeats
-it). For a loop body, `D_V(v_body)` comes from `ExtractIterations`, so those segments begin at
-loop-entry states. Every block must therefore be scored by rolling out from *its own* segment
-start.
-
-The paper never says how the simulator gets into that state. Its only uses of the word
-"reset" concern symbolic state in §5 ("no reset occurs between consecutive blocks", "the loop
-resets to a fresh σ*"). The cost is treated as free.
-
-On the implementation side, `set_state_from_observation` for the Fetch environment
-(`roboverify/synthesis/environment/cee_us_env/fpp_construction_env.py:850`) describes itself
-in its first line as "a dummy function to only visualize the object dynamics": it restores
-block poses, hard-codes the robot's 16-dim state to a fixed home pose, and zeroes velocities.
-The held-object state is not represented at all. This is a consequence of the observation
-format — `agent_dim = 10` is Cartesian end-effector data with no arm joint configuration — so
-reconstructing from the observation would need IK.
-
-A revision should either state the assumption (demonstrations are replayed, or full simulator
-state is recorded) or drop the claim that scoring happens from segment-initial states.
+The paper should state how demonstrations support faithful segment starts and
+account for reset/replay in scoring. This is not remaining F0 implementation work.
 
 ## 3. The §4 demonstration input was literal data, including truncated datasets
 
@@ -248,9 +227,15 @@ Higher and 0<=dz<1.5L for direct-on. These definitions need reconciliation;
 neither blind copying nor a claim of exact agreement is justified. The long
 Higher rewrite in Table 7 is also visibly clipped beyond the PDF page boundary.
 
-Definition 5.4 claims finite universal instantiation is exactly as strong as the
-invariant on arbitrary environments. That equivalence is not true in general;
-the sound direction of abstraction and quantifier polarity must be justified.
+Definition 5.4 should distinguish whole-state equivalence from preservation of
+the verification result. The agreed interpretation is **equisatisfiability of the
+universal collision query** after instantiating over the named objects and an
+arbitrary collision witness, with all relevant universal axioms/invariants
+instantiated over that set. The witness is constrained by those instances; it is
+not an unconstrained invalid block. Whole-state equivalence on an arbitrary
+larger environment is unnecessary for this argument. State the applicable
+fragment and polarity conditions; do not generalize it to arbitrary quantified
+formulas or treat finite instantiation alone as a demonstrated code defect.
 
 ## 15. Termination is not established by the stated VCs; runtime cap mismatch fixed
 
@@ -265,9 +250,9 @@ observed iteration count as an execution cap. An explicitly requested runtime
 budget raises `LoopBudgetExceeded` instead of silently taking a normal loop exit;
 collectors report an incomplete outcome. This fixes the premature-success issue.
 The remaining paper claim is total termination without a ranking/progress
-argument; invariant and motion VCs establish partial correctness. See A2 in
-`PLAN-popl-alignment.md` and the historical audit.
-
+argument; invariant and motion VCs establish partial correctness. See the completed
+A2 checklist in
+[the active plan](PLAN-popl-alignment.md#audit-remediation--completed).
 
 ## 16. The Higher rewrite can disagree with geometric placement
 
@@ -417,49 +402,33 @@ superseded by this decision.
 
 ## 18. Primitive motion formulas do not justify the stated Pick/Release claims
 
-**Direct rereading of §5.5, PDF pp. 27–29.** Formula (5) excludes only the
-pre-held object from collision checks. Pick starts with no held object and ends
-at its target block's center (up to grasp noise). Taking the collision witness
-to be that target and t=1 satisfies all three strict L bounds at zero noise.
-The claim that a grasp-noise bound below L avoids this self-collision is false
-under the written formula. Intended grasp contact needs an explicit exception
-or a different gripper geometry; it cannot be silently counted as collision-free.
+**Status: paper changes only within the agreed model.** The code and regression
+tests already implement the contact and support semantics below. Physical
+simulator/controller refinement is the separate limitation in entry 4, outside
+this entry's implementation work.
 
-Release leaves a supported block in place and havocs an unsupported block's
-position, while moving the arm to a release-height offset. The simulator opens
-the gripper and then moves the empty arm vertically; its settling dynamics still
-require a refinement argument (discrepancy 4). A primitive verifier must state which semantics it checks, preserve unsupported/falling outcomes,
-and cannot transfer such a result to hardware without a controller refinement
-argument. The current audit work must not silently replace either model.
+**Paper, §5.5, PDF pp. 27–29.** Formula (5) excludes only the pre-held object.
+Pick starts with no held object and ends at its target block's center, up to
+bounded grasp noise. Choose that block as collision witness and t=1: at zero
+noise all three coordinate differences are 0 < L. Thus the written formula
+reports collision with the target. The claim that a grasp-noise bound below L
+prevents this is false; intended contact needs an explicit exception or different
+geometry.
 
-Appendix G p. 57 also reverses the wording of Validate's rejection test relative
-to §3.5 p. 19 ("If this fails" versus "If this holds"). The explicit temporal
-validation decision is recorded in discrepancy 17.
+The paper's Release leaves a supported block in place and assigns an arbitrary
+position to an unsupported block, then moves the empty gripper away. The simulator
+opens the gripper before moving vertically. Neither description by itself proves
+settling or controller refinement.
 
-### Remediation status after the direct paper rereading
+**Implemented model:** `verification_lib/primitive_motion.py` treats the empty
+gripper as a point and carried blocks as cubes. Pick/Release explicitly exclude
+contact with the selected object from their collision queries; other blocks
+remain checked. Release must prove support. Unsupported release fails a support
+obligation and gives the block an arbitrary falling position, rather than freezing
+it in mid-air. `test_primitive_motion.py` covers successful placement, unsupported
+release, state propagation and empty-gripper collisions.
 
-Audit A1 added the complete ON*/Higher/Scattered effect and designated-reference
-alignment checks, rejecting the original discrepancy 12–13 counterexamples.
-Follow-up implementation now proves root discovery and preserves tight alignment
-under the user-declared input-tower assumption
-([resolved entry 12](PAPER-RESOLUTIONS.md#12-root-discovery-and-tight-alignment-premises--implemented-with-an-explicit-input-assumption)). The earlier completion
-claim preceded those obligations; the new implementation closes them. Discrepancy 15's
-silent loop-cap exit is fixed; termination still is not proved.
-
-For discrepancy 18, the new primitive model explicitly excludes intended
-Pick/Release contact with the selected object, models the empty gripper as a
-point, and checks supported Release versus an arbitrary unsupported fall. This
-is a stated modeling resolution, not a proof of the simulator's controller.
-Inspection of `ReleaseByName.eval` shows that it opens the gripper first and then
-moves the empty arm vertically; the earlier wording in discrepancy 4 about it
-lowering a held block was inaccurate. Simulator settling after opening and the
-primitive model's support assumption still need a physical refinement argument.
-
-Algorithm 6 now operates on the actual synthesized CFG. It preserves the
-existing documented abstract counterexample-replay decision (discrepancy 7),
-checks strict learning progress, and surfaces entry/exit coverage failures as
-requests for validated demonstrations. It does not assume that a failing
-establishment VC proves the program itself is wrong. Motion repair can change
-instruction structure while retaining the complete symbolic program. Success is
-reported as `verified_model`, expressly excluding a total-correctness or hardware
-claim. See `roboverify/synthesis/cfg/VERIFICATION.md`.
+**Remaining paper edits:** state the intentional-contact exception and geometry,
+remove the incorrect grasp-noise argument, and state the Release support
+assumptions and model-only proof scope. See the current
+[verification guide](roboverify/synthesis/cfg/VERIFICATION.md).

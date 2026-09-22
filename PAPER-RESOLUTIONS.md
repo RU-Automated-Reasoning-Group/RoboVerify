@@ -1,7 +1,7 @@
 # Resolved paper / implementation findings
 
 Resolved findings from [PAPER-DISCREPANCIES.md](PAPER-DISCREPANCIES.md).
-Original numbers are retained so plan and audit references remain valid. These
+Original numbers are retained so references and discussion remain valid. These
 are settled decisions and implementation records, not an active defect list.
 The alignment proof and input assumptions in entry 12 remain part of the model.
 
@@ -28,7 +28,7 @@ collision formula or the code implementing that formula.
   shared-`t` query for the moving-cube model. No endpoint-box fallback is used.
 - **Plan:** D2 originally proposed replacing the query with one axis-aligned box
   enclosing the entire movement and incorrectly treated this as equivalent. The
-  original paragraph is now corrected; the Phase D spike did not require a fallback.
+  active plan retains the shared-`t` query; the Phase D spike did not require a fallback.
 
 For diagonal motion, the enclosing box contains space outside the swept path.
 An obstacle there can overlap the box without colliding with the moving cube.
@@ -185,7 +185,8 @@ bounds plus the new-element alignment check; it does not refute the lemma with
 its full hypotheses or assert that the current complete-effect checker accepts
 this scene. A sound implementation needs a justified stable reference and an
 established/preserved tight alignment invariant, or another proof of the complete
-required geometric effects. See A1 in `AUDIT-popl-alignment.md`.
+required geometric effects. See the completed A1 checklist in
+[the active plan](PLAN-popl-alignment.md#audit-remediation--completed).
 
 ## 13. Placement effects and block-only Scattered — implementation resolved
 
@@ -196,14 +197,14 @@ resulting geometry. `Scattered` applies between blocks, excluding the symbolic
 `tbl` marker. The physical table height is a separate placement condition.
 
 `check_abstract_effects` in
-`roboverify/synthesis/verification_lib/motion_verification.py:421` checks the
+`roboverify/synthesis/verification_lib/motion_verification.py` checks the
 actual ON*/Higher/Scattered results against the symbolic Put rewrites, including
 an arbitrary unnamed object. `check_contract_realization` separately checks
 release and direct placement or table height. A successful local contract does
 not bypass the relation-effect obligations. CFG verification invokes both.
 
 `rewrite_for_put_on_tbl_for_scattered` in
-`roboverify/synthesis/api/program.py:684` excludes `tbl` from both arguments,
+`roboverify/synthesis/api/program.py` excludes `tbl` from both arguments,
 preserving the standing table-isolation decision. The earlier statement that the
 implementation retained the conflicting unrestricted rewrite was obsolete.
 
@@ -216,8 +217,7 @@ rejects it. Regression tests also ensure `Scattered(a, tbl)` remains false:
 - `test_table_scattered_wp_preserves_isolation`
 
 Both tests are in
-`roboverify/synthesis/verification_lib/test_motion_verification.py:147` and passed
-in the focused follow-up run (2 tests, 0.408 seconds). Plan item A1 records the
-completed full-effect checks. No further implementation change is required for
-this finding. The remaining paper notation clarification is retained as entry 13
+`roboverify/synthesis/verification_lib/test_motion_verification.py`.
+Plan item A1 records the completed full-effect checks. No further implementation
+change is required for this finding. The remaining paper notation clarification is retained as entry 13
 in the active discrepancy document.

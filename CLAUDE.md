@@ -1,6 +1,7 @@
-# CLAUDE.md
+# RoboVerify architecture
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Tool-neutral architecture notes. Start with [AGENTS.md](AGENTS.md) for environment
+setup and repository conventions; use [README.md](README.md) as the document index.
 
 ## Work in progress
 
@@ -24,62 +25,24 @@ abstract `ON`/`ON_star`/`Higher`/`Scattered` block algebra, with loop invariants
 from example traces) and low-level (bounded model checking / geometric reasoning over actual
 box coordinates).
 
-All real work lives under `roboverify/`; the repo root only holds experiment logs/notes.
+Implementation lives under `roboverify/`; the repository root holds onboarding,
+the active plan, the paper and its discrepancy/decision records.
 
-## Commands
+## Commands and workflows
 
-All commands run from the `roboverify/` directory using `uv` (see `roboverify/pyproject.toml`
-for the pinned dependency set — `torch`, `z3-solver`, `mujoco-py`, `gymnasium`, etc.).
+Run modules from `roboverify/` using `uv`, with both simulator environment variables
+configured as shown in [AGENTS.md](AGENTS.md). Tests use `unittest`; isort and black
+are the formatters, with no configured linter. For a full-suite command, see
+[the plan](PLAN-popl-alignment.md#validation-and-acceptance).
 
-```bash
-cd roboverify
-unset LD_PRELOAD   # avoids "Failed to initialize OpenGL Runtime" before running any sim code
-export LD_LIBRARY_PATH="$HOME/.mujoco/mujoco210/bin:/usr/lib/nvidia"   # mujoco_py refuses to import without both paths
-```
+- [Trace workflow](roboverify/synthesis/inference_lib/README.md): collection and inference.
+- [Motion API](roboverify/synthesis/verification_lib/README.md): geometric checks and noise.
+- [Standalone CEGIS](roboverify/synthesis/verification_lib/CEGIS.md): existing-program refinement.
+- [CFG workflow](roboverify/synthesis/cfg/VERIFICATION.md): integrated synthesis and verification.
 
-Both lines are required. Without `LD_LIBRARY_PATH`, `import mujoco_py` raises
-`Missing path to your environment variable` and anything touching the simulator —
-including `synthesis.experiment.test_mcmc_parity` — cannot run.
-
-Run a script as a module (required — the `synthesis` package uses relative imports and files
-under `synthesis/entry/` are not meant to be run as bare scripts):
-
-```bash
-uv run python -m synthesis.entry.collect_stack_loop_traces --output /tmp/stack-loop-traces.json
-uv run python -m synthesis.entry.verify_stack_with_learned_invariant --demo-store /tmp/stack-loop-traces.json
-uv run python -m synthesis.entry.verify_stack_with_learned_invariant --demo-store /tmp/stack-loop-traces.json --verification-mode finite --num-blocks 4
-uv run python -m synthesis.entry.verify_unstack_with_learned_invariant --demo-store /path/to/unstack-loop-traces.json --table-surface-height 0.4
-uv run python -m synthesis.entry.verify_reverse_with_learned_invariant --demo-store /path/to/reverse-loop-traces.json
-uv run python -m synthesis.entry.verify_partial_with_learned_invariant --demo-store /path/to/partial-loop-traces.json
-uv run python -m synthesis.entry.verify_2d_with_learned_invariant
-uv run python -m synthesis.entry.synthesize_cfg --smoke   # relational CFG synthesis driver
-```
-
-Run an *instrumented* MCMC search, which writes a monitorable run directory (see
-"Monitoring runs" below) instead of printing a firehose:
-
-```bash
-uv run python -m synthesis.experiment.mcmc.run --smoke --demo-dir demos
-uv run python -m synthesis.experiment.mcmc.run \
-    --task stack --num-blocks 4 --iters 2000 --demo-dir demos \
-    --goal-feature 'ON(1,0)' --slug stack-nb4
-```
-
-Run tests (unittest, not pytest):
-
-```bash
-uv run python -m unittest synthesis.verification_lib.test_bmc_lib -v
-uv run python -m unittest synthesis.inference_lib.test_demo_store -v   # trace adapter and golden equivalence
-uv run python -m unittest synthesis.experiment.test_loop_traces -v     # three MuJoCo loop iterations
-uv run python -m unittest synthesis.experiment.test_run_logger -v      # fast, no simulator
-uv run python -m unittest synthesis.experiment.test_mcmc_parity -v     # drives MuJoCo
-```
-
-Format code (isort then black, over the package dirs — no linter is configured):
-
-```bash
-bash format.sh
-```
+Instrumented MCMC entry point: `uv run python -m synthesis.experiment.mcmc.run`.
+Use `--smoke --demo-dir demos` for a bounded search, or task/iteration options for
+longer runs. Read the resulting directory through the report tool described below.
 
 ## Architecture
 
@@ -89,11 +52,11 @@ bash format.sh
     `env.symbolic_name_to_box_id`) implement `eval()` to drive a MuJoCo env, and
     `register_trainable_parameter`/`update_trainable_parameter` to expose float offsets
     (`Parameter`) as a flat vector for MCMC/CEM optimization. Verification-only instructions
-    (`Put`, `Assign`, `GoalAssign`, `MarkGoal`, `MoveRight`, `MoveDown`) raise on `eval()` —
-    they exist purely for the high-level Z3 semantics (weakest-precondition rewriting) and
-    must be lowered to physical instructions before execution. `While` also doubles as a
-    runtime interpreter: it evaluates a restricted subset of Z3 formulas directly against
-    concrete block positions to find/bind the existential guard variable each loop iteration.
+    (`Put`, `GoalAssign`, `MarkGoal`, `MoveRight`, `MoveDown`) raise on `eval()` and
+    must be lowered to physical instructions before execution. `Assign` updates
+    runtime aliases, and `Get` finds an object satisfying its binding condition.
+    `While` evaluates a restricted subset of Z3 formulas against concrete block
+    positions to find/bind existential guard variables each loop iteration.
   - `program.py`: `Program` (holds a list of instructions plus trainable parameters), the
     weakest-precondition machinery (`wp`, `VC_aux`) and the `rewrite_for_put_for_*`/
     `rewrite_for_put_on_tbl_for_*` family that specializes VC generation for each predicate
@@ -103,8 +66,9 @@ bash format.sh
 
 - **`synthesis/verification_lib/`** — the two verification backends.
   - `highlevel_verification_lib.py`: `HighLevelContext` sets up the Z3 sort for boxes in one
-    of two modes — `"declare"` (an infinite `DeclareSort`, used for *inference*, i.e. learning
-    invariants generically) or `"enum"` (a finite `EnumSort` with a concrete `num_blocks`,
+    of two modes — `"declare"` (an uninterpreted `DeclareSort`, used for generic
+    inference and unbounded verification) or `"enum"` (a finite `EnumSort` with a
+    concrete `num_blocks`,
     used to *check* a learned invariant is sound for a specific finite instance, optionally
     rendering a scene). Defines the `ON_star`/`ON_star_zero`/`Higher`/`Scattered` predicates as Z3
     functions.
@@ -180,11 +144,12 @@ bash format.sh
   operating on raw `obs` arrays; both the `While` runtime interpreter and
   the MCMC reward/feature code call into these rather than duplicating geometry logic.
 
-- **`synthesis/entry/`** — runnable pipelines. `verify_{stack,unstack,reverse,partial,2d}_with_learned_invariant.py`
-  require explicit `--demo-store` input and follow the same shape: learn an invariant,
-  optionally instantiate it into a finite `"enum"` context, build both a high-level (`Put`/
-  `Assign`/`While`) and a lowered physical (`PickPlaceByName`) version of the same program, then
-  call `highlevel_verification` and `lowlevel_verification` and report both results.
+- **`synthesis/entry/`** — runnable pipelines.
+  `verify_{stack,unstack,reverse,partial}_with_learned_invariant.py` require explicit
+  `--demo-store` input, learn an invariant and check a high-level Put/Assign/While
+  program, optionally in a finite `"enum"` context. Stack/Unstack also check a
+  lowered physical body; Reverse/Partial report unsupported motion because they
+  lack one. The separate 2D entry point is outside the tower-task plan.
   `synthesize_cfg.py` is the instrumented relational CFG synthesis CLI and writes a standard
   run directory; `main.py` is now only a shim that forwards to it, the scratch experiment
   script it used to hold having been replaced by that driver.
@@ -237,9 +202,11 @@ bash format.sh
   --smoke --quotient` (on one line) for a bounded integration smoke. `--demos` accepts
   a lossless `.npz` recording; without it, the driver collects the historical oracle.
   `--reset-mode replay` is the default, and Unstack has a 60-second process alarm.
-  This synthesizes candidates; formal verification is a separate step. The historical
-  Unstack oracle's final state does not satisfy the task postcondition in the seed-0
-  smoke, so neither collection nor successful imitation establishes task success.
+  The driver validates demonstrations and verifies the actual synthesized CFG
+  through `cfg/verified_synthesis.py`, including demo requests/resynthesis and
+  structural motion repair. Success is `verified_model` in the documented scope.
+  The historical Unstack oracle fails its final task condition in the seed-0
+  smoke; invalid demonstrations are rejected before synthesis.
 
 - **`synthesis/topdown/`** — retired. `topdown.py` is a thin compatibility wrapper over
   the `synthesis/predicates/` enumerator; the hand-rolled BFS and its DSL are gone.

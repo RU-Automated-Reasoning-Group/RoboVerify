@@ -22,7 +22,8 @@ The collector runs the existing physical Stack program and reports task success
 separately. Its traces are observations, not a certificate of successful execution
 or an inductive invariant. A rollout can hit its iteration limit or fail its task
 and still supply observed states. The existing verifier must check the resulting
-candidate; counterexample-guided refinement remains Phase E.
+candidate; [counterexample-guided refinement](../verification_lib/CEGIS.md)
+provides the standalone feedback workflow.
 
 For another executable tower program, pass the callback directly:
 
@@ -51,7 +52,9 @@ current symbolic bindings, and a copy of the geometry at entry to that loop
 invocation. All iterations from one invocation share that entry geometry;
 a later rollout captures a fresh entry. Guard witnesses are bound before the
 callback, so `b_prime` describes the iteration being entered. Exit states, false
-guards, and iterations beyond `max_iters` do not produce rows.
+guards, and iterations beyond `max_iters` do not produce callback rows.
+The separate CFG adapter in `cfg/invariants.py` includes terminal loop heads from
+recovered iteration segments; it does not rely on this callback to record exits.
 
 The adapter emits three equally sized lists for `compute_dataset`, resolves
 constant names in the supplied Z3 context, and projects the relational `tbl`

@@ -77,8 +77,9 @@ for the proof and user decision. Complete ON*/Higher/Scattered effect checks rem
 A transfer may span adjacent blocks. A Get/assignment/control boundary inside an
 unfinished transfer, multiple placements in one unsplit block, unknown primitive,
 or unsupported summary produces an explicit unsupported result. The existing
-Higher abstraction can also be refuted even for reasonable geometry (discrepancy
-16). Branch/nested-loop synthesis and controller dynamics remain outside the
+Higher effect checks may reject physically valid motion if supplied premises
+also allow unsupported intermediate heights. General height premises are deferred
+until needed (discrepancy 16); the identified Higher rewrite bugs are fixed. Branch/nested-loop synthesis and controller dynamics remain outside the
 agreed flat-loop remediation scope.
 
 Tests use synthetic scenes and scripted realization proposals to exercise the

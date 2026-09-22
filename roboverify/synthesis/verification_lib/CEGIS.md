@@ -1,7 +1,11 @@
 # Counterexample-guided verification (Phase E)
 
-Phase E refines an existing single-loop program. It does not implement Phase F's
-CFG/program synthesizer. `symbolic_verify.py` labels each VC as establishment,
+This guide covers the standalone Phase E APIs for refining an existing
+single-loop program. The [integrated CFG workflow](../cfg/VERIFICATION.md) now
+connects synthesis, verification, demonstration requests and structural repair;
+its capabilities are broader than the standalone offset-repair API below.
+
+`symbolic_verify.py` labels each VC as establishment,
 preservation, exit, or straight-line body, and returns structured
 valid/invalid/vacuous/unknown checks. A result is truthy only when all checks pass.
 `Program.highlevel_verification` now returns this object while remaining compatible
@@ -29,15 +33,17 @@ aliases, and table identity. Abstract tables not realizable by geometry are refu
 Symbolic replay supports straight-line `Put`, `Assign`, and `Skip`; it executes the
 placement abstraction, not the physical controller. The successor may be the final
 loop head where the guard is false, which is still required for exit verification.
-The driver currently supports one non-nested loop; arbitrary CFG propagation is F1.
+This standalone driver supports one non-nested loop. The integrated workflow
+propagates state across supported structured CFGs.
 
 `run_motion_cegis` takes explicit `MotionBlockSpec`s covering every loop, accumulates
 `PenStore` environments, and calls the supplied resynthesis callback. Entry
 conditions must equal the program's invariant and guard. Full motion verification
 runs after every repair. Constants, conditions, placement contracts, relational
 summary, symbolic assignments, guards, and motion operand/release structure must
-remain unchanged. The built-in repair searches offsets only; instruction-structure
-resynthesis remains Phase F work. Unknown, inconsistent, and unsupported checks
+remain unchanged. This built-in repair searches offsets only. The integrated
+CFG workflow supports instruction-structure repair while preserving the entire
+symbolic program. Unknown, inconsistent, and unsupported checks
 cannot become successes or training counterexamples.
 
 `MotionPenalty` rechecks candidates in each saved environment, fixing current and
