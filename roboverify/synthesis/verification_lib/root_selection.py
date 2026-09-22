@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 import z3
 
 from synthesis.api.program import to_seq, wp
+from synthesis.util.symbols import fresh_const
 
 
 @dataclass(frozen=True)
@@ -79,7 +80,12 @@ class RootContext:
                     reason=applicable.reason
                     or "Entry context does not establish the continuation's weakest precondition",
                 )
-        u = z3.FreshConst(self.context.BoxSort, prefix="root_member")
+        candidates = tuple(candidates)
+        u = fresh_const(
+            self.context.BoxSort,
+            prefix="root_member",
+            avoid=(required, target, *candidates),
+        )
         y = self.context.get_consts(target)
         unknown = None
         for name in sorted(set(candidates) - {"tbl", "sym"}):

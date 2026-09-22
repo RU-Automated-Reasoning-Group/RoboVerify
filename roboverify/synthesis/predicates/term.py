@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from functools import lru_cache
 
+from synthesis.util.symbols import fresh_const, fresh_name
+
 
 @dataclass(frozen=True)
 class Term:
@@ -139,7 +141,12 @@ def to_z3(term, context, bindings=None):
     if term.op == "bool":
         return z3.BoolVal(term.value)
     if term.op in ("exists", "forall"):
-        variables = [z3.Const(name, context.BoxSort) for name in term.value]
+        variables = [
+            fresh_const(
+                context.BoxSort, name, avoid=(*bindings.values(), *free_names(term))
+            )
+            for name in term.value
+        ]
         body = to_z3(
             term.args[0], context, dict(bindings, **dict(zip(term.value, variables)))
         )
@@ -156,7 +163,7 @@ def to_z3(term, context, bindings=None):
         return operations[term.op](*args)
     if term.op == "ON":
         a, b = args
-        mid = z3.FreshConst(context.BoxSort, "direct_middle")
+        mid = fresh_const(context.BoxSort, "direct_middle", avoid=(a, b))
         return z3.And(
             a != b,
             context.ON_star(a, b),
@@ -171,12 +178,13 @@ def to_z3(term, context, bindings=None):
     return getattr(context, term.op)(*args)
 
 
-def open_existentials(term, prefix):
+def open_existentials(term, prefix, occupied=()):
     """Open a classifier prefix into fresh program-level Get binders."""
     names, mapping = [], {}
+    occupied = set(occupied) | set(free_names(term))
     while term.op == "exists":
         for old in term.value:
-            name = f"{prefix}_{len(names)}"
+            name = fresh_name(f"{prefix}_{len(names)}", occupied)
             names.append(name)
             mapping[old] = ref(name)
         term = term.args[0]

@@ -164,6 +164,17 @@ bash format.sh
   - `cem.py` / `cost_func.py`: cross-entropy-method parameter optimizer, and KL/MMD-based
     trajectory-distribution distance metrics used as the optimization objective.
 
+- **`synthesis/util/symbols.py`** — shared symbol allocation and quantifier hygiene.
+  Use `fresh_const(sort, prefix, avoid=(...))` for auxiliary solver variables;
+  include the surrounding formulas and operands in `avoid` when adding a binder.
+  Use `rewrite_quantifier` to transform an existing quantified body, or
+  `open_quantifier` when moving binders: these alpha-rename and substitute de
+  Bruijn indices without capturing free names or merging nested shadowed binders.
+  Use `fresh_name(preferred, occupied)` for generated program-level names; it
+  reserves each result in the supplied set. Keep `get_consts`/named constructors
+  for program identities, fixed vocabulary, and intentionally shared BMC state
+  symbols. Never rebuild an auxiliary by guessing or reusing its printed name.
+
 - **`synthesis/util/on.py`** — the ground-truth geometric implementations of the block algebra
   (`on_star_implementation`, `higher_implementation`, `scattered_implementation`)
   operating on raw `obs` arrays; both the `While` runtime interpreter and

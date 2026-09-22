@@ -9,11 +9,9 @@ import numpy as np
 from z3 import (
     Z3_OP_UNINTERPRETED,
     And,
-    Const,
     Consts,
     Exists,
     ForAll,
-    FreshConst,
     Implies,
     Not,
     Or,
@@ -56,6 +54,7 @@ from synthesis.api.instructions import (
     Skip,
     While,
 )
+from synthesis.util.symbols import fresh_const, rewrite_quantifier
 
 
 def _outer_while_direct_body_move_down_var(
@@ -517,26 +516,11 @@ def rewrite_for_put_for_ON_star(expr, b_prime, b, context):
     """
     # Case 1: Quantifier
     if is_quantifier(expr):
-        # Extract info about the quantifier
-        num_vars = expr.num_vars()
-        var_sorts = [expr.var_sort(i) for i in range(num_vars)]
-        var_names = [expr.var_name(i) for i in range(num_vars)]
-
-        # Extract and rewrite the body
-        body = expr.body()
-        rewritten_body = rewrite_for_put_for_ON_star(body, b_prime, b, context)
-
-        # Rebuild the quantifier (keep same type)
-        if expr.is_forall():
-            return ForAll(
-                list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
-                rewritten_body,
-            )
-        else:
-            return Exists(
-                list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
-                rewritten_body,
-            )
+        return rewrite_quantifier(
+            expr,
+            lambda body: rewrite_for_put_for_ON_star(body, b_prime, b, context),
+            avoid=(b_prime, b),
+        )
 
     # Case 2: Function application (And, Or, ON_star, etc.)
     elif is_app(expr):
@@ -564,23 +548,6 @@ def rewrite_for_put_for_ON_star(expr, b_prime, b, context):
         return expr
 
 
-def _push_quantifier_binders(quantifier_expr, binders):
-    """Extend de Bruijn binder stack when entering a quantifier body."""
-    num_vars = quantifier_expr.num_vars()
-    names = [quantifier_expr.var_name(i) for i in range(num_vars)]
-    sorts = [quantifier_expr.var_sort(i) for i in range(num_vars)]
-    # Innermost quantified variable has de Bruijn index 0.
-    new_consts = [Const(names[i], sorts[i]) for i in reversed(range(num_vars))]
-    return new_consts + binders
-
-
-def _resolve_box_var(expr, binders):
-    """Map a Box-sort bound variable (de Bruijn) to its named Const."""
-    if is_var(expr):
-        return binders[get_var_index(expr)]
-    return expr
-
-
 def rewrite_for_put_on_tbl_for_ON_star(expr, b_prime, context):
     """Weakest-precondition rewrite for ON_star after put(upper, tbl).
 
@@ -593,19 +560,10 @@ def rewrite_for_put_on_tbl_for_ON_star(expr, b_prime, context):
     No acyclicity guard (unlike put on a box).
     """
     if is_quantifier(expr):
-        num_vars = expr.num_vars()
-        var_sorts = [expr.var_sort(i) for i in range(num_vars)]
-        var_names = [expr.var_name(i) for i in range(num_vars)]
-        body = expr.body()
-        rewritten_body = rewrite_for_put_on_tbl_for_ON_star(body, b_prime, context)
-        if expr.is_forall():
-            return ForAll(
-                list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
-                rewritten_body,
-            )
-        return Exists(
-            list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
-            rewritten_body,
+        return rewrite_quantifier(
+            expr,
+            lambda body: rewrite_for_put_on_tbl_for_ON_star(body, b_prime, context),
+            avoid=(b_prime,),
         )
 
     if is_app(expr):
@@ -628,39 +586,20 @@ def rewrite_for_put_on_tbl_for_ON_star(expr, b_prime, context):
     return expr
 
 
-def rewrite_for_put_on_tbl_for_Higher(expr, placed_block, context, binders=None):
+def rewrite_for_put_on_tbl_for_Higher(expr, placed_block, context):
     """Weakest-precondition rewrite for Higher after put(placed_block, tbl)."""
-    if binders is None:
-        binders = []
-
     if is_quantifier(expr):
-        num_vars = expr.num_vars()
-        var_sorts = [expr.var_sort(i) for i in range(num_vars)]
-        var_names = [expr.var_name(i) for i in range(num_vars)]
-        body = expr.body()
-        rewritten_body = rewrite_for_put_on_tbl_for_Higher(
-            body,
-            placed_block,
-            context,
-            _push_quantifier_binders(expr, binders),
-        )
-        if expr.is_forall():
-            return ForAll(
-                list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
-                rewritten_body,
-            )
-        return Exists(
-            list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
-            rewritten_body,
+        return rewrite_quantifier(
+            expr,
+            lambda body: rewrite_for_put_on_tbl_for_Higher(body, placed_block, context),
+            avoid=(placed_block,),
         )
 
     if is_app(expr):
         decl = expr.decl()
         if decl.kind() == Z3_OP_UNINTERPRETED and decl.name() == "Higher":
             m, n = expr.children()
-            m = _resolve_box_var(m, binders)
-            n = _resolve_box_var(n, binders)
-            t = Const("t", context.BoxSort)
+            t = fresh_const(context.BoxSort, "table_higher", avoid=(expr, placed_block))
             tbl = context.get_consts("tbl")
             return Or(
                 And(m == placed_block, n == placed_block),
@@ -673,7 +612,7 @@ def rewrite_for_put_on_tbl_for_Higher(expr, placed_block, context, binders=None)
                 And(m != placed_block, m != tbl, n == placed_block, n != tbl),
             )
         new_children = [
-            rewrite_for_put_on_tbl_for_Higher(c, placed_block, context, binders)
+            rewrite_for_put_on_tbl_for_Higher(c, placed_block, context)
             for c in expr.children()
         ]
         return decl(*new_children)
@@ -696,21 +635,12 @@ def rewrite_for_put_on_tbl_for_scattered(expr, placed_block, context):
     See ``rewrite_for_put_for_scattered`` for the put-on-block (non-tbl) case.
     """
     if is_quantifier(expr):
-        num_vars = expr.num_vars()
-        var_sorts = [expr.var_sort(i) for i in range(num_vars)]
-        var_names = [expr.var_name(i) for i in range(num_vars)]
-        body = expr.body()
-        rewritten_body = rewrite_for_put_on_tbl_for_scattered(
-            body, placed_block, context
-        )
-        if expr.is_forall():
-            return ForAll(
-                list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
-                rewritten_body,
-            )
-        return Exists(
-            list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
-            rewritten_body,
+        return rewrite_quantifier(
+            expr,
+            lambda body: rewrite_for_put_on_tbl_for_scattered(
+                body, placed_block, context
+            ),
+            avoid=(placed_block,),
         )
 
     if is_app(expr):
@@ -739,35 +669,15 @@ def _put_base_is_tbl(seq_instruction: Put) -> bool:
     return seq_instruction.base_block == "tbl"
 
 
-def rewrite_for_put_for_higher(expr, b_prime, b, context, binders=None):
+def rewrite_for_put_for_higher(expr, b_prime, b, context):
     """Rewrite Higher after placement on a block in the supported-height model."""
-    if binders is None:
-        binders = []
-
     # Case 1: Quantifier
     if is_quantifier(expr):
-        # Extract info about the quantifier
-        num_vars = expr.num_vars()
-        var_sorts = [expr.var_sort(i) for i in range(num_vars)]
-        var_names = [expr.var_name(i) for i in range(num_vars)]
-
-        # Extract and rewrite the body
-        body = expr.body()
-        rewritten_body = rewrite_for_put_for_higher(
-            body, b_prime, b, context, _push_quantifier_binders(expr, binders)
+        return rewrite_quantifier(
+            expr,
+            lambda body: rewrite_for_put_for_higher(body, b_prime, b, context),
+            avoid=(b_prime, b),
         )
-
-        # Rebuild the quantifier (keep same type)
-        if expr.is_forall():
-            return ForAll(
-                list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
-                rewritten_body,
-            )
-        else:
-            return Exists(
-                list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
-                rewritten_body,
-            )
 
     # Case 2: Function application (And, Or, ON_star, etc.)
     elif is_app(expr):
@@ -776,9 +686,7 @@ def rewrite_for_put_for_higher(expr, b_prime, b, context, binders=None):
         # Match ON_star(a,b)
         if decl.kind() == Z3_OP_UNINTERPRETED and decl.name() == "Higher":
             m, n = expr.children()
-            m = _resolve_box_var(m, binders)
-            n = _resolve_box_var(n, binders)
-            t = FreshConst(context.BoxSort, prefix="higher_below")
+            t = fresh_const(context.BoxSort, "higher_below", avoid=(expr, b_prime, b))
             return Or(
                 And(m != b_prime, m != b, n != b_prime, n != b, context.Higher(m, n)),
                 And(
@@ -823,8 +731,7 @@ def rewrite_for_put_for_higher(expr, b_prime, b, context, binders=None):
 
         # Otherwise rebuild recursively
         new_children = [
-            rewrite_for_put_for_higher(c, b_prime, b, context, binders)
-            for c in expr.children()
+            rewrite_for_put_for_higher(c, b_prime, b, context) for c in expr.children()
         ]
         return decl(*new_children)
 
@@ -840,19 +747,10 @@ def rewrite_for_put_for_scattered(expr, b_prime, b, context):
     b' on b redirects scattered-with-b' to scattered-with-b.
     """
     if is_quantifier(expr):
-        num_vars = expr.num_vars()
-        var_sorts = [expr.var_sort(i) for i in range(num_vars)]
-        var_names = [expr.var_name(i) for i in range(num_vars)]
-        body = expr.body()
-        rewritten_body = rewrite_for_put_for_scattered(body, b_prime, b, context)
-        if expr.is_forall():
-            return ForAll(
-                list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
-                rewritten_body,
-            )
-        return Exists(
-            list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
-            rewritten_body,
+        return rewrite_quantifier(
+            expr,
+            lambda body: rewrite_for_put_for_scattered(body, b_prime, b, context),
+            avoid=(b_prime, b),
         )
 
     if is_app(expr):
@@ -904,19 +802,10 @@ def rewrite_for_put_for_scattered(expr, b_prime, b, context):
 def rewrite_for_mark_goal(expr, target, context):
     """Rewrite every Mark(alpha) as Or(Mark(alpha), alpha == target)."""
     if is_quantifier(expr):
-        num_vars = expr.num_vars()
-        var_sorts = [expr.var_sort(i) for i in range(num_vars)]
-        var_names = [expr.var_name(i) for i in range(num_vars)]
-        body = expr.body()
-        rewritten_body = rewrite_for_mark_goal(body, target, context)
-        if expr.is_forall():
-            return ForAll(
-                list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
-                rewritten_body,
-            )
-        return Exists(
-            list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
-            rewritten_body,
+        return rewrite_quantifier(
+            expr,
+            lambda body: rewrite_for_mark_goal(body, target, context),
+            avoid=(target,),
         )
 
     if is_app(expr):
@@ -1358,14 +1247,14 @@ def wp(seq_instruction, Q, context):
         return rewrite_for_mark_goal(Q, target, context)
     elif isinstance(seq_instruction, MoveRight):
         curr = context.get_goal_consts(seq_instruction.var_name)
-        z = Const(f"z_r_{seq_instruction.var_name}", context.GoalSort)
+        z = fresh_const(context.GoalSort, "move_right", avoid=(Q, curr, context.null))
         return And(
             curr != context.null,
             ForAll([z], Implies(context.rtot(curr, z), substitute(Q, (curr, z)))),
         )
     elif isinstance(seq_instruction, MoveDown):
         curr = context.get_goal_consts(seq_instruction.var_name)
-        z = Const(f"z_d_{seq_instruction.var_name}", context.GoalSort)
+        z = fresh_const(context.GoalSort, "move_down", avoid=(Q, curr, context.null))
         return And(
             curr != context.null,
             ForAll([z], Implies(context.dtot(curr, z), substitute(Q, (curr, z)))),

@@ -4,6 +4,19 @@
 >
 > Branch: `phase-f-synthesis`; Phases A–E are integrated into `main`.
 >
+> **Shared symbol freshness implemented and tested.**
+> `synthesis/util/symbols.py` provides fresh typed solver constants, reserved
+> program names, and capture-safe opening/rebuilding of existing quantifiers.
+> Update rewrites, goal helpers, inference, predicate conversion, and verification
+> auxiliaries use it; CFG template/loop/Get binders reserve their input scope.
+> Existing program identities and intentionally shared BMC state/parameter names
+> retain named lookup. Never recreate a temporary binder from its printed name.
+> Entry 16's table Higher capture is corrected, including nested shadowing and
+> update operands that share an existing binder's name. Paper corrections remain.
+> **204 unittest tests pass in 50.680 seconds**, including simulator tests and
+> 13 new freshness regressions. Changed Python files pass isort/black; git diff
+> whitespace checks pass.
+>
 > **Entry 16 rules 2 and 6 corrected and tested.**
 > User-approved rewrite for `Put(a,b)`: for c distinct from a,b,
 > `Higher'(c,a) = Higher(c,b) and not Higher(b,c)`.
@@ -14,8 +27,9 @@
 > flat table, exact support, and complete towers: heights lie on a common
 > L-spaced grid. Regressions cover equal-height peers, complete support layers,
 > table isolation, and an existing free or quantified object named t.
-> The table Higher rewrite's separate fixed-t capture remains open in
-> [discrepancy 16](PAPER-DISCREPANCIES.md#16-the-higher-rewrite-can-disagree-with-geometric-placement).
+> The subsequent shared-freshness change above also fixes table Higher capture;
+> [discrepancy 16](PAPER-DISCREPANCIES.md#16-the-higher-rewrite-can-disagree-with-geometric-placement)
+> retains the paper corrections and geometric assumptions.
 > Full suite: **191 unittest tests pass in 50.106 seconds**, including simulator
 > tests. Changed Python files pass isort/black; git diff whitespace checks pass.
 > Motion fixtures supply quantified height premises for unnamed blocks;
@@ -132,7 +146,8 @@
 > **Original remediation validation: 170 unittest tests passed in 37.430 seconds;
 > root/alignment follow-up: 186 pass in 47.048 seconds;
 > rule 2 follow-up: 189 pass in 46.804 seconds;
-> current rule 6 follow-up: 191 pass in 50.106 seconds.**
+> rule 6 follow-up: 191 pass in 50.106 seconds;
+> current shared-freshness follow-up: 204 pass in 50.680 seconds.**
 > Changed Python files passed the same isort/black commands used by format.sh;
 > formatting was scoped to changed files to protect unrelated user files. The
 > integrated CLI's help/argument wiring and git diff whitespace checks pass.

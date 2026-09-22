@@ -271,7 +271,8 @@ argument; invariant and motion VCs establish partial correctness. See A2 in
 
 ## 16. The Higher rewrite can disagree with geometric placement
 
-**Partially resolved: put-on-block rules 2 and 6 corrected by user decision.**
+**Code corrections implemented; the paper still needs updating.**
+Put-on-block rules 2 and 6 were corrected by user decision.
 Table 7's original clause for `Put(a,b)` and `Higher(c,a)`, with `c` distinct
 from `a,b`, uses `Exists(t, t!=a and Higher(a,t) and Higher(t,b))`.
 It ignores c's height: initially level a,b,c make t=b a witness even though
@@ -318,11 +319,19 @@ does not install a global supported-height axiom in motion verification.
 The paper's long clause is clipped at the PDF's right edge; the complete old
 formula reviewed here is the implementation's. The paper still needs updating.
 
-**Still open — table-rewrite auxiliary-variable capture.** The table Higher
-rewrite still introduces a fixed `Const("t", BoxSort)`. In the table rule for
-`Higher(a,t)`, an existing object named t can be captured, producing
-`ForAll(t, t!=tbl => Higher(t,t))` instead of comparison against that fixed
-object. That separate table-rewrite fix is not included in the rule 6 change.
+**Resolved in code — auxiliary-variable capture.** The table Higher rewrite
+formerly introduced a fixed `Const("t", BoxSort)`, capturing a program object
+named t and turning its comparison into `ForAll(t, t!=tbl => Higher(t,t))`.
+The shared `synthesis/util/symbols.py` mechanism now allocates auxiliary symbols
+and opens/rebuilds existing quantifiers without reconstructing their printed
+names. All Put/MarkGoal rewrites, goal-successor helpers and updates, inference
+quantifiers, predicate conversion, and verification auxiliaries use the shared
+mechanism. CFG-generated names are reserved against free and in-scope names.
+Persistent program constants and shared state symbols retain their identities.
+Regressions cover table placement against a high block named t, nested shadowing,
+free update operands with binder-like names, goal helpers and moves, inference
+AST conversion/promotion, and classifier binder collisions. This was an
+implementation binding bug, independent of the paper's height formulas.
 
 The review's floating-block/missing-layer examples are outside the agreed model,
 not additional discrepancies. In particular, table Higher rules 3 and 4 have

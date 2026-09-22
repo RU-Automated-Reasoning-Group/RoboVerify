@@ -7,6 +7,7 @@ import z3
 
 from synthesis.inference_lib.demo_store import LoopHeadState
 from synthesis.util import on
+from synthesis.util.symbols import fresh_const
 
 
 class UnrealizableCounterexample(ValueError):
@@ -100,11 +101,11 @@ def model_to_loop_head(context, model, loop_id, constants, *, timeout_ms=5000):
     solver = z3.Solver()
     solver.set(timeout=timeout_ms)
     xyz = {
-        str(obj): tuple(z3.FreshReal(f"current_{axis}") for axis in "xyz")
+        str(obj): tuple(fresh_const(z3.RealSort(), f"current_{axis}") for axis in "xyz")
         for obj in physical
     }
     entry = {
-        str(obj): tuple(z3.FreshReal(f"entry_{axis}") for axis in "xyz")
+        str(obj): tuple(fresh_const(z3.RealSort(), f"entry_{axis}") for axis in "xyz")
         for obj in physical
     }
     length = z3.RealVal("0.05")

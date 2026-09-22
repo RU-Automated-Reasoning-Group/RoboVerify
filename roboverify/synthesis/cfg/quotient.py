@@ -30,6 +30,7 @@ from synthesis.cfg.scope import scope as graph_scope
 from synthesis.predicates.guard import loop_guard_synthesis
 from synthesis.predicates.scene import Scene, evaluate
 from synthesis.predicates.term import conjunction, exists, negate, ref, substitute
+from synthesis.util.symbols import fresh_name
 
 
 @dataclass
@@ -112,17 +113,13 @@ def _fold(cfg, repetition, language, infer_invariant):
     available = set(graph_scope(cfg)[cfg.order[r.start]])
     occupied = set(available)
 
-    def fresh(preferred):
-        name = preferred
-        while name in occupied:
-            name += "_loop"
-        occupied.add(name)
-        return name
-
-    names = {key: fresh("b" if i == 0 else f"b{i}") for i, key in enumerate(carry)}
+    names = {
+        key: fresh_name("b" if i == 0 else f"b{i}", occupied)
+        for i, key in enumerate(carry)
+    }
     names.update(
         {
-            key: fresh("b_prime" if i == 0 else f"b_prime{i}")
+            key: fresh_name("b_prime" if i == 0 else f"b_prime{i}", occupied)
             for i, key in enumerate(rebound)
         }
     )

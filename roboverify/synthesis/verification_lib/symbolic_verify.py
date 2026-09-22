@@ -5,6 +5,7 @@ from typing import Optional
 
 import z3
 
+from synthesis.util.symbols import fresh_const
 from synthesis.verification_lib.highlevel_verification_lib import VC_CHECK_TIMEOUT_MS
 
 
@@ -67,9 +68,9 @@ def discharge_vc(vc, context, timeout_ms=VC_CHECK_TIMEOUT_MS):
         (expr.arg(0), expr.arg(1)) if z3.is_implies(expr) else (z3.BoolVal(True), expr)
     )
     solver = context.new_solver(timeout_ms)
-    premise_label, conclusion_label = z3.FreshBool("premise"), z3.FreshBool(
-        "neg_conclusion"
-    )
+    premise_label, conclusion_label = fresh_const(
+        z3.BoolSort(), "premise", avoid=(expr,)
+    ), fresh_const(z3.BoolSort(), "neg_conclusion", avoid=(expr,))
     solver.assert_and_track(premise, premise_label)
     solver.push()
     solver.assert_and_track(z3.Not(conclusion), conclusion_label)

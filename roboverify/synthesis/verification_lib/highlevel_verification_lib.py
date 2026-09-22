@@ -21,6 +21,8 @@ from z3 import (
     unsat,
 )
 
+from synthesis.util.symbols import fresh_const
+
 try:
     from PIL import Image, ImageDraw, ImageFont
 except Exception:
@@ -157,7 +159,7 @@ class HighLevelContext:
         return c
 
     def add_axiom_higher(self, s: Solver):
-        x, y, c = Consts("x y c", self.BoxSort)
+        x, y, c = [fresh_const(self.BoxSort, name) for name in ("x", "y", "c")]
         s.assert_and_track(
             ForAll(
                 [x, y, c],
@@ -197,7 +199,7 @@ class HighLevelContext:
             )
 
     def add_axiom_scattered(self, s: Solver):
-        x, y, c = Consts("x y c", self.BoxSort)
+        x, y, c = [fresh_const(self.BoxSort, name) for name in ("x", "y", "c")]
         s.assert_and_track(
             ForAll([x, y], self.Scattered(x, y) == self.Scattered(y, x)), "scattered1"
         )
@@ -223,7 +225,7 @@ class HighLevelContext:
         if self.GoalSort is None:
             return
 
-        x, y, z = Consts("x y z", self.GoalSort)
+        x, y, z = [fresh_const(self.GoalSort, name) for name in ("x", "y", "z")]
         # dtca on d_star
         s.assert_and_track(ForAll([x], self.d_star(x, x)), "d_refl")
         s.assert_and_track(
@@ -349,7 +351,7 @@ class HighLevelContext:
             raise ValueError(
                 "Goal relational helpers require verification_mode='goals'."
             )
-        t = Const("t_f", self.GoalSort)
+        t = fresh_const(self.GoalSort, "next_goal", avoid=(a, b, self.null))
         return And(
             self._f_plus(rel, a, b),
             ForAll([t], Implies(self._f_plus(rel, a, t), rel(b, t))),
@@ -360,7 +362,7 @@ class HighLevelContext:
             raise ValueError(
                 "Goal relational helpers require verification_mode='goals'."
             )
-        t = Const("t_ft", self.GoalSort)
+        t = fresh_const(self.GoalSort, "terminal_goal", avoid=(a, b, self.null))
         return Or(
             self.f_(rel, a, b),
             And(b == self.null, ForAll([t], Not(self._f_plus(rel, a, t)))),
@@ -394,7 +396,7 @@ class HighLevelContext:
         return And(self._flat_order(a, b), self._flat_order(b, c))
 
     def add_axiom(self, s: Solver):
-        x, y, c = Consts("x y c", self.BoxSort)
+        x, y, c = [fresh_const(self.BoxSort, name) for name in ("x", "y", "c")]
         s.assert_and_track(
             ForAll(
                 [x, y, c],
@@ -458,7 +460,7 @@ class HighLevelContext:
             )
 
     def add_axiom_on_star_zero(self, s: Solver):
-        x, y, c = Consts("x y c", self.BoxSort)
+        x, y, c = [fresh_const(self.BoxSort, name) for name in ("x", "y", "c")]
         s.assert_and_track(
             ForAll(
                 [x, y, c],

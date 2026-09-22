@@ -10,6 +10,7 @@ from synthesis.predicates.term import (
     ref,
     substitute,
 )
+from synthesis.util.symbols import fresh_name
 
 
 @dataclass(frozen=True)
@@ -48,11 +49,7 @@ def anti_unify(first, second):
         if a.op == b.op == "ref" and a.value not in bound and b.value not in bound:
             pair = (a, b)
             if pair not in memo:
-                index = len(memo)
-                while f"p{index}" in occupied:
-                    index += 1
-                name = f"p{index}"
-                occupied.add(name)
+                name = fresh_name(f"p{len(memo)}", occupied)
                 memo[pair] = ref(name)
                 left[name] = a
                 right[name] = b

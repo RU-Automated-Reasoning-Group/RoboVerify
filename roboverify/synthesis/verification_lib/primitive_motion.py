@@ -8,6 +8,7 @@ and Release target is excluded explicitly (paper discrepancy 18).
 """
 
 import z3
+
 from synthesis.api.instructions import (
     Assign,
     Get,
@@ -16,6 +17,7 @@ from synthesis.api.instructions import (
     ReleaseByName,
     Skip,
 )
+from synthesis.util.symbols import fresh_const
 from synthesis.verification_lib.motion_verification import (
     MotionCheck,
     MotionProblem,
@@ -27,7 +29,7 @@ class PrimitiveMotionProblem(MotionProblem):
     def __init__(self, *args, initial_arm=None, enforce_source=True, **kwargs):
         super().__init__(*args, **kwargs)
         self.enforce_source = enforce_source
-        self.arm = tuple(z3.FreshReal("arm_" + a) for a in "xyz")
+        self.arm = tuple(fresh_const(z3.RealSort(), "arm_" + a) for a in "xyz")
         if initial_arm is not None:
             self.solver.add(
                 *(a == z3.RealVal(str(v)) for a, v in zip(self.arm, initial_arm))
@@ -96,7 +98,7 @@ class PrimitiveMotionProblem(MotionProblem):
             # An empty gripper is modeled as a point against cubes of half-size L/2.
             # A carried cube uses the existing L Minkowski radius.
             if payload is None:
-                t = z3.FreshReal("arm_t")
+                t = fresh_const(z3.RealSort(), "arm_t")
                 collision = z3.And(
                     t >= 0,
                     t <= 1,
@@ -248,7 +250,7 @@ class PrimitiveMotionProblem(MotionProblem):
                 supported = z3.Or(*support)
                 self.check(f"release_support_{self.step}", z3.Not(supported))
                 fallen = tuple(
-                    z3.If(supported, p, z3.FreshReal("fall_" + a))
+                    z3.If(supported, p, fresh_const(z3.RealSort(), "fall_" + a))
                     for a, p in zip("xyz", point)
                 )
                 # Release's fall update does not transport supporting objects.

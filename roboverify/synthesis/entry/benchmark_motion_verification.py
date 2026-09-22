@@ -6,6 +6,7 @@ from time import perf_counter
 import z3
 
 from synthesis.entry.verify_stack_with_learned_invariant import build_stack_programs
+from synthesis.util.symbols import fresh_const
 from synthesis.verification_lib.bmc_lib import NoiseSpec, bounded_noise
 from synthesis.verification_lib.highlevel_verification_lib import HighLevelContext
 from synthesis.verification_lib.lowlevel_verification_lib import LowLevelContext
@@ -41,7 +42,7 @@ def benchmark():
     high = HighLevelContext(mode="declare")
     _, program = build_stack_programs(high)
     root, target = high.get_consts("b0"), high.get_consts("b")
-    member = z3.FreshConst(high.BoxSort, prefix="benchmark_member")
+    member = fresh_const(high.BoxSort, prefix="benchmark_member")
     # Numeric positions alone do not establish the symbolic root criterion.
     conditions = [
         target == root,

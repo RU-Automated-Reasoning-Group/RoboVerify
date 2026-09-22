@@ -20,7 +20,6 @@ from z3 import (
     DeclareSort,
     Exists,
     ForAll,
-    FreshConst,
     Function,
     If,
     Not,
@@ -41,6 +40,7 @@ from z3 import (
 )
 
 import synthesis.api.instructions as instructions
+from synthesis.util.symbols import fresh_const
 
 
 class UnsupportedMotionInstruction(Exception):
@@ -339,7 +339,7 @@ class LowLevelContext:
         """The same swept-cube predicate for a block in a later symbolic state."""
         x0, y0, z0 = p0
         x1, y1, z1 = p1
-        t = FreshConst(RealSort(), prefix="tube_t")
+        t = fresh_const(RealSort(), prefix="tube_t")
         cx = (1 - t) * x0 + t * x1
         cy = (1 - t) * y0 + t * y1
         cz = (1 - t) * z0 + t * z1
@@ -542,9 +542,9 @@ class LowLevelContext:
             timeout_ms=timeout_ms,
         )
 
-    def _fresh_skolem_const(self):
+    def _fresh_skolem_const(self, avoid=()):
         """A Box constant no other term uses, for witnessing an existential."""
-        return FreshConst(self.BoxSort, prefix="sk_")
+        return fresh_const(self.BoxSort, prefix="sk_", avoid=avoid)
 
     @staticmethod
     def _child_polarities(expr, polarity):
@@ -629,7 +629,10 @@ class LowLevelContext:
                     )
                 return And(*conjuncts)
 
-            witnesses = [self._fresh_skolem_const() for _ in range(num_vars)]
+            witnesses = [
+                self._fresh_skolem_const((expr, *const_map.values(), *bindings))
+                for _ in range(num_vars)
+            ]
             new_prefix = [None] * num_vars
             for i in range(num_vars):
                 new_prefix[num_vars - 1 - i] = witnesses[i]
@@ -716,7 +719,11 @@ class LowLevelContext:
             return bindings[get_var_index(expr)]
         if is_quantifier(expr):
             variables = [
-                FreshConst(self.BoxSort, prefix="effect")
+                fresh_const(
+                    self.BoxSort,
+                    prefix="effect",
+                    avoid=(expr, *const_map.values(), *bindings),
+                )
                 for _ in range(expr.num_vars())
             ]
             body = self.translate_exact(

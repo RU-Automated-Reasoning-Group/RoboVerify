@@ -58,7 +58,9 @@ def refine_cfg(cfg, node, negative, available_scope, *, language=None, on_split=
     if not result:
         return result
     predicate = result.term
-    binders, condition = open_existentials(predicate, "g_" + node.replace(".", "_"))
+    binders, condition = open_existentials(
+        predicate, "g_" + node.replace(".", "_"), available_scope
+    )
     starts, finishes, splits = {}, {}, []
     for index, segment in enumerate(segments):
         starts[index] = first_true(segment, lambda s: evaluate(predicate, s), scene_at)

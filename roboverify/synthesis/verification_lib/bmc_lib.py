@@ -90,6 +90,7 @@ from synthesis.api.instructions import (
     Seq,
 )
 from synthesis.util.on import BLOCK_LENGTH, z3_on
+from synthesis.util.symbols import fresh_const
 
 ProgramPart = Union[Instruction, Seq]
 ProgramInput = Union[Sequence[ProgramPart], ProgramPart]
@@ -111,7 +112,7 @@ class NoiseSpec:
 
 def bounded_noise(epsilon, prefix):
     """Fresh free reals; counterexample search ranges over every bounded error."""
-    terms = tuple(z3.FreshReal(f"{prefix}_{axis}") for axis in "xyz")
+    terms = tuple(fresh_const(z3.RealSort(), f"{prefix}_{axis}") for axis in "xyz")
     bound = z3.RealVal(str(epsilon))
     return terms, [z3.And(-bound <= term, term <= bound) for term in terms]
 

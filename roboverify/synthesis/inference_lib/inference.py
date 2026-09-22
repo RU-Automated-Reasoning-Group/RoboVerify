@@ -9,7 +9,7 @@ import z3
 import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
 from synthesis.inference_lib import quant_enum_merge
 from synthesis.util import on
-
+from synthesis.util.symbols import fresh_const
 
 
 class InferenceDataError(Exception):
@@ -618,7 +618,7 @@ def learn_from_partition(S: Set, U: Set):
             break
 
     # sel_i ∈ {0,1}
-    sel = [z3.Int(f"sel_{i}") for i in range(n)]
+    sel = [fresh_const(z3.IntSort(), f"sel_{i}") for i in range(n)]
 
     opt = z3.Optimize()
 
@@ -914,7 +914,7 @@ def forall_exists_learn_from_partition(all_S: List[Set], all_U: List[Set]):
 
     assert n is not None, "Could not infer tuple dimension"
 
-    sel = [z3.Int(f"sel_{i}") for i in range(n)]
+    sel = [fresh_const(z3.IntSort(), f"sel_{i}") for i in range(n)]
 
     opt = z3.Optimize()
 
@@ -1591,7 +1591,7 @@ def loop_inference(
     x, y, z = z3.Consts("x y z", active_context.BoxSort)
 
     def on_table(x):
-        (fresh,) = z3.Consts("fresh", active_context.BoxSort)
+        fresh = fresh_const(active_context.BoxSort, "on_table", avoid=(x,))
         return z3.ForAll([fresh], active_context.Higher(fresh, x))
 
     # desired = z3.Not(

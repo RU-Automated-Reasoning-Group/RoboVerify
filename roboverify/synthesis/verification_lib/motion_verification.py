@@ -12,6 +12,7 @@ from typing import Optional
 import z3
 
 from synthesis.api.instructions import Assign, PickPlaceByName, Skip
+from synthesis.util.symbols import fresh_const
 from synthesis.verification_lib.bmc_lib import NoiseSpec, bounded_noise
 from synthesis.verification_lib.lowlevel_verification_lib import (
     UNHANDLED_MOTION_INSTRUCTIONS,
@@ -336,7 +337,8 @@ class MotionProblem:
                 # No sound rigid-stack dynamics is available. Permit arbitrary
                 # displacement, and separately refuse to certify this case.
                 disturbed = tuple(
-                    z3.FreshReal(f"disturbed_{index}_{name}_{axis}") for axis in "xyz"
+                    fresh_const(z3.RealSort(), f"disturbed_{index}_{name}_{axis}")
+                    for axis in "xyz"
                 )
                 self.current[name] = tuple(
                     z3.If(self.same(name, grab), end, z3.If(supported, unknown, old))
@@ -505,7 +507,11 @@ def assume_input_alignment(problem, roots):
             continue
         assumed.add(name)
         root = problem.constants[name]
-        member = z3.FreshConst(problem.context.BoxSort, prefix="aligned_input")
+        member = fresh_const(
+            problem.context.BoxSort,
+            prefix="aligned_input",
+            avoid=problem.constants.values(),
+        )
         point = tuple(
             axis(member)
             for axis in (problem.context.X, problem.context.Y, problem.context.Z)
