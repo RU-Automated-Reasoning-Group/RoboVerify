@@ -24,14 +24,16 @@ def last_true(segment, predicate, scene_at):
 
 
 def validate_split(starts, finishes, *, entry=False):
-    """Reject absent witnesses, i_s <= i_f, and entry splits at timestep zero."""
+    """Require first-new <= last-old for ordinary transitions.
+
+    Refinement separately enforces strictly interior split boundaries.
+    """
     if not starts or set(starts) != set(finishes):
         return False
     return all(
         start is not None
         and finishes[key] is not None
-        and start > finishes[key]
-        and (not entry or start != 0)
+        and (start > finishes[key] and start != 0 if entry else start <= finishes[key])
         for key, start in starts.items()
     )
 
@@ -39,9 +41,9 @@ def validate_split(starts, finishes, *, entry=False):
 def validate_cfg(cfg):
     """Validate the complete recorded partition, including neighboring blocks.
 
-    Labels are milestones: an earlier predicate may remain true after progress.
-    The new milestone must first hold at its cut, not after the old one becomes
-    false. Bindings and absolute boundaries are checked on both sides of each cut.
+    Ordinary transitions require first-new <= last-old, as clarified for
+    POPL section 3.5. Persistent truth and equality at the boundary are allowed.
+    Bindings and absolute boundaries are checked on both sides of each cut.
     """
     from collections import Counter
 
@@ -64,10 +66,16 @@ def validate_cfg(cfg):
                     return False
                 if not evaluate(outgoing.label, scene_at(row, row.t_end)):
                     return False
-                if outgoing.target != cfg.exit:
-                    first = first_true(
-                        row, lambda state: evaluate(outgoing.label, state), scene_at
+                first = first_true(
+                    row, lambda state: evaluate(outgoing.label, state), scene_at
+                )
+                if incoming.source != cfg.entry:
+                    last = last_true(
+                        row, lambda state: evaluate(incoming.label, state), scene_at
                     )
+                    if not validate_split({0: first}, {0: last}):
+                        return False
+                if outgoing.target != cfg.exit:
                     if first != row.t_end or row.t_end <= row.t_start:
                         return False
             except (KeyError, ValueError):

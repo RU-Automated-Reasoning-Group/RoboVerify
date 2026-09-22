@@ -24,8 +24,8 @@ class IRTests(unittest.TestCase):
         self.assertEqual((inner.t_start, inner.t_end), (15, 17))
         self.assertEqual(end.states, (17, 18, 19))
         self.assertIs(inner.parent, right)
-        self.assertFalse(validate_split({3: 15}, {3: 15}))
-        self.assertTrue(validate_split({3: 16}, {3: 15}))
+        self.assertTrue(validate_split({3: 15}, {3: 15}))
+        self.assertFalse(validate_split({3: 16}, {3: 15}))
 
     def test_lowering_preserves_vcs_without_using_demo_count_as_execution_limit(self):
         ctx = HighLevelContext()

@@ -4,7 +4,7 @@ import itertools
 from copy import copy, deepcopy
 
 from synthesis.cfg.graph import Edge, Node
-from synthesis.cfg.validate import first_true, validate_cfg, validate_split
+from synthesis.cfg.validate import first_true, last_true, validate_cfg, validate_split
 from synthesis.predicates.classifier import learn_classifier
 from synthesis.predicates.scene import Scene, evaluate, scene_from_obs
 from synthesis.predicates.term import open_existentials
@@ -64,9 +64,13 @@ def refine_cfg(cfg, node, negative, available_scope, *, language=None, on_split=
     starts, finishes, splits = {}, {}, []
     for index, segment in enumerate(segments):
         starts[index] = first_true(segment, lambda s: evaluate(predicate, s), scene_at)
-        # Previous milestone was established at this segment's entry. Its
-        # continued truth is not a reason to reject later progress.
-        finishes[index] = segment.t_start
+        # The acceptance inequality uses the predicate's actual last occurrence,
+        # independently of the structural requirement for an interior cut.
+        finishes[index] = (
+            segment.t_start
+            if incoming[0].source == cfg.entry
+            else last_true(segment, lambda s: evaluate(incoming[0].label, s), scene_at)
+        )
         cut = starts[index]
         if cut is None or not segment.t_start < cut < segment.t_end:
             result.status = "validate_reject"

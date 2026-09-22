@@ -358,17 +358,35 @@ valid geometric interpretations under the supported-height assumptions.
 Motion verification continues checking exact ON*, Higher and Scattered effects;
 remaining abstraction mismatches are rejected and solver unknown is inconclusive.
 
-## 17. Temporal validation when milestones persist
+## 17. Temporal validation acceptance and the incorrect rejection sentence
 
-Algorithm 2's last-old-true/first-new-true ordering rejects useful consecutive
-milestones whenever the older relation remains true after the next one is
-established (for example, placing another block on an existing tower). The CFG
-implementation instead requires strictly advancing first establishment times,
-starting from the previously assigned cut. It validates every segment's entry,
-exit, Get witness and adjacency across the complete CFG before committing a
-split or fold. Persistent truth is allowed; zero progress and mismatched cuts
-are rejected. Synthetic tests cover both cases. This is an explicit resolution
-of the temporal ambiguity, not a claim to implement that literal paper formula.
+**User clarification:** for ordinary transitions, satisfying
+`i_s(d, psi) <= i_f(d, phi)` is an **acceptance requirement**, including equality.
+Here i_s is the first occurrence of the next predicate and i_f is the actual
+last occurrence of the previous predicate in the relevant demonstration segment.
+A gap with first-new > last-old must be rejected; a persistent previous predicate
+can satisfy the requirement. The earlier claim that the intended paper rule
+rejects ordinary persistent stacking milestones was incorrect and is withdrawn.
+
+**Paper correction required:** in section 3.5, p. 19, replace "If this holds"
+with "If this fails" in the sentence that rejects the split. Appendix G, p. 57,
+already uses the intended rejection direction. The inequality itself is correct.
+
+**Ordinary-transition implementation corrected and tested:** validation now
+compares the actual first-new and last-old scans, both during proposed refinement
+and across the recorded CFG, including transitions to the final postcondition.
+Previously it substituted the segment start for last-old and checked only strict
+cut progression. Nonempty splits, boundary adjacency, entry/exit predicates and
+Get binding checks remain separate structural obligations. A failed refinement
+must leave the original CFG and demonstration assignment unchanged. Seven new
+regressions cover equality, persistence, gaps, missing occurrences, whole-CFG
+coverage and atomic rejection. Full suite: 211 tests pass in 50.593 seconds.
+
+The special entry clause `i_s(d, psi)=0` needs clarification about whether psi
+means the incoming entry condition or the new split predicate: requiring a new
+interior split predicate at its segment start would preclude that split. Pending
+that clarification, the existing entry checks are unchanged; no resolution of
+this separate clause is claimed.
 
 ## 18. Primitive motion formulas do not justify the stated Pick/Release claims
 

@@ -4,6 +4,17 @@
 >
 > Branch: `phase-f-synthesis`; Phases A–E are integrated into `main`.
 >
+> **Entry 17 ordinary-transition correction implemented and tested.**
+> User clarified that first-new <= last-old
+> is required for acceptance, including equality. Section 3.5's "If this holds"
+> rejection sentence is wrong; change it to "If this fails", as in Appendix G.
+> Ordinary-transition checks now scan actual predicate occurrences rather than
+> substituting a cut boundary. Focused refinement/IR validation: 21 tests pass.
+> The separate entry clause is awaiting clarification; existing entry checks
+> remain unchanged. **211 unittest tests pass in 50.593 seconds**, including
+> simulator tests and seven new temporal regressions. Changed Python files pass
+> isort/black; git diff whitespace checks pass.
+>
 > **Entry 16 follow-up decision:** the identified code fixes are complete under
 > the agreed supported-tower model. Update the paper's Table 7 Higher rules 2
 > and 6 and document their physical assumptions. General supported-height
@@ -125,8 +136,8 @@
 >       ground separation and intermediate-object adjacency regressions pass
 >       together with the existing search/refinement tests (nine tests).
 > - [x] **A10:** Splits/folds validate all entries, exits, witnesses and adjacent
->       cuts atomically. Persistent milestones use strict progress from the
->       previous cut; the paper ambiguity is recorded as discrepancy 17.
+>       cuts atomically. Entry 17 corrects ordinary-transition acceptance to
+>       first-new <= actual last-old; strict interior cuts are a separate check.
 > - [x] **A11:** Loop inference includes terminal heads and frozen entry geometry;
 >       the CLI exposes legacy/monotone learning, relation vocabulary and variable
 >       count, with legacy as default. Equality naming is normalized. The combined
@@ -156,7 +167,8 @@
 > root/alignment follow-up: 186 pass in 47.048 seconds;
 > rule 2 follow-up: 189 pass in 46.804 seconds;
 > rule 6 follow-up: 191 pass in 50.106 seconds;
-> current shared-freshness follow-up: 204 pass in 50.680 seconds.**
+> shared-freshness follow-up: 204 pass in 50.680 seconds;
+> current ordinary temporal-validation follow-up: 211 pass in 50.593 seconds.**
 > Changed Python files passed the same isort/black commands used by format.sh;
 > formatting was scoped to changed files to protect unrelated user files. The
 > integrated CLI's help/argument wiring and git diff whitespace checks pass.
@@ -1076,10 +1088,18 @@ is expressive enough and that verification is unaffected.
 
 ### F2 — `Validate` §3.5 (small)
 
-Pure function over absolute indices: reject a split when `i_s(d,ψ) ≤ i_f(d,φ)`, or
-`i_s(d,ψ) = 0` when φ is `φ_pre`. Reuse the first-true scan at
-[decision_tree.py:94](roboverify/synthesis/mcmc/decision_tree.py:94). No ML, no MuJoCo, no
-solving — fully unit-testable with synthetic segments.
+User-adjudicated acceptance: for ordinary transitions require
+`i_s(d,psi) <= i_f(d,phi)` on the relevant recorded segments; reject absent
+occurrences or first-new > last-old. Equality and persistent milestones pass.
+Section 3.5's "If this holds" rejection sentence is a paper error; Appendix G's
+"If this fails" is intended. See [entry 17](PAPER-DISCREPANCIES.md#17-temporal-validation-acceptance-and-the-incorrect-rejection-sentence)
+for the separate entry-clause clarification still pending.
+
+Use `first_true`/`last_true` in `synthesis/cfg/validate.py` over absolute indices.
+Validate recorded boundaries, predicates, bindings and adjacency across the CFG
+before atomically committing refinement or folding. Requiring two nonempty split
+segments is distinct from the first-new/last-old acceptance condition. Tests use
+synthetic segments; validation requires no ML, MuJoCo, or solver calls.
 
 ### F3 — Predicate language and enumerator (medium; no prerequisites)
 
