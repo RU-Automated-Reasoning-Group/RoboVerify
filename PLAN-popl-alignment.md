@@ -2,8 +2,8 @@
 
 > **Status — read this first.**
 >
-> Branch: `phase-f-synthesis`. Phases A–E are integrated into `main`.
-> Phase F's supported implementation and audit fixes are complete; **end-to-end
+> Integration: Phases A–F and the subsequent audit fixes are merged into local
+> `main` from `phase-f-synthesis`. Phase F's supported implementation is complete; **end-to-end
 > learning acceptance on validated task demonstrations remains open**.
 >
 > Latest code validation: **215 unittest tests passed in 50.735 seconds**, including
