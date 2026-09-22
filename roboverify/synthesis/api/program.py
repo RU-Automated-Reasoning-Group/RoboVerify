@@ -787,9 +787,11 @@ def rewrite_for_put_for_higher(expr, b_prime, b, context, binders=None):
                     m != b_prime,
                     m != b,
                     n == b_prime,
-                    Exists(
-                        [t], And(t != n, context.Higher(n, t), context.Higher(t, b))
-                    ),
+                    # Exact support on a common L-spaced height grid makes
+                    # m >= b + L equivalent to m > b. Keep both relations:
+                    # abstract Higher need not be total and tbl is isolated.
+                    context.Higher(m, b),
+                    Not(context.Higher(b, m)),
                 ),
                 And(m != b_prime, m != b, n == b, context.Higher(m, n)),
                 And(m == b, n != b_prime, n != b, context.Higher(m, n)),

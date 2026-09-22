@@ -4,6 +4,18 @@
 >
 > Branch: `phase-f-synthesis`; Phases A–E are integrated into `main`.
 >
+> **Entry 16 rule 2 corrected and tested.**
+> User-approved rewrite for `Put(a,b)`: for c distinct from a,b,
+> `Higher'(c,a) = Higher(c,b) and not Higher(b,c)`.
+> The user confirms uniform upright blocks on one flat table, exact support,
+> and complete towers: heights lie on a common L-spaced grid. Rule 2 preserves
+> table isolation and accepts the former level-source counterexample.
+> Rule 6's equal-height error and fixed-t variable capture remain open in
+> [discrepancy 16](PAPER-DISCREPANCIES.md#16-the-higher-rewrite-can-disagree-with-geometric-placement).
+> Focused symbolic/motion regressions: **27 tests pass in 11.694 seconds**.
+> Full suite: **189 unittest tests pass in 46.804 seconds**, including simulator
+> tests. Changed Python files pass isort/black; git diff whitespace checks pass.
+>
 > **Discrepancy housekeeping:** resolved entries 5, 6, 11, 12 and the implementation
 > part of 13 are recorded in [PAPER-RESOLUTIONS.md](PAPER-RESOLUTIONS.md), with IDs
 > retained. The active discrepancy file keeps entry 13 only for the paper's
@@ -44,7 +56,8 @@
 > - [x] **A1:** MotionVerify checks ON*/Higher/Scattered
 >       outcomes against Put WP, plus proved-root alignment; the table Scattered
 >       rewrite preserves isolation. Exact quantified effects fail closed. The
->       known Higher mismatch remains explicitly rejected (discrepancy 16).
+>       Higher rule 2 is corrected; the remaining rule 6 mismatch is explicitly
+>       rejected (discrepancy 16).
 >       Root selection quantifies over unnamed objects and uses scoped candidates,
 >       an established entry context, and the remaining symbolic WP. Input towers
 >       satisfy the tight bound by the user's declared model assumption. Every
@@ -112,7 +125,8 @@
 > is committed on `phase-f-synthesis`; unrelated untracked files stay untouched.
 > Baseline: 133 tests passed; five audit probes exposed uncovered issues.
 > **Original remediation validation: 170 unittest tests passed in 37.430 seconds;
-> current root/alignment follow-up: 186 pass in 47.048 seconds.**
+> root/alignment follow-up: 186 pass in 47.048 seconds;
+> current rule 2 follow-up: 189 pass in 46.804 seconds.**
 > Changed Python files passed the same isort/black commands used by format.sh;
 > formatting was scoped to changed files to protect unrelated user files. The
 > integrated CLI's help/argument wiring and git diff whitespace checks pass.

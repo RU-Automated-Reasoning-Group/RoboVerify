@@ -271,25 +271,46 @@ argument; invariant and motion VCs establish partial correctness. See A2 in
 
 ## 16. The Higher rewrite can disagree with geometric placement
 
-**Found while closing audit A1.** Table 7's put-on-block Higher disjunct for
-m distinct from source/target and n=source uses Exists(t, t!=n and Higher(n,t)
-and Higher(t,target)); it does not depend on m's height. With source, target,
-and an unrelated object initially at equal height, the target itself witnesses
-that existential. The rewrite predicts the unrelated object is at least as high
-as the placed source, although the source has just been raised above the target.
+**Partially resolved: put-on-block rule 2 corrected by user decision.**
+Table 7's original clause for `Put(a,b)` and `Higher(c,a)`, with `c` distinct
+from `a,b`, uses `Exists(t, t!=a and Higher(a,t) and Higher(t,b))`.
+It ignores c's height: initially level a,b,c make t=b a witness even though
+placing a above b makes c lower than a. It also incorrectly admits c=tbl.
 
-The implementation matches this paper rule, so the standing decision not to
-speculatively replace Higher's WP remains intact. Motion verification now checks
-ON*, Higher and Scattered outcomes against the actual rewritten formulas and
-rejects this mismatch. This can reject physically reasonable controllers whose
-claimed abstraction is wrong; that is an explicit abstraction failure, not a
-motion proof. Exact quantifiers/premises are retained for these equivalence checks;
-solver unknown remains inconclusive. The regression preserves this counterexample.
+The user confirmed the intended physical abstraction: equal-height upright
+blocks, one common flat table, exact support, and complete supported towers
+without vertical gaps. Center heights therefore lie on one grid spaced by L.
+Under these assumptions, after placement `z'(a)=z(b)+L`, so
+`Higher'(c,a)` iff `z(c)>=z(b)+L` iff `z(c)>z(b)`.
+The implementation now uses **`Higher(c,b) and not Higher(b,c)`** in rule 2.
+Both conjuncts are retained: the symbolic axioms do not enforce unconditional
+physical-pair comparability, and the positive conjunct excludes the isolated
+table marker. This is an intentional correction to the paper, not a claim that
+Table 7 already states the correct rule. No other Higher clause was changed.
 
-Audit A1 also adds a root-alignment check with radius L/4, consistent with the
-existing pairwise ON* bound L/2, and fixes Scattered's table-isolation rewrite.
-The two original geometric audit probes are now rejected. This does not prove
-physical settling, full-arm collision avoidance, or total loop termination.
+Completed regressions prove the rule against arbitrary integer height levels
+(independent of the source's old height), preserve table isolation, and accept
+the formerly rejected level-source motion. A separate motion regression retains
+rejection of the remaining rule 6 discrepancy below.
+
+**Still open — rule 6, `Higher(a,c)`.** Its universal clause rejects another
+object t at c's height above b. For example, c and d can be tops of separate
+supported towers at `z(b)+L`. Placing a on b makes a,c,d level, but t=d falsifies
+the rule for `Higher(a,c)`. This remains a counterexample under the agreed
+supported-height assumptions. The paper's long clause is clipped at the PDF's
+right edge; the complete formula reviewed here is the implementation's.
+
+**Still open — auxiliary-variable capture.** Higher rewrites introduce a fixed
+`Const("t", BoxSort)`. In the table rule for `Higher(a,t)`, an existing object
+named t can be captured, producing `ForAll(t, t!=tbl => Higher(t,t))` instead
+of comparison against that fixed object. Fresh/capture-avoiding binders remain
+a separate implementation fix; rule 2's replacement does not resolve it.
+
+The review's floating-block/missing-layer examples are outside the agreed model,
+not additional discrepancies. In particular, table Higher rules 3 and 4 have
+valid geometric interpretations under the supported-height assumptions.
+Motion verification continues checking exact ON*, Higher and Scattered effects;
+remaining abstraction mismatches are rejected and solver unknown is inconclusive.
 
 ## 17. Temporal validation when milestones persist
 

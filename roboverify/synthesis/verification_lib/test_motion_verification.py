@@ -55,8 +55,8 @@ def rooted_tower_conditions(*, root="b0", target="b", use_tbl=False):
 
 class MotionVerification(unittest.TestCase):
     def setUp(self):
-        # A source below the target layer admits the full current Put abstraction.
-        # Equal-height source/target exposes the separate Higher mismatch below.
+        # Baseline clearance fixture; dedicated tests cover an initially level
+        # source and the remaining reverse-direction Higher mismatch.
         self.scene = {
             "a": [0.3, 0, -0.1],
             "b": [0, 0, 0],
@@ -154,10 +154,26 @@ class MotionVerification(unittest.TestCase):
         self.assertEqual(statuses["effect_Scattered"], "refuted")
         self.assertFalse(result)
 
-    def test_paper_higher_effect_mismatch_is_not_a_motion_proof(self):
-        # Table 7's second disjunct ignores the height of the other block.
-        # From level source/target it can predict Higher(sym, source) after lifting.
+    def test_level_source_placement_has_correct_higher_effect(self):
+        # Rule 2 must not leave a level, stationary block above the lifted source.
         self.scene["a"][2] = 0
+        result = self.verify()
+        statuses = {c.obligation: c.status for c in result.checks}
+        self.assertEqual(statuses["contract"], "valid")
+        self.assertEqual(statuses["effect_Higher"], "valid")
+        self.assertTrue(result, str(result))
+
+    def test_rule_six_equal_height_mismatch_is_not_a_motion_proof(self):
+        # Two separate supported tower tops share the new source's height.
+        # Unchanged rule 6 incorrectly rejects Higher(source, either top).
+        self.scene.update(
+            a=[0.3, 0, 0],
+            c=[1, 1, 0.05],
+            cbase=[1, 1, 0],
+            sym=[2, 2, 0.05],
+            dbase=[2, 2, 0],
+        )
+        self.constants.extend(["c", "cbase", "dbase"])
         result = self.verify()
         statuses = {c.obligation: c.status for c in result.checks}
         self.assertEqual(statuses["contract"], "valid")
