@@ -271,7 +271,26 @@ argument; invariant and motion VCs establish partial correctness. See A2 in
 
 ## 16. The Higher rewrite can disagree with geometric placement
 
-**Code corrections implemented; the paper still needs updating.**
+**Code corrections complete under the agreed model. Paper update pending;
+general height-premise encoding deferred by user decision.**
+
+- [x] Correct put-on-block Higher rules 2 and 6 and auxiliary-variable capture.
+- [ ] **Update the paper:** revise Table 7's Higher rules 2 and 6 to the formulas
+  below, state the common-table, uniform-block, exact-support and complete-tower
+  assumptions used in their justification, and make the full rule 6 readable.
+- **Deferred until necessary:** encode the general supported-height assumptions
+  for all blocks, including unnamed objects, in motion verification. Revisit if
+  physically inadmissible intermediate-height counterexamples obstruct needed
+  verification. This is not an immediate implementation task or a blocker to
+  considering the identified entry 16 code bugs fixed.
+
+The two-height premise belongs only to the regression fixture described below;
+it is not a production restriction on block heights. Until the deferred work is
+needed, motion verification continues using supplied premises and may reject a
+valid motion when those premises also admit configurations outside our physical
+model. Such a result remains unsuccessful verification; no counterexample is
+silently discarded and no failed check is treated as a proof.
+
 Put-on-block rules 2 and 6 were corrected by user decision.
 Table 7's original clause for `Put(a,b)` and `Higher(c,a)`, with `c` distinct
 from `a,b`, uses `Exists(t, t!=a and Higher(a,t) and Higher(t,b))`.

@@ -4,6 +4,15 @@
 >
 > Branch: `phase-f-synthesis`; Phases A–E are integrated into `main`.
 >
+> **Entry 16 follow-up decision:** the identified code fixes are complete under
+> the agreed supported-tower model. Update the paper's Table 7 Higher rules 2
+> and 6 and document their physical assumptions. General supported-height
+> premises for all objects in motion verification are **deferred until needed**,
+> e.g. if inadmissible intermediate-height counterexamples obstruct verification.
+> This is not an immediate coding task. The two-height premise is test-specific;
+> production verification continues using supplied premises and rejects failed
+> obligations. See [entry 16](PAPER-DISCREPANCIES.md#16-the-higher-rewrite-can-disagree-with-geometric-placement).
+>
 > **Shared symbol freshness implemented and tested.**
 > `synthesis/util/symbols.py` provides fresh typed solver constants, reserved
 > program names, and capture-safe opening/rebuilding of existing quantifiers.
