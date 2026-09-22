@@ -34,8 +34,8 @@ synthesis, nested/starred quotient, Grid/Pyramid, total termination and physical
 controller refinement remain outside this plan. Existing out-of-scope code stays
 available; this is not a claim that those tasks have verified physical programs.
 
-Use [AGENTS.md](AGENTS.md) for environment, commands and working conventions;
-[CLAUDE.md](CLAUDE.md) for architecture; and
+Use [AGENTS.md](AGENTS.md) as the single agent guide for environment, commands,
+working conventions, architecture and experiment reporting; use
 [CFG verification](roboverify/synthesis/cfg/VERIFICATION.md) for the integrated
 pipeline's proof scope. This status header is the session handoff; update it when
 work changes. Detailed historical investigations remain in Git history rather

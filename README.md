@@ -7,10 +7,10 @@ flat-loop recovery, learned invariants and counterexample-guided refinement.
 
 ## Start here
 
-- [Agent and contributor setup](AGENTS.md): environment, commands and conventions.
+- [Agent guide and architecture](AGENTS.md): environment, commands, conventions,
+  package responsibilities and experiment reporting.
 - [Current implementation plan](PLAN-popl-alignment.md): completed work, settled
   decisions and remaining demonstration/learning acceptance.
-- [Architecture](CLAUDE.md): packages, APIs and experiment reporting.
 - [Integrated synthesis and verification](roboverify/synthesis/cfg/VERIFICATION.md):
   pipeline, model assumptions and the meaning of `verified_model`.
 - [Motion verification](roboverify/synthesis/verification_lib/README.md),
