@@ -5,7 +5,7 @@ against the implementation. It covers §§2–5, Algorithms 1–6, Appendix A/Ta
 and the associated appendix algorithms/proofs; experimental numbers are not
 correctness targets. Neither paper nor code automatically wins a disagreement.
 
-Entry numbers 1–20 are stable, including resolved findings. Each entry records
+Entry numbers 1–21 are stable, including resolved findings. Each entry records
 its status, decision/reasoning and remaining action. Add new findings with the
 next unused ID. Detailed implementation history and completed audit checklists
 remain in Git history; use [README.md](README.md#project-status) for project status
@@ -23,6 +23,7 @@ model assumptions and APIs.
 | 17, 18 | Paper edits only; code fixes complete. |
 | 19 | Resolved integration defect: recorded and candidate imitation features. |
 | 20 | Shared Stack specification and runtime inference implemented; acceptance remains open. |
+| 21 | Decide and document the object-operand search space and timing of Get insertion. |
 
 ## 1. Theorem 5.2 contradicts the paper's own Table 7 (`R_Higher`)
 
@@ -455,3 +456,38 @@ real verifiers and their feedback paths separately from these acceptance runs.
 **Remaining action:** supply the requested coverage or improve the candidate as
 justified by the failed obligations, recover the full loop through search, and
 obtain `verified_model` on that same synthesized candidate.
+
+## 21. Free-object binding is performed before search instead of on the returned candidate
+
+**Status:** paper/code discrepancy identified; operand-search policy remains unresolved.
+
+**Paper:** Section 2.2 (p. 4) defines object-valued variables, and Fig. 5 (p. 10)
+uses bound `b` and `b_prime` in the loop body's physical primitives. Algorithm 5
+(p. 17) mutates instructions and operands, then optimizes continuous parameters.
+Section 3.4 (p. 17, lines 831–832) describes introducing a typed `Get(True)` for
+any object identifier still free in the returned candidate. It does not specify
+Python ByName/ID classes or require every search operand to be a numeric ID.
+
+**Implementation:** `entry/synthesize_cfg.py` generates a numeric seed program,
+then calls `cfg/bindings.py::close_objects` before `straight_line_synthesize`.
+This reuses consistently bound in-scope aliases or inserts fresh `Get` bindings,
+and converts physical instructions to ByName variants. `mutate_scoped` then
+freezes the Get prefix and samples only names already in scope or introduced by
+that prefix. MCMC cannot introduce additional object bindings within that search
+attempt. The standalone MCMC CLI instead supplies numeric-ID primitives and an
+integer operand pool; it is not the complete relational CFG algorithm.
+
+**Consequence:** ByName instructions represent the paper's variable-based DSL,
+but early binding plus a fixed binding prefix is an additional search policy.
+It changes the available operands and can change the scored rollouts: a fresh
+`Get(True)` need not select the concrete ID that appeared in the random seed.
+This is not solely a class-name substitution. Its effect on end-to-end search
+acceptance has not been measured, and it is not established as the cause of
+existing smoke-run failures.
+
+**Remaining action:** choose and document the intended operand domain and binding
+schedule. If binding is moved after candidate selection, rescore the resulting
+executable and retain verification of every allowed witness; a successful numeric
+rollout does not establish the behavior of an arbitrary Get binding. If early
+binding is retained, explicitly justify the fixed prefix or support searching
+bindings as well. Neither paper wording nor current code alone settles the choice.
