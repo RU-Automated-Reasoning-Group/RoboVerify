@@ -53,14 +53,18 @@ Stack collection holds the initial gripper position for 50 steps before
 recording; the settled full snapshot becomes state zero. Synthesis, candidate
 verification, and standalone MCMC restore archived states without repeating
 settling or recreating a layout from its seed. The shared Stack precondition
-includes `forall x,y. Higher(x,y)`, requiring equal heights at entry only.
+includes `forall x,y. Higher(x,y)`, requiring one height level at entry only.
+Higher uses a shared configurable 1 mm tolerance (`--higher-tolerance`); zero
+restores exact comparison. Numeric evaluation, geometric verification and
+counterexample realization must use the same setting.
 All symbolic inference uses the
 intended partition-based algorithm, `InvInference` → `inference.loop_inference`;
 there is no alternate learner flag or callback. See the
 [verification command](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification).
 Supplied Stack verification passes with `ON_star Higher Scattered equality`,
-counterexample-guided inference refinement and the documented supported-tower
-motion model. Full synthesis acceptance remains open; the earlier alternate-learner
+the 1 mm Higher tolerance and the documented supported-tower motion model;
+the supplied-program bootstrap currently passes without invariant refinement.
+Full synthesis acceptance remains open; the earlier alternate-learner
 result is separate from this intended-algorithm verification.
 Update the relevant status or entry when it changes, rather than maintaining a
 separate implementation-plan history.

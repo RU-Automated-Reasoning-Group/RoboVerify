@@ -22,7 +22,8 @@ identify recordings rather than reconstructing their initial state. Restoration
 never repeats settling. Recollect older demos to use the new settled starts.
 
 The shared Stack precondition requires unstacked, pairwise-scattered blocks
-at the same height (`forall x,y. Higher(x,y)`);
+at the same height level (`forall x,y. Higher(x,y)`, using the configured
+Higher tolerance for observed geometry);
 the postcondition requires every block to be ON* b0. Every supplied demonstration
 must complete and satisfy these initial/final conditions. The driver requires
 `--demos` and no longer automatically collects a historical oracle.
@@ -46,6 +47,10 @@ loops are unsupported in this workflow. `--output-dir` changes the experiment
 results root; `--run-name` adds an optional readable label. `--smoke` is a small
 search budget, not an acceptance criterion.
 
+The collector and pipeline accept `--higher-tolerance METRES` (default 0.001,
+zero for exact ordering). Runtime guards, inference and geometric verification
+share this setting; see the [height comparison guide](../inference_lib/README.md#higher-height-tolerance).
+
 ## Provided Stack verification
 
 The unchanged supplied program has a symbolic body
@@ -62,7 +67,7 @@ uv run python -m synthesis.entry.synthesize_cfg \
   --supported-towers --table-surface-height 0.4 \
   --initial-arm 1.3446426 0.74911606 0.5314612 \
   --motion-timeout-ms 10000 --verification-timeout-ms 10000 \
-  --run-name stack-verification
+  --higher-tolerance 0.001 --run-name stack-verification
 ```
 
 If the archive is absent, collect it with `collect_demos --num-blocks 4
@@ -82,27 +87,27 @@ normal exits; preservation feedback uses the same algorithm. There is no
 
 **Both verification stages pass with the intended learner:** the result is
 `verified_model` in the noiseless, supported-tower model. The shared equal-height
-precondition establishes the initial height facts. The bootstrap invariant can
-still contain height correlations induced by small simulator displacements;
-preservation counterexamples supply new states to `InvInference` and remove those
-unsupported restrictions. The documented run needed two such inference updates,
-without changing the program or repairing its motion.
+precondition establishes the initial height facts. With the 1 mm Higher tolerance,
+the bootstrap invariant passes all three symbolic obligations at sizes 2–4 and
+in the unbounded context, followed by all 63 motion obligations. No counterexample
+refinement, program change or motion repair is needed for this configuration.
+The former exact comparison admitted a spurious simulator-height correlation;
+its successful run required two refinement updates (review entries 30–31).
 
-Write `O(x,y)` for ON*, `H(x,y)` for Higher, and `S(x,y)` for Scattered. The final
-learned invariant has these seven universally quantified clauses:
+Write `O(x,y)` for ON*, `H(x,y)` for Higher, and `S(x,y)` for Scattered. The learned
+invariant has these six universally quantified clauses:
 
 ```text
 H(x,y)                       => S(x,y) or O(x,y)
 O(x,b)                       => x = b
 O(b,x)                       => O(x,b0)
 H(b0,y)                      => H(x,y)
-x != b0 and not O(b,y)        => H(x,y)
-H(x,y) and O(y,b0)            => O(x,y) or H(b0,y)
+H(x,y)                       => O(x,y) or H(b0,y)
 H(b,x)
 ```
 
 These constrain the tower's clear top and root, relative heights and separation.
-All clauses are learned from candidate executions and counterexample successors;
+All clauses in this configuration are learned from candidate executions;
 none is substituted by a handwritten invariant. The explicit progress checks and
 nonvacuity checks remain in force. See the [height-precondition decision](../../../PAPER-DISCREPANCIES.md#31-stack-resets-equal-height-assumption-belongs-in-the-task-precondition)
 and [bootstrap failure diagnosis](../../../PAPER-DISCREPANCIES.md#30-stack-invariant-vocabulary-and-attachment-semantics).

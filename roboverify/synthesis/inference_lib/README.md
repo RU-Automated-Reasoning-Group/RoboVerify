@@ -65,7 +65,8 @@ is no collection run-name flag.
 Every accepted trajectory must finish normally, start with unstacked,
 pairwise-scattered blocks at equal heights, and end with all blocks in the tower
 rooted at b0. The entry premise is `forall x,y. Higher(x,y)`; since Higher means
-at least as high, both ordered pairs enforce equal heights. This is an entry
+at least as high within the configured tolerance, both ordered pairs enforce
+one initial height level (at most 1 mm spread by default). This is an entry
 condition, not a requirement on later loop states or the final tower.
 Transient success is insufficient. The accepted archive is published only if
 all requested trajectories pass. Diagnostic archives and the per-seed report
@@ -79,6 +80,57 @@ required for videos. Encoding failures are reported separately and produce a
 nonzero command result without discarding valid trajectory data. Frames are
 streamed rather than retained in memory. Rendering adds no simulator steps;
 recording starts after the 50-step preparation.
+
+## Higher height tolerance
+
+`Higher(x,y)` evaluates `z(x) >= z(y) - tolerance`. The default tolerance is
+**0.001 m (1 mm)**, compared with a **0.05 m** block side. This treats small
+contact-induced height differences as the same level while retaining the order
+of separated block levels. `Higher(x,x)` remains true, and the table remains an
+isolated logical marker.
+
+Both `collect_demos` and `synthesize_cfg` accept `--higher-tolerance METRES`.
+Use `--higher-tolerance 0` for the former exact comparison. Values must be finite,
+nonnegative and below half a block length (0.025 m). Collection metadata and
+pipeline configuration record the setting. Archived coordinates are never
+rewritten; existing observations can be re-evaluated at another tolerance.
+New candidate executions record their active setting as well.
+
+For direct Python calls, use a scoped setting:
+
+```python
+from synthesis.util.on import using_higher_tolerance
+
+with using_higher_tolerance(0.001):
+    # Runtime guards, predicate search, invariant learning and verification
+    # invoked here share this setting. It is restored when the scope exits.
+    invariant = InvInference(store, loop_id, vocabulary, context)
+```
+
+The numeric comparison, low-level Z3 translation, and geometric counterexample
+realization share the formula. A `LowLevelContext` captures the active setting
+when constructed and also accepts an explicit `higher_tolerance` argument.
+Abstract Higher axioms and placement WP rules remain unchanged. Tolerant
+comparison is not transitive for arbitrary continuous heights; interpreting it
+as an order requires a suitable separated-level domain. The threshold is not
+a controller tolerance and does not establish physical/model equivalence.
+
+Compare already recorded Stack loop heads and normal exits with ideal placements:
+
+```bash
+uv run python -m synthesis.experiment.compare_stack_heights \
+  --demos demos/stack/4-blocks-500-trajectories/demonstrations.npz \
+  --higher-tolerance 0.001
+```
+
+The script supports the supplied single-tower Stack program, reconstructing
+50 mm levels from recorded `b`/`b_prime` placements instead of rounding observed
+heights. It checks every ordered physical-block pair, reports exact and tolerant
+Higher results, and separately checks ON*, frozen ON*, Scattered and equality.
+It also checks Higher reflexivity, totality and transitivity on each saved state.
+Reports go under `runs/height-comparison/`; `--output-dir` and `--run-name` change
+the destination. A difference in any checked predicate produces a nonzero exit;
+a Higher match must not hide an independent Scattered mismatch.
 
 ## Stack reset workspace
 

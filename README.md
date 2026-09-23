@@ -24,8 +24,10 @@ Both return named programs to inference and verification. See the
 
 Stack reset scatters blocks within **0.70 m horizontally of the robot base**,
 retaining block separation and initial gripper clearance. The shared Stack
-precondition also requires equal initial block heights, expressed as
-`forall x,y. Higher(x,y)`. Primitive ID/ByName
+precondition also requires one initial block-height level, expressed as
+`forall x,y. Higher(x,y)`. The shared Higher predicate has a configurable
+**1 mm tolerance** (`--higher-tolerance`, with 0 restoring exact comparison).
+Primitive ID/ByName
 instructions share configurable controllers and retain their 50-step budgets.
 See [controller settings](roboverify/synthesis/inference_lib/README.md#primitive-controller-settings).
 
@@ -34,9 +36,9 @@ See [controller settings](roboverify/synthesis/inference_lib/README.md#primitive
 pipeline modes and standalone symbolic CEGIS; there is no learner-selection flag.
 
 **Supplied Stack verification passes with the intended learner and the vocabulary
-`ON_star Higher Scattered equality`.** The equal-height entry premise allows
-establishment; preservation counterexamples then drive invariant refinement.
-The resulting candidate passes unbounded symbolic verification and the documented
+`ON_star Higher Scattered equality`.** With the equal-height entry premise and
+1 mm Higher tolerance, the bootstrap invariant passes without refinement.
+The candidate passes unbounded symbolic verification and the documented
 noiseless motion checks with explicit supported-tower geometry. Full synthesis
 acceptance remains open; verifying the supplied program does not establish search
 or loop recovery.

@@ -33,7 +33,8 @@ model assumptions and APIs.
 | 28 | Resolved imitation-sampling defect: candidate boundary callbacks no longer add scoring samples. |
 | 29 | Intended symbolic inference enforced; alternate learner selection removed. |
 | 30 | Bootstrap vocabulary/height failures diagnosed; full-vocabulary refinement succeeds with equal-height entry (31). |
-| 31 | Equal initial heights added; supplied Stack reaches both verification stages successfully after intended-learner refinement. |
+| 31 | Equal initial heights added; intended-learner verification passes. |
+| 32 | Configurable Higher tolerance aligns saved height comparisons with ideal levels; separate Scattered boundary differences remain. |
 
 ## 1. Theorem 5.2 contradicts the paper's own Table 7 (`R_Higher`)
 
@@ -811,7 +812,8 @@ downward after stacking, making `Higher(b0,x)` false for untouched blocks. Ideal
 symbolic placement preserves b0's height. This is a learned dependency on a small
 simulator displacement, distinct from the attachment/replay mismatch above.
 The equal-height entry premise added in entry 31 does not repair this preservation
-failure. Learner, predicates and placement semantics remain unchanged.
+failure on its own. Entry 32 changes the concrete Higher interpretation to
+ignore small height differences; learner and placement rules remain unchanged.
 
 The successful ON*/equality invariant omits separation facts and still fails motion
 collision checks. The full vocabulary and counterexample refinement retain
@@ -828,7 +830,8 @@ contains the current reproduction command and invariant interpretation.
 **Decision:** add `forall x,y. Higher(x,y)` to the existing unstacked and
 pairwise-Scattered precondition. Higher denotes non-strict height ordering, so
 quantification over both ordered pairs requires every block to start at the same
-height. The concrete predicate uses its existing exact comparison. This premise
+height. Entry 32 subsequently adds a configurable tolerance to the concrete
+comparison, interpreting small physical deviations as one level. This premise
 holds at the archived, settled beginning of the Stack demonstrations and is
 validated by collection and by both integrated pipeline modes. It is an entry
 condition, not a global axiom or an invariant imposed on subsequent states.
@@ -855,3 +858,40 @@ Regressions reject unequal-height starts even when the final stacking goal holds
 check that entry establishes both height bounds on b/b0 without vacuity, and retain
 unequal heights in final towers. Full synthesis acceptance, termination and
 physical-controller refinement remain separate claims.
+
+
+## 32. Higher tolerance for contact-induced height differences
+
+**Status:** user decision implemented; saved Higher tables match ideal Stack
+levels, and supplied-program symbolic/motion verification passes without refinement.
+
+**Decision:** use `Higher(x,y) := z(x) >= z(y) - tolerance` for geometry, with a
+1 mm default and a configurable threshold below half the 50 mm block length.
+Zero retains the exact comparison. Runtime guards, predicate search, invariant
+learning, low-level Z3 translation and counterexample realization share the
+setting; abstract axioms and placement WP rules are unchanged. The collector
+and integrated pipeline expose `--higher-tolerance` and record the chosen value.
+Saved coordinates and simulator contacts are unchanged.
+
+**Scope:** tolerance is a reading of approximately discrete height levels.
+It is not a transitive order for every continuous scene: heights 0, 0.75 mm and
+1.5 mm form a counterexample at 1 mm tolerance. The abstract ordering assumptions
+therefore still require an appropriate geometric domain. Exact agreement on
+saved loop states is evidence about those states, not universal simulator
+refinement. Motion-noise and controller tolerances remain separate.
+
+**Validation:** the saved-state comparison reconstructs ideal heights from the
+recorded placement sequence, independently of measured Z coordinates, and checks
+all ordered pairs at continuing heads and normal exits. Higher, ON*, frozen ON*
+and equality agree on the checked archive; separate Scattered differences occur
+when horizontal placement error crosses its 0.10 m separation boundary. The
+five candidate executions used for supplied-program inference agree for all five
+predicates. No Scattered definition or archive is changed to hide those cases.
+Detailed experiment counts belong in generated run artifacts.
+
+With the new default, the intended learner produces a six-clause bootstrap
+invariant and both verification stages pass without counterexample refinement.
+The [current reproduction command](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification)
+and [comparison interface](roboverify/synthesis/inference_lib/README.md#higher-height-tolerance)
+describe the supported workflow. Full synthesis and physical-controller
+refinement remain separate claims.

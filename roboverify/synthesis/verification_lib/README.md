@@ -166,3 +166,18 @@ new placements must prove the same bound against that root, including noise.
 A name hint cannot bypass root discovery. See
 [verification scope](../cfg/VERIFICATION.md) for the input assumption, loop
 invariant, and failure behavior.
+
+## Higher observation tolerance
+
+Higher uses the shared comparison `z1 >= z2 - tolerance`, defaulting to 1 mm.
+The numerical evaluator, low-level Z3 interpretation and geometric counterexample
+realizer use the same setting. `LowLevelContext(higher_tolerance=0)` explicitly
+selects exact geometry; otherwise a context captures the active setting when
+constructed. The integrated pipeline and collector expose `--higher-tolerance`;
+see the [configuration and saved-state comparison](../inference_lib/README.md#higher-height-tolerance).
+
+The abstract ordering axioms are unchanged. A pairwise tolerance need not be
+transitive on arbitrary continuous heights; the intended interpretation uses
+well-separated block levels. Increasing the threshold is not a proof that all
+physical executions satisfy the abstract model. Motion/controller tolerances
+and `--motion-noise` are separate parameters.
