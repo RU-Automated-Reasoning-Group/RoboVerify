@@ -18,8 +18,11 @@ Synthesis offers `--synthesis-approach relational` (the existing default) and
 Both return named programs to inference and verification. See the
 [approach guide](roboverify/synthesis/cfg/VERIFICATION.md#synthesis-approaches).
 
-Five real Stack recordings at each of three and four blocks (seeds 0–4) pass
-initial/final task validation and have saved videos. **End-to-end learning acceptance remains open:**
+Five current four-block Stack recordings (seeds 0–4) finish in exactly three
+iterations, pass initial/final task validation, and have saved 20 FPS videos.
+Primitive ID/ByName instructions share configurable controllers and retain their
+50-step budgets. See [controller settings](roboverify/synthesis/inference_lib/README.md#primitive-controller-settings).
+**End-to-end learning acceptance remains open:**
 the verification-mode smoke requests additional demonstrations after symbolic
 checking; the full-search smoke exhausts its configured budget. Neither result
 is verified. See [the review record](PAPER-DISCREPANCIES.md) for model boundaries,

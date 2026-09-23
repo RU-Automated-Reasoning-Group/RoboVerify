@@ -58,6 +58,70 @@ required for videos. Encoding failures are reported separately and produce a
 nonzero command result without discarding valid trajectory data. Frames are
 streamed rather than retained in memory. No extra simulator steps are added.
 
+## Primitive controller settings
+
+`Pick`/`Move`/`Release` and their ByName variants share the controllers in
+`api/control.py`. A named instruction only resolves its operands before running
+the same controller. Every primitive keeps a default **50-step total budget**;
+Pick shares it across approach, opening, descent, and closing.
+
+| Setting | Pick / PickByName | Move / MoveByName | Release / ReleaseByName |
+| --- | --- | --- | --- |
+| Position tolerance | 0.010 m | 0.002 m | 0.002 m |
+| Proportional gain | 20 | 20 | 20 |
+| Step limit | 50 | 50 | 50 |
+
+Pick and Move use 3D gripper-position error; Release uses vertical error after
+opening. These are controller tolerances, not bounds on final block placement.
+Gripper opening uses the summed finger positions with threshold 0.052 m and
+margin 0.001 m. Open/closed tests are complementary.
+
+Customize one instruction or share an immutable configuration:
+
+```python
+from synthesis.api.control import ControlConfig
+from synthesis.api.instructions import MoveByName
+
+control = ControlConfig(position_tolerance=0.002, gain=20.0)
+move = MoveByName(
+    "b0", "b0", "b",
+    target_offset=[0, 0, 0.05],
+    limit=50,
+    control=control,
+)
+```
+
+The action helper `get_move_action` computes the proportional command and has
+no tolerance argument. The controller applies the configured tolerance to its
+stopping test. Controller settings are preserved during ID-to-name conversion
+and included in program descriptions/fingerprints; they are fixed settings,
+separate from the waypoint offsets optimized by CEM.
+
+Each instruction retains `last_control_result` (convergence, steps, final phase,
+and position error when applicable), also saved in its `instruction_end` event.
+A step limit stops that instruction without claiming convergence. Collection
+rejects a trace containing an unconverged primitive, even if its final task
+predicate happens to hold. Convergence alone does not certify a grasp or goal.
+
+The Stack example uses a 0.10 m transfer height above the current top, then
+lowers to 0.05 m. Tighter tolerances with the original 0.20 m transfer waypoint
+exposed controller stalls in the tested scenes. For the intended four-block
+three-placement demonstrations, collect with a three-iteration cap:
+
+```bash
+uv run python -m synthesis.entry.collect_demos \
+  --program synthesis.examples.stack:build_program \
+  --num-blocks 4 --num-trajectories 5 --max-loop-iterations 3 --save-video \
+  --output-dir demos/stack/4-blocks-5-trajectories-precise
+```
+
+Seeds 0–4 finish normally with exactly three iterations, all 15 primitives
+converged, and at most 20 steps per primitive. Videos use 20 FPS. These results
+validate this collection, not all possible scenes or formal verification.
+Recollect after changing controller settings; older fingerprints describe the
+previous executable. The earlier continuation findings in review entry 22 refer
+to the former controllers and waypoints.
+
 ## Run either pipeline mode
 
 ```bash

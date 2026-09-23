@@ -91,7 +91,9 @@ to accept that returned candidate.
 ### Manual continuation experiment
 
 To replace MCMC with supplied placement candidates while retaining real simulator
-execution, refinement, and quotienting, run:
+execution, refinement, and quotienting, use recordings from the current Stack
+example. Recollect after changing controller settings or waypoints; the diagnostic
+checks the source fingerprint. For example:
 
 ```bash
 uv run python -m synthesis.experiment.id_first_continuation \
@@ -118,7 +120,11 @@ programs, and complete replay archives.
 The script distinguishes automatic continuation from isolated calls to quotient
 and from replaying rejected candidate loops; none is a formal verification result.
 
-On the five three-block seed-0–4 recordings, a failed remaining-block search refines to
+The following findings describe the earlier controllers and 0.20 m transfer
+waypoint. The redesigned shared controllers and 0.10 m waypoint require fresh
+experiments; these historical results are not their acceptance evidence.
+
+On the five earlier three-block seed-0–4 recordings, a failed remaining-block search refines to
 `not(Scattered(b0, 2))`, not `ON(2, 1)`. The first learned cut is mid-placement.
 Supplying fragments that carry the pending placement across that cut yields a
 successful straight-line program, but no loop. Separately, complete placement
@@ -134,8 +140,8 @@ learns the same `Scattered` guard, but validation rejects seed 1's exit at
 observation 169 (the task first holds at 171). That rejected loop passes only
 three of five full replays. The original demos all pass but require 3, 6, 8, 3,
 and 3 iterations; their recovery behavior is missing from the extracted simple
-chain. Numeric and named Release also have different retreat tolerances, recorded
-in [entry 23](../../../PAPER-DISCREPANCIES.md#23-numeric-and-named-release-use-different-physical-stopping-tolerances).
+chain. The numeric/named Release retreat mismatch found in that experiment is now
+resolved by shared controllers, recorded in [entry 23](../../../PAPER-DISCREPANCIES.md#23-numeric-and-named-release-use-different-physical-stopping-tolerances).
 
 ## Verification workflow
 

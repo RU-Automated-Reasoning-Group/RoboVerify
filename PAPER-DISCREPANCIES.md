@@ -25,7 +25,7 @@ model assumptions and APIs.
 | 20 | Shared Stack specification and runtime inference implemented; acceptance remains open. |
 | 21 | Switchable ID-first policy implemented; full learning acceptance and policy comparison remain open. |
 | 22 | Preserve pending transfers and task-completing continuations across relational CFG cuts and loop exits. |
-| 23 | Reconcile numeric/named Release stopping tolerances and validate execution parity. |
+| 23 | Resolved primitive-controller discrepancy; shared configurable control and execution parity checks. |
 
 ## 1. Theorem 5.2 contradicts the paper's own Table 7 (`R_Higher`)
 
@@ -611,19 +611,46 @@ fixtures did not expose these intermediate-motion and boundary cases.
 
 ## 23. Numeric and named Release use different physical stopping tolerances
 
-**Status:** observed implementation discrepancy; documented without changing
-controller behavior during the continuation experiment.
+**Status:** resolved by shared configurable primitive controllers; the earlier
+continuation experiments retain their historical results.
 
-**Finding:** `api/instructions.py::Release.eval` stops the empty-gripper retreat
-within 0.02 m of its target, while `ReleaseByName.eval` uses 0.001 m. The other
-retreat logic and the target offset are the same. Converting numeric operands to
-fixed named aliases therefore changes the number of simulator steps and the
+**Finding:** Before the controller redesign, `api/instructions.py::Release.eval`
+stopped the empty-gripper retreat
+within 0.02 m of its target, while `ReleaseByName.eval` used 0.001 m. The other
+retreat logic and target offset were the same. Converting numeric operands to
+fixed named aliases therefore changed the number of simulator steps and the
 physical rollout, not just operand lookup. The four-block experiment in entry 22
-passes four of five complete numeric replays but only three of five named ones.
+passed four of five complete numeric replays but only three of five named ones.
 This comparison exposes a physical semantics difference; neither success rate
 establishes either controller's correctness.
 
-**Remaining action:** choose and unify the intended Release semantics, add a
-numeric/named execution-parity regression, and rerun the affected synthesis and
-collection checks. Preserve the requirement that synthesis returns only named
-instructions and that fresh execution/verification checks the returned program.
+**Resolution:** `api/control.py` now owns the shared Pick, Move, and Release
+controllers. ID and ByName variants only differ in operand lookup. Immutable
+`ControlConfig` settings specify position tolerance, gain, and the gripper-state
+threshold/margin. The action helper computes a proportional command without an
+unused tolerance argument; the controller owns convergence. Defaults are 10 mm
+for Pick, 2 mm for Move and Release, and gain 20. The existing 50-step total
+budget per instruction is unchanged. Step exhaustion is recorded explicitly,
+and demonstration acceptance rejects any unconverged primitive. Control settings
+survive ID-to-name conversion and participate in executable fingerprints.
+
+**Evidence:** Numeric and named programs produce identical MuJoCo actions,
+observations, and execution events in the parity regression. Unit tests cover
+nondefault control preservation, tolerance-dependent stopping, shared Pick
+budgets, vertical retreat after opening, runtime diagnostics, and rejection of
+unconverged recordings. The full suite passes 259 tests. A trial at 1 mm with gain 10 stalled in some approach
+motions near a 1.5 mm residual; reducing tolerance alone was insufficient.
+
+The Stack example also lowers its transfer waypoint from 0.20 m to 0.10 m above
+the current top, avoiding the high configurations where the tighter controller
+stalled in the tested scenes. Five new four-block recordings, seeds 0–4, all
+complete exactly three iterations with selections 1, 2, 3, satisfy the shared
+pre/postconditions, and converge in every primitive within at most 20 steps.
+All five have 20 FPS videos; video-on/off actions match exactly and observations
+agree within 1e-8. The older recordings that required recovery are not accepted
+as the intended three-iteration demonstration baseline. No new synthesis or
+formal-verification acceptance is claimed from these controller tests.
+
+**Remaining action:** none for the numeric/named mismatch. Full learning and
+verification acceptance (20–22) must use recollected demonstrations and fresh
+candidate execution under these controller settings.

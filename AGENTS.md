@@ -46,8 +46,8 @@ Tests are `unittest`, not pytest. No linter is configured.
 Read [README.md](README.md#project-status) for current project status and
 [PAPER-DISCREPANCIES.md](PAPER-DISCREPANCIES.md) for numbered findings, settled
 reasoning and remaining actions. Implementation is complete within the supported
-scope; five primitive Stack demonstrations at each of three and four blocks pass
-task validation. End-to-end learning acceptance remains open.
+scope; five current four-block Stack demonstrations pass task validation in
+exactly three iterations each. End-to-end learning acceptance remains open.
 Update the relevant status or entry when it changes, rather than maintaining a
 separate implementation-plan history.
 
@@ -141,6 +141,13 @@ Read the relevant package notes before non-trivial changes. This section describ
 the DSL, verification backends, inference, search and integrated CFG pipeline.
 
 - **`synthesis/api/`** — the program representation.
+  - `control.py`: shared bounded controllers for explicit Pick/Move/Release.
+    ID/ByName pairs share execution after operand lookup. Immutable `ControlConfig`
+    uses 10 mm Pick and 2 mm Move/Release tolerances, gain 20, and the unchanged
+    50-step instruction budget. `last_control_result` and runtime events report
+    convergence/step exhaustion; collection rejects unconverged primitives.
+    Control settings survive naming and enter executable fingerprints. Legacy
+    PickPlace macros retain separate controllers and are not collection inputs.
   - `instructions.py`: `Instruction` subclasses. Physical instructions (`Pick`, `Move`,
     `Release`, `PickPlace`, and their `...ByName` variants that resolve symbolic box names via
     `env.symbolic_name_to_box_id`) implement `eval()` to drive a MuJoCo env, and
