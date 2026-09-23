@@ -56,8 +56,9 @@ settling or recreating a layout from its seed. All symbolic inference uses the
 intended partition-based algorithm, `InvInference` → `inference.loop_inference`;
 there is no alternate learner flag or callback. See the
 [verification command](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification).
-Supplied Stack verification and full synthesis acceptance remain open with this
-algorithm; the earlier alternate-learner result is not acceptance evidence.
+Supplied Stack symbolic verification passes with the explicit `ON_star equality`
+vocabulary. Motion collision checks and full synthesis acceptance remain open;
+the earlier alternate-learner result is not acceptance evidence.
 Update the relevant status or entry when it changes, rather than maintaining a
 separate implementation-plan history.
 
@@ -350,8 +351,9 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   The driver requires validated current archives and has no historical-oracle
   fallback. `--reset-mode replay` is the default; Unstack retains its 60-second
   process alarm. Success is `verified_model` in the documented scope.
-  Supplied Stack verification and full synthesis acceptance remain open with the
-  intended partition-based inference algorithm. `--supported-towers` adds explicit height
+  Supplied Stack symbolic verification passes with the intended learner and the
+  explicit `ON_star equality` vocabulary; motion and full synthesis acceptance
+  remain open. `--supported-towers` adds explicit height
   premises and checks arm-clearance, column-alignment and height loop invariants.
   Finite SAT witnesses accelerate consistency only; motion safety stays unbounded.
   `cfg/artifacts.py` records CFG structure and segment indices without expanding

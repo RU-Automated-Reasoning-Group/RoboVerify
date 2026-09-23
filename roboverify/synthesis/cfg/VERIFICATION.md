@@ -55,17 +55,17 @@ for Z. Use the following explicit configuration with the settled archive:
 uv run python -m synthesis.entry.synthesize_cfg \
   --mode verify --task stack --num-blocks 4 \
   --program synthesis.examples.stack:build_program \
-  --demos demos/stack/4-blocks-500-trajectories/demonstrations.npz \
+  --demos demos/stack/4-blocks-5-trajectories/demonstrations.npz \
   --max-loop-iterations 3 --motion-iterations 0 \
-  --invariant-relations ON_star Scattered equality \
+  --invariant-relations ON_star equality \
   --supported-towers --table-surface-height 0.4 \
   --initial-arm 1.3446426 0.74911606 0.5314612 \
-  --motion-timeout-ms 30000 --verification-timeout-ms 10000 \
+  --motion-timeout-ms 10000 --verification-timeout-ms 10000 \
   --run-name stack-verification
 ```
 
 If the archive is absent, collect it with `collect_demos --num-blocks 4
---num-trajectories 500 --program synthesis.examples.stack:build_program` first.
+--num-trajectories 5 --program synthesis.examples.stack:build_program` first.
 Use the collector's printed path if it adds a suffix. The initial-arm values above
 are the nominal settled reset pose in this environment; they are explicit formal
 entry conditions, not automatic extraction of the complete simulator state into Z3.
@@ -76,12 +76,37 @@ partition-based algorithm. Candidate execution supplies continuing loop heads an
 normal exits; preservation feedback uses the same algorithm. There is no
 `--learner` option and no automatic fallback to a different learner.
 
-**Acceptance remains open with the intended algorithm.** The earlier 500-seed
-`verified_model` result used the separate observed-pattern utility and does not
-establish this workflow's acceptance. The command above is a diagnostic invocation,
-not a claim that it currently passes. A failed invariant must be diagnosed through
-the recorded obligations. The supported-tower model and geometric loop checks
-remain as described below; they do not replace the inferred relational invariant.
+**Symbolic verification passes with this explicit vocabulary; motion verification
+still fails collision checks.** The CLI therefore reports `motion_unverified`, not
+`verified_model`. The learner, supplied program and task specification are unchanged.
+This is an explicit configuration, not a change to the default vocabulary.
+
+Write `O(x,y)` for reflexive ON*. Under the relational axioms, the learned
+invariant has the following interpretation:
+
+```text
+forall x,y: O(x,y) and x != y  => O(y,b0)
+forall x:   O(x,b)             => x = b
+forall x:   O(b,x)             => O(x,b0)
+```
+
+There is one possible nontrivial tower, rooted at b0 and topped by b; every
+outside block is a singleton. All three facts come from the partition learner.
+Minimum-feature ties can produce syntactically different clauses; the actual
+formula is always checked by the verifier.
+
+Including Scattered can instead produce a weaker invariant that permits another
+tower. The current attachment WP retains a selected block's old ON* relationships;
+physically moving that block off another tower does not. Such a model can fail
+symbolic preservation while its replay still satisfies the invariant, yielding
+`no_progress`. Including Higher can learn observed height facts absent from the
+relational entry precondition, failing establishment. These are distinct failures;
+see [entry 30](../../../PAPER-DISCREPANCIES.md#30-stack-invariant-vocabulary-and-attachment-semantics).
+
+The ON*/equality invariant supplies no Scattered separation facts, so it is
+insufficient for the physical collision proof. The supported-tower geometry does
+not supply those missing relational facts. The earlier alternate-learner success
+remains separate from acceptance of this intended inference workflow.
 
 Finite symbolic checks are followed by an unbounded proof; motion checks also
 quantify over unnamed objects. The demonstration count supplies inference data,

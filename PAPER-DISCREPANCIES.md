@@ -5,7 +5,7 @@ against the implementation. It covers §§2–5, Algorithms 1–6, Appendix A/Ta
 and the associated appendix algorithms/proofs; experimental numbers are not
 correctness targets. Neither paper nor code automatically wins a disagreement.
 
-Entry numbers 1–29 are stable, including resolved findings. Each entry records
+Entry numbers 1–30 are stable, including resolved findings. Each entry records
 its status, decision/reasoning and remaining action. Add new findings with the
 next unused ID. Detailed implementation history and completed audit checklists
 remain in Git history; use [README.md](README.md#project-status) for project status
@@ -22,7 +22,7 @@ model assumptions and APIs.
 | 16 | Paper rules/assumptions; opt-in height consequences implemented for Stack (27). |
 | 17, 18 | Paper edits only; code fixes complete. |
 | 19 | Resolved integration defect: recorded and candidate imitation features. |
-| 20 | Shared Stack workflow implemented; acceptance with the intended inference algorithm remains open. |
+| 20 | Supplied Stack symbolic verification passes with the intended learner (30); end-to-end acceptance remains open. |
 | 21 | Switchable ID-first policy implemented; full learning acceptance and policy comparison remain open. |
 | 22 | Settled continuation reproduces placement-cut and loop-exit limits; full loop recovery remains open. |
 | 23 | Resolved primitive-controller discrepancy; shared configurable control and execution parity checks. |
@@ -32,6 +32,7 @@ model assumptions and APIs.
 | 27 | Motion-model fixes implemented; supplied Stack acceptance must use the intended partition-based inference (29). |
 | 28 | Resolved imitation-sampling defect: candidate boundary callbacks no longer add scoring samples. |
 | 29 | Intended symbolic inference enforced; alternate learner selection removed. |
+| 30 | Stack symbolic proof passes with ON*/equality; broader-vocabulary and attachment/replay limitations diagnosed. |
 
 ## 1. Theorem 5.2 contradicts the paper's own Table 7 (`R_Higher`)
 
@@ -437,7 +438,7 @@ identical feature vectors.
 
 ## 20. Stack entry conditions and invariant data now agree across both modes
 
-**Status:** shared workflow implemented; supplied Stack and full synthesis acceptance remain open with the intended inference algorithm.
+**Status:** supplied Stack symbolic verification passes with the intended learner (30); motion and full synthesis acceptance remain open.
 
 **Decision:** Stack starts with unstacked, pairwise-scattered blocks and ends with
 all blocks ON* b0. The former integrated True precondition and the standalone
@@ -459,9 +460,9 @@ alternate observed-pattern learner. It does not establish acceptance of the inte
 symbolic inference workflow (29). The abstract body remains
 `Put(b_prime, b); Assign(b, b_prime)`.
 
-**Remaining action:** verify the supplied program with the intended inference
-algorithm, then recover the full loop through search and obtain `verified_model`
-on that synthesized candidate with validated settled starts.
+**Remaining action:** retain a learned invariant sufficient for motion verification
+as well as the symbolic proof in entry 30, then recover the full loop through search
+and obtain `verified_model` on that synthesized candidate with validated settled starts.
 
 ## 21. Free-object binding is performed before search instead of on the returned candidate
 
@@ -748,8 +749,52 @@ Z3's invalid `ForAll([])`. Feature selection and formula learning are unchanged.
 
 **Acceptance correction:** the previous Stack success with the alternate learner
 does not validate the intended inference workflow. Supplied-program and full
-synthesis acceptance remain open until they pass using `InvInference`. Geometric
+synthesis acceptance require both stages to pass using `InvInference`. Entry 30
+establishes symbolic verification with an explicit vocabulary; motion remains open. Geometric
 unit tests use a declared structural invariant to retain independent collision,
 clearance and alignment coverage; this fixture is never injected into production
 inference. Regression tests check the removed CLI/API options and that bootstrap
 and counterexample refinement invoke the intended algorithm.
+
+
+## 30. Stack invariant vocabulary and attachment semantics
+
+**Status:** symbolic proof passes with the intended learner and an explicit
+ON*/equality vocabulary; motion and full synthesis acceptance remain open.
+
+**Finding:** the partition learner selects a minimum separating feature subset
+for each predicate partition. Enlarging its vocabulary need not strengthen the
+result: a different separator can omit useful correlations. With ON*, Scattered
+and equality, Stack inference can retain only pairwise comparability-or-separation,
+a clear b, and `ON*(b,x) => ON*(x,b0)`. That invariant permits a second tower.
+
+**Preservation diagnosis:** let a = b = b0 be alone, with c = b_prime above d in
+another, separated tower. The invariant and guard hold. The attachment WP uses
+`ON_new(x,y) = ON_old(x,y) or (ON_old(x,c) and ON_old(b,y))`: it adds c above a but
+retains c above d. After `b := c`, the clause `ON*(b,x) => ON*(x,b0)` demands d above
+a and fails. Geometric replay instead detaches c from d and preserves the invariant,
+so it cannot supply the failing successor required for invariant weakening. This
+explains `no_progress`; a predicate-boundary conversion error can independently
+interrupt realization of such a model. Neither result is successful refinement.
+The attachment rule and geometric replay remain unchanged in this task.
+
+**Successful configuration:** `--invariant-relations ON_star equality` uses the
+same `InvInference` algorithm and actual candidate heads and normal exits. Its
+learned invariant, under the relational axioms, says that every lower member of
+a strict ON* pair belongs to the b0 tower, b is clear, and everything beneath b
+is on b0. Thus there is one possible nontrivial tower, rooted at b0 and topped by b;
+every outside block is a singleton. It excludes the second-tower counterexample.
+Establishment, preservation and exit pass both finite checks and unbounded proof.
+No handwritten invariant, stronger precondition, alternate learner or changed
+program is used. The vocabulary remains an explicit option, not a new default.
+A synthetic-loop-state regression learns the formula and checks these obligations
+for sizes 2–6 and an uninterpreted domain; it does not inject a fixture invariant.
+
+**Other failure and remaining actions:** the default vocabulary also includes
+Higher, which can infer observed facts such as `forall x: Higher(b,x)` not implied
+by Stack's relational entry precondition; establishment then fails. The successful
+ON*/equality invariant omits separation facts and still fails motion collision
+checks. Resolve sufficient learned separation facts for motion, and the mismatch
+between attachment WP and replay outside source-singleton states, before claiming
+end-to-end acceptance. The [workflow](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification)
+contains the current reproduction command and invariant interpretation.

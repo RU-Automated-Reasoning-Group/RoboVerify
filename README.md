@@ -31,12 +31,14 @@ See [controller settings](roboverify/synthesis/inference_lib/README.md#primitive
 `inference.py`, through `InvInference`.** It is the intended algorithm for both
 pipeline modes and standalone symbolic CEGIS; there is no learner-selection flag.
 
-**Supplied Stack verification and full synthesis acceptance remain open under
-this algorithm.** The earlier successful run selected an alternate observed-pattern
-learner and does not establish acceptance of the intended inference workflow.
-The verifier fixes and separately checked geometric invariants remain available.
+**Supplied Stack symbolic verification passes with the intended learner and the
+explicit vocabulary `--invariant-relations ON_star equality`.** It learns from
+candidate loop heads and normal exits, then proves establishment, preservation
+and exit, including unbounded verification. This configuration does not carry
+separation facts needed by motion verification: collision checks still fail.
+End-to-end supplied-program verification and full synthesis acceptance remain open.
 See the [verification command](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification)
-and [diagnosis](PAPER-DISCREPANCIES.md#27-stack-motion-needed-geometric-loop-invariants).
+and [invariant diagnosis](PAPER-DISCREPANCIES.md#30-stack-invariant-vocabulary-and-attachment-semantics).
 Current archives contain full simulator states; old demo formats are unsupported.
 Collect demonstrations before running the pipeline examples.
 
