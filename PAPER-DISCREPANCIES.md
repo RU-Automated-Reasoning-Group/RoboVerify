@@ -792,9 +792,24 @@ for sizes 2–6 and an uninterpreted domain; it does not inject a fixture invari
 
 **Other failure and remaining actions:** the default vocabulary also includes
 Higher, which can infer observed facts such as `forall x: Higher(b,x)` not implied
-by Stack's relational entry precondition; establishment then fails. The successful
-ON*/equality invariant omits separation facts and still fails motion collision
-checks. Resolve sufficient learned separation facts for motion, and the mismatch
+by Stack's relational entry precondition; establishment then fails. The abstract
+Higher axioms also admit incomparable pairs that numeric heights cannot realize,
+but concrete unequal-height scattered scenes independently refute establishment.
+
+A further learned clause,
+`Higher(y,x) and Higher(b0,x) => ON*(b,x) or Higher(b0,y)`, fails preservation from
+three equal-height singletons. After placing one above b0, choose x as the remaining
+singleton and y as the new top: both height premises hold and both conclusions
+are false. The full learned invariant and guard hold before that placement.
+The recorded simulator states can satisfy this clause because b0 moves slightly
+downward after stacking, making `Higher(b0,x)` false for untouched blocks. Ideal
+symbolic placement preserves b0's height. This is a learned dependency on a small
+simulator displacement, distinct from the attachment/replay mismatch above.
+Adding an equal-height entry premise alone would not repair this preservation
+failure. Learner, predicates and verification semantics remain unchanged.
+
+The successful ON*/equality invariant omits separation facts and still fails motion
+collision checks. Resolve sufficient learned separation facts for motion, and the mismatch
 between attachment WP and replay outside source-singleton states, before claiming
 end-to-end acceptance. The [workflow](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification)
 contains the current reproduction command and invariant interpretation.

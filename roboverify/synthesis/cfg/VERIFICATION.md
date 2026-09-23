@@ -100,7 +100,9 @@ tower. The current attachment WP retains a selected block's old ON* relationship
 physically moving that block off another tower does not. Such a model can fail
 symbolic preservation while its replay still satisfies the invariant, yielding
 `no_progress`. Including Higher can learn observed height facts absent from the
-relational entry precondition, failing establishment. These are distinct failures;
+relational entry precondition, failing establishment. It can also learn clauses
+that depend on small simulator displacements of b0 and fail preservation under
+ideal placement, even from equal-height scattered blocks. These are distinct failures;
 see [entry 30](../../../PAPER-DISCREPANCIES.md#30-stack-invariant-vocabulary-and-attachment-semantics).
 
 The ON*/equality invariant supplies no Scattered separation facts, so it is
