@@ -18,11 +18,13 @@ Synthesis offers `--synthesis-approach relational` (the existing default) and
 Both return named programs to inference and verification. See the
 [approach guide](roboverify/synthesis/cfg/VERIFICATION.md#synthesis-approaches).
 
-Five current four-block Stack recordings (seeds 0–4) finish in exactly three
-iterations, pass initial/final task validation, and have saved 20 FPS videos.
-A broader check of seeds 0–99 passes **96/100**; seeds 38, 46, 73, and 85 exhaust
-the third Pick's approach budget. Controller robustness remains open (review
-entry 23).
+Stack reset now scatters blocks within **0.70 m horizontally of the robot base**,
+retaining block separation and initial gripper clearance. With this region,
+**100/100 four-block demos (seeds 0–99)** finish in exactly three iterations,
+pass initial/final task validation, and converge in every primitive within at
+most 22 steps. The earlier region passed 96/100; see review entry 23 for the
+reset bounds and physical diagnosis. This validates the tested four-block
+collection, not arbitrary tower sizes or robot configurations.
 Primitive ID/ByName instructions share configurable controllers and retain their
 50-step budgets. See [controller settings](roboverify/synthesis/inference_lib/README.md#primitive-controller-settings).
 **End-to-end learning acceptance remains open:**

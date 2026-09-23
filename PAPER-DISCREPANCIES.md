@@ -699,8 +699,8 @@ For seeds 38, 46, and 85, the simulator reports active contacts between
 `robot0:upperarm_roll_link` and both head links. Disabling collision masks on
 only the two head geoms in diagnostic environments makes the unchanged targets
 converge in 4, 5, and 9 steps, respectively. This isolates head/upper-arm contact
-as the obstruction in those three replays; disabling collisions is not a
-proposed production fix.
+as the obstruction in those three replays. Only diagnostic environments had
+their collision masks changed.
 
 Seed 73 has no robot self-contact, and removing head collisions leaves its
 failure unchanged. Its elbow angle is approximately -0.00349 radians, with the
@@ -729,8 +729,37 @@ Diagnostic results and replay scripts are saved beside the collection as
 `stall-diagnosis.json`, `stall-isolation.json`, `stall-probe.py`, and
 `stall-isolation.py`.
 
-**Remaining action:** none for the numeric/named mismatch. Address the approach
-height/path while preserving clearance around the tower, then rerun the same
-100-seed acceptance check with complete programs. Full learning and verification
-acceptance (20–22) must use validated demonstrations and fresh candidate
-execution under the chosen controller settings.
+**Stack reset region:** The user clarified that reliable primitive skills are
+assumed, with head/arm self-collision outside the experiment's scope, and asked
+to sample initial blocks closer to the robot base. Stack reset now calls
+`environment/stack_reset.py::sample_stack_xy`: block centers have base-relative
+X in [0.54, 0.70] m and Y in [-0.20, 0.20] m, with an additional XY radius bound
+of 0.70 m. It retains pairwise Scattered separation, 0.10 m initial-gripper
+clearance, resting table height, and the b0 binding. Sampling uses the existing
+seeded NumPy stream, restarts crowded layouts, and fails after bounded retries
+without expanding the region or returning a partial layout. Other task reset
+samplers are unchanged. Saved archives still restore their actual initial
+states; new sampling bounds apply when recollecting, not when replaying them.
+
+With the same Stack program, tolerances, 50-step primitive budget, and collision
+settings, a fresh collection of **all seeds 0–99 passes 100/100**. Each run
+satisfies the precondition and final postcondition, selects blocks 1, 2, 3 in
+exactly three iterations, and exits the loop normally. All 1,500 primitives
+converge, with a maximum of 22 control steps. All 400 initial block centers lie
+within the bound; the largest measured radius is 0.699845 m. No failing seeds
+were substituted. The accepted archive and independent audit are saved in
+`demos/stack/4-blocks-100-trajectories-near-base/` as `demonstrations.npz` and
+`validation-summary.json`. Reproduce with the 100-seed command above, changing
+only `--output-dir` to that new directory.
+
+Regression checks cover two-, three-, four-, and six-block layouts across
+100 seeds, seeded reproducibility, translated base coordinates, bounded
+exhaustion without an out-of-bounds fallback, and actual simulator resets.
+The full regression suite passes 263 tests.
+The 0.70 m bound holds by construction for every returned layout. The 100-demo
+result establishes finite four-block execution evidence, not universal robot
+reachability at arbitrary heights, orientations, or block counts.
+
+**Remaining action:** none for the numeric/named mismatch or requested Stack
+reset bound. Full learning and verification acceptance (20–22) must use validated
+demonstrations and fresh candidate execution under the chosen controller settings.

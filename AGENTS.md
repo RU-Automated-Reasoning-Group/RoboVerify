@@ -46,10 +46,10 @@ Tests are `unittest`, not pytest. No linter is configured.
 Read [README.md](README.md#project-status) for current project status and
 [PAPER-DISCREPANCIES.md](PAPER-DISCREPANCIES.md) for numbered findings, settled
 reasoning and remaining actions. Implementation is complete within the supported
-scope; current four-block Stack demos pass 96/100 seeds (0–99) with exactly
-three iterations. Seeds 38, 46, 73, and 85 fail the third Pick's approach within
-50 steps (review entry 23). Controller robustness and end-to-end learning
-acceptance remain open.
+scope; Stack reset bounds initial blocks to 0.70 m XY from the robot base.
+Current four-block demos pass 100/100 seeds (0–99) with exactly three iterations
+and at most 22 steps per primitive (review entry 23). This is finite validation
+of the chosen workspace; end-to-end learning acceptance remains open.
 Update the relevant status or entry when it changes, rather than maintaining a
 separate implementation-plan history.
 
@@ -75,6 +75,10 @@ and paper corrections are recorded in the numbered review entries.
 | 5 | Top is removed from the predicate vocabulary. |
 | 6 | ON_star_zero is frozen entry geometry. Tasks using it equate it with current ON* in the precondition, never through a global link axiom (entry 5). |
 | 7 | Optimize all three Move coordinates. Reassess CEM budgets when dimensionality changes; a single smoke run does not justify new defaults. |
+
+The experiment assumes reliable primitive skills; head/arm self-collision is
+outside its evaluation scope. Simulator skill failures must still be diagnosed,
+and accepted demonstrations must actually satisfy their pre/postconditions.
 
 ## Conventions
 
@@ -263,6 +267,12 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   Unstack/Reverse/Partial standalone verifiers consume `--demos` via the in-memory
   inference adapter; Reverse/Partial still report unsupported motion because they
   lack lowered physical programs. The 2D entry point remains outside tower scope.
+
+- **`synthesis/environment/stack_reset.py`** — Stack-only bounded reset sampling.
+  Initial block centers have base-relative X in [0.54, 0.70] m, Y in [-0.20,
+  0.20] m, and XY radius at most 0.70 m. Retain Scattered separation and 0.10 m
+  initial-gripper clearance. Bounded retries fail explicitly without expanding
+  the workspace; archived initial states still restore exactly.
 
 - **`synthesis/environment/`** — MuJoCo/Gymnasium environments (Fetch pick-and-place block
   construction, ant maze, etc.), largely vendored/adapted from CEE-US and

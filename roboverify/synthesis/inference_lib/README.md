@@ -58,6 +58,22 @@ required for videos. Encoding failures are reported separately and produce a
 nonzero command result without discarding valid trajectory data. Frames are
 streamed rather than retained in memory. No extra simulator steps are added.
 
+## Stack reset workspace
+
+New Stack resets sample block centers relative to the robot base: X is
+0.54–0.70 m forward, Y is within ±0.20 m, and horizontal distance from the base
+is at most **0.70 m**. This replaces the former square around the initial
+gripper, which allowed distant approach targets. Every layout retains at least
+0.10 m separation in X or Y between blocks and 0.10 m horizontal clearance from
+the initial gripper. Blocks start at the resting table height; b0 is unchanged.
+Sampling restarts a crowded layout with bounded retries and reports an error if
+it cannot fit the requested count; it never expands the region as a fallback.
+
+The bound applies to every newly sampled layout, independently of seed. It is
+an XY workspace restriction, not a proof of reachability at every height or for
+every tower size. Existing archives restore their saved initial states; recollect
+to use the new region. The same reset is used by collection and candidate runs.
+
 ## Primitive controller settings
 
 `Pick`/`Move`/`Release` and their ByName variants share the controllers in
@@ -115,14 +131,15 @@ uv run python -m synthesis.entry.collect_demos \
   --output-dir demos/stack/4-blocks-5-trajectories-precise
 ```
 
-Seeds 0–4 finish normally with exactly three iterations, all 15 primitives
-converged, and at most 20 steps per primitive. Videos use 20 FPS. These results
-validate this collection, not all possible scenes or formal verification.
-A subsequent check of seeds 0–99 passes 96/100 under the same settings; seeds
-38, 46, 73, and 85 exhaust the third Pick's approach budget and fail the final
-task condition. The 96 successes use at most 21 steps per primitive. The whole
-100-seed batch is rejected, with all trajectories retained as diagnostics; see
-[review entry 23](../../../PAPER-DISCREPANCIES.md#23-numeric-and-named-release-use-different-physical-stopping-tolerances).
+With the former reset region, seeds 0–4 finished in three iterations with
+20 FPS videos, but a broader check passed only 96/100: seeds 38, 46, 73, and 85
+failed the third Pick's approach. The rejected batch remains as diagnostics.
+With the bounded reset region above and identical program/controller settings,
+seeds 0–99 now pass **100/100**: exactly three iterations, all 15 primitives
+converged, and at most 22 steps per primitive. The accepted archive is
+`demos/stack/4-blocks-100-trajectories-near-base/demonstrations.npz`.
+This validates that collection, not all possible scenes or formal verification;
+see [review entry 23](../../../PAPER-DISCREPANCIES.md#23-numeric-and-named-release-use-different-physical-stopping-tolerances).
 Recollect after changing controller settings; older fingerprints describe the
 previous executable. The earlier continuation findings in review entry 22 refer
 to the former controllers and waypoints.
