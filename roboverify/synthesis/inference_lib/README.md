@@ -142,6 +142,12 @@ Ten separately rendered runs (seeds 0, 38, 46, 73, 85, 150, 250, 350, 450, 499)
 have 20 FPS videos under `demos/stack/4-blocks-near-base-10-videos/videos/`.
 All ten pass validation and reproduce their matching batch actions exactly;
 observations agree within 1e-8.
+These accepted traces still exhibit a systematic first-placement offset of about
+13 mm: the initial robot state has not fully settled, and Move controls the
+gripper site without compensating for the held block's offset. The task's
+25 mm per-axis ON tolerance accepts it. See
+[review entry 24](../../../PAPER-DISCREPANCIES.md#24-the-first-stack-placement-inherits-a-transient-robot-state-and-a-grasp-offset)
+for the diagnosis; controller convergence does not certify block centering.
 This validates that collection, not all possible scenes or formal verification;
 see [review entry 23](../../../PAPER-DISCREPANCIES.md#23-numeric-and-named-release-use-different-physical-stopping-tolerances).
 Recollect after changing controller settings; older fingerprints describe the

@@ -800,3 +800,80 @@ remains the implementation regression baseline.
 **Remaining action:** none for the numeric/named mismatch or requested Stack
 reset bound. Full learning and verification acceptance (20–22) must use validated
 demonstrations and fresh candidate execution under the chosen controller settings.
+
+## 24. The first Stack placement inherits a transient robot state and a grasp offset
+
+**Status:** diagnosed implementation issue; no motion/reset/controller fix has
+been applied. This is a placement-precision issue within the current accepted
+geometric task tolerance, not a contradiction of the 500-seed task result.
+
+**Finding:** Across all 500 four-block traces in the bounded reset region, the
+first placed block (yellow, ID 1) finishes toward the robot relative to b0. The
+mean final X offsets from b0 are -12.798 mm for block 1, +2.631 mm for block 2,
+and +5.962 mm for block 3. Block 1's range is -16.306 to -9.314 mm; every one of
+the 500 offsets points toward the robot when projected onto the base direction.
+The upper two blocks differ by 3.331 mm in X on average, explaining why they
+appear much more closely aligned with each other.
+
+The bias largely develops during transport. Immediately before the first
+Release, the mean gripper X error relative to b0 is only +0.552 mm, but the
+carried block is -11.307 mm relative to the gripper (and 16.341 mm above its
+tracked site). The block is therefore already about 10.756 mm toward the robot
+before opening; release/settling adds roughly another 2 mm. `Move` measures the
+gripper site in `observation[:3]`, not the held block's center, and has no grasp
+offset compensation. A 2 mm Move tolerance consequently does not imply a 2 mm
+block placement error. Current ON/ON_star geometry permits lateral differences
+below 25 mm per axis, so the task checker accepts these placements.
+
+**Cause and controlled evidence:** The inherited Fetch setup advances only ten
+simulator control steps after commanding the initial robot pose, then saves
+`initial_state`. Stack reset restores that same robot state for every seed and
+changes the block positions without waiting for robot settling. The saved state
+still has gripper linear velocity approximately (-4.14, -0.02, +5.86) mm/s,
+angular velocity approximately 0.0305 rad/s about Y, and a 0.704-degree
+orientation error. The later picks start after substantially more robot settling.
+
+The following diagnostics restore saved initial simulator states; they do not
+change the production implementation or the primitive budgets:
+
+- Replaying the original first placement reproduces its recorded observations
+  within 1e-8 on seeds 0, 38, 73, and 499.
+- Holding the initial gripper position for 50 control steps before that placement
+  changes the release-time X offsets as follows. These are isolated first-placement
+  experiments, not complete-program acceptance results.
+
+| Seed | Original first-placement offset | After diagnostic settling |
+| --- | --- | --- |
+| 0 | -12.844 mm | +1.586 mm |
+| 38 | -11.913 mm | +1.302 mm |
+| 73 | -12.610 mm | +1.392 mm |
+| 499 | -15.619 mm | +0.373 mm |
+
+- On seeds 0 and 499, restoring only the blocks' original positions/velocities
+  after settling preserves the improvement. Restoring the robot's original
+  joint positions/velocities reinstates the original bias to approximately
+  0.00012 mm. This isolates the robot state from object settling and elapsed time.
+- Picking block 2 first instead gives that block an offset of -14.583 mm (seed 0)
+  or -12.863 mm (seed 499): the effect follows the first pick, not its color/ID.
+- Opening the gripper before the first approach does not remove the bias.
+  Tightening Pick to 2 mm reduces it only partially (roughly 5–6 mm remains).
+  Sending an absolute orientation target alone also does not remove it. Merely
+  zeroing initial robot velocities worsens the tested first-placement X errors
+  to approximately 55–65 mm, despite reported primitive convergence; a consistent
+  settled state is needed rather than a velocity-only reset. The
+  evidence identifies the initial robot-state transient and uncorrected held-block
+  displacement; it does not isolate a single contact/force parameter as the cause.
+
+Data and replay scripts are saved with the 500-seed collection:
+`placement-offset-audit.json`, `grasp-isolation.json`,
+`first-placement-transient.json`, and `reset-transient-metrics.json`, with their
+corresponding Python scripts. The 500-trace audit measures final geometry and
+instruction boundaries; the diagnostic scripts restore simulator snapshots and
+record their interventions separately from the accepted demonstrations.
+
+**Remaining action:** settle and validate the initial robot state before saving
+it for resets, and evaluate held-block feedback or grasp-offset compensation
+for placement. Verify actual block-centering errors as well as controller
+convergence and task predicates. A 50-step diagnostic wait is evidence for the
+cause, not a validated new default or a universal fix. Recollect and rerun full
+program validation after choosing an implementation change.

@@ -25,7 +25,9 @@ pass initial/final task validation, and converge in every primitive within at
 most 22 steps. The earlier region passed 96/100; see review entry 23 for the
 reset bounds and physical diagnosis. This validates the tested four-block
 collection, not arbitrary tower sizes or robot configurations. Ten selected
-seeds also have validated 20 FPS videos (review entry 23).
+seeds also have validated 20 FPS videos (review entry 23). A systematic first
+placement offset of about 13 mm remains within the task tolerance; its initial
+robot-state and grasp-tracking causes are recorded in review entry 24.
 Primitive ID/ByName instructions share configurable controllers and retain their
 50-step budgets. See [controller settings](roboverify/synthesis/inference_lib/README.md#primitive-controller-settings).
 **End-to-end learning acceptance remains open:**
