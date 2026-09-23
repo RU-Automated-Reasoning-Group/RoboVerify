@@ -286,12 +286,17 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   a refinement's existential prefix requires), `refine.py` (Algorithm 3),
   `straightline.py` (Algorithm 5), `synthesize.py` (the Algorithm 2 recursive driver),
   `quotient.py`/`kleene.py` (Algorithm 4, flat case only), plus demo recording,
-  segment reset/replay and split validation. Numeric physical operands can be
-  generalized to named operands during folding, but this does not establish a
-  relational summary: symbolic lowering rejects such candidates. Learned guards
+  segment reset/replay and split validation. `--synthesis-approach relational`
+  retains early scoped binding and is the default. `id-first` keeps MCMC and CFG
+  refinement numeric, then runs quotienting after concrete search completes.
+  `id_first.py` converts any residual IDs to fixed entry aliases before synthesis
+  returns; inference and both verifiers receive only named instructions and
+  predicates. Quotienting compares repeated coordinate operands independently,
+  preserving fixed-base XY versus carried-top Z. Neither conversion establishes
+  a relational summary; the shared verification stages still check it. Learned guards
   accept demonstrated witnesses and reject all bindings at demonstrated exits;
-  unselected continuing-state bindings are unlabeled. Runtime may choose the first
-  matching witness; symbolic preservation verification covers every matching choice.
+  unselected continuing-state bindings are unlabeled. Runtime chooses the first
+  matching witness in ascending physical ID order; symbolic preservation verification covers every matching choice.
   Multiple witnesses are permitted, without a separate uniqueness requirement.
   Extracted iterations share their invocation's frozen entry geometry.
 

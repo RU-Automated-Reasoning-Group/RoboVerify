@@ -459,7 +459,7 @@ obtain `verified_model` on that same synthesized candidate.
 
 ## 21. Free-object binding is performed before search instead of on the returned candidate
 
-**Status:** paper/code discrepancy identified; operand-search policy remains unresolved.
+**Status:** user-selected ID-first alternative implemented; the original relational policy remains the default.
 
 **Paper:** Section 2.2 (p. 4) defines object-valued variables, and Fig. 5 (p. 10)
 uses bound `b` and `b_prime` in the loop body's physical primitives. Algorithm 5
@@ -468,7 +468,7 @@ Section 3.4 (p. 17, lines 831–832) describes introducing a typed `Get(True)` f
 any object identifier still free in the returned candidate. It does not specify
 Python ByName/ID classes or require every search operand to be a numeric ID.
 
-**Implementation:** `entry/synthesize_cfg.py` generates a numeric seed program,
+**Existing relational approach:** `entry/synthesize_cfg.py` generates a numeric seed program,
 then calls `cfg/bindings.py::close_objects` before `straight_line_synthesize`.
 This reuses consistently bound in-scope aliases or inserts fresh `Get` bindings,
 and converts physical instructions to ByName variants. `mutate_scoped` then
@@ -485,9 +485,31 @@ This is not solely a class-name substitution. Its effect on end-to-end search
 acceptance has not been measured, and it is not established as the cause of
 existing smoke-run failures.
 
-**Remaining action:** choose and document the intended operand domain and binding
-schedule. If binding is moved after candidate selection, rescore the resulting
-executable and retain verification of every allowed witness; a successful numeric
-rollout does not establish the behavior of an arbitrary Get binding. If early
-binding is retained, explicitly justify the fixed prefix or support searching
-bindings as well. Neither paper wording nor current code alone settles the choice.
+**Decision and implementation:** The user selected a switchable alternative,
+`--synthesis-approach id-first`, while retaining `relational` as the default.
+ID-first MCMC uses only numeric physical operands; CFG refinement learns ground
+ID predicates without existential binders. After concrete search finishes,
+quotienting introduces loop roles from repeated predicates and physical operand
+sequences. This is an explicit user-selected search schedule, not a claim that
+the paper uniquely prescribes it. Runtime first-witness selection is unchanged.
+
+The user additionally requires a named synthesis output. Before synthesis
+returns, residual IDs become fixed entry aliases with preserved identity and
+explicit alias facts. Loop variables arise during quotienting; fixed residual
+aliases do not claim relational generalization. No numeric primitives or ID
+literals are sent to invariant inference or either verifier. Fresh execution and
+both verification stages still check the returned candidate, including all
+allowed guard witnesses. A numeric rollout alone cannot establish that result.
+
+**Evidence:** Generated tests learn `ON(1, b0)` then `ON(2, 1)` through the actual
+classifier, recover carried/rebound loop roles, preserve fixed-base XY and
+carried-top Z, and exercise the named boundary through the existing symbolic and
+motion verifiers. CLI and resynthesis tests retain the selected policy. The full
+suite passes 247 tests. A real five-demo Stack ID-first smoke (seeds 0–4,
+base-aligned collection) learns `ON(1, b0)` with no new bindings, then exhausts
+its search budget in about 70 seconds. It does not reach verification and is not
+learning acceptance.
+
+**Remaining action:** demonstrate complete learning acceptance with representative
+recordings and compare the two search policies. The early-Get policy's fixed
+prefix remains an explicit limitation of the retained relational variant.

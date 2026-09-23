@@ -32,6 +32,62 @@ loops are unsupported in this workflow. `--output-dir` changes the experiment
 results root; `--run-name` adds an optional readable label. `--smoke` is a small
 search budget, not an acceptance criterion.
 
+## Synthesis approaches
+
+`--synthesis-approach relational` is the default and retains the existing
+behavior: bind numeric seed operands to names before local MCMC, search over
+those names, and allow existential classifiers to introduce scoped bindings.
+`--quotient` enables its existing interleaved flat-loop recovery.
+
+`--synthesis-approach id-first` selects **ID-first synthesis**:
+
+1. MCMC and CEM search only numeric `Pick`, `Move`, and `Release` primitives
+   (plus `Skip`), over IDs `0 .. num_blocks-1`. There is no early `Get(True)`
+   conversion. Move still optimizes all three coordinate offsets.
+2. CFG refinement learns ground predicates over those IDs and existing fixed
+   task names, such as `ON(1, b0)` followed by `ON(2, 1)`. It introduces no new
+   existential object variables. A missing separator or exhausted budget remains
+   an unsuccessful search; there is no fallback to quantified refinement.
+3. After the concrete CFG is synthesized, flat-loop quotienting generalizes
+   repeated fragments to roles such as `b` and `b_prime`, starting from `b0`.
+   ID-first enables quotienting automatically. It compares operand sequences
+   across completed fragments, so a fixed base used for XY can remain `b0` while
+   the changing Z reference becomes `b`. Incompatible controllers are not folded.
+   A final completed placement may supply a concrete repetition letter when the
+   outgoing task goal is quantified; the task postcondition itself is retained.
+4. **Before synthesis returns, every physical instruction is ByName.** Any
+   remaining concrete IDs become fixed entry aliases, with their identity map
+   and equality/distinctness facts preserved. They are not arbitrary `Get`
+   witnesses. This also covers straight-line candidates when no loop is found.
+   Inference, symbolic verification, and motion verification receive the same
+   named representation as before, and candidate execution records fresh states
+   after generalization. Later motion repair uses that named representation.
+
+```bash
+uv run python -m synthesis.entry.synthesize_cfg --task stack --num-blocks 3 \
+  --mode full --synthesis-approach id-first \
+  --demos demos/stack/3-blocks-5-trajectories-base-aligned/demonstrations.npz \
+  --run-name stack-id-first
+```
+
+The flag is independent of `--mode`: verify mode still skips initial synthesis;
+if verification requests resynthesis with additional demonstrations, it uses the
+selected approach. Configuration and `artifacts/cfg.json` record the approach;
+the latter also records any fixed ID bindings. The standalone
+`synthesis.experiment.mcmc.run` already searches numeric primitives and does not
+perform CFG refinement or quotienting; this switch belongs to the integrated CLI.
+
+ID-first expects the same physical ID universe across demonstrations. Its finite
+counterexample checks start at the demonstrated block count, so a smaller
+universe does not make fixed-alias distinctness premises inconsistent; the
+existing unbounded proof is still required afterward. Runtime
+witness selection remains deterministic (first match in ascending physical ID
+order). Quotienting is conservative: a carried role must initialize from an
+available alias, and repeated physical fragments must have matching instruction
+shapes and recoverable operand roles. A successful numeric search does not prove
+the generalized loop; the shared inference and verification pipeline still has
+to accept that returned candidate.
+
 ## Verification workflow
 
 1. Acquire the synthesized or supplied CFG and propose checked placement summaries.

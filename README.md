@@ -13,6 +13,11 @@ modes. Both modes learn invariants from executions of the actual candidate and
 perform symbolic and motion verification with feedback. See the
 [collection guide](roboverify/synthesis/inference_lib/README.md).
 
+Synthesis offers `--synthesis-approach relational` (the existing default) and
+`--synthesis-approach id-first` (numeric MCMC/refinement, followed by quotienting).
+Both return named programs to inference and verification. See the
+[approach guide](roboverify/synthesis/cfg/VERIFICATION.md#synthesis-approaches).
+
 Five real three-block Stack recordings (seeds 0–4) pass initial/final task
 validation and have saved videos. **End-to-end learning acceptance remains open:**
 the verification-mode smoke requests additional demonstrations after symbolic
