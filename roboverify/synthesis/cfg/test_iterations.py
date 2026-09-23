@@ -79,10 +79,11 @@ class IterationExtractionTests(unittest.TestCase):
 
 
 class InvariantAdapterResultTests(unittest.TestCase):
-    def test_legacy_inference_returns_the_formula_not_provenance_tuple(self):
+    def test_inference_returns_the_formula_not_provenance_tuple(self):
         from unittest.mock import patch
 
         import z3
+
         from synthesis.cfg.invariants import infer_loop_invariant
         from synthesis.verification_lib.highlevel_verification_lib import (
             HighLevelContext,

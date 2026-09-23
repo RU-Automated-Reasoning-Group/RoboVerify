@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 import numpy as np
 import z3
+
 from synthesis.api.instructions import Assign, LoopBudgetExceeded, While
 from synthesis.api.program import Program
 from synthesis.inference_lib import golden_tower_fixtures as golden
@@ -122,7 +123,7 @@ class TraceCollection(unittest.TestCase):
 class InferenceAdapter(unittest.TestCase):
     def setUp(self):
         self.context = HighLevelContext(mode="declare")
-        # Capture exactly what the legacy example passed to the learner.
+        # Capture exactly what the original example passed to the learner.
         with patch.object(golden, "loop_inference", side_effect=lambda *a, **kw: a):
             self.inputs = golden.run_proposal_example(self.context)
         _, states, _, _, _, mappings = self.inputs

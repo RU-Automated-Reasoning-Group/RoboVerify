@@ -13,6 +13,7 @@ from synthesis.api.program import Program
 from synthesis.inference_lib.demo_store import (
     DemoStore,
     InferenceVocabulary,
+    InvInference,
     LoopHeadState,
 )
 from synthesis.verification_lib.cegis import (
@@ -58,9 +59,14 @@ class SymbolicCEGISTests(unittest.TestCase):
 
     def test_false_to_inductive_invariant_strictly_enlarges_and_terminates(self):
         store = DemoStore([self.row])
-        result = run_symbolic_cegis(
-            store, "0", self.vocab, self.ctx, self.build, max_blocks=2
-        )
+        with patch(
+            "synthesis.verification_lib.cegis.InvInference", wraps=InvInference
+        ) as infer:
+            result = run_symbolic_cegis(
+                store, "0", self.vocab, self.ctx, self.build, max_blocks=2
+            )
+        # Bootstrap and counterexample refinement must both use the intended algorithm.
+        self.assertEqual(infer.call_count, 2)
         self.assertTrue(result, (result.status, result.reason))
         self.assertEqual(result.iterations, 2)
         self.assertEqual(len(store), 2)

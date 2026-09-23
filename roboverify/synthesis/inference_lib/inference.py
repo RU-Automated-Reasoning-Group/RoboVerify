@@ -823,6 +823,9 @@ def implication_sop_to_clauses_z3(M, N):
 
 def add_universal_quantifiers(clauses: List, universal_quantified_vars: List) -> List:
     """Adding universal quantifiers for all vars in universal_quantified_vars"""
+    # Ground vocabularies have no binders; ForAll([]) is rejected by Z3.
+    if not universal_quantified_vars:
+        return list(clauses)
     result = []
     for clause in clauses:
         result.append(z3.ForAll([*universal_quantified_vars], clause))

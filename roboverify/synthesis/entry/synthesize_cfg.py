@@ -256,7 +256,6 @@ def run(args, logger):
         prepare=lambda candidate, revision: prepare_candidate(
             candidate,
             context,
-            learner=args.learner,
             relations=args.invariant_relations,
             variables=args.invariant_variables,
             max_loop_iterations=args.max_loop_iterations,
@@ -276,7 +275,6 @@ def run(args, logger):
         symbolic_iterations=args.symbolic_iterations,
         motion_iterations=args.motion_iterations,
         timeout_ms=args.verification_timeout_ms,
-        learner=args.learner,
         relations=args.invariant_relations,
         variables=args.invariant_variables,
         motion_options={
@@ -355,7 +353,6 @@ def main(argv=None):
     parser.add_argument(
         "--quotient", action="store_true", help="Enable conservative flat-loop folding"
     )
-    parser.add_argument("--learner", choices=("legacy", "monotone"), default="legacy")
     parser.add_argument(
         "--invariant-relations",
         nargs="+",

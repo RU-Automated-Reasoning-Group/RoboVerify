@@ -8,7 +8,6 @@ from synthesis.inference_lib.demo_store import (
     LoopHeadState,
 )
 from synthesis.util import on
-from synthesis.verification_lib.cegis import MonotoneInvariantLearner
 
 
 def loop_learning_data(rows, scope, *, relations=None, variables=2):
@@ -47,14 +46,8 @@ def loop_learning_data(rows, scope, *, relations=None, variables=2):
     return store, InferenceVocabulary(variables, relations, names)
 
 
-def infer_loop_invariant(
-    rows, guard, scope, *, context, learner="legacy", relations=None, variables=2
-):
+def infer_loop_invariant(rows, guard, scope, *, context, relations=None, variables=2):
     store, vocabulary = loop_learning_data(
         rows, scope, relations=relations, variables=variables
     )
-    if learner == "legacy":
-        return InvInference(store, "loop", vocabulary, context)[0]
-    if learner == "monotone":
-        return MonotoneInvariantLearner()(store, "loop", vocabulary, context)
-    raise ValueError(f"Unknown invariant learner: {learner}")
+    return InvInference(store, "loop", vocabulary, context)[0]

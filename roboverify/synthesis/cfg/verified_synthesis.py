@@ -21,7 +21,6 @@ from synthesis.cfg.verification import (
 from synthesis.inference_lib.demo_store import InvInference
 from synthesis.predicates.term import to_z3
 from synthesis.verification_lib.cegis import (
-    MonotoneInvariantLearner,
     PenStore,
     _project,
 )
@@ -151,7 +150,6 @@ def verified_synthesis(
     max_refinements=10,
     symbolic_iterations=10,
     motion_iterations=10,
-    learner="legacy",
     relations=None,
     variables=2,
     timeout_ms=5000,
@@ -379,11 +377,7 @@ def verified_synthesis(
             store, vocabulary = stores[key]
             successor.loop_id = "loop"
             store.add(successor)
-            candidate = (
-                InvInference(store, "loop", vocabulary, context)[0]
-                if learner == "legacy"
-                else MonotoneInvariantLearner()(store, "loop", vocabulary, context)
-            )
+            candidate = InvInference(store, "loop", vocabulary, context)[0]
             if not all(
                 state_holds(candidate, _project(row, context.use_tbl))
                 for row in store.for_loop("loop")

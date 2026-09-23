@@ -436,7 +436,6 @@ class VerifiedSynthesisTests(unittest.TestCase):
             lambda n, *_: (n.region, True),
             lambda _: [],
             ctx,
-            learner="monotone",
             relations=("equality",),
             variables=1,
             min_blocks=2,

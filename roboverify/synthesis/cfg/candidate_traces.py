@@ -10,7 +10,7 @@ from synthesis.cfg.lower import lower_with_locations
 from synthesis.cfg.program_source import ProgramDefinition, describe_program
 from synthesis.cfg.recordings import loop_store, save_traces
 from synthesis.inference_lib.demo_store import InferenceVocabulary, InvInference
-from synthesis.verification_lib.cegis import MonotoneInvariantLearner, _project
+from synthesis.verification_lib.cegis import _project
 from synthesis.verification_lib.counterexamples import state_holds
 
 
@@ -64,7 +64,6 @@ def prepare_candidate(
     cfg,
     context,
     *,
-    learner="legacy",
     relations=None,
     variables=2,
     max_loop_iterations=100,
@@ -151,11 +150,7 @@ def prepare_candidate(
             logger.write_artifact(
                 f"candidates/{revision}/invariant-{loop_path}-initial.smt2", "false"
             )
-        formula = (
-            InvInference(store, "loop", vocabulary, context)[0]
-            if learner == "legacy"
-            else MonotoneInvariantLearner()(store, "loop", vocabulary, context)
-        )
+        formula = InvInference(store, "loop", vocabulary, context)[0]
         if not all(
             state_holds(formula, _project(row, context.use_tbl))
             for row in store.for_loop("loop")

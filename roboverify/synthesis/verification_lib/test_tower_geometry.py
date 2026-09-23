@@ -1,7 +1,11 @@
-"""Unbounded checks on the supplied Stack program with a learned invariant."""
+"""Geometric solver regressions using an explicit structural invariant fixture.
+
+This fixture tests proof obligations, not acceptance of the inference algorithm.
+"""
 
 import unittest
-from copy import deepcopy
+
+import z3
 
 from synthesis.api.instructions import MoveByName
 from synthesis.cfg.program_adapter import program_to_cfg
@@ -13,34 +17,27 @@ from synthesis.cfg.verification import (
     verify_cfg_symbolic,
 )
 from synthesis.cfg.verified_synthesis import loop_regions
-from synthesis.inference_lib.demo_store import (
-    DemoStore,
-    InferenceVocabulary,
-    LoopHeadState,
-)
-from synthesis.verification_lib.cegis import MonotoneInvariantLearner
 from synthesis.verification_lib.highlevel_verification_lib import HighLevelContext
 
 
-def learned_stack_cfg():
+def stack_cfg_with_fixture_invariant():
     context = HighLevelContext()
     definition = load_program("synthesis.examples.stack:build_program", context, 4)
     cfg = program_to_cfg(definition, [], *task_spec("stack"))
     propose_summaries(cfg, context)
-    store = DemoStore()
-    start = {f"x{i}": [0.2 * i, 0.0, 0.425] for i in range(4)}
-    scene = deepcopy(start)
-    for top in range(4):
-        if top:
-            scene[f"x{top}"] = [0.0, 0.0, 0.425 + 0.05 * top]
-        store.add(
-            LoopHeadState("loop", deepcopy(scene), start, {"b0": "x0", "b": f"x{top}"})
-        )
-    invariant = MonotoneInvariantLearner()(
-        store,
-        "loop",
-        InferenceVocabulary(2, ("ON_star", "Scattered", "equality"), ("b", "b0")),
-        context,
+    # One tower rooted at b0 and topped by b; all other blocks are singletons.
+    # Explicit test input, never injected into production inference.
+    b, b0, x, y = z3.Consts("b b0 fixture_x fixture_y", context.BoxSort)
+    on = context.ON_star
+    invariant = z3.And(
+        on(b, b0),
+        z3.ForAll([x], z3.Implies(on(b0, x), x == b0)),
+        z3.ForAll([x], z3.Implies(on(x, b), x == b)),
+        z3.ForAll([x], z3.Implies(on(x, b0), on(b, x))),
+        z3.ForAll([x, y], z3.Or(on(x, y), on(y, x), context.Scattered(x, y))),
+        z3.ForAll(
+            [x, y], z3.Implies(z3.And(x != y, on(x, y)), z3.And(on(x, b0), on(y, b0)))
+        ),
     )
     next(loop_regions(cfg)).invariant = invariant
     return context, cfg
@@ -120,8 +117,8 @@ class ConsistencyWitnessTests(unittest.TestCase):
 
 
 class SupportedStackTests(unittest.TestCase):
-    def test_supplied_stack_passes_both_levels_with_inferred_invariant(self):
-        context, cfg = learned_stack_cfg()
+    def test_stack_solver_obligations_with_explicit_invariant(self):
+        context, cfg = stack_cfg_with_fixture_invariant()
         symbolic = verify_cfg_symbolic(cfg, context, timeout_ms=10000)
         self.assertTrue(symbolic, str(symbolic))
         self.assertEqual(symbolic.scope, "unbounded")
@@ -147,7 +144,7 @@ class SupportedStackTests(unittest.TestCase):
             self.assertEqual(checks[0].status, "valid")
 
     def test_clearance_is_not_assumed_at_program_entry(self):
-        context, cfg = learned_stack_cfg()
+        context, cfg = stack_cfg_with_fixture_invariant()
         motion = verify_cfg_motion(
             cfg,
             context,
@@ -163,7 +160,7 @@ class SupportedStackTests(unittest.TestCase):
         self.assertEqual(entry.status, "refuted")
 
     def test_offset_placement_fails_column_preservation(self):
-        context, cfg = learned_stack_cfg()
+        context, cfg = stack_cfg_with_fixture_invariant()
         loop = next(loop_regions(cfg))
         body = loop.body_cfg.nodes[loop.body_cfg.order[0]].region
         changed = list(body.physical)
@@ -186,7 +183,7 @@ class SupportedStackTests(unittest.TestCase):
         self.assertEqual(column.status, "refuted")
 
     def test_low_transfer_still_fails_collision_verification(self):
-        context, cfg = learned_stack_cfg()
+        context, cfg = stack_cfg_with_fixture_invariant()
         loop = next(loop_regions(cfg))
         body = loop.body_cfg.nodes[loop.body_cfg.order[0]].region
         changed = list(body.physical)
