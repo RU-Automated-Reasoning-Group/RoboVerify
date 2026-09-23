@@ -5,7 +5,7 @@ against the implementation. It covers §§2–5, Algorithms 1–6, Appendix A/Ta
 and the associated appendix algorithms/proofs; experimental numbers are not
 correctness targets. Neither paper nor code automatically wins a disagreement.
 
-Entry numbers 1–21 are stable, including resolved findings. Each entry records
+Entry numbers 1–23 are stable, including resolved findings. Each entry records
 its status, decision/reasoning and remaining action. Add new findings with the
 next unused ID. Detailed implementation history and completed audit checklists
 remain in Git history; use [README.md](README.md#project-status) for project status
@@ -23,7 +23,9 @@ model assumptions and APIs.
 | 17, 18 | Paper edits only; code fixes complete. |
 | 19 | Resolved integration defect: recorded and candidate imitation features. |
 | 20 | Shared Stack specification and runtime inference implemented; acceptance remains open. |
-| 21 | Decide and document the object-operand search space and timing of Get insertion. |
+| 21 | Switchable ID-first policy implemented; full learning acceptance and policy comparison remain open. |
+| 22 | Preserve pending transfers and task-completing continuations across relational CFG cuts and loop exits. |
+| 23 | Reconcile numeric/named Release stopping tolerances and validate execution parity. |
 
 ## 1. Theorem 5.2 contradicts the paper's own Table 7 (`R_Higher`)
 
@@ -72,8 +74,8 @@ or task success. Tests do not require saved demonstration files.
 
 **Remaining action:** use validated task demonstrations for full-pipeline
 acceptance and renewed empirical claims. Stack is the current first task (20).
-Five three-block primitive Stack recordings at seeds 0–4 pass initial/final
-validation; this is demonstration acceptance, not synthesized-program verification.
+Five primitive Stack recordings at each of three and four blocks, seeds 0–4,
+pass initial/final validation; this is demonstration acceptance, not synthesized-program verification.
 Do not treat old fixtures or paper numbers as targets.
 
 ## 4. Motion proofs depend on a waypoint abstraction, not physical controller dynamics
@@ -561,8 +563,67 @@ from the demonstration program.
   seeds, choosing blocks 1 then 2. These replays do not override rejection or
   establish an invariant, arbitrary-witness correctness, or motion-model proof.
 
+**Four-block repeat:** Five newly collected recordings at seeds 0–4 all pass
+initial/final task validation and have 20 FPS videos. Run the same diagnostic
+with `--num-blocks 4`. The additional block does expose the intended second
+milestone, but does not remove the boundary problems:
+
+- Actual refinement learns `ON(1, b0)`, then `ON(2, 1)`. The latter holds in all
+  seven positive transition witnesses and none of the 239 negative states.
+  There are seven positives because the final task predicate can change truth
+  value more than once within a trajectory.
+- Complete placement controllers fail from the restored intermediate cuts on
+  all five seeds. The normal supplied-controller continuation stops at its
+  second block with `budget_exhausted` (zero additional refinement rounds) and
+  never calls quotient. Proposed fragments carrying the pending transfer across
+  cuts (3, 5, and 7 instructions) achieve the second target on only three seeds;
+  this control also stops before quotient.
+- The separately labeled isolated quotient receives
+  `ON(1, b0), ON(2, 1), ON(3, 2)`. Only the first two were learned by refinement;
+  the third is derived by quotient's existing terminal-placement recognition.
+  It recovers the same carried/rebound roles and `Scattered(b, b_prime)` guard,
+  using 15 extracted continuing heads and five exits. Whole-CFG validation
+  rejects the fold: seed 1's reconstructed exit is observation 169, while its
+  task goal first holds at 171.
+- The original demonstrations execute 3, 6, 8, 3, and 3 iterations. Seeds 1 and
+  2 require further placements after the initial `1, 2, 3` sequence; the learner's
+  three-iteration extraction does not retain those later continuations. On full
+  replay, the rejected learned loop passes only seeds 0, 3, and 4. For seeds 1
+  and 2 it selects `1, 2, 3, 0, 3` and finishes with the task goal false, whereas
+  the demonstration guard excludes the obstructed base during recovery.
+- A supplied numeric straight-line program containing exactly three placements
+  passes four of five full replays. After conversion to fixed named operands it
+  passes three of five. Numeric and named Release have different physical
+  stopping tolerances (23), so these are not equivalent controllers. All failed
+  full replays reached the goal transiently but failed the final-state check.
+
+Four blocks provide a useful additional intermediate predicate; they do not
+force loop synthesis. Any fixed block count can be unrolled, and these recordings
+also expose recovery behavior absent from the simplified three-placement chain.
+These results are simulator diagnostics, with MCMC supplied and both formal
+verification stages unrun.
+
 **Remaining action:** handle pending physical transfers across relational CFG
 cuts and preserve the required task-completing continuation when recovering loop
 exits. Do not force the desired classifier, bypass validation, or silently change
 ON/ON* semantics to make this diagnostic pass. The prior observation-only unit
 fixtures did not expose these intermediate-motion and boundary cases.
+
+## 23. Numeric and named Release use different physical stopping tolerances
+
+**Status:** observed implementation discrepancy; documented without changing
+controller behavior during the continuation experiment.
+
+**Finding:** `api/instructions.py::Release.eval` stops the empty-gripper retreat
+within 0.02 m of its target, while `ReleaseByName.eval` uses 0.001 m. The other
+retreat logic and the target offset are the same. Converting numeric operands to
+fixed named aliases therefore changes the number of simulator steps and the
+physical rollout, not just operand lookup. The four-block experiment in entry 22
+passes four of five complete numeric replays but only three of five named ones.
+This comparison exposes a physical semantics difference; neither success rate
+establishes either controller's correctness.
+
+**Remaining action:** choose and unify the intended Release semantics, add a
+numeric/named execution-parity regression, and rerun the affected synthesis and
+collection checks. Preserve the requirement that synthesis returns only named
+instructions and that fresh execution/verification checks the returned program.

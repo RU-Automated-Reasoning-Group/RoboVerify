@@ -46,8 +46,8 @@ Tests are `unittest`, not pytest. No linter is configured.
 Read [README.md](README.md#project-status) for current project status and
 [PAPER-DISCREPANCIES.md](PAPER-DISCREPANCIES.md) for numbered findings, settled
 reasoning and remaining actions. Implementation is complete within the supported
-scope; five primitive Stack demonstrations pass task validation. End-to-end
-learning acceptance remains open.
+scope; five primitive Stack demonstrations at each of three and four blocks pass
+task validation. End-to-end learning acceptance remains open.
 Update the relevant status or entry when it changes, rather than maintaining a
 separate implementation-plan history.
 

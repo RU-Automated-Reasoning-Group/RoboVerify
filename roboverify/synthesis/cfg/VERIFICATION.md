@@ -99,12 +99,26 @@ uv run python -m synthesis.experiment.id_first_continuation \
 uv run python -m synthesis.experiment.report --run runs/id-first-continuation/latest
 ```
 
-This diagnostic requires three-block recordings from the current Stack example.
-It saves `artifacts/summary.json`, named programs, and complete replay archives.
+Use `--num-blocks 4` with four-block recordings to repeat the experiment with
+an additional intermediate placement:
+
+```bash
+uv run python -m synthesis.entry.collect_demos \
+  --program synthesis.examples.stack:build_program --task stack \
+  --num-blocks 4 --num-trajectories 5 --seed-start 0 --save-video \
+  --output-dir demos/stack/4-blocks-5-trajectories-base-aligned
+uv run python -m synthesis.experiment.id_first_continuation \
+  --num-blocks 4 \
+  --demos demos/stack/4-blocks-5-trajectories-base-aligned/demonstrations.npz
+```
+
+This diagnostic requires three- or four-block recordings from the current Stack
+example, with `b0` bound to physical ID 0. It saves `artifacts/summary.json`, named
+programs, and complete replay archives.
 The script distinguishes automatic continuation from isolated calls to quotient
 and from replaying rejected candidate loops; none is a formal verification result.
 
-On the five seed-0–4 recordings, a failed remaining-block search refines to
+On the five three-block seed-0–4 recordings, a failed remaining-block search refines to
 `not(Scattered(b0, 2))`, not `ON(2, 1)`. The first learned cut is mid-placement.
 Supplying fragments that carry the pending placement across that cut yields a
 successful straight-line program, but no loop. Separately, complete placement
@@ -112,6 +126,16 @@ fragments propose a `Scattered(b, b_prime)` loop which succeeds on all five
 simulator replays. Quotient validation rejects its reconstructed seed-3 exit
 one observation before the task postcondition holds. This is recorded in
 [review entry 22](../../../PAPER-DISCREPANCIES.md#22-id-first-continuation-exposes-placement-and-loop-exit-boundary-limits).
+
+With four blocks, actual refinement learns `ON(1, b0)` and then `ON(2, 1)`.
+Complete placement controllers still fail from the mid-transfer cuts, so normal
+continuation does not reach quotient. An isolated fold over three placements
+learns the same `Scattered` guard, but validation rejects seed 1's exit at
+observation 169 (the task first holds at 171). That rejected loop passes only
+three of five full replays. The original demos all pass but require 3, 6, 8, 3,
+and 3 iterations; their recovery behavior is missing from the extracted simple
+chain. Numeric and named Release also have different retreat tolerances, recorded
+in [entry 23](../../../PAPER-DISCREPANCIES.md#23-numeric-and-named-release-use-different-physical-stopping-tolerances).
 
 ## Verification workflow
 

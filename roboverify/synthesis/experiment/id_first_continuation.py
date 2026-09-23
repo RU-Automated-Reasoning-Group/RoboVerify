@@ -82,17 +82,19 @@ def graph_summary(cfg):
 
 def run(args, logger):
     context = HighLevelContext()
-    expected = load_program("synthesis.examples.stack:build_program", context, 3)
+    expected = load_program(
+        "synthesis.examples.stack:build_program", context, args.num_blocks
+    )
     traces = load_traces(args.demos, require_valid=True)
     if any(
         t.task != "stack"
-        or t.num_blocks != 3
+        or t.num_blocks != args.num_blocks
         or t.metadata.get("task_spec") != task_identity("stack")
         or t.metadata["initial_bindings"].get("b0") != 0
         for t in traces
     ):
         raise ValueError(
-            "This experiment requires validated three-block Stack demos with b0 bound to ID 0"
+            f"This experiment requires validated {args.num_blocks}-block Stack demos with b0 bound to ID 0"
         )
     if any(
         t.metadata.get("fingerprint") != expected.metadata["fingerprint"]
@@ -117,9 +119,22 @@ def run(args, logger):
     cfg = RelationalCFG.initial(rows, pre, post, {"b0"}, synthesis_approach="id-first")
     cfg._task_demos = rows
     summary = dict(
+        num_blocks=args.num_blocks,
         seeds=[t.seed for t in traces],
         mcmc="supplied candidates, not searched",
         formal_verification="not_run",
+        demonstrations=[
+            dict(
+                seed=t.seed,
+                observations=len(t.states),
+                heads=[
+                    dict(index=e["index"], bindings=e["bindings"])
+                    for e in t.events
+                    if e["kind"] == "loop_head"
+                ],
+            )
+            for t in traces
+        ],
     )
 
     def save():
@@ -137,7 +152,12 @@ def run(args, logger):
             f"Starting milestone was not recovered: {first.status}: {first.term}"
         )
     first_name, tail_name = cfg.order
-    candidates = {first_name: placement(1, 0), tail_name: placement(2, 1)}
+    placements = [placement(i, i - 1) for i in range(1, args.num_blocks)]
+    remaining = [inst for program in placements[1:] for inst in program.instructions]
+    candidates = {
+        first_name: placements[0],
+        tail_name: Program(len(remaining), remaining),
+    }
 
     def check(program, segments, target):
         results = []
@@ -201,7 +221,7 @@ def run(args, logger):
             )
         )
     summary["first_boundary_diagnostics"] = boundaries
-    summary["second_placement_after_recorded_release"] = check(
+    summary["remaining_placements_after_recorded_release"] = check(
         candidates[tail_name], released_rows, post
     )
 
@@ -230,13 +250,29 @@ def run(args, logger):
     )
     save()
 
-    # Branch B: assume MCMC finds the second placement too. Check that assumption
-    # in MuJoCo, then let the real synthesis driver decide whether to quotient.
-    tail_checks = check(candidates[tail_name], cfg.demos.for_node(tail_name), post)
-    summary["supplied_second_placement"] = dict(
-        program=describe_program(candidates[tail_name]), checks=tail_checks
-    )
-    checks = {first_name: first_checks, tail_name: tail_checks}
+    # With four blocks, ON(2, 1) can be an intermediate milestone. Follow the
+    # actual refinement if it discovers that predicate; never insert it by hand.
+    follow_second = args.num_blocks == 4 and bool(second) and second.term == on21
+    summary["followed_second_refinement"] = follow_second
+    if follow_second:
+        cfg = failed
+        candidates = dict(zip(cfg.order, placements))
+    # Supply complete placements for each learned milestone, then let the real
+    # synthesis driver decide whether their actual segment rollouts permit a fold.
+    checks = {
+        name: check(program, cfg.demos.for_node(name), cfg.outgoing(name)[0].label)
+        for name, program in candidates.items()
+    }
+    summary["supplied_continuation"] = {
+        name: dict(
+            target=str(cfg.outgoing(name)[0].label),
+            program=describe_program(program),
+            checks=checks[name],
+        )
+        for name, program in candidates.items()
+    }
+    summary["continuation_graph"] = graph_summary(cfg)
+    numeric_cfg = deepcopy(cfg)
     guard_searches = []
     fold_validations = []
     rejected_programs = []
@@ -349,6 +385,7 @@ def run(args, logger):
         logger=logger,
     )
     summary["synthesis_status"] = result.status
+    summary["synthesis_failed_block"] = result.failed_block
     save()
 
     def replay(program, prefix, graph=cfg):
@@ -360,7 +397,7 @@ def run(args, logger):
             trace = record_execution(
                 definition,
                 seed=segment.trace.seed,
-                num_blocks=3,
+                num_blocks=args.num_blocks,
                 initial_snapshot=segment.trace.snapshots[0],
                 max_loop_iterations=10,
                 timeout_seconds=args.trajectory_timeout_seconds,
@@ -391,32 +428,30 @@ def run(args, logger):
             )
         return replays
 
-    continuous = Program(
-        10, candidates[first_name].instructions + candidates[tail_name].instructions
-    )
+    all_instructions = [inst for program in placements for inst in program.instructions]
+    continuous = Program(len(all_instructions), all_instructions)
     logger.write_artifact(
         "continuous_program.json", json.dumps(describe_program(continuous), indent=2)
     )
     replay(continuous, "continuous_program_replays")
-    # A second control supplies fragments that preserve the pending placement
-    # across the learned cut. Their concatenation is the same successful ten
-    # primitive program, but their CFG block boundaries match the learned cut.
-    matched = deepcopy(cfg)
+    # A second control carries each pending placement across a learned cut.
+    # Its concatenation is identical to the complete numeric placement program.
+    # These are proposed controller boundaries; actual rollouts still decide success.
+    matched = deepcopy(numeric_cfg)
+    cuts = (
+        [0]
+        + [5 * i + 3 for i in range(len(matched.order) - 1)]
+        + [len(all_instructions)]
+    )
     matched_programs = {
-        first_name: Program(3, candidates[first_name].instructions[:3]),
-        tail_name: Program(
-            7,
-            candidates[first_name].instructions[3:]
-            + candidates[tail_name].instructions,
-        ),
+        name: Program(end - start, all_instructions[start:end])
+        for name, start, end in zip(matched.order, cuts, cuts[1:])
     }
     matched_checks = {
-        first_name: check(
-            matched_programs[first_name], matched.demos.for_node(first_name), first.term
-        ),
-        tail_name: check(
-            matched_programs[tail_name], matched.demos.for_node(tail_name), post
-        ),
+        name: check(
+            program, matched.demos.for_node(name), matched.outgoing(name)[0].label
+        )
+        for name, program in matched_programs.items()
     }
 
     def matched_realize(node, demos, target):
@@ -465,8 +500,12 @@ def run(args, logger):
     summary["quotient_reached_by_synthesis"] = "quotient" in summary
     if not result:
         # Explicit diagnostic only: this is not an automatic synthesis success.
-        # Ask what quotient would produce from the two supplied full placements.
+        # Ask what quotient would produce from all supplied complete placements.
+        # The driver can stop before installing a later candidate, so install it
+        # only here, after recording the real failed continuation above.
         summary["quotient_mode"] = "isolated_manual_call_after_segment_failure"
+        for name, candidate in candidates.items():
+            cfg.nodes[name].region = BlockRegion(None, tuple(candidate.instructions))
         fold(cfg)
         close_id_candidate(cfg)
     else:
@@ -506,6 +545,13 @@ def run(args, logger):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--demos", required=True)
+    parser.add_argument(
+        "--num-blocks",
+        type=int,
+        choices=(3, 4),
+        default=3,
+        help="Physical block count in the supplied Stack recordings (default: 3)",
+    )
     parser.add_argument("--output-dir", default="runs")
     parser.add_argument("--run-name", default="stack-id-first-continuation")
     parser.add_argument("--predicate-seconds", type=float, default=5)
