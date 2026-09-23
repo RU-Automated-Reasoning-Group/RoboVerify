@@ -9,7 +9,9 @@ longer substitutes a tower fixture at the verification boundary.
 First collect a supplied primitive DSL program using
 `synthesis.entry.collect_demos`. The [collection guide](../inference_lib/README.md)
 describes seeds, full-state archives, and optional 20 FPS videos. Demonstrations
-belong under `demos/`; experiment results belong under `runs/`.
+belong under `demos/`; experiment results belong under `runs/`. Generated
+archives are not bundled. The commands below first create a collection; if its
+output directory gets a numbered suffix, use the printed archive path.
 
 Stack collection holds the reset gripper position for 50 control steps, then
 records the resulting full simulator state as demonstration state zero. The
@@ -25,6 +27,9 @@ must complete and satisfy these initial/final conditions. The driver requires
 `--demos` and no longer automatically collects a historical oracle.
 
 ```bash
+uv run python -m synthesis.entry.collect_demos \
+  --program synthesis.examples.stack:build_program \
+  --num-blocks 3 --num-trajectories 5 --save-video
 uv run python -m synthesis.entry.synthesize_cfg --task stack --num-blocks 3 \
   --mode full --quotient --demos demos/stack/3-blocks-5-trajectories/demonstrations.npz
 uv run python -m synthesis.entry.synthesize_cfg --task stack --num-blocks 3 \
@@ -71,10 +76,12 @@ those names, and allow existential classifiers to introduce scoped bindings.
    named representation as before, and candidate execution records fresh states
    after generalization. Later motion repair uses that named representation.
 
+Using the collection created above:
+
 ```bash
 uv run python -m synthesis.entry.synthesize_cfg --task stack --num-blocks 3 \
   --mode full --synthesis-approach id-first \
-  --demos demos/stack/3-blocks-5-trajectories-base-aligned/demonstrations.npz \
+  --demos demos/stack/3-blocks-5-trajectories/demonstrations.npz \
   --run-name stack-id-first
 ```
 
@@ -105,7 +112,7 @@ checks the source fingerprint. For example:
 
 ```bash
 uv run python -m synthesis.experiment.id_first_continuation \
-  --demos demos/stack/3-blocks-5-trajectories-base-aligned/demonstrations.npz
+  --demos demos/stack/3-blocks-5-trajectories/demonstrations.npz
 uv run python -m synthesis.experiment.report --run runs/id-first-continuation/latest
 ```
 
@@ -116,10 +123,11 @@ an additional intermediate placement:
 uv run python -m synthesis.entry.collect_demos \
   --program synthesis.examples.stack:build_program --task stack \
   --num-blocks 4 --num-trajectories 5 --seed-start 0 --save-video \
-  --output-dir demos/stack/4-blocks-5-trajectories-base-aligned
+  --max-loop-iterations 3 \
+  --output-dir demos/stack/4-blocks-5-trajectories
 uv run python -m synthesis.experiment.id_first_continuation \
   --num-blocks 4 \
-  --demos demos/stack/4-blocks-5-trajectories-base-aligned/demonstrations.npz
+  --demos demos/stack/4-blocks-5-trajectories/demonstrations.npz
 ```
 
 This diagnostic requires three- or four-block recordings from the current Stack
@@ -129,8 +137,9 @@ The script distinguishes automatic continuation from isolated calls to quotient
 and from replaying rejected candidate loops; none is a formal verification result.
 
 The following findings describe the earlier controllers and 0.20 m transfer
-waypoint. The redesigned shared controllers and 0.10 m waypoint require fresh
-experiments; these historical results are not their acceptance evidence.
+waypoint, before the reset-region and settling changes. The continuation
+diagnostic has not been rerun with the adopted 50-step preparation; these
+historical results are not acceptance evidence for the current pipeline.
 
 On the five earlier three-block seed-0–4 recordings, a failed remaining-block search refines to
 `not(Scattered(b0, 2))`, not `ON(2, 1)`. The first learned cut is mid-placement.
@@ -141,9 +150,9 @@ simulator replays. Quotient validation rejects its reconstructed seed-3 exit
 one observation before the task postcondition holds. This is recorded in
 [review entry 22](../../../PAPER-DISCREPANCIES.md#22-id-first-continuation-exposes-placement-and-loop-exit-boundary-limits).
 
-With four blocks, actual refinement learns `ON(1, b0)` and then `ON(2, 1)`.
-Complete placement controllers still fail from the mid-transfer cuts, so normal
-continuation does not reach quotient. An isolated fold over three placements
+In that earlier four-block experiment, refinement learned `ON(1, b0)` and then
+`ON(2, 1)`. Complete placement controllers failed from mid-transfer cuts, so
+normal continuation did not reach quotient. An isolated fold over three placements
 learns the same `Scattered` guard, but validation rejects seed 1's exit at
 observation 169 (the task first holds at 171). That rejected loop passes only
 three of five full replays. The original demos all pass but require 3, 6, 8, 3,
@@ -257,8 +266,10 @@ or unsupported summary produces an explicit unsupported result.
 
 Demo segments use absolute inclusive indices and share their cut state. Current
 archives contain full snapshots and recorded actions. Direct restoration and
-action replay reproduce segment starts; replay is the default and begins with
-the saved settled state, then only the recorded program actions. Observation-only
+action replay reproduce segment starts. Replay is the default: it restores
+archive state zero, then replays only recorded program actions up to the segment.
+Direct reset restores the requested segment snapshot. Newly collected Stack
+archives start at the settled state; old archives retain their own saved starts. Observation-only
 and older archive formats are removed. Inference uses candidate runtime loop
 heads and normal terminal heads with frozen invocation-entry geometry.
 

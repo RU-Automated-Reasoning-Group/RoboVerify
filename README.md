@@ -38,11 +38,13 @@ see review entry 24. Recollect older demos to use settled starting states.
 Primitive ID/ByName instructions share configurable controllers and retain their
 50-step budgets. See [controller settings](roboverify/synthesis/inference_lib/README.md#primitive-controller-settings).
 **End-to-end learning acceptance remains open:**
-the verification-mode smoke requests additional demonstrations after symbolic
-checking; the full-search smoke exhausts its configured budget. Neither result
-is verified. See [the review record](PAPER-DISCREPANCIES.md) for model boundaries,
+earlier verification-mode and full-search smokes requested additional
+demonstrations or exhausted their budgets. Those runs predate the current
+controllers and settling policy; current validation covers collection/replay,
+not a new end-to-end learning result. See [the review record](PAPER-DISCREPANCIES.md) for model boundaries,
 remaining acceptance work, and recorded implementation findings. Old demonstration
-formats are removed; recollect instead of using the historical datasets.
+formats are removed. Generated demo artifacts have also been cleaned up;
+collect fresh demonstrations before running the pipeline examples.
 
 The supported scope is structured chains and flat loops for the tower tasks;
 the integrated synthesis CLI exposes Stack and Unstack. A successful

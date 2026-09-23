@@ -52,7 +52,7 @@ admit scenes outside the agreed supported-height model (discrepancy 16). Each
 physical object's canonical name is given by `bindings`;
 multiple symbolic names may share a position and refer to the same object.
 
-The model is **idealized waypoint motion**, with no settling, grasp-failure,
+The model is **idealized waypoint motion**, with no modeled settling, grasp-failure,
 gripper-shape, or rigid/falling-stack dynamics. Collision checks cover blocks,
 not the robot arm or the physical table plane. A table-placement contract requires
 the actual `table_surface_height` and checks the resting center height at release;
@@ -77,8 +77,11 @@ pipeline before motion is attempted. Physical repairs require new runtime traces
 renewed inference, and both checks again. The expert archive remains the imitation
 target; candidate traces cannot silently replace it.
 
-Collect full-state demonstrations with `synthesis.entry.collect_demos`; use
-`--save-video` for fixed 20 FPS MP4s from the same executions. Old observation-only
+Collect full-state demonstrations with `synthesis.entry.collect_demos`. Stack
+collection performs 50 holding steps before recording; the resulting full state
+becomes archive state zero. Candidate runs restore it without further settling.
+This simulator preparation does not add settling dynamics to the formal model.
+Use `--save-video` for fixed 20 FPS MP4s starting at that saved state. Old observation-only
 and loop-head JSON demonstration formats are removed. See the
 [collection guide](../inference_lib/README.md) and
 [integrated workflow](../cfg/VERIFICATION.md) for complete commands. Only
@@ -97,14 +100,15 @@ supported block positions remain fixed. The legacy PickPlace/BMC encodings have
 their own release displacement convention. Noise never becomes an optimized
 instruction offset.
 
-All four tower entry points accept:
+The integrated CFG CLI and all four standalone tower entry points accept:
 
 ```bash
 --motion-noise 0.005 0.005 0.005 --motion-timeout-ms 5000
 ```
 
-Omitting `--motion-noise` keeps noise off. Unstack additionally requires
-`--table-surface-height`, read from its environment; the bundled tower environments
+Omitting `--motion-noise` keeps noise off. The standalone Unstack verifier
+requires `--table-surface-height`; integrated Unstack motion checking also needs
+that value for table-placement contracts. Read it from the environment; the bundled tower environments
 use `0.4`. Keep Unstack end-to-end invocations under `timeout 60s`.
 
 The BMC APIs accept the same optional `noise`. `bmc_verify` returns a
@@ -135,7 +139,9 @@ uv run python -m unittest synthesis.verification_lib.test_bmc_lib \
 uv run python -m synthesis.entry.benchmark_motion_verification
 ```
 
-The benchmark uses the existing three-waypoint Stack body, not a tuned replacement.
+The benchmark uses the historical three-`PickPlaceByName` Stack fixture from
+`build_stack_programs`, not the current primitive DSL demo program in
+`synthesis/examples/stack.py`.
 Its synthetic entry conditions explicitly establish the destination tower root;
 numeric coordinates alone do not substitute for symbolic root discovery.
 Its final `1.5 * L` release offset fails the strict direct-on height band, even

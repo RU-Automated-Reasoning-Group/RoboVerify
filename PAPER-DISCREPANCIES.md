@@ -5,7 +5,7 @@ against the implementation. It covers §§2–5, Algorithms 1–6, Appendix A/Ta
 and the associated appendix algorithms/proofs; experimental numbers are not
 correctness targets. Neither paper nor code automatically wins a disagreement.
 
-Entry numbers 1–23 are stable, including resolved findings. Each entry records
+Entry numbers 1–24 are stable, including resolved findings. Each entry records
 its status, decision/reasoning and remaining action. Add new findings with the
 next unused ID. Detailed implementation history and completed audit checklists
 remain in Git history; use [README.md](README.md#project-status) for project status
@@ -15,7 +15,10 @@ model assumptions and APIs.
 Generated collections, videos, and diagnostic scripts under `roboverify/demos/`
 were removed at the user's request after the settling investigation. Artifact
 paths below are historical experiment locations; the recorded findings remain.
-Use `synthesis.entry.collect_demos` to generate fresh demonstrations.
+Use `synthesis.entry.collect_demos` to generate fresh demonstrations. Test counts
+and commands in historical evidence describe the implementation at that stage.
+Running those commands today uses the current controllers, reset bounds, and
+50-step collection preparation; it does not recreate the historical setup.
 
 | Entries | Remaining work |
 | --- | --- |
@@ -29,8 +32,9 @@ Use `synthesis.entry.collect_demos` to generate fresh demonstrations.
 | 19 | Resolved integration defect: recorded and candidate imitation features. |
 | 20 | Shared Stack specification and runtime inference implemented; acceptance remains open. |
 | 21 | Switchable ID-first policy implemented; full learning acceptance and policy comparison remain open. |
-| 22 | Preserve pending transfers and task-completing continuations across relational CFG cuts and loop exits. |
+| 22 | Rerun continuation diagnostics with settled demos; address reproduced CFG-cut and loop-exit failures. |
 | 23 | Resolved primitive-controller discrepancy; shared configurable control and execution parity checks. |
+| 24 | Settled collection starts and saved-state replay implemented; residual grasp offsets and full learning acceptance remain. |
 
 ## 1. Theorem 5.2 contradicts the paper's own Table 7 (`R_Higher`)
 
@@ -79,8 +83,9 @@ or task success. Tests do not require saved demonstration files.
 
 **Remaining action:** use validated task demonstrations for full-pipeline
 acceptance and renewed empirical claims. Stack is the current first task (20).
-Five primitive Stack recordings at each of three and four blocks, seeds 0–4,
-pass initial/final validation; this is demonstration acceptance, not synthesized-program verification.
+Earlier five-seed collections at three and four blocks passed initial/final
+validation. The adopted settling policy has separate four-seed collection/replay
+evidence in entry 24. Neither establishes synthesized-program verification.
 Do not treat old fixtures or paper numbers as targets.
 
 ## 4. Motion proofs depend on a waypoint abstraction, not physical controller dynamics
@@ -451,18 +456,20 @@ arbitrary-witness verification are unchanged. Physical repairs cause new runtime
 traces and renewed inference/verification; collected observations alone never
 prove inductiveness or the physical-controller refinement excluded in entry 4.
 
-**Evidence:** Five real three-block Stack collections, seeds 0–4, satisfy their
-initial/final conditions and have 20 FPS videos. Video on/off actions are identical
-and observations agree within the existing 1e-8 restoration tolerance. The
-five-demo verification smoke collects 15 heads/exits, reaches symbolic checking,
-and requests additional demonstrations. The full smoke reaches search/refinement
-and exhausts its budget.
+**Historical evidence (before the current controllers and settling):** Five
+three-block Stack collections, seeds 0–4, satisfied initial/final conditions
+and had 20 FPS videos. Video on/off actions were identical, and observations
+agreed within the existing 1e-8 restoration tolerance. The five-demo verification
+smoke collected 15 heads/exits, reached symbolic checking, and requested additional
+demonstrations. The full smoke reached search/refinement and exhausted its budget.
 Neither is successful verification. Tests use generated data and exercise both
 real verifiers and their feedback paths separately from these acceptance runs.
 
-**Remaining action:** supply the requested coverage or improve the candidate as
-justified by the failed obligations, recover the full loop through search, and
-obtain `verified_model` on that same synthesized candidate.
+**Remaining action:** rerun both modes with freshly collected settled starts.
+Use the resulting obligations to guide additional demonstrations or candidate
+changes, recover the full loop through search, and obtain `verified_model` on
+that same synthesized candidate. The later controller/settling checks do not
+rerun or establish this end-to-end result.
 
 ## 21. Free-object binding is performed before search instead of on the returned candidate
 
@@ -512,9 +519,9 @@ allowed guard witnesses. A numeric rollout alone cannot establish that result.
 classifier, recover carried/rebound loop roles, preserve fixed-base XY and
 carried-top Z, and exercise the named boundary through the existing symbolic and
 motion verifiers. CLI and resynthesis tests retain the selected policy. The full
-suite passes 247 tests. A real five-demo Stack ID-first smoke (seeds 0–4,
-base-aligned collection) learns `ON(1, b0)` with no new bindings, then exhausts
-its search budget in about 70 seconds. It does not reach verification and is not
+suite passed 247 tests at that stage. A five-demo Stack ID-first smoke
+(seeds 0–4, base-aligned collection) learned `ON(1, b0)` with no new bindings, then exhausted
+its search budget in about 70 seconds. It did not reach verification and is not
 learning acceptance.
 
 **Remaining action:** demonstrate complete learning acceptance with representative
@@ -523,12 +530,13 @@ prefix remains an explicit limitation of the retained relational variant.
 
 ## 22. ID-first continuation exposes placement and loop-exit boundary limits
 
-**Status:** observed implementation limits; diagnostic recorded, synthesis behavior
-unchanged. This experiment substitutes known controllers for MCMC, so it is not
-end-to-end learning acceptance or formal verification.
+**Status:** historical continuation limits observed before the controller,
+reset-region, and settling changes in entries 23–24; this diagnostic has not
+been rerun under the adopted setting. It substitutes known controllers for MCMC,
+so it is not end-to-end learning acceptance or formal verification.
 
-**Setup:** Run `synthesis.experiment.id_first_continuation` on the five validated,
-base-aligned three-block Stack recordings (seeds 0–4). Predicate enumeration,
+**Historical setup:** `synthesis.experiment.id_first_continuation` ran on five
+validated, base-aligned three-block Stack recordings (seeds 0–4). Predicate enumeration,
 segment replay, CFG refinement, quotienting, and full-program simulator execution
 are real. Only straight-line search is replaced by supplied numeric fragments
 from the demonstration program.
@@ -598,9 +606,9 @@ milestone, but does not remove the boundary problems:
   the demonstration guard excludes the obstructed base during recovery.
 - A supplied numeric straight-line program containing exactly three placements
   passes four of five full replays. After conversion to fixed named operands it
-  passes three of five. Numeric and named Release have different physical
-  stopping tolerances (23), so these are not equivalent controllers. All failed
-  full replays reached the goal transiently but failed the final-state check.
+  passes three of five. Numeric and named Release had different physical
+  stopping tolerances at that time (23), so those were not equivalent controllers.
+  All failed full replays reached the goal transiently but failed the final-state check.
 
 Four blocks provide a useful additional intermediate predicate; they do not
 force loop synthesis. Any fixed block count can be unrolled, and these recordings
@@ -608,10 +616,10 @@ also expose recovery behavior absent from the simplified three-placement chain.
 These results are simulator diagnostics, with MCMC supplied and both formal
 verification stages unrun.
 
-**Remaining action:** handle pending physical transfers across relational CFG
-cuts and preserve the required task-completing continuation when recovering loop
-exits. Do not force the desired classifier, bypass validation, or silently change
-ON/ON* semantics to make this diagnostic pass. The prior observation-only unit
+**Remaining action:** rerun the continuation experiment with current settled
+demonstrations, then address any reproduced pending-transfer cuts and loop-exit
+continuation failures. Do not force the desired classifier, bypass validation,
+or silently change ON/ON* semantics to make this diagnostic pass. The prior observation-only unit
 fixtures did not expose these intermediate-motion and boundary cases.
 
 ## 23. Numeric and named Release use different physical stopping tolerances
@@ -643,8 +651,9 @@ survive ID-to-name conversion and participate in executable fingerprints.
 observations, and execution events in the parity regression. Unit tests cover
 nondefault control preservation, tolerance-dependent stopping, shared Pick
 budgets, vertical retreat after opening, runtime diagnostics, and rejection of
-unconverged recordings. The full suite passes 259 tests. A trial at 1 mm with gain 10 stalled in some approach
-motions near a 1.5 mm residual; reducing tolerance alone was insufficient.
+unconverged recordings. The full suite passed 259 tests at that stage. A trial
+at 1 mm with gain 10 stalled in some approach motions near a 1.5 mm residual;
+reducing tolerance alone was insufficient.
 
 The Stack example also lowers its transfer waypoint from 0.20 m to 0.10 m above
 the current top, avoiding the high configurations where the tighter controller
@@ -656,8 +665,8 @@ agree within 1e-8. The older recordings that required recovery are not accepted
 as the intended three-iteration demonstration baseline. No new synthesis or
 formal-verification acceptance is claimed from these controller tests.
 
-**100-seed check:** With the same program and thresholds at commit `a840a54`,
-collect seeds 0–99 with four blocks, a three-iteration cap, and no video:
+**Historical 100-seed check:** At commit `a840a54`, the following command
+collected seeds 0–99 with four blocks, a three-iteration cap, and no video:
 
 ```bash
 uv run python -m synthesis.entry.collect_demos \
@@ -730,7 +739,7 @@ validated general clearance policy. Extending the original approach budget to
 500 steps also eventually reaches the 10 mm threshold (383, 377, 280, and 133
 steps, respectively); the apparent stall is very slow progress, not necessarily
 permanent immobility. No production controller, budget, or model was changed.
-Diagnostic results and replay scripts are saved beside the collection as
+Diagnostic results and replay scripts were saved beside the collection as
 `stall-diagnosis.json`, `stall-isolation.json`, `stall-probe.py`, and
 `stall-isolation.py`.
 
@@ -752,15 +761,15 @@ satisfies the precondition and final postcondition, selects blocks 1, 2, 3 in
 exactly three iterations, and exits the loop normally. All 1,500 primitives
 converge, with a maximum of 22 control steps. All 400 initial block centers lie
 within the bound; the largest measured radius is 0.699845 m. No failing seeds
-were substituted. The accepted archive and independent audit are saved in
+were substituted. The accepted archive and independent audit were saved in
 `demos/stack/4-blocks-100-trajectories-near-base/` as `demonstrations.npz` and
-`validation-summary.json`. Reproduce with the 100-seed command above, changing
-only `--output-dir` to that new directory.
+`validation-summary.json`. That run used the 100-seed command above with
+`--output-dir` changed to the new directory, before collection added settling.
 
 Regression checks cover two-, three-, four-, and six-block layouts across
 100 seeds, seeded reproducibility, translated base coordinates, bounded
 exhaustion without an out-of-bounds fallback, and actual simulator resets.
-The full regression suite passes 263 tests.
+The full regression suite passed 263 tests at that stage.
 The 0.70 m bound holds by construction for every returned layout. The 100-demo
 result establishes finite four-block execution evidence, not universal robot
 reachability at arbitrary heights, orientations, or block counts.
@@ -795,12 +804,12 @@ observation difference is 2.33e-10. All ten MP4s decode successfully as 500×500
 H.264 at 20 FPS, with frame counts matching one initial frame plus the recorded
 control steps. This rendering agreement is scoped to those ten runs.
 
-The 500-run directory contains the accepted `demonstrations.npz`,
+The historical 500-run directory contained the accepted `demonstrations.npz`,
 `collection.json`, independent `validation-summary.json`, source hashes and
-commands in `experiment.json`, and the audit script. The video directory retains
+commands in `experiment.json`, and the audit script. The video directory retained
 its own accepted archive, `video-validation.json`, and an index of all ten clips.
-No implementation changed for this experiment; the existing 263-test result
-remains the implementation regression baseline.
+No implementation changed for that experiment; 263 tests were the regression
+baseline then. Entry 24 records the later 268-test validation.
 
 **Remaining action:** none for the numeric/named mismatch or requested Stack
 reset bound. Full learning and verification acceptance (20–22) must use validated
@@ -814,8 +823,9 @@ first-placement bias without claiming exact centering. The original issue was
 within accepted geometric task tolerance, not a contradiction of the earlier
 500-seed task result.
 
-**Finding:** Across all 500 four-block traces in the bounded reset region, the
-first placed block (yellow, ID 1) finishes toward the robot relative to b0. The
+**Finding before collection settling:** Across all 500 four-block traces in
+the bounded reset region, the first placed block (yellow, ID 1) finished toward
+the robot relative to b0. The
 mean final X offsets from b0 are -12.798 mm for block 1, +2.631 mm for block 2,
 and +5.962 mm for block 3. Block 1's range is -16.306 to -9.314 mm; every one of
 the 500 offsets points toward the robot when projected onto the base direction.
@@ -835,8 +845,9 @@ below 25 mm per axis, so the task checker accepts these placements.
 **Cause and controlled evidence:** The inherited Fetch setup advances only ten
 simulator control steps after commanding the initial robot pose, then saves
 `initial_state`. Stack reset restores that same robot state for every seed and
-changes the block positions without waiting for robot settling. The saved state
-still has gripper linear velocity approximately (-4.14, -0.02, +5.86) mm/s,
+changes the block positions without waiting for robot settling. The collector
+now adds 50 holding steps after this raw reset before recording. The raw saved
+reset state has gripper linear velocity approximately (-4.14, -0.02, +5.86) mm/s,
 angular velocity approximately 0.0305 rad/s about Y, and a 0.704-degree
 orientation error. The later picks start after substantially more robot settling.
 
@@ -871,7 +882,7 @@ change the production implementation or the primitive budgets:
   evidence identifies the initial robot-state transient and uncorrected held-block
   displacement; it does not isolate a single contact/force parameter as the cause.
 
-Data and replay scripts are saved with the 500-seed collection:
+Data and replay scripts were saved with the historical 500-seed collection:
 `placement-offset-audit.json`, `grasp-isolation.json`,
 `first-placement-transient.json`, and `reset-transient-metrics.json`, with their
 corresponding Python scripts. The 500-trace audit measures final geometry and
@@ -892,17 +903,17 @@ Final yellow-block X offsets from b0, after all three placements, are:
 | 73 | -12.357 mm | +1.872 mm |
 | 499 | -15.234 mm | +0.435 mm |
 
-`demos/stack/4-blocks-settled-50-steps-videos/` contains four full videos that
-include the settling prefix, four side-by-side comparisons, final-frame
-previews, a video index, and `collection.json`. All eight MP4s decode at 20 FPS.
-The full videos show the 50 settling steps during the first 2.5 seconds of
+`demos/stack/4-blocks-settled-50-steps-videos/` contained four full videos that
+included the settling prefix, four side-by-side comparisons, final-frame
+previews, a video index, and `collection.json`. All eight MP4s decoded at 20 FPS.
+The full videos showed the 50 settling steps during the first 2.5 seconds of
 playback; the comparisons align DSL program starts and hold the final frames.
-The accepted program executions are saved as `demonstrations.npz`; the separate
-`settling-prefixes.npz` retains their full-state diagnostic prefixes. The saved
-`generate_videos.py` reproduces the intervention and media generation. These
-four full executions extend the earlier isolated first-placement evidence;
-they do not establish a new default or broad seed acceptance after settling.
-Production motion and reset code remain unchanged.
+The program executions were saved as `demonstrations.npz`; the separate
+`settling-prefixes.npz` retained their full-state diagnostic prefixes. The
+diagnostic `generate_videos.py` produced the intervention and media. Those four
+executions extended the isolated first-placement evidence; no default changed
+at that stage, and they did not establish broad seed acceptance. The policy
+was subsequently adopted below. Generated artifacts were later removed.
 
 **Ten-step follow-up:** The same four saved initial states and unchanged Stack
 program were rerun with only 10 holding steps before execution. All four pass
@@ -923,13 +934,13 @@ This is evidence from four seeds, not broad acceptance of either intervention.
 
 The historical index at `demos/stack/4-blocks-settled-10-steps-videos/README.md`
 linked four full 10-step videos, four original-versus-10 comparisons, and four
-10-versus-50 comparisons. All 12 public MP4s decode at 20 FPS. Full videos include
+10-versus-50 comparisons. All 12 public MP4s decoded at 20 FPS. Full videos included
 the 0.5-second settling prefix; comparisons align program starts and hold final
-frames. `settling-comparison.json` records the measurements and video metadata;
-`demonstrations.npz` saves accepted program executions, and the separately saved
+frames. `settling-comparison.json` recorded the measurements and video metadata;
+`demonstrations.npz` saved accepted program executions, and the separately saved
 `settling-prefixes.npz` was checked to contain exactly 10 actions per seed.
-`generate_videos.py` and `compare_settling_durations.py` reproduce the experiment
-and comparisons. Production motion and reset code remain unchanged.
+`generate_videos.py` and `compare_settling_durations.py` produced that experiment
+and its comparisons. They were removed with the generated artifacts.
 
 **Saved settled-state replay:** The user selected 50 settling steps and asked
 whether collection can omit the settling prefix while preserving its benefit
@@ -955,13 +966,14 @@ these four cases.
 
 The historical index at `demos/stack/4-blocks-settled-50-steps-restored/README.md`
 linked four fresh-environment execution videos and four comparisons against the
-earlier settled runs. All eight MP4s decode at 20 FPS; the execution videos and
-accepted `demonstrations.npz` start at S50 and contain zero settling actions.
-`result.json` records the comparisons, while `check_saved_start.py --prepare`
-and `--replay` reproduce the separate-process experiment. This establishes the
+earlier settled runs. All eight MP4s decoded at 20 FPS; the execution videos and
+accepted `demonstrations.npz` started at S50 and contained zero settling actions.
+`result.json` recorded the comparisons, while `check_saved_start.py --prepare`
+and `--replay` performed the separate-process experiment. This establishes the
 saved-state workflow for the tested cases using full snapshots, including robot
 positions/velocities, controls, mocap, and solver state; saving observations
-alone is insufficient. The production collector/reset default is unchanged.
+alone is insufficient. The production collection default had not yet changed
+at that stage; the adopted implementation follows.
 
 **Adopted implementation:** Fresh Stack collection now holds the reset gripper
 position with the gripper open for exactly 50 control steps before invoking the
@@ -981,8 +993,8 @@ selected demonstration's first snapshot and records that initialization source
 in run configuration. Missing requested snapshots are errors, never a seed-reset
 fallback. This changes the physical evaluation start, not the search objective.
 
-**Validation:** All 268 unittests pass, including fresh collection with exactly
-50 excluded steps, saved-state replay in a new simulator, both segment reset
+**Validation at adoption:** All 268 unittests passed, including fresh collection
+with exactly 50 excluded steps, saved-state replay in a new simulator, both segment reset
 modes, verification candidate restarts, MCMC archive/seed selection, video/action
 consistency, and original/instrumented MCMC parity with and without snapshots.
 The normal collection CLI passes seeds 0, 38, 73, and 499 in three iterations

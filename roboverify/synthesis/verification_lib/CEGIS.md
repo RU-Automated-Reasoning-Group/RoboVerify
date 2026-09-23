@@ -58,7 +58,8 @@ score; without one it is explicitly penalty-only repair. A zero training penalty
 is never substituted for the full verification query.
 
 Run the shared supplied-program workflow from `roboverify/`, with the simulator
-environment variables from `AGENTS.md` set:
+environment variables from `AGENTS.md` set. Generated demo archives are not
+bundled; use the actual output path printed by the collection command:
 
 ```bash
 uv run python -m synthesis.entry.collect_demos \
@@ -73,12 +74,15 @@ uv run python -m synthesis.experiment.report --run runs/cfg/latest
 `--mode full` searches first; verify mode starts from the supplied program and
 enters the same inference and verification stages. Both rerun the actual physical
 candidate from recorded initial states to obtain loop heads and normal exits.
-Motion repairs trigger fresh execution, inference and both verification checks.
+New Stack collections save their state after 50 settling steps; candidate
+execution restores it directly without repeating that preparation. Motion repairs
+trigger fresh execution, inference and both verification checks.
 The supplied program's executable fingerprint must match the archive. Expert
 recordings remain separate for imitation scoring and later resynthesis.
-The old `--demo-store`, `--expert-states`, `--run-root` and `--slug` interfaces are
-removed. `--demos` accepts current full-state NPZ archives; `--output-dir` changes
-the experiment root and `--run-name` labels a run. The old
+For this integrated CLI, `--demos` replaces the old `--demo-store` and
+`--expert-states` inputs, while `--output-dir` and `--run-name` replace its old
+`--run-root` and `--slug` options. The separate
+`synthesis.experiment.mcmc.run` CLI still uses `--run-root` and `--slug`. The old
 `synthesis.entry.verified_synthesis` command now forwards to this verify mode.
 
 `--motion-noise GRASP MOVE RELEASE` opts into bounded errors. `--learner legacy`
@@ -94,9 +98,11 @@ bounded summaries. Exit code 0 means both verification stages passed with result
 `verified_model`; 2 means an explicit unsuccessful result. Budget exhaustion never
 means verification succeeded.
 
-Five real primitive Stack demonstrations pass initial/final validation; verify
-mode currently reaches `needs_demonstrations` after symbolic checking. No verified
-Stack program is claimed. Generated regression fixtures exercise both actual
+An earlier five-demo Stack smoke reached `needs_demonstrations` after symbolic
+checking. It predates the current controllers and settling policy; the latest
+four-seed checks validate collection and saved-state replay only. End-to-end
+verification has not been rerun under that policy, and no verified Stack program
+is claimed. The generated acceptance recordings were removed during cleanup. Generated regression fixtures exercise both actual
 verification backends and the repair/resynthesis paths independently of these
 acceptance recordings. See [the integrated workflow](../cfg/VERIFICATION.md) for
 scope and [the collection guide](../inference_lib/README.md) for seeds and video.

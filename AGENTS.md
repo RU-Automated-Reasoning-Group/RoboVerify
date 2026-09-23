@@ -15,7 +15,8 @@ use the architecture and workflow sections for the affected subsystem.
 
 ## Environment
 
-Both lines are required before anything touches the simulator:
+Configure the working directory and both environment variables before importing
+or running simulator code:
 
 ```bash
 cd roboverify
@@ -36,10 +37,11 @@ uv run python -m synthesis.entry.synthesize_cfg --mode full --quotient --demos d
 uv run python -m unittest synthesis.verification_lib.test_bmc_lib -v
 uv run python -m unittest synthesis.experiment.test_run_logger -v     # fast, no simulator
 uv run python -m unittest synthesis.experiment.test_mcmc_parity -v    # drives MuJoCo
-bash format.sh                                                        # isort then black
 ```
 
-Tests are `unittest`, not pytest. No linter is configured.
+Tests are `unittest`, not pytest. No linter is configured. Generated demos are
+not bundled; collect them before running the pipeline examples. If collection
+prints a numbered output directory, use that archive path in subsequent commands.
 
 ## Project status and decisions — read before starting
 
@@ -123,8 +125,9 @@ Use the environment and module commands above; the full-suite command is below.
 - [CFG workflow](roboverify/synthesis/cfg/VERIFICATION.md): integrated synthesis and verification.
 
 Instrumented MCMC entry point: `uv run python -m synthesis.experiment.mcmc.run`.
-Use `--smoke --demos demos/stack/3-blocks-5-trajectories/demonstrations.npz`
-with matching task/block options for a bounded search, or iteration options for
+Use `--smoke --task stack --num-blocks 3
+--demos demos/stack/3-blocks-5-trajectories/demonstrations.npz` (on one line)
+for a bounded search with the collection above, or iteration options for
 longer runs. Read the resulting directory through the report tool described below.
 
 ### Validation
@@ -217,10 +220,12 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   `InvInference(store, loop_id, vocab, context)` reuses the existing learner.
   See [the trace workflow](roboverify/synthesis/inference_lib/README.md).
 
-- **`synthesis/inference_lib/inference.py`** — invariant learning. Given positive traces
-  (expert demos) and negative traces (random/failed programs), builds a boolean-formula
-  vocabulary over the block predicates, partitions per-timestep states into truth-table rows,
-  and extracts a minimal quantified invariant (`loop_inference`, `forall_exists_loop_inference`,
+- **`synthesis/inference_lib/inference.py`** — invariant learning. Builds a
+  boolean-formula vocabulary over the block predicates and partitions supplied
+  loop states into truth-table rows. The integrated workflow supplies current
+  candidate executions, including normal exits; classifier positives/negatives
+  are a separate input to CFG refinement. The learner extracts a quantified
+  invariant (`loop_inference`, `forall_exists_loop_inference`,
   `learn_from_partition`) that is later instantiated into an `EnumSort` context for finite
   checking (`instantiate_invariant`/`serialize_invariant` round-trip an invariant between the
   inference context and a verification context).
@@ -237,7 +242,8 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
     superseded by the bounded predicate enumerator in `synthesis/predicates/`, which can
     express quantified separators rather than a single ground `ON(b1, b2)`.
   - `search_core.py`: the acceptance rule, annealing schedule, imitation objective and
-    epsilon candidate pool shared by the original and instrumented searches — keep the
+    epsilon candidate pool used by CFG straight-line synthesis. Original and
+    instrumented MCMC share its acceptance and objective helpers; keep the
     Metropolis ratio here rather than writing it out a second time.
   - `distance.py`: cached KL/MMD trajectory distances for the candidate pool.
   - `cem.py` / `cost_func.py`: cross-entropy-method parameter optimizer, and KL/MMD-based
@@ -298,7 +304,8 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   emit records (`MCMC`, `score_candidate_program`, `optimize_program`, `cem_optimize`)
   and import the remaining implementation from `synthesis.mcmc`. Both copies share
   acceptance and objective
-  helpers, and `test_mcmc_parity.py` pins the same accept/reject sequence.
+  helpers, and `test_mcmc_parity.py` checks matching cost sequences for both
+  seed-only and saved-snapshot starts.
 
 - **`synthesis/predicates/`** — the predicate language and its bounded search.
   `term.py` holds canonical interned first-order terms, `scene.py` the concrete
@@ -341,9 +348,10 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   --smoke --quotient` (on one line) for a bounded integration smoke.
   The driver requires validated current archives and has no historical-oracle
   fallback. `--reset-mode replay` is the default; Unstack retains its 60-second
-  process alarm. Success is `verified_model` in the documented scope. Current
-  Stack acceptance runs stop at a demonstration request or exhausted search
-  budget; neither is successful verification.
+  process alarm. Success is `verified_model` in the documented scope. Earlier
+  Stack smoke runs stopped at a demonstration request or exhausted search budget.
+  End-to-end acceptance has not been rerun after the controller and settling
+  changes; the latest four-seed checks validate collection and replay only.
 
 ## Monitoring runs
 
@@ -382,8 +390,9 @@ The metrics are chosen so each symptom points at a specific lever:
 | `bmc_feasible` near 0, `bmc_reason` dominated by one label | goal spec, operand pool, or program length | `--program-slots`, `--goal-feature`, `--num-blocks` |
 | `accept` near 1.0 | acceptance rule is nearly unselective (a cost delta of 0.0065 gives ratio 0.993) | `--beta` |
 | `at_floor` near 1.0, `first_feasible` unset | chain pinned at `bmc_failed_cost`, so acceptance is unconditional | seed program, BMC penalty shape |
-| `cem` delta mean ~0 or many zero-delta iters | inner parameter optimization not improving anything | `--cem-N/-K/--cem-iterations`, `--cem-init-std` |
+| `cem` delta mean ~0 or many zero-delta iters | inner parameter optimization not improving anything | `--cem-N`, `--cem-K`, `--cem-iterations`, `--cem-init-std` |
 | `success` mean ~0 while `best_cost` improves | objective is not tracking task success | reward weights, objective design |
 
-`--smoke` (20 iterations, 2 CEM iterations, no videos) is for testing one of these
-hypotheses in minutes rather than hours.
+For standalone MCMC, `--smoke` uses 20 iterations, 2 CEM iterations, 2 seeds,
+and no videos. The separate CFG CLI uses 2 search iterations and 1 CEM iteration
+in smoke mode. These are diagnostic budgets, not acceptance criteria.

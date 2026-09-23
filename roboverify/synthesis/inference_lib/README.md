@@ -2,7 +2,8 @@
 
 Use one full-state NPZ archive for collection, synthesis, and inference. Old
 observation-only NumPy/pickle datasets and loop-head JSON inputs are removed;
-recollect demonstrations instead of converting them.
+recollect demonstrations instead of converting them. Generated demonstration
+archives are not bundled in the repository.
 
 ## Collect Stack demonstrations
 
@@ -57,7 +58,9 @@ demos/stack/3-blocks-5-trajectories/
 ```
 
 Repeated default collections use numbered suffixes. `--output-dir demos/my-stack-demonstrations` chooses a new destination; an existing explicit
-directory is rejected. There is no collection run-name flag.
+directory is rejected. Use the actual archive path printed by collection in
+subsequent commands; examples below assume the first default collection. There
+is no collection run-name flag.
 
 Every accepted trajectory must finish normally, start with unstacked,
 pairwise-scattered blocks, and end with all blocks in the tower rooted at b0.
@@ -167,7 +170,8 @@ The generated collections, videos, and diagnostics were removed during cleanup;
 use the collection command above to create new demonstrations. See
 [review entry 24](../../../PAPER-DISCREPANCIES.md#24-the-first-stack-placement-inherits-a-transient-robot-state-and-a-grasp-offset)
 for the diagnosis; controller convergence does not certify block centering.
-This validates that collection, not all possible scenes or formal verification;
+These collection results do not establish formal verification or arbitrary-scene
+success;
 see [review entry 23](../../../PAPER-DISCREPANCIES.md#23-numeric-and-named-release-use-different-physical-stopping-tolerances).
 Recollect after changing controller settings; older fingerprints describe the
 previous executable. The earlier continuation findings in review entry 22 refer
@@ -207,8 +211,10 @@ Archives retain full simulator snapshots, controls, mocap and solver arrays,
 actions, observation/action indices, aliases, instruction boundaries, and loop
 events. `cfg.recordings.save_traces/load_traces` handle this one current format.
 `--reset-mode replay` remains the pipeline default; `reset` restores a segment
-snapshot directly. For a newly collected Stack demo, both modes start from the
-settled state; replay never includes the discarded 50-step preparation.
+snapshot directly. At the beginning of a newly collected Stack demo, both modes
+restore the settled state. For later segments, `reset` restores that segment
+snapshot and `replay` restores state zero then replays the recorded prefix.
+Neither mode repeats the discarded 50-step preparation.
 Observations alone cannot restore a segment.
 
 Runtime events identify each loop path, invocation, iteration, continuing head,
