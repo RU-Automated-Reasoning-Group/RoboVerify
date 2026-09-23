@@ -149,24 +149,22 @@ uv run python -m synthesis.entry.collect_demos \
 
 With the former reset region, seeds 0–4 finished in three iterations with
 20 FPS videos, but a broader check passed only 96/100: seeds 38, 46, 73, and 85
-failed the third Pick's approach. The rejected batch remains as diagnostics.
+failed the third Pick's approach; the failures were retained during diagnosis.
 With the bounded reset region above and identical program/controller settings,
 the earlier collection before settling passed **500/500** seeds (0–499): exactly
-three iterations, all 15 primitives converged, and at most 22 steps per primitive. The accepted archive is
-`demos/stack/4-blocks-500-trajectories-near-base/demonstrations.npz`.
+three iterations, all 15 primitives converged, and at most 22 steps per primitive.
 Ten separately rendered runs (seeds 0, 38, 46, 73, 85, 150, 250, 350, 450, 499)
-have 20 FPS videos under `demos/stack/4-blocks-near-base-10-videos/videos/`.
-All ten pass validation and reproduce their matching batch actions exactly;
-observations agree within 1e-8.
+had 20 FPS videos. All ten passed validation and reproduced their matching batch
+actions exactly; observations agreed within 1e-8.
 Those earlier accepted traces exhibit a systematic first-placement offset of
 about 13 mm: the initial robot state had not fully settled, and Move controls
 the gripper site without compensating for the held block's offset. The task's
 25 mm per-axis ON tolerance accepts it. The adopted 50-step preparation reduces
 yellow's final X offset to 0.4–1.9 mm on seeds 0, 38, 73, and 499; the normal
 collector passes all four in three iterations and fresh-environment replay
-reproduces every action. These four new runs have videos under
-`demos/stack/4-blocks-4-trajectories-settled-default/videos/`.
-This is not a new 500-seed validation. See
+reproduces every action. This is not a new 500-seed validation.
+The generated collections, videos, and diagnostics were removed during cleanup;
+use the collection command above to create new demonstrations. See
 [review entry 24](../../../PAPER-DISCREPANCIES.md#24-the-first-stack-placement-inherits-a-transient-robot-state-and-a-grasp-offset)
 for the diagnosis; controller convergence does not certify block centering.
 This validates that collection, not all possible scenes or formal verification;

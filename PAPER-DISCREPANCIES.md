@@ -12,6 +12,11 @@ remain in Git history; use [README.md](README.md#project-status) for project sta
 and [the verification guide](roboverify/synthesis/cfg/VERIFICATION.md) for current
 model assumptions and APIs.
 
+Generated collections, videos, and diagnostic scripts under `roboverify/demos/`
+were removed at the user's request after the settling investigation. Artifact
+paths below are historical experiment locations; the recorded findings remain.
+Use `synthesis.entry.collect_demos` to generate fresh demonstrations.
+
 | Entries | Remaining work |
 | --- | --- |
 | 1, 2, 7, 8, 9, 13, 14 | Paper/formalization corrections; implementation decisions are recorded below. |
@@ -916,8 +921,8 @@ Ten steps roughly halve the original bias, but leave 5.9–7.0 mm toward the
 robot. The corresponding 50-step runs have only 0.4–1.9 mm of X displacement.
 This is evidence from four seeds, not broad acceptance of either intervention.
 
-The [video index](roboverify/demos/stack/4-blocks-settled-10-steps-videos/README.md)
-links four full 10-step videos, four original-versus-10 comparisons, and four
+The historical index at `demos/stack/4-blocks-settled-10-steps-videos/README.md`
+linked four full 10-step videos, four original-versus-10 comparisons, and four
 10-versus-50 comparisons. All 12 public MP4s decode at 20 FPS. Full videos include
 the 0.5-second settling prefix; comparisons align program starts and hold final
 frames. `settling-comparison.json` records the measurements and video metadata;
@@ -948,8 +953,8 @@ exactly, including yellow's X offsets of +1.720, +1.327, +1.872, and +0.435 mm.
 Restoration does not reintroduce the original large first-placement bias in
 these four cases.
 
-The [replay video index](roboverify/demos/stack/4-blocks-settled-50-steps-restored/README.md)
-links four fresh-environment execution videos and four comparisons against the
+The historical index at `demos/stack/4-blocks-settled-50-steps-restored/README.md`
+linked four fresh-environment execution videos and four comparisons against the
 earlier settled runs. All eight MP4s decode at 20 FPS; the execution videos and
 accepted `demonstrations.npz` start at S50 and contain zero settling actions.
 `result.json` records the comparisons, while `check_saved_start.py --prepare`
@@ -982,8 +987,8 @@ modes, verification candidate restarts, MCMC archive/seed selection, video/actio
 consistency, and original/instrumented MCMC parity with and without snapshots.
 The normal collection CLI passes seeds 0, 38, 73, and 499 in three iterations
 with all 60 primitive calls converged (maximum 21 steps). Its
-[new archive and video index](roboverify/demos/stack/4-blocks-4-trajectories-settled-default/README.md)
-retain only program execution: 124, 120, 116, and 114 actions, with exactly one
+archive under `demos/stack/4-blocks-4-trajectories-settled-default/`
+retained only program execution: 124, 120, 116, and 114 actions, with exactly one
 more frame per 20 FPS video. Fresh-environment replay from that archive matches
 all actions exactly and observations within 4.657e-10; yellow's final X offsets
 are +1.720, +1.327, +1.872, and +0.435 mm. This is four-seed acceptance for the

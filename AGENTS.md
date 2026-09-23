@@ -93,8 +93,9 @@ and accepted demonstrations must actually satisfy their pre/postconditions.
 - Commit in meaningful increments, one coherent change per commit, rather than one large
   commit at the end.
 - Work on a topic branch; do not commit directly to `main`.
-- When staging, use explicit paths. The tree carries unrelated untracked files
-  (`roboverify/demos/`, `plot.py`, `create_env_figure.py`), and `git add -A` sweeps them in.
+- When staging, use explicit paths. Generated `roboverify/demos/` collections and
+  unrelated untracked files (`plot.py`, `create_env_figure.py`) must not be swept
+  into commits with `git add -A`.
 - If a tool needs its own rules configuration, point it to `AGENTS.md` rather than
   duplicating these instructions in a separate agent-specific Markdown file.
 

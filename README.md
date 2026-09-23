@@ -29,7 +29,7 @@ passed initial/final task validation, and converged in every primitive within at
 most 22 steps. The earlier region passed 96/100; see review entry 23 for the
 reset bounds and physical diagnosis. This validates the tested four-block
 collection, not arbitrary tower sizes or robot configurations. Ten selected
-seeds also have validated 20 FPS videos (review entry 23). Those earlier demos
+seeds also passed 20 FPS video validation (review entry 23). Those earlier demos
 had a systematic first-placement offset of about 13 mm within the task tolerance.
 With the adopted settling policy, four production runs (seeds 0, 38, 73, 499)
 pass in three iterations and retain yellow-block X offsets of 0.4–1.9 mm after
