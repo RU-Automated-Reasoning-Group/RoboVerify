@@ -15,7 +15,7 @@ from synthesis.cfg.demos import DemoSegment
 from synthesis.cfg.program_source import load_program
 from synthesis.cfg.recordings import load_traces, save_traces
 from synthesis.cfg.reset import capture, inner_env, reset_segment
-from synthesis.cfg.straightline import segment_rollout
+from synthesis.cfg.straightline import _features, segment_rollout
 from synthesis.mcmc import synthesis
 from synthesis.verification_lib.highlevel_verification_lib import HighLevelContext
 
@@ -132,6 +132,13 @@ class SettledDemoTests(unittest.TestCase):
         segment = DemoSegment(0, 0, len(source.states) - 1, source)
         scenes = segment_rollout(Program(1, [Skip(0)]), segment, fresh_env)
         np.testing.assert_array_equal(scenes[0].observation, source.states[0])
+
+        # Search must score the same sample sequence as collection, including a
+        # supplied loop and its binding-only instructions.
+        scenes = segment_rollout(definition.program, segment, fresh_env)
+        np.testing.assert_allclose(
+            _features(scenes, 4), _features(source.states, 4), atol=1e-8, rtol=0
+        )
 
         # Standalone MCMC uses the same archived start instead of recreating seed 73.
         with patch(

@@ -2,14 +2,23 @@ import unittest
 from unittest.mock import Mock, patch
 
 import numpy as np
-from synthesis.api.instructions import Assign, Get, Move, Pick, PickByName, Release
+
+from synthesis.api.instructions import (
+    Assign,
+    Get,
+    Move,
+    Pick,
+    PickByName,
+    Release,
+    Skip,
+)
 from synthesis.api.program import Program
 from synthesis.cfg.bindings import close_objects, mutate_scoped, require_closed
 from synthesis.cfg.demos import DemoSegment, DemoTrace
 from synthesis.cfg.graph import RelationalCFG
 from synthesis.cfg.region import BlockRegion
 from synthesis.cfg.scope import scope
-from synthesis.cfg.straightline import postcondition_reached, segment_rollout
+from synthesis.cfg.straightline import _features, postcondition_reached, segment_rollout
 from synthesis.predicates.scene import Scene
 from synthesis.predicates.term import atom, boolean, ref
 from synthesis.verification_lib.highlevel_verification_lib import HighLevelContext
@@ -73,6 +82,30 @@ class BindingTests(unittest.TestCase):
             )
         self.assertEqual(states[0].bindings["b"], 0)
         self.assertEqual(states[-1].bindings["b"], 1)
+        self.assertTrue(
+            postcondition_reached(states, segment, atom("eq", ref("b"), ref("other")))
+        )
+        env.close.assert_called_once()
+
+    def test_imitation_samples_match_recording_without_losing_binding_states(self):
+        initial = np.zeros(43)
+        initial[10:13], initial[22:25] = (0, 0, 0), (0.2, 0, 0)
+        moved, final = initial.copy(), initial.copy()
+        moved[0], final[0] = 0.1, 0.2
+        # Repeated observations produced by the program remain real samples.
+        observations = (initial, moved, moved, final)
+        trace = DemoTrace(observations, num_blocks=2)
+        segment = DemoSegment(0, 0, 3, trace, {"b": 0, "other": 1})
+        env = Mock(symbolic_name_to_box_id=dict(segment.bindings))
+        env.flatten_observation.side_effect = observations[1:]
+        program = Program(3, [Skip(2), Assign("b", "other"), Skip(1)])
+        with patch("synthesis.cfg.straightline.reset_segment", return_value=initial):
+            states = segment_rollout(program, segment, lambda _: env)
+        np.testing.assert_array_equal(_features(states, 2), _features(observations, 2))
+        self.assertTrue(
+            any(s.bindings["b"] == 1 and s.observation[0] == 0.1 for s in states)
+        )
+        self.assertEqual(states[0].bindings["b"], 0)
         self.assertTrue(
             postcondition_reached(states, segment, atom("eq", ref("b"), ref("other")))
         )

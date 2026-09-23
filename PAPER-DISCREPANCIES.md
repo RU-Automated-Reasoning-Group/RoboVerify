@@ -5,7 +5,7 @@ against the implementation. It covers §§2–5, Algorithms 1–6, Appendix A/Ta
 and the associated appendix algorithms/proofs; experimental numbers are not
 correctness targets. Neither paper nor code automatically wins a disagreement.
 
-Entry numbers 1–27 are stable, including resolved findings. Each entry records
+Entry numbers 1–28 are stable, including resolved findings. Each entry records
 its status, decision/reasoning and remaining action. Add new findings with the
 next unused ID. Detailed implementation history and completed audit checklists
 remain in Git history; use [README.md](README.md#project-status) for project status
@@ -24,12 +24,13 @@ model assumptions and APIs.
 | 19 | Resolved integration defect: recorded and candidate imitation features. |
 | 20 | Supplied Stack verification passes; full synthesis acceptance remains open. |
 | 21 | Switchable ID-first policy implemented; full learning acceptance and policy comparison remain open. |
-| 22 | Evaluate continuation, placement cuts and loop exits with current settled demonstrations. |
+| 22 | Settled continuation reproduces placement-cut and loop-exit limits; full loop recovery remains open. |
 | 23 | Resolved primitive-controller discrepancy; shared configurable control and execution parity checks. |
 | 24 | Settled collection starts and saved-state replay implemented; residual grasp offsets and full learning acceptance remain. |
 | 25 | Resolved motion translation defect: normalize negative quantifiers before weakening premises. |
 | 26 | Resolved primitive-model discrepancy: Pick follows horizontal approach and vertical descent. |
 | 27 | Supplied Stack verified with learned relational and checked geometric invariants; full synthesis and controller refinement remain separate. |
+| 28 | Resolved imitation-sampling defect: candidate boundary callbacks no longer add scoring samples. |
 
 ## 1. Theorem 5.2 contradicts the paper's own Table 7 (`R_Higher`)
 
@@ -528,9 +529,24 @@ and replays of rejected candidates. These diagnostics do not establish full
 learning acceptance or formal verification. See the
 [continuation workflow](roboverify/synthesis/cfg/VERIFICATION.md#manual-continuation-experiment).
 
-**Remaining action:** evaluate continuation on current settled demonstrations,
-check placement cuts and guard-false exits, and resolve concrete counterexamples
-before claiming acceptance of a recovered loop.
+**Settled-start diagnosis:** on four-block seeds 0–4, the real classifier recovers
+`ON(1, b0)` and `ON(2, 1)`. Complete supplied placements replay successfully when
+concatenated, but cannot all resume from the earliest relational cuts: those cuts
+occur before the preceding lowering/release finishes. Splitting the supplied
+instructions across those boundaries permits continuation, with fragment lengths
+3/5/7, but the current quotient does not fold those different shapes.
+
+An isolated quotient call on the complete placement fragments learns
+`Scattered(b0, b_prime)` and constructs a loop that passes the five concrete
+replays. Validation correctly rejects its extracted demonstration exit for seed 3:
+the selected exit is observation 102, while the task goal first holds at 103.
+This isolated call bypasses the failed segment continuation and is not accepted
+synthesis. Neither concrete replay nor this guard's fit establishes inductiveness.
+A two-iteration ID-first MCMC smoke also exhausts its budget before verification.
+
+**Remaining action:** recover physically compatible repeated fragments and valid
+loop exits through search, then verify the returned candidate. Do not move a cut
+or accept a rejected fold solely because the complete demonstration later succeeds.
 
 ## 23. Numeric and named Release use different physical stopping tolerances
 
@@ -683,3 +699,23 @@ the former reversed display did not change the stored operands or WP semantics.
 See the [workflow](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification)
 for the reproduction command and current acceptance scope. Full synthesis,
 termination and physical-controller refinement are separate claims.
+
+
+## 28. CFG imitation scoring counted instruction-boundary callbacks as observations
+
+**Status:** resolved implementation defect; full synthesis acceptance remains open.
+
+**Finding:** `execute_current` reports appended observations and instruction-end
+states to its callback. The latter retain alias changes made by `Assign` and `Get`
+without a simulator step. `segment_rollout` treated every callback as an imitation
+sample, whereas demonstration collection records only the initial observation and
+observations appended by the program. Even an identical execution therefore had
+extra endpoint samples, changing the density and its KL/MMD score. Deduplicating
+observation values would also be wrong: a program can record unchanged states.
+
+**Resolution:** the rollout retains boundary scenes for PostScore and predicate
+checks, alongside the execution's original observation sequence. Imitation features
+use only that sequence. Features, distance scales, convergence thresholds and
+physical execution are unchanged. Synthetic coverage retains repeated observations
+and binding-only states; a freshly generated settled Stack replay checks complete
+feature-sequence parity with collection, without saved demonstration fixtures.

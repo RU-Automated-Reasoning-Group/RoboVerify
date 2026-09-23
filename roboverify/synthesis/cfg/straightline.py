@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from time import perf_counter
 
 import numpy as np
+
 from synthesis.cfg.execute import execute_current
 from synthesis.cfg.refine import scene_at
 from synthesis.cfg.reset import reset_segment
@@ -48,7 +49,21 @@ class StraightLineResult:
     iterations: int = 0
 
 
+class SegmentRollout(list):
+    """Predicate scenes, including binding boundaries, plus recorded observations.
+
+    Boundary callbacks do not advance the simulation. Keep them for predicates,
+    but score only the observation sequence returned by program execution.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.observations = []
+
+
 def _features(states, num_blocks):
+    if isinstance(states, SegmentRollout):
+        states = states.observations
     if isinstance(states[0], Scene):
         if states[0].observation is not None:
             if any(s.observation is None for s in states):
@@ -81,7 +96,7 @@ def segment_rollout(program, segment, env_factory, reset_mode="replay"):
         env = env_factory(segment.trace)
         try:
             first = reset_segment(env, segment, mode=reset_mode)
-            scenes = []
+            scenes = SegmentRollout()
             entry = scene_at(segment, segment.entry_index).entry_positions
 
             def record(obs, bindings):
@@ -95,7 +110,9 @@ def segment_rollout(program, segment, env_factory, reset_mode="replay"):
                     Scene(scene.positions, scene.bindings, entry, scene.observation)
                 )
 
-            execute_current(program, env, first, on_state=record)
+            scenes.observations = list(
+                execute_current(program, env, first, on_state=record)
+            )
             return scenes
         finally:
             env.close()
