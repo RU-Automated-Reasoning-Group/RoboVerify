@@ -12,6 +12,7 @@ import synthesis.environment.cee_us_env.torch_helpers as torch_helpers
 from synthesis.environment.cee_us_env.abstract_environments import MaskedGoalSpaceEnvironmentInterface
 from synthesis.environment.cee_us_env.fpp_construction.construction import FetchBlockConstructionEnv
 from synthesis.environment.cee_us_env.robotics import GymRoboticsGroundTruthSupportEnv
+from synthesis.environment.stack_reset import sample_stack_xy
 from synthesis.util.on import BLOCK_LENGTH, on as on_relation
 
 ROBOVERIFY_PYRAMID_NUM_BLOCKS = 6
@@ -434,46 +435,20 @@ class FetchPickAndPlaceConstruction(
     def _reset_sim_roboverify_stack(self):
         """
         RoboVerifyStack init:
-        - Randomize all blocks on the tabletop.
+        - Randomize all blocks on the tabletop within 0.70 m XY of the robot base.
         - Enforce pairwise "scattered" separation in XY for every block pair.
         """
         self.sim.set_state(self.initial_state)
-
-        scattered_sep = 2.0 * BLOCK_LENGTH  # Must be large enough for lowlevel_scattered(m,n)
-        prev_obj_xypos = []
-
-        # Sample per-object XY independently and reject until all pairs satisfy scattered.
-        for obj_name in self.object_names:
-            while True:
-                object_xypos = self.initial_gripper_xpos[:2] + np.random.uniform(
-                    -self.obj_range, self.obj_range, size=2
-                )
-
-                # Keep the same "not too close to gripper" constraint used in the base env.
-                if np.linalg.norm(object_xypos - self.initial_gripper_xpos[:2]) < 0.1:
-                    continue
-
-                ok = True
-                for other_xypos in prev_obj_xypos:
-                    dx = abs(object_xypos[0] - other_xypos[0])
-                    dy = abs(object_xypos[1] - other_xypos[1])
-                    if not (dx >= scattered_sep or dy >= scattered_sep):
-                        ok = False
-                        break
-
-                if not ok:
-                    continue
-
-                object_qpos = self.sim.data.get_joint_qpos(f"{obj_name}:joint")
-                assert object_qpos.shape == (7,)
-                object_qpos[:2] = object_xypos
-                object_qpos[2] = self.height_offset
-                self.sim.data.set_joint_qpos(f"{obj_name}:joint", object_qpos)
-                self.sim.forward()
-
-                prev_obj_xypos.append(object_xypos)
-                break
-
+        positions = sample_stack_xy(
+            self.num_blocks, self.robot_base_xy, self.initial_gripper_xpos[:2]
+        )
+        for obj_name, object_xypos in zip(self.object_names, positions):
+            object_qpos = self.sim.data.get_joint_qpos(f"{obj_name}:joint")
+            assert object_qpos.shape == (7,)
+            object_qpos[:2] = object_xypos
+            object_qpos[2] = self.height_offset
+            self.sim.data.set_joint_qpos(f"{obj_name}:joint", object_qpos)
+        self.sim.forward()
         return True
 
     def _reset_sim_roboverify_tower(self):
