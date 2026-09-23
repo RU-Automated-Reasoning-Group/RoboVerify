@@ -851,7 +851,7 @@ class Put(Instruction):
         self.upper_block = upper_block
 
     def __str__(self):
-        return f"put({self.base_block}, {self.upper_block})"
+        return f"put({self.upper_block}, {self.base_block})"
 
     def eval(self, env, traj, return_image=False) -> List:
         # `Put` is a logical/table-level operation in the stack DSL.

@@ -24,7 +24,7 @@ from typing import Any, Iterator, Optional
 DEFAULT_MAX_LINES = 60
 CURVE_POINTS = 16
 STDOUT_TAIL_LINES = 15
-HEALTHY_STATUSES = {"completed"}
+HEALTHY_STATUSES = {"completed", "verified_model"}
 FLOOR_THRESHOLD = -1e5  # costs at or below this are the BMC-failure sentinel
 
 
@@ -254,6 +254,10 @@ class RunSummary:
 
     def diagnostics_lines(self) -> list:
         lines = ["", "diagnostics"]
+        if self.result.get("formal_verification"):
+            lines.append(f"  verification {self.result['formal_verification']}")
+            lines.append(f"  symbolic     {self.result.get('symbolic', 'not run')}")
+            lines.append(f"  motion       {self.result.get('motion', 'not run')}")
         if self.cfg_progress:
             lines.append(
                 f"  CFG result: {self.result.get('status','running')}  formal verification: {self.result.get('formal_verification','not established')}"

@@ -156,6 +156,7 @@ def verify_cfg_motion(
     initial_positions=None,
     initial_arm=None,
     table_surface_height=None,
+    supported_tower_model=False,
     entry_conditions=None,
 ):
     """Thread geometry/arm/held state through blocks; fresh states at loop boundaries.
@@ -164,6 +165,13 @@ def verify_cfg_motion(
     starts from a fresh invariant + guard-false state. A failed/unknown premise or
     unsupported primitive is never a successful proof.
     """
+    from synthesis.verification_lib.tower_geometry import (
+        arm_clearance,
+        assume_tower_geometry,
+        column_alignment,
+        tower_height_invariant,
+    )
+
     constants = sorted(_all_names(cfg))
     low = LowLevelContext(default_L=0.05, use_tbl=context.use_tbl)
     checks = []
@@ -178,7 +186,9 @@ def verify_cfg_motion(
         physical_names[0], physical_names[0], table_surface_height=table_surface_height
     )
 
-    def fresh(conditions, path, positions=None, arm=None, available=()):
+    def fresh(
+        conditions, path, positions=None, arm=None, available=(), clear_arm=False
+    ):
         p = PrimitiveMotionProblem(
             low,
             conditions,
@@ -191,6 +201,10 @@ def verify_cfg_motion(
             initial_arm=arm,
             enforce_source=False,
         )
+        if supported_tower_model:
+            assume_tower_geometry(p, table_surface_height)
+            if clear_arm:
+                p.solver.add(arm_clearance(p), column_alignment(p))
         p.root_context = RootContext(context, z3.And(*conditions), timeout_ms)
         assume_input_alignment(p, p.root_context.initial_roots(available))
         p.check("initial_consistency")
@@ -239,6 +253,18 @@ def verify_cfg_motion(
                 initializers = [Assign(a, b) for a, b in region.init]
                 p.execute(initializers)
                 p.root_context.history.extend(initializers)
+                if supported_tower_model:
+                    p.check(
+                        "arm_clearance_entry", z3.Not(arm_clearance(p, fields=p.fields))
+                    )
+                    p.check(
+                        "column_alignment_entry",
+                        z3.Not(column_alignment(p, fields=p.fields)),
+                    )
+                    p.check(
+                        "tower_height_entry",
+                        z3.Not(tower_height_invariant(p, fields=p.fields)),
+                    )
                 append_new(p, offset, path)
                 guard = to_z3(region.guard, context)
                 inv = region.invariant
@@ -248,16 +274,34 @@ def verify_cfg_motion(
                     else inv
                 )
                 child = fresh(
-                    [inv, guard], path, available=region.body_cfg.initial_scope
+                    [inv, guard],
+                    path,
+                    available=region.body_cfg.initial_scope,
+                    clear_arm=supported_tower_model,
                 )
                 append_new(child, 0, path)
-                walk(
+                child = walk(
                     region.body_cfg,
                     child,
                     path + "/",
                     postcondition=inv,
                     tail=tuple(Assign(a, b) for a, b in region.update),
                 )
+                if supported_tower_model:
+                    finish_offset = len(child.checks)
+                    child.check(
+                        "arm_clearance_preserved",
+                        z3.Not(arm_clearance(child, fields=child.fields)),
+                    )
+                    child.check(
+                        "column_alignment_preserved",
+                        z3.Not(column_alignment(child, fields=child.fields)),
+                    )
+                    child.check(
+                        "tower_height_preserved",
+                        z3.Not(tower_height_invariant(child, fields=child.fields)),
+                    )
+                    append_new(child, finish_offset, path)
                 exists_vars = [context.get_consts(n) for n in region.exists_vars]
                 no_guard = (
                     z3.Not(z3.Exists(exists_vars, guard))
@@ -268,6 +312,7 @@ def verify_cfg_motion(
                     [inv, no_guard],
                     path + "/exit",
                     available=available | {a for a, _ in region.init},
+                    clear_arm=supported_tower_model,
                 )
                 append_new(p, 0, path + "/exit")
                 continue

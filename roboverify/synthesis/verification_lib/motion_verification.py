@@ -6,6 +6,7 @@ we refuse to certify such a manipulation rather than silently freezing it.
 """
 
 from dataclasses import dataclass, field, replace
+from itertools import product
 from time import perf_counter
 from typing import Optional
 
@@ -128,11 +129,12 @@ class MotionProblem:
         self.contract = contract
         self.noise = noise
         self.block_v = str(block_v)
+        self.timeout_ms = timeout_ms
         self.solver = z3.Solver()
         self.solver.set(timeout=timeout_ms)
         self.solver.add(context.L == z3.RealVal(str(context.default_L)))
         self.constants = context.translate_condition(
-            self.solver, constants, initial_condition
+            self.solver, constants, initial_condition, track=False
         )
         self.constants["sym"] = context.get_consts("sym")
         if context.use_tbl:
@@ -229,12 +231,69 @@ class MotionProblem:
             },
         )
 
+    def finite_consistency_witness(self, candidates):
+        """SAT over an explicit finite domain witnesses unbounded consistency.
+
+        Expand every Box quantifier over that domain and assert domain closure.
+        This is only a SAT shortcut: finite UNSAT/UNKNOWN is never a proof of
+        inconsistency and never a proof of a universally quantified obligation.
+        """
+        cache = {}
+        expansions = 0
+
+        def expand(expr):
+            nonlocal expansions
+            if expr in cache:
+                return cache[expr]
+            if z3.is_quantifier(expr):
+                if any(
+                    expr.var_sort(i) != self.context.BoxSort
+                    for i in range(expr.num_vars())
+                ):
+                    return expr
+                terms = []
+                for values in product(candidates, repeat=expr.num_vars()):
+                    expansions += 1
+                    if expansions > 10000:
+                        raise ValueError(
+                            "Finite consistency expansion budget exhausted"
+                        )
+                    terms.append(
+                        expand(z3.substitute_vars(expr.body(), *reversed(values)))
+                    )
+                result = (z3.And if expr.is_forall() else z3.Or)(*terms)
+            elif z3.is_app(expr) and expr.num_args():
+                result = expr.decl()(*(expand(c) for c in expr.children()))
+            else:
+                result = expr
+            cache[expr] = result
+            return result
+
+        finite = z3.Solver()
+        finite.set(timeout=self.timeout_ms)
+        try:
+            finite.add(*(expand(a) for a in self.solver.assertions()))
+        except ValueError:
+            return False
+        obj = fresh_const(self.context.BoxSort, "consistency_object")
+        finite.add(z3.ForAll([obj], z3.Or(*(obj == c for c in candidates))))
+        return finite.check() == z3.sat
+
     def check(self, obligation, violation=None):
         start = perf_counter()
         self.solver.push()
         if violation is not None:
             self.solver.add(violation)
-        answer = self.solver.check()
+        answer = None
+        candidates = getattr(self, "consistency_candidates", ())
+        if (
+            violation is None
+            and candidates
+            and self.finite_consistency_witness(candidates)
+        ):
+            answer = z3.sat
+        if answer is None:
+            answer = self.solver.check()
         counterexample = None
         reason = ""
         if answer == z3.unknown:

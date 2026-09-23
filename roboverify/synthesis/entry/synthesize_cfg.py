@@ -6,6 +6,7 @@ import signal
 from functools import partial
 
 from synthesis.api.program import Program, generate_random_program
+from synthesis.cfg.artifacts import describe_cfg
 from synthesis.cfg.bindings import (
     close_objects,
     mutate_ids,
@@ -285,6 +286,7 @@ def run(args, logger):
             ),
             "timeout_ms": args.motion_timeout_ms,
             "table_surface_height": args.table_surface_height,
+            "supported_tower_model": args.supported_towers,
         },
         max_refinements=args.refinements,
         language=Language(timeout_seconds=args.predicate_seconds),
@@ -292,39 +294,7 @@ def run(args, logger):
     )
     import json
 
-    logger.write_artifact(
-        "cfg.json",
-        json.dumps(
-            {
-                "synthesis_approach": cfg.synthesis_approach,
-                "fixed_id_bindings": getattr(cfg, "_fixed_id_bindings", {}),
-                "order": cfg.order,
-                "nodes": {name: str(node.region) for name, node in cfg.nodes.items()},
-                "edges": [
-                    {
-                        "source": e.source,
-                        "target": e.target,
-                        "label": str(e.label),
-                        "binds": sorted(e.binds),
-                    }
-                    for e in cfg.edges
-                ],
-                "segments": {
-                    name: [
-                        {
-                            "demo": s.demo_idx,
-                            "start": s.t_start,
-                            "end": s.t_end,
-                            "bindings": s.bindings,
-                        }
-                        for s in rows
-                    ]
-                    for name, rows in cfg.demos.segments.items()
-                },
-            },
-            indent=2,
-        ),
-    )
+    logger.write_artifact("cfg.json", json.dumps(describe_cfg(cfg), indent=2))
     if result:
         program = lower(cfg, context, physical=True)
         logger.write_artifact("program.txt", str(program))
@@ -397,6 +367,11 @@ def main(argv=None):
         "--table-surface-height",
         type=float,
         help="Physical table height required for table-placement contracts",
+    )
+    parser.add_argument(
+        "--supported-towers",
+        action="store_true",
+        help="Use complete uniform towers on a common table; check height, arm-clearance and column invariants",
     )
     parser.add_argument(
         "--additional-demos",

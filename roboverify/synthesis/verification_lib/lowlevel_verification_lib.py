@@ -775,7 +775,9 @@ class LowLevelContext:
             )
         return decl(*children)
 
-    def translate_condition(self, s: Solver, constants: List, conditions: List):
+    def translate_condition(
+        self, s: Solver, constants: List, conditions: List, *, track=True
+    ):
         const_map = {str(c): self.get_consts(str(c)) for c in constants}
         lowlevel_constants = list(const_map.values())
         sym = self.get_consts("sym")
@@ -786,6 +788,9 @@ class LowLevelContext:
             translated = self._translate_expr(
                 condition, lowlevel_constants, const_map, []
             )
-            s.assert_and_track(translated, f"condition_{idx}")
+            if track:
+                s.assert_and_track(translated, f"condition_{idx}")
+            else:
+                s.add(translated)
 
         return const_map

@@ -17,6 +17,33 @@ from synthesis.verification_lib.highlevel_verification_lib import HighLevelConte
 
 
 class IRTests(unittest.TestCase):
+    def test_artifact_does_not_expand_trajectory_payloads(self):
+        import json
+
+        from synthesis.cfg.artifacts import describe_cfg
+
+        class ArchiveOnly:
+            def __repr__(self):
+                raise AssertionError("Trajectory data must not appear in CFG JSON")
+
+        segment = DemoSegment(0, 0, 1, DemoTrace((ArchiveOnly(), ArchiveOnly())))
+        child = RelationalCFG.initial([segment], boolean(True), boolean(True))
+        child.nodes["v0"].region = BlockRegion((Assign("b", "b0"),))
+        cfg = RelationalCFG.initial([segment], boolean(True), boolean(True))
+        cfg.nodes["v0"].region = LoopRegion(
+            boolean(True),
+            (),
+            (),
+            body_cfg=child,
+            body_demos=(ArchiveOnly(),),
+            exit_demos=(ArchiveOnly(),),
+        )
+        payload = json.loads(json.dumps(describe_cfg(cfg)))
+        loop = payload["nodes"]["v0"]
+        self.assertEqual(loop["kind"], "loop")
+        self.assertEqual(loop["body"]["nodes"]["v0"]["kind"], "block")
+        self.assertEqual(loop["body"]["segments"]["v0"][0]["end"], 1)
+
     def test_absolute_split_indices_survive_repeated_splits(self):
         segment = DemoSegment(3, 10, 19, DemoTrace(tuple(range(20))))
         left, right = segment.split(15)
