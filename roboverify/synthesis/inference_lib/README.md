@@ -174,6 +174,8 @@ Full mode synthesizes from the archive. Verify mode starts from the supplied
 program, whose executable fingerprint must match the collected source. Both
 execute the current candidate from the saved initial simulator states, infer
 invariants, and perform the same symbolic and motion verification with feedback.
+All symbolic inference calls `InvInference` → `inference.loop_inference`, the
+intended partition-based algorithm. There is no learner-selection flag or fallback.
 Verification-only mode may enter resynthesis later; this is recorded explicitly.
 See [the integrated workflow](../cfg/VERIFICATION.md).
 

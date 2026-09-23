@@ -52,11 +52,12 @@ scope; Stack reset bounds initial blocks to 0.70 m XY from the robot base.
 Stack collection holds the initial gripper position for 50 steps before
 recording; the settled full snapshot becomes state zero. Synthesis, candidate
 verification, and standalone MCMC restore archived states without repeating
-settling or recreating a layout from its seed. The supplied Stack program passes
-verification mode with the monotone relational learner and explicit supported-tower
-geometry; see the [reproduction command](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification).
-Full synthesis acceptance remains open; verification of a supplied program does
-not establish search or loop recovery.
+settling or recreating a layout from its seed. All symbolic inference uses the
+intended partition-based algorithm, `InvInference` → `inference.loop_inference`;
+there is no alternate learner flag or callback. See the
+[verification command](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification).
+Supplied Stack verification and full synthesis acceptance remain open with this
+algorithm; the earlier alternate-learner result is not acceptance evidence.
 Update the relevant status or entry when it changes, rather than maintaining a
 separate implementation-plan history.
 
@@ -196,8 +197,9 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   - `symbolic_verify.py`: labeled VC results, exact vacuity detection, increasing-size
     finite counterexample search and optional unbounded proof. `counterexamples.py`
     realizes relation tables as geometry or explicitly refuses the model.
-  - `cegis.py`: bounded symbolic/motion refinement, monotone finite-vocabulary
-    learning, `NeedsResynthesis` for entry failures, and counterexample penalties.
+  - `cegis.py`: bounded symbolic/motion refinement using the intended
+    `InvInference` algorithm, explicit coverage/progress checks,
+    `NeedsResynthesis` for entry failures, and counterexample penalties.
     See [Phase E workflow](roboverify/synthesis/verification_lib/CEGIS.md).
   - `motion_verification.py`: explicit placement contracts, frame preservation, and
     swept-cube checks for lowered loop bodies. Results retain proof mode, failed
@@ -348,8 +350,8 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   The driver requires validated current archives and has no historical-oracle
   fallback. `--reset-mode replay` is the default; Unstack retains its 60-second
   process alarm. Success is `verified_model` in the documented scope.
-  Supplied Stack verification passes with the documented configuration; full
-  synthesis acceptance remains open. `--supported-towers` adds explicit height
+  Supplied Stack verification and full synthesis acceptance remain open with the
+  intended partition-based inference algorithm. `--supported-towers` adds explicit height
   premises and checks arm-clearance, column-alignment and height loop invariants.
   Finite SAT witnesses accelerate consistency only; motion safety stays unbounded.
   `cfg/artifacts.py` records CFG structure and segment indices without expanding

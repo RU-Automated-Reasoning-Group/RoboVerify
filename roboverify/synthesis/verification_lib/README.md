@@ -157,7 +157,8 @@ rewrite; it is not implemented. Run the benchmark to measure current outcomes
 and performance.
 
 Phase E adds [counterexample-guided refinement](CEGIS.md), typed symbolic results,
-monotone invariant learning, and fixed-environment motion penalties.
+partition-based invariant inference with checked progress, and fixed-environment
+motion penalties.
 
 Motion placement verification proves a scoped root with the §5.5 quantified
 criterion. Existing towers are assumed tightly aligned (`< L/4` in X and Y);

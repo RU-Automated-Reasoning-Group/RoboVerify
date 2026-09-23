@@ -27,15 +27,18 @@ retaining block separation and initial gripper clearance. Primitive ID/ByName
 instructions share configurable controllers and retain their 50-step budgets.
 See [controller settings](roboverify/synthesis/inference_lib/README.md#primitive-controller-settings).
 
-**The supplied Stack program passes verification mode** with a learned relational
-invariant and both symbolic and motion proofs. The documented configuration uses
-the monotone learner and explicit supported-tower geometry; geometric loop
-invariants are separately checked at entry and after the body. See the
-[reproduction command](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification)
+**Symbolic invariant inference uses the partition-based algorithm in
+`inference.py`, through `InvInference`.** It is the intended algorithm for both
+pipeline modes and standalone symbolic CEGIS; there is no learner-selection flag.
+
+**Supplied Stack verification and full synthesis acceptance remain open under
+this algorithm.** The earlier successful run selected an alternate observed-pattern
+learner and does not establish acceptance of the intended inference workflow.
+The verifier fixes and separately checked geometric invariants remain available.
+See the [verification command](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification)
 and [diagnosis](PAPER-DISCREPANCIES.md#27-stack-motion-needed-geometric-loop-invariants).
-**Full synthesis acceptance remains open:** this result starts from the supplied
-program and does not establish MCMC/CFG loop recovery. Current archives contain full simulator states; old demo formats
-are unsupported. Collect demonstrations before running the pipeline examples.
+Current archives contain full simulator states; old demo formats are unsupported.
+Collect demonstrations before running the pipeline examples.
 
 The supported scope is structured chains and flat loops for the tower tasks;
 the integrated synthesis CLI exposes Stack and Unstack. A successful

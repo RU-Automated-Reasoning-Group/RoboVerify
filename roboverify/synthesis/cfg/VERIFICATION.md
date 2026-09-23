@@ -57,7 +57,7 @@ uv run python -m synthesis.entry.synthesize_cfg \
   --program synthesis.examples.stack:build_program \
   --demos demos/stack/4-blocks-500-trajectories/demonstrations.npz \
   --max-loop-iterations 3 --motion-iterations 0 \
-  --learner monotone --invariant-relations ON_star Scattered equality \
+  --invariant-relations ON_star Scattered equality \
   --supported-towers --table-surface-height 0.4 \
   --initial-arm 1.3446426 0.74911606 0.5314612 \
   --motion-timeout-ms 30000 --verification-timeout-ms 10000 \
@@ -71,21 +71,22 @@ are the nominal settled reset pose in this environment; they are explicit formal
 entry conditions, not automatic extraction of the complete simulator state into Z3.
 Only candidate execution restores full simulator snapshots.
 
-Current acceptance: 500 seeds (0–499), 1,500 continuing loop heads and 500 normal
-exits; `verified_model` with 12 valid symbolic checks (including the unbounded
-proof) and 63 valid motion checks. Candidate actions and observations match the
-expert recordings exactly on all 500 starts. There is one candidate revision and
-no resynthesis or repair.
+Both modes use `InvInference` → `inference.loop_inference`, the intended
+partition-based algorithm. Candidate execution supplies continuing loop heads and
+normal exits; preservation feedback uses the same algorithm. There is no
+`--learner` option and no automatic fallback to a different learner.
 
-The relational invariant is learned from the candidate's own heads and normal
-exits. The monotone learner with this vocabulary retains the structure needed by
-Stack without requiring unsupported initial Higher facts. Geometric loop facts
-are separately checked templates, as described below. The program is verified
-without motion repair or resynthesis. Finite symbolic checks are followed by an
-unbounded proof; motion checks also quantify over unnamed objects. The 500
-trajectories provide inference data, not a bound on the proof's block count.
-This establishes supplied-program verification within the stated model; full
-MCMC/CFG synthesis acceptance remains open.
+**Acceptance remains open with the intended algorithm.** The earlier 500-seed
+`verified_model` result used the separate observed-pattern utility and does not
+establish this workflow's acceptance. The command above is a diagnostic invocation,
+not a claim that it currently passes. A failed invariant must be diagnosed through
+the recorded obligations. The supported-tower model and geometric loop checks
+remain as described below; they do not replace the inferred relational invariant.
+
+Finite symbolic checks are followed by an unbounded proof; motion checks also
+quantify over unnamed objects. The demonstration count supplies inference data,
+not a bound on the proof's block count. Full MCMC/CFG synthesis acceptance remains
+open independently of supplied-program verification.
 
 ## Synthesis approaches
 
@@ -206,8 +207,10 @@ revision; traces from earlier executables are not reused as later executions.
 `--max-loop-iterations` (100) and `--trajectory-timeout-seconds` (60) bound candidate
 execution. Incomplete executions return an unsuccessful result.
 
-The integrated learner defaults to `legacy`; `--learner monotone` selects Boolean
-rows. Both enforce positive-state coverage and explicit progress checks.
+Bootstrap and counterexample refinement both use `InvInference`, implemented by
+`inference.loop_inference`. The standalone symbolic CEGIS API uses the same
+algorithm. Positive-state coverage and explicit progress checks remain mandatory;
+an unsuccessful inference attempt never switches to another learner.
 
 Each verification attempt records structured obligations under
 `artifacts/verification/`: symbolic files retain VC kinds, formulas, proof scope,

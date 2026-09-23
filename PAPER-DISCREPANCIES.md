@@ -5,7 +5,7 @@ against the implementation. It covers §§2–5, Algorithms 1–6, Appendix A/Ta
 and the associated appendix algorithms/proofs; experimental numbers are not
 correctness targets. Neither paper nor code automatically wins a disagreement.
 
-Entry numbers 1–28 are stable, including resolved findings. Each entry records
+Entry numbers 1–29 are stable, including resolved findings. Each entry records
 its status, decision/reasoning and remaining action. Add new findings with the
 next unused ID. Detailed implementation history and completed audit checklists
 remain in Git history; use [README.md](README.md#project-status) for project status
@@ -22,15 +22,16 @@ model assumptions and APIs.
 | 16 | Paper rules/assumptions; opt-in height consequences implemented for Stack (27). |
 | 17, 18 | Paper edits only; code fixes complete. |
 | 19 | Resolved integration defect: recorded and candidate imitation features. |
-| 20 | Supplied Stack verification passes; full synthesis acceptance remains open. |
+| 20 | Shared Stack workflow implemented; acceptance with the intended inference algorithm remains open. |
 | 21 | Switchable ID-first policy implemented; full learning acceptance and policy comparison remain open. |
 | 22 | Settled continuation reproduces placement-cut and loop-exit limits; full loop recovery remains open. |
 | 23 | Resolved primitive-controller discrepancy; shared configurable control and execution parity checks. |
 | 24 | Settled collection starts and saved-state replay implemented; residual grasp offsets and full learning acceptance remain. |
 | 25 | Resolved motion translation defect: normalize negative quantifiers before weakening premises. |
 | 26 | Resolved primitive-model discrepancy: Pick follows horizontal approach and vertical descent. |
-| 27 | Supplied Stack verified with learned relational and checked geometric invariants; full synthesis and controller refinement remain separate. |
+| 27 | Motion-model fixes implemented; supplied Stack acceptance must use the intended partition-based inference (29). |
 | 28 | Resolved imitation-sampling defect: candidate boundary callbacks no longer add scoring samples. |
+| 29 | Intended symbolic inference enforced; alternate learner selection removed. |
 
 ## 1. Theorem 5.2 contradicts the paper's own Table 7 (`R_Higher`)
 
@@ -142,9 +143,10 @@ validated demonstrations and support resynthesis when recordings are supplied.
 
 Log False as iteration zero, then bootstrap from supplied traces; do not promise
 unconditional convergence from False. Each accepted update checks implication
-from the old invariant and newly covered states. Standalone CEGIS defaults to
-monotone Boolean rows; the integrated CFG CLI defaults to the legacy learner
-with the same explicit progress checks.
+from the old invariant and newly covered states. Standalone CEGIS and both
+integrated pipeline modes use `InvInference` → `inference.loop_inference`, with
+no alternate learner selection (29). This is the intended algorithm. Monotonicity
+is checked on each update rather than assumed from the learner.
 
 **Remaining action:** clarify Algorithm 6's failure-state, successor and progress
 semantics. No remaining integration task for the supported flat-loop workflow;
@@ -435,7 +437,7 @@ identical feature vectors.
 
 ## 20. Stack entry conditions and invariant data now agree across both modes
 
-**Status:** supplied Stack verification passes; full synthesis acceptance remains open.
+**Status:** shared workflow implemented; supplied Stack and full synthesis acceptance remain open with the intended inference algorithm.
 
 **Decision:** Stack starts with unstacked, pairwise-scattered blocks and ends with
 all blocks ON* b0. The former integrated True precondition and the standalone
@@ -452,12 +454,14 @@ arbitrary-witness verification are unchanged. Physical repairs cause new runtime
 traces and renewed inference/verification; collected observations alone never
 prove inductiveness or the physical-controller refinement excluded in entry 4.
 
-**Verification result:** the unchanged supplied program reaches `verified_model`
-using runtime inference, the monotone learner, and the explicit motion model in
-entry 27. The abstract body remains `Put(b_prime, b); Assign(b, b_prime)`.
+**Verification scope:** the earlier successful supplied-program result selected an
+alternate observed-pattern learner. It does not establish acceptance of the intended
+symbolic inference workflow (29). The abstract body remains
+`Put(b_prime, b); Assign(b, b_prime)`.
 
-**Remaining action:** recover the full loop through search in full mode and obtain
-`verified_model` on that same synthesized candidate with validated settled starts.
+**Remaining action:** verify the supplied program with the intended inference
+algorithm, then recover the full loop through search and obtain `verified_model`
+on that synthesized candidate with validated settled starts.
 
 ## 21. Free-object binding is performed before search instead of on the returned candidate
 
@@ -645,7 +649,7 @@ claim a proof of MuJoCo feedback dynamics.
 
 ## 27. Stack motion needed geometric loop invariants
 
-**Status:** supplied-program verification passes without resynthesis or motion repair.
+**Status:** geometric verifier fixes implemented; supplied-program acceptance with the intended inference algorithm remains open (29).
 
 **Diagnosis:** fresh motion states at loop boundaries discarded facts established
 by prior iterations. An arbitrary arm could begin inside the tower; loose ON*
@@ -673,13 +677,15 @@ obligations to pass. Noise or an offset placement can invalidate preservation;
 neither is silently treated as exact. Symbolic task pre/postconditions and the
 supplied physical program are unchanged.
 
-**Inference:** use the existing `monotone` learner with ON_star, Scattered and
-equality. It learns Boolean rows from actual candidate heads and normal exits;
-the inferred relational formula is not replaced with a handwritten invariant.
-The legacy learner can lose needed structure, while adding Higher can learn
-observed height facts that the relational entry specification does not guarantee.
-The successful configuration is explicit, not a change to the default learner.
-Geometric invariants above are checked templates, separate from relational learning.
+**Inference correction (29):** the partition-based implementation in `inference.py`
+is the intended symbolic algorithm. The earlier successful run used an alternate
+observed-pattern learner, so its result is not acceptance evidence for that algorithm.
+All production symbolic inference now calls `InvInference`; its failures must be
+diagnosed without substituting another learner. Adding Higher to the vocabulary
+can still learn observed facts that the relational precondition does not guarantee.
+Geometric regressions use an explicitly labeled structural invariant fixture;
+they test solver obligations and make no inference-acceptance claim. The geometric
+invariants above remain checked templates, separate from relational learning.
 
 **Nonvacuity:** quantified consistency can time out even when all violation
 queries are unsatisfiable. A bounded-domain SAT witness now establishes premise
@@ -697,7 +703,7 @@ reports recognize `verified_model` as successful and show both proof stages.
 The Put text formatter now follows its constructor order, `Put(upper, base)`;
 the former reversed display did not change the stored operands or WP semantics.
 See the [workflow](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification)
-for the reproduction command and current acceptance scope. Full synthesis,
+for the diagnostic command and current acceptance scope. Full synthesis,
 termination and physical-controller refinement are separate claims.
 
 
@@ -719,3 +725,31 @@ use only that sequence. Features, distance scales, convergence thresholds and
 physical execution are unchanged. Synthetic coverage retains repeated observations
 and binding-only states; a freshly generated settled Stack replay checks complete
 feature-sequence parity with collection, without saved demonstration fixtures.
+
+
+## 29. Symbolic inference must use the intended partition-based algorithm
+
+**Status:** user decision implemented; alternate learner selection removed.
+
+**Decision:** `InvInference` → `inference.loop_inference` is the intended symbolic
+invariant inference algorithm, not a legacy fallback. Candidate bootstrap,
+recovered-loop inference, integrated preservation refinement and standalone
+symbolic CEGIS all use it. The `--learner` flag and Python learner-selection
+parameters are removed; passing them is an error. No unsuccessful inference
+attempt falls back to observed Boolean patterns.
+
+`MonotoneInvariantLearner` remains an independent utility in
+`inference_lib/observed_patterns.py` for other analyses. Symbolic verification
+workflows do not import or select it. Coverage, explicit implication/progress
+checks, nonvacuity and increasing-size/unbounded verification remain in force.
+Routing standalone tests through the intended algorithm exposed an empty-binder
+adapter bug: a ground clause is now returned directly instead of constructing
+Z3's invalid `ForAll([])`. Feature selection and formula learning are unchanged.
+
+**Acceptance correction:** the previous Stack success with the alternate learner
+does not validate the intended inference workflow. Supplied-program and full
+synthesis acceptance remain open until they pass using `InvInference`. Geometric
+unit tests use a declared structural invariant to retain independent collision,
+clearance and alignment coverage; this fixture is never injected into production
+inference. Regression tests check the removed CLI/API options and that bootstrap
+and counterexample refinement invoke the intended algorithm.

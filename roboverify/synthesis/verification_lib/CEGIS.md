@@ -19,13 +19,15 @@ then requests an unbounded proof unless disabled. `build_problem(n)` returns
 Finite success is labeled with its checked range. Unknown/vacuous smaller instances
 stop the search rather than making a later counterexample appear smallest.
 
-`run_symbolic_cegis` records `False`, learns from the supplied `DemoStore`, checks
-strict enlargement, verifies, and adds preservation-failure successors. Its default
-`MonotoneInvariantLearner` builds a universal Boolean formula over the observed
-vocabulary rows. The finite set of allowed rows only grows. `InvInference` can be
-passed instead, but nonmonotone updates are rejected. An exit failure requests a
-stronger invariant; a vacuous/unknown query or unrealizable geometric model stops
-with its own status. An establishment/body failure saves the model and raises
+`run_symbolic_cegis` records `False`, calls `InvInference` on the supplied
+`DemoStore`, checks strict enlargement, verifies, and adds preservation-failure
+successors. `InvInference` delegates to the intended partition-based algorithm in
+`inference.loop_inference`; the integrated CFG bootstrap and refinement use it too.
+There is no learner callback or alternate implementation to select. The learner
+is not assumed monotone: updates must pass the explicit coverage and implication
+checks, and nonmonotone updates are rejected. An exit failure requests a stronger
+invariant; a vacuous/unknown query or unrealizable geometric model stops with its
+own status. An establishment/body failure saves the model and raises
 `NeedsResynthesis`, whose `.s0` is the concrete scene when realization succeeds.
 
 Counterexample scene construction preserves ON*, frozen ON*, Higher, Scattered,
@@ -85,10 +87,14 @@ For this integrated CLI, `--demos` replaces the old `--demo-store` and
 `synthesis.experiment.mcmc.run` CLI still uses `--run-root` and `--slug`. The old
 `synthesis.entry.verified_synthesis` command now forwards to this verify mode.
 
-`--motion-noise GRASP MOVE RELEASE` opts into bounded errors. `--learner legacy`
-is the default; `monotone` selects the Boolean-row learner. The generic standalone
-library APIs above remain available. No Unstack run may exceed the standing
+`--motion-noise GRASP MOVE RELEASE` opts into bounded errors. The learner-selection
+flag has been removed. The standalone library APIs above remain available with the
+same fixed symbolic inference algorithm. No Unstack run may exceed the standing
 60-second cap.
+
+`inference_lib/observed_patterns.py` retains `MonotoneInvariantLearner` as an
+independent observed-pattern utility for other analyses. Symbolic verification
+workflows do not import or select it.
 
 RunLogger stores candidate programs, actual execution traces and bootstrap
 invariants under `artifacts/candidates/<revision>/`, counterexamples and later
