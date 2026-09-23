@@ -11,6 +11,14 @@ First collect a supplied primitive DSL program using
 describes seeds, full-state archives, and optional 20 FPS videos. Demonstrations
 belong under `demos/`; experiment results belong under `runs/`.
 
+Stack collection holds the reset gripper position for 50 control steps, then
+records the resulting full simulator state as demonstration state zero. The
+preparation is excluded from program actions, loop events, and video. Both
+pipeline modes restore archived starts for candidates and repairs; standalone
+MCMC uses the same saved starts for CEM/scoring and candidate videos. Seeds
+identify recordings rather than reconstructing their initial state. Restoration
+never repeats settling. Recollect older demos to use the new settled starts.
+
 The shared Stack precondition requires unstacked, pairwise-scattered blocks;
 the postcondition requires every block to be ON* b0. Every supplied demonstration
 must complete and satisfy these initial/final conditions. The driver requires
@@ -249,7 +257,8 @@ or unsupported summary produces an explicit unsupported result.
 
 Demo segments use absolute inclusive indices and share their cut state. Current
 archives contain full snapshots and recorded actions. Direct restoration and
-action replay reproduce segment starts; replay is the default. Observation-only
+action replay reproduce segment starts; replay is the default and begins with
+the saved settled state, then only the recorded program actions. Observation-only
 and older archive formats are removed. Inference uses candidate runtime loop
 heads and normal terminal heads with frozen invocation-entry geometry.
 

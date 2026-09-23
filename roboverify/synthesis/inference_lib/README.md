@@ -30,6 +30,21 @@ zero. Use `--seed-start 10` for another consecutive range or `--seeds 3 8 12`
 for explicit seeds. An explicit trajectory count must match the explicit list.
 Failed seeds are retained as failures, never replaced by easier seeds.
 
+Before running the DSL, collection holds the reset gripper position for exactly
+**50 control steps** with the gripper open. The full state after those steps
+(S50, the 51st state counting reset) becomes demonstration **state zero**. The
+first 50 states and preparation actions are excluded from the archive, loop
+traces, and video. The trajectory timeout includes this preparation. Every
+trace records `initialization.source` and `initialization.settling_steps`.
+
+Synthesis, candidate execution for invariant inference/verification, and
+standalone MCMC restore this archived full state when restarting a demo. They
+do not reconstruct it by calling reset with the seed, and do not settle it
+again. Seeds identify trajectories; snapshots define their actual starting
+states. Later segments use their saved snapshot or replay only the recorded
+program actions from state zero. Recollect older demonstrations to adopt the
+settled start; existing archives always replay their own stored states.
+
 Default output:
 
 ```text
@@ -56,7 +71,8 @@ seed gets its own MP4, including partial failed executions where possible.
 `--render` independently displays a live window. The ffmpeg executable is
 required for videos. Encoding failures are reported separately and produce a
 nonzero command result without discarding valid trajectory data. Frames are
-streamed rather than retained in memory. No extra simulator steps are added.
+streamed rather than retained in memory. Rendering adds no simulator steps;
+recording starts after the 50-step preparation.
 
 ## Stack reset workspace
 
@@ -72,7 +88,7 @@ it cannot fit the requested count; it never expands the region as a fallback.
 The bound applies to every newly sampled layout, independently of seed. It is
 an XY workspace restriction, not a proof of reachability at every height or for
 every tower size. Existing archives restore their saved initial states; recollect
-to use the new region. The same reset is used by collection and candidate runs.
+to use the new region. Candidate runs restore their archived starts.
 
 ## Primitive controller settings
 
@@ -135,17 +151,22 @@ With the former reset region, seeds 0–4 finished in three iterations with
 20 FPS videos, but a broader check passed only 96/100: seeds 38, 46, 73, and 85
 failed the third Pick's approach. The rejected batch remains as diagnostics.
 With the bounded reset region above and identical program/controller settings,
-seeds 0–499 now pass **500/500**: exactly three iterations, all 15 primitives
-converged, and at most 22 steps per primitive. The accepted archive is
+the earlier collection before settling passed **500/500** seeds (0–499): exactly
+three iterations, all 15 primitives converged, and at most 22 steps per primitive. The accepted archive is
 `demos/stack/4-blocks-500-trajectories-near-base/demonstrations.npz`.
 Ten separately rendered runs (seeds 0, 38, 46, 73, 85, 150, 250, 350, 450, 499)
 have 20 FPS videos under `demos/stack/4-blocks-near-base-10-videos/videos/`.
 All ten pass validation and reproduce their matching batch actions exactly;
 observations agree within 1e-8.
-These accepted traces still exhibit a systematic first-placement offset of about
-13 mm: the initial robot state has not fully settled, and Move controls the
-gripper site without compensating for the held block's offset. The task's
-25 mm per-axis ON tolerance accepts it. See
+Those earlier accepted traces exhibit a systematic first-placement offset of
+about 13 mm: the initial robot state had not fully settled, and Move controls
+the gripper site without compensating for the held block's offset. The task's
+25 mm per-axis ON tolerance accepts it. The adopted 50-step preparation reduces
+yellow's final X offset to 0.4–1.9 mm on seeds 0, 38, 73, and 499; the normal
+collector passes all four in three iterations and fresh-environment replay
+reproduces every action. These four new runs have videos under
+`demos/stack/4-blocks-4-trajectories-settled-default/videos/`.
+This is not a new 500-seed validation. See
 [review entry 24](../../../PAPER-DISCREPANCIES.md#24-the-first-stack-placement-inherits-a-transient-robot-state-and-a-grasp-offset)
 for the diagnosis; controller convergence does not certify block centering.
 This validates that collection, not all possible scenes or formal verification;
@@ -188,7 +209,9 @@ Archives retain full simulator snapshots, controls, mocap and solver arrays,
 actions, observation/action indices, aliases, instruction boundaries, and loop
 events. `cfg.recordings.save_traces/load_traces` handle this one current format.
 `--reset-mode replay` remains the pipeline default; `reset` restores a segment
-snapshot directly. Observations alone cannot restore a segment.
+snapshot directly. For a newly collected Stack demo, both modes start from the
+settled state; replay never includes the discarded 50-step preparation.
+Observations alone cannot restore a segment.
 
 Runtime events identify each loop path, invocation, iteration, continuing head,
 and normal guard-false exit, including zero-iteration loops. Frozen geometry

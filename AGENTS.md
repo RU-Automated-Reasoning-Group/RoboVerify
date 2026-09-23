@@ -47,11 +47,15 @@ Read [README.md](README.md#project-status) for current project status and
 [PAPER-DISCREPANCIES.md](PAPER-DISCREPANCIES.md) for numbered findings, settled
 reasoning and remaining actions. Implementation is complete within the supported
 scope; Stack reset bounds initial blocks to 0.70 m XY from the robot base.
-Current four-block demos pass 500/500 seeds (0–499) with exactly three iterations
-and at most 22 steps per primitive (review entry 23). This is finite validation
-of the chosen workspace; a systematic first-placement centering bias is
-diagnosed but unresolved (review entry 24). End-to-end learning acceptance
-remains open.
+Before adding settling, four-block demos passed 500/500 seeds (0–499), with
+exactly three iterations and at most 22 steps per primitive (review entry 23).
+Stack collection now holds the initial gripper position for 50 steps before
+recording; the settled full snapshot becomes state zero. Synthesis, candidate
+verification, and standalone MCMC restore archived states without repeating
+settling or recreating a layout from its seed. Four production seeds pass and
+replay with yellow-block X offsets of 0.4–1.9 mm (review entry 24); this is not a
+new 500-seed acceptance result or a guarantee of exact centering. Recollect older
+demos to adopt settled starts. End-to-end learning acceptance remains open.
 Update the relevant status or entry when it changes, rather than maintaining a
 separate implementation-plan history.
 
@@ -323,6 +327,10 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
 
   `recordings.py` owns the current full-state NPZ format, `collection.py` executes
   bounded recorded programs, and `program_source.py` loads/fingerprints factories.
+  Fresh Stack collection holds the initial gripper position for 50 steps before
+  recording. Supplied snapshots bypass reset and settling; all recorded indices,
+  frozen entry geometry, and video start at the saved settled state. Standalone
+  MCMC threads each seed's archived snapshot through scoring, CEM, and video.
   `program_adapter.py` adapts supplied primitive programs to the CFG;
   `candidate_traces.py` maps runtime events to explicit CFG locations for invariant
   inference. Expert recordings remain imitation/resynthesis targets across repairs.

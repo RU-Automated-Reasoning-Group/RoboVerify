@@ -803,9 +803,11 @@ demonstrations and fresh candidate execution under the chosen controller setting
 
 ## 24. The first Stack placement inherits a transient robot state and a grasp offset
 
-**Status:** diagnosed implementation issue; no motion/reset/controller fix has
-been applied. This is a placement-precision issue within the current accepted
-geometric task tolerance, not a contradiction of the 500-seed task result.
+**Status:** the 50-step collection preparation and saved-state replay policy
+are implemented. Residual grasp offsets remain; this mitigates the diagnosed
+first-placement bias without claiming exact centering. The original issue was
+within accepted geometric task tolerance, not a contradiction of the earlier
+500-seed task result.
 
 **Finding:** Across all 500 four-block traces in the bounded reset region, the
 first placed block (yellow, ID 1) finishes toward the robot relative to b0. The
@@ -956,9 +958,39 @@ saved-state workflow for the tested cases using full snapshots, including robot
 positions/velocities, controls, mocap, and solver state; saving observations
 alone is insufficient. The production collector/reset default is unchanged.
 
-**Remaining action:** settle and validate the initial robot state before saving
-it for resets, and evaluate held-block feedback or grasp-offset compensation
-for placement. Verify actual block-centering errors as well as controller
-convergence and task predicates. These diagnostic settling trials provide
-evidence for the cause, not a validated new default or a universal fix. Recollect
-and rerun full program validation after choosing an implementation change.
+**Adopted implementation:** Fresh Stack collection now holds the reset gripper
+position with the gripper open for exactly 50 control steps before invoking the
+DSL recorder. S50 becomes state zero, including all simulator snapshot fields.
+Preparation actions/states never enter the archive, loop-entry geometry, or
+20 FPS video. Per-trajectory `initialization` metadata records whether execution
+started from a fresh reset (50 preparation steps) or a supplied snapshot (zero).
+The existing trajectory deadline also bounds preparation. Restoring a supplied
+snapshot bypasses both reset and settling, including after motion repair.
+
+The integrated CFG search, segment replay, and candidate tracing already restored
+saved snapshots. Inspection found a related defect in standalone MCMC: its CLI
+loaded archive observations but scored candidates by regenerating environments
+from seeds. Both MCMC implementations now accept a seed-to-snapshot map, threaded
+through CEM, scoring, and candidate videos. The standalone CLI supplies each
+selected demonstration's first snapshot and records that initialization source
+in run configuration. Missing requested snapshots are errors, never a seed-reset
+fallback. This changes the physical evaluation start, not the search objective.
+
+**Validation:** All 268 unittests pass, including fresh collection with exactly
+50 excluded steps, saved-state replay in a new simulator, both segment reset
+modes, verification candidate restarts, MCMC archive/seed selection, video/action
+consistency, and original/instrumented MCMC parity with and without snapshots.
+The normal collection CLI passes seeds 0, 38, 73, and 499 in three iterations
+with all 60 primitive calls converged (maximum 21 steps). Its
+[new archive and video index](roboverify/demos/stack/4-blocks-4-trajectories-settled-default/README.md)
+retain only program execution: 124, 120, 116, and 114 actions, with exactly one
+more frame per 20 FPS video. Fresh-environment replay from that archive matches
+all actions exactly and observations within 4.657e-10; yellow's final X offsets
+are +1.720, +1.327, +1.872, and +0.435 mm. This is four-seed acceptance for the
+adopted default, not a replacement 500-seed result.
+
+**Remaining action:** evaluate held-block feedback or grasp-offset compensation
+if tighter centering is required. Settling does not establish perfect primitive
+skills or arbitrary-seed acceptance. Recollect older archives to adopt settled
+starts; they continue to restore their own saved states without modification.
+End-to-end learning acceptance remains open.

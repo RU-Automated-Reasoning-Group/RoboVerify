@@ -9,8 +9,12 @@ learned invariants and counterexample-guided refinement.
 
 The Stack workflow now has a standalone multi-seed DSL demonstration collector,
 full-state archives, optional 20 FPS videos, and shared `full` / `verify` pipeline
-modes. Both modes learn invariants from executions of the actual candidate and
-perform symbolic and motion verification with feedback. See the
+modes. Collection holds the initial gripper position for **50 settling steps**,
+then saves that full simulator state as demonstration state zero. Settling is
+excluded from recorded actions and video. Both modes and standalone MCMC restore
+the archived start without resetting from the seed or settling again. Both modes
+learn invariants from executions of the actual candidate and perform symbolic
+and motion verification with feedback. See the
 [collection guide](roboverify/synthesis/inference_lib/README.md).
 
 Synthesis offers `--synthesis-approach relational` (the existing default) and
@@ -19,15 +23,18 @@ Both return named programs to inference and verification. See the
 [approach guide](roboverify/synthesis/cfg/VERIFICATION.md#synthesis-approaches).
 
 Stack reset now scatters blocks within **0.70 m horizontally of the robot base**,
-retaining block separation and initial gripper clearance. With this region,
-**500/500 four-block demos (seeds 0–499)** finish in exactly three iterations,
-pass initial/final task validation, and converge in every primitive within at
+retaining block separation and initial gripper clearance. Before adding settling,
+**500/500 four-block demos (seeds 0–499)** finished in exactly three iterations,
+passed initial/final task validation, and converged in every primitive within at
 most 22 steps. The earlier region passed 96/100; see review entry 23 for the
 reset bounds and physical diagnosis. This validates the tested four-block
 collection, not arbitrary tower sizes or robot configurations. Ten selected
-seeds also have validated 20 FPS videos (review entry 23). A systematic first
-placement offset of about 13 mm remains within the task tolerance; its initial
-robot-state and grasp-tracking causes are recorded in review entry 24.
+seeds also have validated 20 FPS videos (review entry 23). Those earlier demos
+had a systematic first-placement offset of about 13 mm within the task tolerance.
+With the adopted settling policy, four production runs (seeds 0, 38, 73, 499)
+pass in three iterations and retain yellow-block X offsets of 0.4–1.9 mm after
+fresh-environment replay. This is four-seed validation, not a new 500-seed result;
+see review entry 24. Recollect older demos to use settled starting states.
 Primitive ID/ByName instructions share configurable controllers and retain their
 50-step budgets. See [controller settings](roboverify/synthesis/inference_lib/README.md#primitive-controller-settings).
 **End-to-end learning acceptance remains open:**
