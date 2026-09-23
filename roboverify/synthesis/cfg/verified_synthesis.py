@@ -2,7 +2,7 @@
 
 import json
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 
 import z3
 
@@ -240,6 +240,35 @@ def verified_synthesis(
                 max_blocks=max_blocks,
                 timeout_ms=timeout_ms,
             )
+            if logger:
+                logger.write_artifact(
+                    f"verification/revision-{revision}-symbolic-{iteration}.json",
+                    json.dumps(
+                        dict(
+                            ok=bool(result.symbolic),
+                            scope=result.symbolic.scope,
+                            num_blocks=result.symbolic.num_blocks,
+                            reason=result.symbolic.reason,
+                            checks=[
+                                dict(
+                                    kind=check.vc.kind,
+                                    loop_id=check.vc.loop_id,
+                                    status=check.status,
+                                    reason=check.reason,
+                                    queries=check.queries,
+                                    formula=check.vc.expr.sexpr(),
+                                    model=(
+                                        None
+                                        if check.model is None
+                                        else str(check.model)
+                                    ),
+                                )
+                                for check in result.symbolic.checks
+                            ],
+                        ),
+                        indent=2,
+                    ),
+                )
             event("symbolic", iteration=iteration, ok=bool(result.symbolic))
             if result.symbolic:
                 break
@@ -376,6 +405,19 @@ def verified_synthesis(
 
         signature = str(lower(cfg, context))
         result.motion = verify_cfg_motion(cfg, context, **options)
+        if logger:
+            logger.write_artifact(
+                f"verification/revision-{revision}-motion-{motion_iteration}.json",
+                json.dumps(
+                    dict(
+                        ok=bool(result.motion),
+                        mode=result.motion.mode,
+                        checked_blocks=result.motion.checked_blocks,
+                        checks=[asdict(check) for check in result.motion.checks],
+                    ),
+                    indent=2,
+                ),
+            )
         event("motion", iteration=motion_iteration, ok=bool(result.motion))
         if result.motion:
             result.status = "verified_model"

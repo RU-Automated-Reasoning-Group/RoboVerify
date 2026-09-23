@@ -40,7 +40,7 @@ from z3 import (
 )
 
 import synthesis.api.instructions as instructions
-from synthesis.util.symbols import fresh_const
+from synthesis.util.symbols import fresh_const, open_quantifier
 
 
 class UnsupportedMotionInstruction(Exception):
@@ -596,8 +596,9 @@ class LowLevelContext:
           demands the witness be one of the constants we happened to name -- and
           could make a check come out unsat that is not.
 
-        Under a negation both rules invert into strengthenings, so a quantifier
-        at negative or mixed polarity is refused rather than translated.
+        Negative quantifiers are first dualized: not forall becomes exists not,
+        and not exists becomes forall not. The positive rules then apply to the
+        negated formula. Mixed polarity (for example Boolean equality) is refused.
 
         bindings: list where bindings[de_bruijn_index] = concrete lowlevel constant.
         """
@@ -605,12 +606,22 @@ class LowLevelContext:
             return bindings[get_var_index(expr)]
 
         if is_quantifier(expr):
-            if polarity is not True:
+            if polarity is None:
                 raise NotImplementedError(
-                    "quantifier under a negation in a low-level condition: "
-                    f"{expr}. Both quantifier rules turn into strengthenings at "
-                    "this polarity, which would let the check assume more than "
-                    "the condition states; refusing to translate it"
+                    f"Quantifier at mixed polarity in a low-level condition: {expr}"
+                )
+            if polarity is False:
+                variables, body = open_quantifier(
+                    expr, avoid=(*const_map.values(), *bindings)
+                )
+                dual = (Exists if expr.is_forall() else ForAll)(variables, Not(body))
+                # The surrounding negative position cancels this outer Not.
+                # Applying finite expansion directly under Not would strengthen
+                # the premise; dualizing first preserves the weakening direction.
+                return Not(
+                    self._translate_expr(
+                        dual, lowlevel_constants, const_map, bindings, True
+                    )
                 )
             num_vars = expr.num_vars()
             body = expr.body()

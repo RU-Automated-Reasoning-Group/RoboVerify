@@ -90,7 +90,7 @@ class PrimitiveMotionProblem(MotionProblem):
             for i, (name, offset) in enumerate(zip(names, offsets))
         )
 
-    def sweep(self, start, end, *, payload=None, contact=None):
+    def sweep(self, start, end, *, payload=None, contact=None, phase=None):
         for name, position in self.current.items():
             exclude = [
                 z3.Not(self.same(name, n)) for n in (payload, contact) if n is not None
@@ -110,8 +110,11 @@ class PrimitiveMotionProblem(MotionProblem):
                 )
             else:
                 collision = self.context.encode_collision_at(position, start, end)
+            label = f"collision_{self.step}"
+            if phase is not None:
+                label += "_" + phase
             self.check(
-                f"collision_{self.step}_{name}",
+                f"{label}_{name}",
                 z3.And(self.physical(name), *exclude, collision),
             )
 
@@ -190,7 +193,12 @@ class PrimitiveMotionProblem(MotionProblem):
                     return
                 self.check(f"physical_{self.step}", z3.Not(self.physical(name)))
                 end = self.endpoint([instruction.grab_box_name] * 3, [0, 0, 0], "grasp")
-                self.sweep(self.arm, end, contact=name)
+                # PrimitiveController.pick first aligns XY at the current arm
+                # height, then descends vertically. A single diagonal segment
+                # invents collisions the actual waypoint program does not take.
+                approach = (end[0], end[1], self.arm[2])
+                self.sweep(self.arm, approach, contact=name, phase="approach")
+                self.sweep(approach, end, contact=name, phase="descend")
                 self.arm, self.held_name = end, name
                 self.released = False
             elif isinstance(instruction, MoveByName):

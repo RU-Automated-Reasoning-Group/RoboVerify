@@ -12,12 +12,14 @@ import random
 import unittest
 
 from z3 import (
+    And,
     BoolVal,
     Consts,
     EnumSort,
     Exists,
     ForAll,
     Not,
+    Or,
     RealVal,
     Solver,
     sat,
@@ -347,16 +349,37 @@ class QuantifierTranslation(unittest.TestCase):
         for name in self.const_map:
             self.assertIn(name, translated)
 
-    def test_quantifier_under_a_negation_is_refused(self):
+    def test_negated_universal_keeps_an_unnamed_counterexample_witness(self):
         b0 = self.high.get_consts("b0")
-        (x,) = Consts("x", self.high.BoxSort)
-        for inner in (
-            ForAll([x], self.high.ON_star(x, b0)),
-            Exists([x], self.high.ON_star(x, b0)),
-        ):
-            with self.subTest(quantifier=str(inner)[:6]):
-                with self.assertRaises(NotImplementedError):
-                    self._translate(Not(inner))
+        x = self.high.get_consts("x")
+        translated = self._translate(Not(ForAll([x], self.high.ON_star(x, b0))))
+        solver = Solver()
+        for obj in self.constants:
+            solver.add(*_pin(self.low, obj, [0, 0, 0]))
+        solver.add(translated)
+        self.assertEqual(solver.check(), sat)
+        self.assertEqual(len(self._skolem_names(translated)), 1)
+
+    def test_negated_existential_checks_every_named_counterexample(self):
+        b0 = self.high.get_consts("b0")
+        x = self.high.get_consts("x")
+        translated = self._translate(Not(Exists([x], Not(self.high.ON_star(x, b0)))))
+        solver = Solver()
+        solver.add(*_pin(self.low, self.const_map["b0"], [0, 0, 0]))
+        solver.add(*_pin(self.low, self.const_map["b"], [1, 0, 0]))
+        solver.add(self.low.L == RealVal("0.05"), translated)
+        self.assertEqual(solver.check(), unsat)
+        self.assertFalse(self._skolem_names(translated))
+
+    def test_stack_guard_false_translates_nested_quantifiers(self):
+        b, picked, other = Consts("b picked other", self.high.BoxSort)
+        guard = And(
+            picked != b,
+            ForAll([other], Or(other == picked, Not(self.high.ON_star(other, picked)))),
+        )
+        translated = self._translate(Not(Exists([picked], guard)))
+        self.assertNotIn("ON_star", str(translated))
+        self.assertEqual(len(self._skolem_names(translated)), len(self.constants))
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ against the implementation. It covers §§2–5, Algorithms 1–6, Appendix A/Ta
 and the associated appendix algorithms/proofs; experimental numbers are not
 correctness targets. Neither paper nor code automatically wins a disagreement.
 
-Entry numbers 1–24 are stable, including resolved findings. Each entry records
+Entry numbers 1–26 are stable, including resolved findings. Each entry records
 its status, decision/reasoning and remaining action. Add new findings with the
 next unused ID. Detailed implementation history and completed audit checklists
 remain in Git history; use [README.md](README.md#project-status) for project status
@@ -27,6 +27,8 @@ model assumptions and APIs.
 | 22 | Evaluate continuation, placement cuts and loop exits with current settled demonstrations. |
 | 23 | Resolved primitive-controller discrepancy; shared configurable control and execution parity checks. |
 | 24 | Settled collection starts and saved-state replay implemented; residual grasp offsets and full learning acceptance remain. |
+| 25 | Resolved motion translation defect: normalize negative quantifiers before weakening premises. |
+| 26 | Resolved primitive-model discrepancy: Pick follows horizontal approach and vertical descent. |
 
 ## 1. Theorem 5.2 contradicts the paper's own Table 7 (`R_Higher`)
 
@@ -584,3 +586,36 @@ fallback. This changes the physical start, not the search objective.
 **Remaining action:** evaluate held-block feedback or grasp-offset compensation
 if exact centering becomes a requirement. Full synthesis and verification
 acceptance remains open.
+
+## 25. Motion translation rejected the normal guard-false loop exit
+
+**Status:** resolved; mixed-polarity quantifiers remain explicitly unsupported.
+
+**Finding:** The integrated verifier constructs a fresh motion state with
+`Not(Exists(witness, guard))` at a loop exit. The assumption translator rejected
+all negative quantifiers, so a supplied program could pass symbolic verification
+and crash before producing a motion verdict.
+
+**Resolution:** Dualize negative quantifiers before applying the existing
+positive-polarity rules: `not forall` becomes `exists not`, and `not exists`
+becomes `forall not`. Universal finite instantiation still weakens premises;
+existential witnesses remain fresh and may denote unnamed blocks. Quantifiers
+under Boolean equality retain their mixed-polarity rejection. The integrated
+verifier reports unsupported translations explicitly instead of crashing.
+Regression checks cover unnamed counterexample witnesses, named universal
+instances and the actual nested Stack guard-false condition.
+
+## 26. The motion model gave Pick a diagonal path absent from its controller
+
+**Status:** resolved within the existing idealized waypoint model.
+
+**Finding:** `PrimitiveController.pick` first moves horizontally above its target
+at the current arm height, then descends vertically. The motion verifier encoded
+one diagonal segment to the block center. This could invent obstacle intersections
+and did not check the path the primitive actually specifies.
+
+**Resolution:** Check both approach and descent segments, retaining explicit
+contact permission only for the selected object. Each segment has a distinct
+obligation label. Regression scenes distinguish a diagonal-only intersection
+from a real low-approach collision. This aligns waypoint semantics; it does not
+claim a proof of MuJoCo feedback dynamics.

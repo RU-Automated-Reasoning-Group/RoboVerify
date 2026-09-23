@@ -372,7 +372,7 @@ def verify_cfg_motion(
         )
         append_new(p, 0, "entry")
         walk(cfg, p, postcondition=to_z3(cfg.postcondition, context))
-    except (ValueError, KeyError, TypeError) as exc:
+    except (ValueError, KeyError, TypeError, NotImplementedError) as exc:
         checks.append(MotionCheck("coverage", "unsupported", reason=str(exc)))
     return MotionVerificationResult(checks, noise, count)
 

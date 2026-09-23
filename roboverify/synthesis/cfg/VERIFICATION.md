@@ -167,6 +167,13 @@ execution. Incomplete executions return an unsuccessful result.
 The integrated learner defaults to `legacy`; `--learner monotone` selects Boolean
 rows. Both enforce positive-state coverage and explicit progress checks.
 
+Each verification attempt records structured obligations under
+`artifacts/verification/`: symbolic files retain VC kinds, formulas, proof scope,
+statuses and countermodels; motion files retain every obligation and its geometric
+counterexample. Use the run report first, then these artifacts to diagnose the
+specific failed check. Candidate programs and inferred invariants remain under
+`artifacts/candidates/`.
+
 ## Scope and model
 
 A successful result is named **`verified_model`**: partial correctness in the
@@ -194,7 +201,8 @@ Blocks share their current geometry, arm position, and held object. Loop bodies
 start from fresh invariant/guard states; continuation uses a fresh
 invariant/guard-false state. Frozen ON_star_zero geometry remains separate.
 Empty-gripper paths use a point against block cubes; carried cubes use the swept
-cube model. Intentional Pick/Release contact with the selected object is exempt,
+cube model. Pick checks its horizontal approach at the current arm height and
+then its vertical descent, matching the primitive's waypoint sequence. Intentional Pick/Release contact with the selected object is exempt,
 explicitly resolving the paper's Pick self-collision contradiction. Release
 requires physical support; a missing support causes a failed obligation and an
 arbitrary falling position, never an assumed stable placement.

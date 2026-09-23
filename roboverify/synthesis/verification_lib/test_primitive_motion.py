@@ -39,6 +39,41 @@ class PrimitiveMotionTests(unittest.TestCase):
         result = self.verify(primitives())
         self.assertTrue(result, str(result))
 
+    def test_pick_checks_horizontal_approach_then_vertical_descent(self):
+        # The diagonal crosses the obstacle; the actual two-segment Pick clears
+        # it at z=.2. Lowering the approach to z=.1 must detect a collision.
+        for height, expected in ((0.2, "valid"), (0.1, "refuted")):
+            with self.subTest(height=height):
+                problem = PrimitiveMotionProblem(
+                    LowLevelContext(default_L=0.05),
+                    [],
+                    ["a", "b", "obstacle"],
+                    MotionContract("a", "b"),
+                    None,
+                    "pick",
+                    3000,
+                    initial_positions={
+                        "a": [0.3, 0, 0],
+                        "b": [0, 0, 0],
+                        "obstacle": [0.15, 0, 0.1],
+                        "sym": [2, 2, 0],
+                    },
+                    initial_arm=[0, 0, height],
+                )
+                problem.execute([PickByName("a")])
+                approach = next(
+                    c
+                    for c in problem.checks
+                    if c.obligation == "collision_1_approach_obstacle"
+                )
+                self.assertEqual(approach.status, expected)
+                descent = next(
+                    c
+                    for c in problem.checks
+                    if c.obligation == "collision_1_descend_obstacle"
+                )
+                self.assertEqual(descent.status, "valid")
+
     def test_unsupported_release_cannot_freeze_the_payload(self):
         result = self.verify(primitives(0.1))
         self.assertFalse(result)
