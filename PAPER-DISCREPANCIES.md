@@ -760,6 +760,43 @@ The 0.70 m bound holds by construction for every returned layout. The 100-demo
 result establishes finite four-block execution evidence, not universal robot
 reachability at arbitrary heights, orientations, or block counts.
 
+**500-seed check:** At commit `428fe39`, the same four-block program and
+controller settings pass **500/500 seeds (0–499)**. An independent archive audit
+confirms every initial precondition and final postcondition, exactly three loop
+iterations with selections 1, 2, 3, and normal loop exit. All **7,500 primitive
+calls converge**, with a maximum of 22 steps against the unchanged 50-step
+budget. All 2,000 initial block centers satisfy the 0.70 m horizontal radius
+bound; the largest measured radius is 0.699945 m. No seeds were replaced and no
+motion settings were adjusted during the experiment.
+
+```bash
+uv run python -m synthesis.entry.collect_demos \
+  --program synthesis.examples.stack:build_program --task stack \
+  --num-blocks 4 --num-trajectories 500 --seed-start 0 \
+  --max-loop-iterations 3 \
+  --output-dir demos/stack/4-blocks-500-trajectories-near-base
+uv run python -m synthesis.entry.collect_demos \
+  --program synthesis.examples.stack:build_program --task stack \
+  --num-blocks 4 --seeds 0 38 46 73 85 150 250 350 450 499 \
+  --max-loop-iterations 3 --save-video \
+  --output-dir demos/stack/4-blocks-near-base-10-videos
+```
+
+The ten video seeds were chosen before seeing the 500-seed results and include
+the four failures from the former reset region. These separate rendered runs
+all pass the same three-iteration task validation. Their actions and primitive
+step counts match the corresponding batch trajectories exactly; the maximum
+observation difference is 2.33e-10. All ten MP4s decode successfully as 500×500
+H.264 at 20 FPS, with frame counts matching one initial frame plus the recorded
+control steps. This rendering agreement is scoped to those ten runs.
+
+The 500-run directory contains the accepted `demonstrations.npz`,
+`collection.json`, independent `validation-summary.json`, source hashes and
+commands in `experiment.json`, and the audit script. The video directory retains
+its own accepted archive, `video-validation.json`, and an index of all ten clips.
+No implementation changed for this experiment; the existing 263-test result
+remains the implementation regression baseline.
+
 **Remaining action:** none for the numeric/named mismatch or requested Stack
 reset bound. Full learning and verification acceptance (20–22) must use validated
 demonstrations and fresh candidate execution under the chosen controller settings.

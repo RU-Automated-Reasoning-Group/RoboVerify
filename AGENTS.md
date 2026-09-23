@@ -47,7 +47,7 @@ Read [README.md](README.md#project-status) for current project status and
 [PAPER-DISCREPANCIES.md](PAPER-DISCREPANCIES.md) for numbered findings, settled
 reasoning and remaining actions. Implementation is complete within the supported
 scope; Stack reset bounds initial blocks to 0.70 m XY from the robot base.
-Current four-block demos pass 100/100 seeds (0–99) with exactly three iterations
+Current four-block demos pass 500/500 seeds (0–499) with exactly three iterations
 and at most 22 steps per primitive (review entry 23). This is finite validation
 of the chosen workspace; end-to-end learning acceptance remains open.
 Update the relevant status or entry when it changes, rather than maintaining a

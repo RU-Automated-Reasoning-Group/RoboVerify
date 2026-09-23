@@ -135,9 +135,13 @@ With the former reset region, seeds 0–4 finished in three iterations with
 20 FPS videos, but a broader check passed only 96/100: seeds 38, 46, 73, and 85
 failed the third Pick's approach. The rejected batch remains as diagnostics.
 With the bounded reset region above and identical program/controller settings,
-seeds 0–99 now pass **100/100**: exactly three iterations, all 15 primitives
+seeds 0–499 now pass **500/500**: exactly three iterations, all 15 primitives
 converged, and at most 22 steps per primitive. The accepted archive is
-`demos/stack/4-blocks-100-trajectories-near-base/demonstrations.npz`.
+`demos/stack/4-blocks-500-trajectories-near-base/demonstrations.npz`.
+Ten separately rendered runs (seeds 0, 38, 46, 73, 85, 150, 250, 350, 450, 499)
+have 20 FPS videos under `demos/stack/4-blocks-near-base-10-videos/videos/`.
+All ten pass validation and reproduce their matching batch actions exactly;
+observations agree within 1e-8.
 This validates that collection, not all possible scenes or formal verification;
 see [review entry 23](../../../PAPER-DISCREPANCIES.md#23-numeric-and-named-release-use-different-physical-stopping-tolerances).
 Recollect after changing controller settings; older fingerprints describe the
