@@ -678,9 +678,9 @@ includes a 50-step exhaustion in the third Pick's approach:
 The Pick threshold is 10 mm; the lift threshold is 2 mm. Failed approach targets
 retain a gripper height of approximately 0.675–0.677 m. Error changes by only
 0.03–0.15 mm over the final ten recorded observations, suggesting a difficult
-approach configuration rather than establishing that a larger budget will fix it.
-The specific physical cause is not yet established. All 1,440 primitives in the
-96 successful trials converge within at most 21 steps.
+approach configuration. All 1,440 primitives in the 96 successful trials
+converge within at most 21 steps. The controlled diagnosis below identifies
+self-contact and arm extension at these high approach targets.
 
 The collector correctly rejects the complete requested batch and publishes no
 accepted `demonstrations.npz`. All 100 trajectories, including the successes,
@@ -689,8 +689,48 @@ and `validation-summary.json` records the independent iteration, controller,
 pre/postcondition, and final-geometry audit. No seeds were replaced, and no
 controller settings or step budgets were changed during this check.
 
-**Remaining action:** none for the numeric/named mismatch. Controller robustness
-is not established by the five-seed result: diagnose the third-pick approach on
-these four failing seeds, then rerun the same 100-seed acceptance check. Full
-learning and verification acceptance (20–22) must use validated demonstrations
-and fresh candidate execution under the chosen controller settings.
+**Physical diagnosis:** Replaying each saved trajectory to the third Pick
+reproduces its original 50-step approach failure. `Pick` retains the current
+gripper z while approaching the next block's x/y; the previous `Release` has
+retreated 0.15 m above the second placed block, leaving z approximately 0.675 m.
+The controller therefore attempts a high lateral reach before descending.
+
+For seeds 38, 46, and 85, the simulator reports active contacts between
+`robot0:upperarm_roll_link` and both head links. Disabling collision masks on
+only the two head geoms in diagnostic environments makes the unchanged targets
+converge in 4, 5, and 9 steps, respectively. This isolates head/upper-arm contact
+as the obstruction in those three replays; disabling collisions is not a
+proposed production fix.
+
+Seed 73 has no robot self-contact, and removing head collisions leaves its
+failure unchanged. Its elbow angle is approximately -0.00349 radians, with the
+shoulder-to-wrist distance at 99.9998% of the two links' combined 0.6735 m length.
+At the measured shoulder position and hand orientation, reaching the exact
+Cartesian target would require a 0.68487 m shoulder-to-wrist distance. This
+identifies a nearly straight-arm reach limitation for that configuration, not
+an active joint-limit constraint or a proof of global unreachability.
+
+In a separate replay, changing only the approach target z to 0.60 m makes all
+four approaches converge within the unchanged 50-step budget and 10 mm threshold:
+
+| Seed | Lower approach steps | Final approach error |
+| --- | --- | --- |
+| 38 | 4 | 4.54 mm |
+| 46 | 5 | 3.26 mm |
+| 73 | 8 | 5.55 mm |
+| 85 | 9 | 3.91 mm |
+
+These are isolated approach tests, not accepted full demonstrations or a
+validated general clearance policy. Extending the original approach budget to
+500 steps also eventually reaches the 10 mm threshold (383, 377, 280, and 133
+steps, respectively); the apparent stall is very slow progress, not necessarily
+permanent immobility. No production controller, budget, or model was changed.
+Diagnostic results and replay scripts are saved beside the collection as
+`stall-diagnosis.json`, `stall-isolation.json`, `stall-probe.py`, and
+`stall-isolation.py`.
+
+**Remaining action:** none for the numeric/named mismatch. Address the approach
+height/path while preserving clearance around the tower, then rerun the same
+100-seed acceptance check with complete programs. Full learning and verification
+acceptance (20–22) must use validated demonstrations and fresh candidate
+execution under the chosen controller settings.
