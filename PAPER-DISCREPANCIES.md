@@ -871,6 +871,32 @@ corresponding Python scripts. The 500-trace audit measures final geometry and
 instruction boundaries; the diagnostic scripts restore simulator snapshots and
 record their interventions separately from the accepted demonstrations.
 
+**Rendered full-run follow-up:** Seeds 0, 38, 73, and 499 were restored from
+those same saved initial states, held at the initial gripper position for 50
+control steps, and then executed through the unchanged complete Stack program.
+All four pass pre/postcondition validation, finish exactly three iterations with
+selections 1, 2, 3, and converge in all primitives within at most 21 steps.
+Final yellow-block X offsets from b0, after all three placements, are:
+
+| Seed | Original full run | Full run after settling |
+| --- | --- | --- |
+| 0 | -12.516 mm | +1.720 mm |
+| 38 | -11.600 mm | +1.327 mm |
+| 73 | -12.357 mm | +1.872 mm |
+| 499 | -15.234 mm | +0.435 mm |
+
+`demos/stack/4-blocks-settled-50-steps-videos/` contains four full videos that
+include the settling prefix, four side-by-side comparisons, final-frame
+previews, a video index, and `collection.json`. All eight MP4s decode at 20 FPS.
+The full videos show the 50 settling steps during the first 2.5 seconds of
+playback; the comparisons align DSL program starts and hold the final frames.
+The accepted program executions are saved as `demonstrations.npz`; the separate
+`settling-prefixes.npz` retains their full-state diagnostic prefixes. The saved
+`generate_videos.py` reproduces the intervention and media generation. These
+four full executions extend the earlier isolated first-placement evidence;
+they do not establish a new default or broad seed acceptance after settling.
+Production motion and reset code remain unchanged.
+
 **Remaining action:** settle and validate the initial robot state before saving
 it for resets, and evaluate held-block feedback or grasp-offset compensation
 for placement. Verify actual block-centering errors as well as controller
