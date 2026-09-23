@@ -4,9 +4,12 @@ import time
 from copy import deepcopy
 
 import numpy as np
+from z3 import And, Consts, ForAll, Not, Or
+
 import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
 from synthesis.api.instructions import PickPlaceByName
 from synthesis.api.program import Assign, Program, Put, While
+from synthesis.cfg.tasks import task_spec
 from synthesis.entry.motion_options import add_motion_options, motion_noise_from_args
 from synthesis.entry.run_rollouts import run_program_rollouts
 from synthesis.inference_lib.demo_store import DemoStore, InvInference, tower_vocabulary
@@ -14,8 +17,8 @@ from synthesis.inference_lib.inference import (
     instantiate_invariant,
     serialize_invariant,
 )
+from synthesis.predicates.term import to_z3
 from synthesis.verification_lib.motion_verification import MotionContract
-from z3 import And, Consts, ForAll, Implies, Not, Or
 
 
 def build_stack_programs(
@@ -118,21 +121,8 @@ def verify_stack_program_with_learned_invariant(
         context, learned_invariant, learned_invariant_lists
     )
 
-    m, n = Consts("m n", context.BoxSort)
-    precondition = And(
-        ForAll(
-            [m],
-            ForAll([n], Or(m == n, Not(context.ON_star(n, m)))),
-        ),
-        # ForAll(
-        #     [m],
-        #     ForAll([n], context.Higher(n, m)),
-        # ),
-        ForAll([m, n], Implies(m != n, context.Scattered(m, n))),
-    )
-
-    m, b0 = Consts("m b0", context.BoxSort)
-    postcondition = ForAll([m], context.ON_star(m, b0))
+    pre, post = task_spec("stack")
+    precondition, postcondition = to_z3(pre, context), to_z3(post, context)
 
     hl_ok = program.highlevel_verification(precondition, postcondition, context=context)
     ll_ok = ll_program.lowlevel_verification(

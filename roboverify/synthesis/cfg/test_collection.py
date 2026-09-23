@@ -88,6 +88,19 @@ class CollectionTests(unittest.TestCase):
             trace.metadata["status"] = status
             self.assertFalse(validate_trace(trace))
 
+    def test_unequal_initial_heights_are_rejected_even_when_stacking_succeeds(self):
+        for offset in (-0.001, 0.001):
+            with self.subTest(offset=offset):
+                trace = example_trace()
+                trace.states[0][24] += offset
+                self.assertFalse(validate_trace(trace))
+                validation = trace.metadata["validation"]
+                self.assertEqual(validation["pre_holds"], 0)
+                self.assertEqual(validation["post_at_end"], 1)
+                self.assertEqual(
+                    validation["issues"][0]["reason"], "Initial task condition is false"
+                )
+
     def test_archive_roundtrip_and_rejection(self):
         trace = example_trace()
         validate_trace(trace)

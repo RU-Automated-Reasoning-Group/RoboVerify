@@ -16,12 +16,18 @@ def task_spec(task):
     if task == "stack":
         different = negate(atom("eq", x, y))
         return (
-            forall(
-                ["x", "y"],
-                implies(
-                    different,
-                    conjunction(negate(atom("ON_star", x, y)), atom("Scattered", x, y)),
+            conjunction(
+                forall(
+                    ["x", "y"],
+                    implies(
+                        different,
+                        conjunction(
+                            negate(atom("ON_star", x, y)), atom("Scattered", x, y)
+                        ),
+                    ),
                 ),
+                # Higher is >=; both ordered pairs enforce equal initial heights.
+                forall(["x", "y"], atom("Higher", x, y)),
             ),
             forall(["x"], atom("ON_star", x, b0)),
         )
