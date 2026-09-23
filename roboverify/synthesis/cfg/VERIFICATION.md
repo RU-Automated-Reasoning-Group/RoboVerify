@@ -21,7 +21,8 @@ MCMC uses the same saved starts for CEM/scoring and candidate videos. Seeds
 identify recordings rather than reconstructing their initial state. Restoration
 never repeats settling. Recollect older demos to use the new settled starts.
 
-The shared Stack precondition requires unstacked, pairwise-scattered blocks;
+The shared Stack precondition requires unstacked, pairwise-scattered blocks
+at the same height (`forall x,y. Higher(x,y)`);
 the postcondition requires every block to be ON* b0. Every supplied demonstration
 must complete and satisfy these initial/final conditions. The driver requires
 `--demos` and no longer automatically collects a historical oracle.
@@ -55,9 +56,9 @@ for Z. Use the following explicit configuration with the settled archive:
 uv run python -m synthesis.entry.synthesize_cfg \
   --mode verify --task stack --num-blocks 4 \
   --program synthesis.examples.stack:build_program \
-  --demos demos/stack/4-blocks-5-trajectories/demonstrations.npz \
+  --demos demos/stack/4-blocks-5-trajectories-equal-height/demonstrations.npz \
   --max-loop-iterations 3 --motion-iterations 0 \
-  --invariant-relations ON_star equality \
+  --invariant-relations ON_star Higher Scattered equality \
   --supported-towers --table-surface-height 0.4 \
   --initial-arm 1.3446426 0.74911606 0.5314612 \
   --motion-timeout-ms 10000 --verification-timeout-ms 10000 \
@@ -65,50 +66,51 @@ uv run python -m synthesis.entry.synthesize_cfg \
 ```
 
 If the archive is absent, collect it with `collect_demos --num-blocks 4
---num-trajectories 5 --program synthesis.examples.stack:build_program` first.
-Use the collector's printed path if it adds a suffix. The initial-arm values above
+--num-trajectories 5 --program synthesis.examples.stack:build_program
+--output-dir demos/stack/4-blocks-5-trajectories-equal-height` first.
+Use the collector's printed archive path. The initial-arm values above
 are the nominal settled reset pose in this environment; they are explicit formal
 entry conditions, not automatic extraction of the complete simulator state into Z3.
-Only candidate execution restores full simulator snapshots.
+Only candidate execution restores full simulator snapshots. Archives collected
+before the equal-height premise was added record the earlier task specification;
+recollect them before running this pipeline. The archive format is unchanged.
 
 Both modes use `InvInference` → `inference.loop_inference`, the intended
 partition-based algorithm. Candidate execution supplies continuing loop heads and
 normal exits; preservation feedback uses the same algorithm. There is no
 `--learner` option and no automatic fallback to a different learner.
 
-**Symbolic verification passes with this explicit vocabulary; motion verification
-still fails collision checks.** The CLI therefore reports `motion_unverified`, not
-`verified_model`. The learner, supplied program and task specification are unchanged.
-This is an explicit configuration, not a change to the default vocabulary.
+**Both verification stages pass with the intended learner:** the result is
+`verified_model` in the noiseless, supported-tower model. The shared equal-height
+precondition establishes the initial height facts. The bootstrap invariant can
+still contain height correlations induced by small simulator displacements;
+preservation counterexamples supply new states to `InvInference` and remove those
+unsupported restrictions. The documented run needed two such inference updates,
+without changing the program or repairing its motion.
 
-Write `O(x,y)` for reflexive ON*. Under the relational axioms, the learned
-invariant has the following interpretation:
+Write `O(x,y)` for ON*, `H(x,y)` for Higher, and `S(x,y)` for Scattered. The final
+learned invariant has these seven universally quantified clauses:
 
 ```text
-forall x,y: O(x,y) and x != y  => O(y,b0)
-forall x:   O(x,b)             => x = b
-forall x:   O(b,x)             => O(x,b0)
+H(x,y)                       => S(x,y) or O(x,y)
+O(x,b)                       => x = b
+O(b,x)                       => O(x,b0)
+H(b0,y)                      => H(x,y)
+x != b0 and not O(b,y)        => H(x,y)
+H(x,y) and O(y,b0)            => O(x,y) or H(b0,y)
+H(b,x)
 ```
 
-There is one possible nontrivial tower, rooted at b0 and topped by b; every
-outside block is a singleton. All three facts come from the partition learner.
-Minimum-feature ties can produce syntactically different clauses; the actual
-formula is always checked by the verifier.
+These constrain the tower's clear top and root, relative heights and separation.
+All clauses are learned from candidate executions and counterexample successors;
+none is substituted by a handwritten invariant. The explicit progress checks and
+nonvacuity checks remain in force. See the [height-precondition decision](../../../PAPER-DISCREPANCIES.md#31-stack-resets-equal-height-assumption-belongs-in-the-task-precondition)
+and [bootstrap failure diagnosis](../../../PAPER-DISCREPANCIES.md#30-stack-invariant-vocabulary-and-attachment-semantics).
 
-Including Scattered can instead produce a weaker invariant that permits another
-tower. The current attachment WP retains a selected block's old ON* relationships;
-physically moving that block off another tower does not. Such a model can fail
-symbolic preservation while its replay still satisfies the invariant, yielding
-`no_progress`. Including Higher can learn observed height facts absent from the
-relational entry precondition, failing establishment. It can also learn clauses
-that depend on small simulator displacements of b0 and fail preservation under
-ideal placement, even from equal-height scattered blocks. These are distinct failures;
-see [entry 30](../../../PAPER-DISCREPANCIES.md#30-stack-invariant-vocabulary-and-attachment-semantics).
-
-The ON*/equality invariant supplies no Scattered separation facts, so it is
-insufficient for the physical collision proof. The supported-tower geometry does
-not supply those missing relational facts. The earlier alternate-learner success
-remains separate from acceptance of this intended inference workflow.
+The narrower `ON_star equality` vocabulary can pass symbolic verification but
+omits separation facts needed for motion. The `ON_star Scattered equality` vocabulary can
+permit another tower and expose the attachment/replay mismatch described in entry
+30. Those remain configuration/model limitations, not failures of this checked run.
 
 Finite symbolic checks are followed by an unbounded proof; motion checks also
 quantify over unnamed objects. The demonstration count supplies inference data,

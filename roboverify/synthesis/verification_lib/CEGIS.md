@@ -104,8 +104,10 @@ bounded summaries. Exit code 0 means both verification stages passed with result
 `verified_model`; 2 means an explicit unsuccessful result. Budget exhaustion never
 means verification succeeded.
 
-End-to-end Stack learning acceptance remains open. Generated regression fixtures
-exercise both verification backends and the repair/resynthesis paths; collection
-and replay checks alone do not establish a verified program. See
+Supplied Stack verification passes with the intended learner, the shared
+equal-height entry premise, the full default vocabulary and the documented motion
+model. Preservation counterexamples refine the initial learned invariant before
+both proof stages pass. Full synthesis acceptance remains open; collection and
+replay checks alone do not establish a verified program. See
 [the integrated workflow](../cfg/VERIFICATION.md) for scope and
 [the collection guide](../inference_lib/README.md) for seeds and video.

@@ -63,7 +63,10 @@ subsequent commands; examples below assume the first default collection. There
 is no collection run-name flag.
 
 Every accepted trajectory must finish normally, start with unstacked,
-pairwise-scattered blocks, and end with all blocks in the tower rooted at b0.
+pairwise-scattered blocks at equal heights, and end with all blocks in the tower
+rooted at b0. The entry premise is `forall x,y. Higher(x,y)`; since Higher means
+at least as high, both ordered pairs enforce equal heights. This is an entry
+condition, not a requirement on later loop states or the final tower.
 Transient success is insufficient. The accepted archive is published only if
 all requested trajectories pass. Diagnostic archives and the per-seed report
 retain failures. `--max-loop-iterations` defaults to 100 and

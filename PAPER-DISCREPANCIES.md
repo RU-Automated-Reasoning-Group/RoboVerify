@@ -5,7 +5,7 @@ against the implementation. It covers §§2–5, Algorithms 1–6, Appendix A/Ta
 and the associated appendix algorithms/proofs; experimental numbers are not
 correctness targets. Neither paper nor code automatically wins a disagreement.
 
-Entry numbers 1–30 are stable, including resolved findings. Each entry records
+Entry numbers 1–31 are stable, including resolved findings. Each entry records
 its status, decision/reasoning and remaining action. Add new findings with the
 next unused ID. Detailed implementation history and completed audit checklists
 remain in Git history; use [README.md](README.md#project-status) for project status
@@ -22,17 +22,18 @@ model assumptions and APIs.
 | 16 | Paper rules/assumptions; opt-in height consequences implemented for Stack (27). |
 | 17, 18 | Paper edits only; code fixes complete. |
 | 19 | Resolved integration defect: recorded and candidate imitation features. |
-| 20 | Supplied Stack symbolic verification passes with the intended learner (30); end-to-end acceptance remains open. |
+| 20 | Supplied Stack verification passes with the intended learner (31); full synthesis acceptance remains open. |
 | 21 | Switchable ID-first policy implemented; full learning acceptance and policy comparison remain open. |
 | 22 | Settled continuation reproduces placement-cut and loop-exit limits; full loop recovery remains open. |
 | 23 | Resolved primitive-controller discrepancy; shared configurable control and execution parity checks. |
 | 24 | Settled collection starts and saved-state replay implemented; residual grasp offsets and full learning acceptance remain. |
 | 25 | Resolved motion translation defect: normalize negative quantifiers before weakening premises. |
 | 26 | Resolved primitive-model discrepancy: Pick follows horizontal approach and vertical descent. |
-| 27 | Motion-model fixes implemented; supplied Stack acceptance must use the intended partition-based inference (29). |
+| 27 | Motion-model fixes implemented; supplied Stack also passes with intended inference and equal-height entry (31). |
 | 28 | Resolved imitation-sampling defect: candidate boundary callbacks no longer add scoring samples. |
 | 29 | Intended symbolic inference enforced; alternate learner selection removed. |
-| 30 | Stack symbolic proof passes with ON*/equality; broader-vocabulary and attachment/replay limitations diagnosed. |
+| 30 | Bootstrap vocabulary/height failures diagnosed; full-vocabulary refinement succeeds with equal-height entry (31). |
+| 31 | Equal initial heights added; supplied Stack reaches both verification stages successfully after intended-learner refinement. |
 
 ## 1. Theorem 5.2 contradicts the paper's own Table 7 (`R_Higher`)
 
@@ -438,10 +439,10 @@ identical feature vectors.
 
 ## 20. Stack entry conditions and invariant data now agree across both modes
 
-**Status:** supplied Stack symbolic verification passes with the intended learner (30); motion and full synthesis acceptance remain open.
+**Status:** supplied Stack verification passes with the intended learner and equal-height entry (31); full synthesis acceptance remains open.
 
-**Decision:** Stack starts with unstacked, pairwise-scattered blocks and ends with
-all blocks ON* b0. The former integrated True precondition and the standalone
+**Decision:** Stack starts with unstacked, pairwise-scattered blocks at equal
+heights (31) and ends with all blocks ON* b0. The former integrated True precondition and the standalone
 scattered-block precondition were different tasks. Collection and both new modes
 now use one specification. The public supplied-program path uses explicit
 Pick/Move/Release primitives, not the old PickPlace macro program.
@@ -460,9 +461,9 @@ alternate observed-pattern learner. It does not establish acceptance of the inte
 symbolic inference workflow (29). The abstract body remains
 `Put(b_prime, b); Assign(b, b_prime)`.
 
-**Remaining action:** retain a learned invariant sufficient for motion verification
-as well as the symbolic proof in entry 30, then recover the full loop through search
-and obtain `verified_model` on that synthesized candidate with validated settled starts.
+**Remaining action:** recover the full loop through search and obtain
+`verified_model` on that synthesized candidate with validated settled starts.
+The supplied-program invariant now supports both proof stages (31).
 
 ## 21. Free-object binding is performed before search instead of on the returned candidate
 
@@ -650,7 +651,7 @@ claim a proof of MuJoCo feedback dynamics.
 
 ## 27. Stack motion needed geometric loop invariants
 
-**Status:** geometric verifier fixes implemented; supplied-program acceptance with the intended inference algorithm remains open (29).
+**Status:** geometric verifier fixes implemented; supplied-program verification also passes with the intended inference algorithm and equal-height entry (31).
 
 **Diagnosis:** fresh motion states at loop boundaries discarded facts established
 by prior iterations. An arbitrary arm could begin inside the tower; loose ON*
@@ -682,8 +683,8 @@ supplied physical program are unchanged.
 is the intended symbolic algorithm. The earlier successful run used an alternate
 observed-pattern learner, so its result is not acceptance evidence for that algorithm.
 All production symbolic inference now calls `InvInference`; its failures must be
-diagnosed without substituting another learner. Adding Higher to the vocabulary
-can still learn observed facts that the relational precondition does not guarantee.
+diagnosed without substituting another learner. Entry 31 records the missing
+initial height premise and successful counterexample-guided refinement with Higher.
 Geometric regressions use an explicitly labeled structural invariant fixture;
 they test solver obligations and make no inference-acceptance claim. The geometric
 invariants above remain checked templates, separate from relational learning.
@@ -749,8 +750,9 @@ Z3's invalid `ForAll([])`. Feature selection and formula learning are unchanged.
 
 **Acceptance correction:** the previous Stack success with the alternate learner
 does not validate the intended inference workflow. Supplied-program and full
-synthesis acceptance require both stages to pass using `InvInference`. Entry 30
-establishes symbolic verification with an explicit vocabulary; motion remains open. Geometric
+synthesis acceptance require both stages to pass using `InvInference`. Entry 31
+establishes supplied-program verification with the equal-height entry premise;
+full synthesis remains separate. Geometric
 unit tests use a declared structural invariant to retain independent collision,
 clearance and alignment coverage; this fixture is never injected into production
 inference. Regression tests check the removed CLI/API options and that bootstrap
@@ -759,8 +761,9 @@ and counterexample refinement invoke the intended algorithm.
 
 ## 30. Stack invariant vocabulary and attachment semantics
 
-**Status:** symbolic proof passes with the intended learner and an explicit
-ON*/equality vocabulary; motion and full synthesis acceptance remain open.
+**Status:** bootstrap vocabulary and height failures diagnosed. With the corrected
+entry premise, intended-learner refinement passes both verification stages (31);
+full synthesis and the attachment/replay model issue remain separate.
 
 **Finding:** the partition learner selects a minimum separating feature subset
 for each predicate partition. Enlarging its vocabulary need not strengthen the
@@ -785,16 +788,18 @@ a strict ON* pair belongs to the b0 tower, b is clear, and everything beneath b
 is on b0. Thus there is one possible nontrivial tower, rooted at b0 and topped by b;
 every outside block is a singleton. It excludes the second-tower counterexample.
 Establishment, preservation and exit pass both finite checks and unbounded proof.
-No handwritten invariant, stronger precondition, alternate learner or changed
-program is used. The vocabulary remains an explicit option, not a new default.
+No handwritten invariant, alternate learner or changed program is used. The
+shared entry premise now also records equal initial heights (31). The vocabulary
+remains an explicit option, not a new default.
 A synthetic-loop-state regression learns the formula and checks these obligations
 for sizes 2–6 and an uninterpreted domain; it does not inject a fixture invariant.
 
 **Other failure and remaining actions:** the default vocabulary also includes
-Higher, which can infer observed facts such as `forall x: Higher(b,x)` not implied
-by Stack's relational entry precondition; establishment then fails. The abstract
-Higher axioms also admit incomparable pairs that numeric heights cannot realize,
-but concrete unequal-height scattered scenes independently refute establishment.
+Higher, which inferred observed facts such as `forall x: Higher(b,x)` that the
+former height-free Stack precondition did not imply. Entry 31 adds the missing
+reset assumption and resolves establishment for the diagnosed invariant. The
+abstract Higher axioms still admit incomparable pairs in general, but the new
+entry premise excludes them, as well as unequal initial heights.
 
 A further learned clause,
 `Higher(y,x) and Higher(b0,x) => ON*(b,x) or Higher(b0,y)`, fails preservation from
@@ -805,11 +810,48 @@ The recorded simulator states can satisfy this clause because b0 moves slightly
 downward after stacking, making `Higher(b0,x)` false for untouched blocks. Ideal
 symbolic placement preserves b0's height. This is a learned dependency on a small
 simulator displacement, distinct from the attachment/replay mismatch above.
-Adding an equal-height entry premise alone would not repair this preservation
-failure. Learner, predicates and verification semantics remain unchanged.
+The equal-height entry premise added in entry 31 does not repair this preservation
+failure. Learner, predicates and placement semantics remain unchanged.
 
 The successful ON*/equality invariant omits separation facts and still fails motion
-collision checks. Resolve sufficient learned separation facts for motion, and the mismatch
-between attachment WP and replay outside source-singleton states, before claiming
-end-to-end acceptance. The [workflow](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification)
+collision checks. The full vocabulary and counterexample refinement retain
+sufficient separation for the successful run in entry 31. The mismatch between
+attachment WP and replay outside source-singleton states remains a model limitation.
+The [workflow](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification)
 contains the current reproduction command and invariant interpretation.
+
+
+## 31. Stack reset's equal-height assumption belongs in the task precondition
+
+**Status:** user decision implemented; supplied-program symbolic and motion verification pass with the intended learner.
+
+**Decision:** add `forall x,y. Higher(x,y)` to the existing unstacked and
+pairwise-Scattered precondition. Higher denotes non-strict height ordering, so
+quantification over both ordered pairs requires every block to start at the same
+height. The concrete predicate uses its existing exact comparison. This premise
+holds at the archived, settled beginning of the Stack demonstrations and is
+validated by collection and by both integrated pipeline modes. It is an entry
+condition, not a global axiom or an invariant imposed on subsequent states.
+The postcondition remains `forall x. ON*(x,b0)`.
+
+The standalone Stack verification API now obtains its conditions from the same
+`task_spec` function instead of maintaining a duplicate precondition. Existing
+archives store the former task identity; the integrated CLI continues to reject
+that mismatch and requires recollection. No archive-format conversion or relaxed
+validation is introduced.
+
+**Verification effect:** holding the eight-clause invariant from entry 30 fixed,
+establishment now passes at sizes 2–4 and with an uninterpreted domain. The
+height-dependent preservation failure remains from three blocks onward for that
+unchanged bootstrap formula. In the normal pipeline, however, establishment now
+passes and preservation counterexamples can drive the intended refinement loop.
+Two successor-learning updates produce a seven-clause invariant that passes the
+unbounded symbolic proof and all noiseless motion obligations under the explicit
+supported-tower model. The physical program and vocabulary remain unchanged;
+there is no alternate learner, resynthesis or motion repair. The [workflow](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification)
+contains the current command and final learned clauses.
+
+Regressions reject unequal-height starts even when the final stacking goal holds,
+check that entry establishes both height bounds on b/b0 without vacuity, and retain
+unequal heights in final towers. Full synthesis acceptance, termination and
+physical-controller refinement remain separate claims.

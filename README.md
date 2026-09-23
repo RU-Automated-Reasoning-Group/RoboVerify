@@ -23,7 +23,9 @@ Both return named programs to inference and verification. See the
 [approach guide](roboverify/synthesis/cfg/VERIFICATION.md#synthesis-approaches).
 
 Stack reset scatters blocks within **0.70 m horizontally of the robot base**,
-retaining block separation and initial gripper clearance. Primitive ID/ByName
+retaining block separation and initial gripper clearance. The shared Stack
+precondition also requires equal initial block heights, expressed as
+`forall x,y. Higher(x,y)`. Primitive ID/ByName
 instructions share configurable controllers and retain their 50-step budgets.
 See [controller settings](roboverify/synthesis/inference_lib/README.md#primitive-controller-settings).
 
@@ -31,14 +33,15 @@ See [controller settings](roboverify/synthesis/inference_lib/README.md#primitive
 `inference.py`, through `InvInference`.** It is the intended algorithm for both
 pipeline modes and standalone symbolic CEGIS; there is no learner-selection flag.
 
-**Supplied Stack symbolic verification passes with the intended learner and the
-explicit vocabulary `--invariant-relations ON_star equality`.** It learns from
-candidate loop heads and normal exits, then proves establishment, preservation
-and exit, including unbounded verification. This configuration does not carry
-separation facts needed by motion verification: collision checks still fail.
-End-to-end supplied-program verification and full synthesis acceptance remain open.
+**Supplied Stack verification passes with the intended learner and the vocabulary
+`ON_star Higher Scattered equality`.** The equal-height entry premise allows
+establishment; preservation counterexamples then drive invariant refinement.
+The resulting candidate passes unbounded symbolic verification and the documented
+noiseless motion checks with explicit supported-tower geometry. Full synthesis
+acceptance remains open; verifying the supplied program does not establish search
+or loop recovery.
 See the [verification command](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification)
-and [invariant diagnosis](PAPER-DISCREPANCIES.md#30-stack-invariant-vocabulary-and-attachment-semantics).
+and [height-precondition decision](PAPER-DISCREPANCIES.md#31-stack-resets-equal-height-assumption-belongs-in-the-task-precondition).
 Current archives contain full simulator states; old demo formats are unsupported.
 Collect demonstrations before running the pipeline examples.
 
