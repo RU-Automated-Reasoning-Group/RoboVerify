@@ -48,7 +48,13 @@ bindings, and the chosen bounded errors. These are witnesses in the geometric
 abstraction, not evidence of simulator reachability. The arbitrary collision
 witness is constrained by the instantiated axioms/invariants; finite instantiation
 alone is not a reason to call it spurious. Supplied geometric premises may still
-admit scenes outside the agreed supported-height model (discrepancy 16). Each
+admit scenes outside the agreed supported-height model (discrepancy 16). The CFG
+verifier's opt-in `supported_tower_model=True` (`--supported-towers`) adds explicit
+height consequences and checks height, arm-clearance and exact-column loop
+invariants at entry and after the body. Exact columns and arm clearance are not
+assumed at program entry. Only consistency queries may use a finite SAT witness;
+safety queries stay unbounded. See the
+[Stack configuration](../cfg/VERIFICATION.md#provided-stack-verification). Each
 physical object's canonical name is given by `bindings`;
 multiple symbolic names may share a position and refer to the same object.
 

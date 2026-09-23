@@ -45,6 +45,48 @@ loops are unsupported in this workflow. `--output-dir` changes the experiment
 results root; `--run-name` adds an optional readable label. `--smoke` is a small
 search budget, not an acceptance criterion.
 
+## Provided Stack verification
+
+The unchanged supplied program has a symbolic body
+`Put(b_prime, b); Assign(b, b_prime)`. Its physical placement uses b0 for XY and b
+for Z. Use the following explicit configuration with the settled archive:
+
+```bash
+uv run python -m synthesis.entry.synthesize_cfg \
+  --mode verify --task stack --num-blocks 4 \
+  --program synthesis.examples.stack:build_program \
+  --demos demos/stack/4-blocks-500-trajectories/demonstrations.npz \
+  --max-loop-iterations 3 --motion-iterations 0 \
+  --learner monotone --invariant-relations ON_star Scattered equality \
+  --supported-towers --table-surface-height 0.4 \
+  --initial-arm 1.3446426 0.74911606 0.5314612 \
+  --motion-timeout-ms 30000 --verification-timeout-ms 10000 \
+  --run-name stack-verification
+```
+
+If the archive is absent, collect it with `collect_demos --num-blocks 4
+--num-trajectories 500 --program synthesis.examples.stack:build_program` first.
+Use the collector's printed path if it adds a suffix. The initial-arm values above
+are the nominal settled reset pose in this environment; they are explicit formal
+entry conditions, not automatic extraction of the complete simulator state into Z3.
+Only candidate execution restores full simulator snapshots.
+
+Current acceptance: 500 seeds (0–499), 1,500 continuing loop heads and 500 normal
+exits; `verified_model` with 12 valid symbolic checks (including the unbounded
+proof) and 63 valid motion checks. Candidate actions and observations match the
+expert recordings exactly on all 500 starts. There is one candidate revision and
+no resynthesis or repair.
+
+The relational invariant is learned from the candidate's own heads and normal
+exits. The monotone learner with this vocabulary retains the structure needed by
+Stack without requiring unsupported initial Higher facts. Geometric loop facts
+are separately checked templates, as described below. The program is verified
+without motion repair or resynthesis. Finite symbolic checks are followed by an
+unbounded proof; motion checks also quantify over unnamed objects. The 500
+trajectories provide inference data, not a bound on the proof's block count.
+This establishes supplied-program verification within the stated model; full
+MCMC/CFG synthesis acceptance remains open.
+
 ## Synthesis approaches
 
 `--synthesis-approach relational` is the default and retains the existing
@@ -191,10 +233,27 @@ verified physical execution.
 
 Supported towers have uniform upright blocks of height L, a common flat table,
 exact support and complete layers. The tight XY input invariant and placement
-VCs are described below. General solver height premises for all blocks, including
-unnamed objects, are deferred until needed (entry 16). The two-height premise
-belongs only to a regression fixture. Missing premises can cause rejection of
-otherwise valid motion; failed/unknown checks are never silently accepted.
+VCs are described below. `--supported-towers` explicitly adds height consequences
+for all blocks, including unnamed objects: roots rest at table-center height,
+blocks stay above that height, and distinct ON*-related members differ by at least
+L vertically. These are weaker than complete support chains: they admit gaps but
+suffice for this Stack proof. Without a numeric table height the API uses one
+shared symbolic height. The two-height premise belongs only to a regression
+fixture. Missing premises can cause rejection of otherwise valid motion;
+failed/unknown checks are never silently accepted.
+
+With this flag, every loop also checks entry and preservation of the height
+consequences, empty-arm clearance (at least L/2 above every center), and exact XY
+alignment of ON*-related blocks. The latter two are checked loop invariants, not
+new input assumptions. In Stack, pairwise scattering establishes column alignment
+at entry and ideal root-aligned placement preserves it. A slightly offset placement
+can fail this check even if it satisfies the older L/4 bound. This matters for
+Scattered at its sharp 2L threshold. Noiseless proof does not certify nonzero error.
+
+Nonvacuity checks may use an explicitly closed finite domain to obtain a SAT
+witness. All Box quantifiers are grounded there; finite UNSAT/UNKNOWN falls back
+to the original solver. This shortcut never establishes a safety property or
+restricts a violation query: those remain unbounded.
 
 The primitive model follows §5.5's held-object and composed-position state.
 Blocks share their current geometry, arm position, and held object. Loop bodies

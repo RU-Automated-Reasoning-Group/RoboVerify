@@ -5,7 +5,7 @@ against the implementation. It covers §§2–5, Algorithms 1–6, Appendix A/Ta
 and the associated appendix algorithms/proofs; experimental numbers are not
 correctness targets. Neither paper nor code automatically wins a disagreement.
 
-Entry numbers 1–26 are stable, including resolved findings. Each entry records
+Entry numbers 1–27 are stable, including resolved findings. Each entry records
 its status, decision/reasoning and remaining action. Add new findings with the
 next unused ID. Detailed implementation history and completed audit checklists
 remain in Git history; use [README.md](README.md#project-status) for project status
@@ -19,16 +19,17 @@ model assumptions and APIs.
 | 4 | Paper scope correction; physical-controller refinement is outside scope. |
 | 5, 6, 11, 12 | Resolved; retain the decisions and alignment proof. |
 | 15 | Paper termination claim; runtime cap mismatch is fixed. |
-| 16 | Paper rules/assumptions; general solver height premises deferred until needed. |
+| 16 | Paper rules/assumptions; opt-in height consequences implemented for Stack (27). |
 | 17, 18 | Paper edits only; code fixes complete. |
 | 19 | Resolved integration defect: recorded and candidate imitation features. |
-| 20 | Shared Stack specification and runtime inference implemented; acceptance remains open. |
+| 20 | Supplied Stack verification passes; full synthesis acceptance remains open. |
 | 21 | Switchable ID-first policy implemented; full learning acceptance and policy comparison remain open. |
 | 22 | Evaluate continuation, placement cuts and loop exits with current settled demonstrations. |
 | 23 | Resolved primitive-controller discrepancy; shared configurable control and execution parity checks. |
 | 24 | Settled collection starts and saved-state replay implemented; residual grasp offsets and full learning acceptance remain. |
 | 25 | Resolved motion translation defect: normalize negative quantifiers before weakening premises. |
 | 26 | Resolved primitive-model discrepancy: Pick follows horizontal approach and vertical descent. |
+| 27 | Supplied Stack verified with learned relational and checked geometric invariants; full synthesis and controller refinement remain separate. |
 
 ## 1. Theorem 5.2 contradicts the paper's own Table 7 (`R_Higher`)
 
@@ -329,7 +330,7 @@ additional termination argument. Total-termination implementation is outside sco
 
 ## 16. The Higher rewrite can disagree with geometric placement
 
-**Status:** code fixes complete; paper update pending; general height premises deferred.
+**Status:** code fixes and opt-in height consequences implemented; paper update pending.
 
 **Decision/reasoning:** The agreed physical abstraction uses uniform upright
 blocks of height L, a common flat table, exact support and complete towers without
@@ -363,12 +364,15 @@ formulas. See `api/program.py` and the Higher/quantifier-hygiene regressions.
 **Remaining action:** update Table 7 rules 2/6, make the clipped rule 6 readable,
 and state the physical assumptions used in their justification.
 
-**Deferred by user until needed:** encode general supported-height premises for
-all blocks, including unnamed objects, if inadmissible intermediate-height models
-obstruct required proofs. The two-height premise is only a regression fixture,
-not a production restriction. Until then, motion uses supplied premises and may
-reject valid motion when those premises admit nonphysical scenes. Failed/unknown
-checks remain unsuccessful verification; no counterexample is silently discarded.
+**Implemented when required by Stack verification (27):** `--supported-towers`
+adds quantified height consequences for all blocks, including unnamed objects:
+roots rest at the common table height, all blocks are above it, and distinct
+ON*-related blocks differ by at least L in height. These weaker consequences
+allow gaps; they suffice for the checked Stack body but are not a complete
+encoding of the supported-tower model or a general proof of all Higher rules.
+Their preservation is checked at loop boundaries. The two-height premise remains
+only a regression fixture. Failed/unknown checks are unsuccessful verification;
+no counterexample is silently discarded.
 
 ## 17. Temporal validation acceptance and the incorrect rejection sentence
 
@@ -430,7 +434,7 @@ identical feature vectors.
 
 ## 20. Stack entry conditions and invariant data now agree across both modes
 
-**Status:** user-selected workflow implemented; end-to-end acceptance remains open.
+**Status:** supplied Stack verification passes; full synthesis acceptance remains open.
 
 **Decision:** Stack starts with unstacked, pairwise-scattered blocks and ends with
 all blocks ON* b0. The former integrated True precondition and the standalone
@@ -447,10 +451,12 @@ arbitrary-witness verification are unchanged. Physical repairs cause new runtime
 traces and renewed inference/verification; collected observations alone never
 prove inductiveness or the physical-controller refinement excluded in entry 4.
 
-**Remaining action:** run both modes with validated settled starts. Use the
-resulting obligations to guide additional demonstrations or candidate changes,
-recover the full loop through search, and obtain `verified_model` on that same
-synthesized candidate.
+**Verification result:** the unchanged supplied program reaches `verified_model`
+using runtime inference, the monotone learner, and the explicit motion model in
+entry 27. The abstract body remains `Put(b_prime, b); Assign(b, b_prime)`.
+
+**Remaining action:** recover the full loop through search in full mode and obtain
+`verified_model` on that same synthesized candidate with validated settled starts.
 
 ## 21. Free-object binding is performed before search instead of on the returned candidate
 
@@ -619,3 +625,61 @@ contact permission only for the selected object. Each segment has a distinct
 obligation label. Regression scenes distinguish a diagonal-only intersection
 from a real low-approach collision. This aligns waypoint semantics; it does not
 claim a proof of MuJoCo feedback dynamics.
+
+
+## 27. Stack motion needed geometric loop invariants
+
+**Status:** supplied-program verification passes without resynthesis or motion repair.
+
+**Diagnosis:** fresh motion states at loop boundaries discarded facts established
+by prior iterations. An arbitrary arm could begin inside the tower; loose ON*
+geometry admitted floating blocks and fractional height gaps; tight XY alignment
+alone admitted offsets that invalidate the exact Scattered WP rule when placement
+uses b0 for XY and b for Z. For example, with L=0.05, an unrelated block exactly
+0.10 m from b0 can be less than 0.10 m from a slightly offset b. Placing at b0 then
+changes its Scattered relation relative to the one inherited from b. This is a
+real counterexample to those premises, not evidence that the supplied noiseless
+program creates such a state.
+
+**Resolution:** opt-in `--supported-towers` supplies the height consequences in
+entry 16. Alongside the learned relational invariant, the CFG verifier checks:
+
+- the empty arm is at least L/2 above every block center;
+- ON*-related blocks have identical XY coordinates;
+- the supported-height consequences continue to hold.
+
+Each candidate geometric invariant has an entry and a preservation obligation,
+quantified over unnamed as well as named objects. Exact columns and clearance are
+not assumed at program entry. Stack's scattered entry establishes exact columns
+trivially; its ideal root-aligned placement preserves them. Fresh loop-head and
+exit contexts carry these facts only as part of a result requiring all their
+obligations to pass. Noise or an offset placement can invalidate preservation;
+neither is silently treated as exact. Symbolic task pre/postconditions and the
+supplied physical program are unchanged.
+
+**Inference:** use the existing `monotone` learner with ON_star, Scattered and
+equality. It learns Boolean rows from actual candidate heads and normal exits;
+the inferred relational formula is not replaced with a handwritten invariant.
+The legacy learner can lose needed structure, while adding Higher can learn
+observed height facts that the relational entry specification does not guarantee.
+The successful configuration is explicit, not a change to the default learner.
+Geometric invariants above are checked templates, separate from relational learning.
+
+**Nonvacuity:** quantified consistency can time out even when all violation
+queries are unsatisfiable. A bounded-domain SAT witness now establishes premise
+consistency; every Box quantifier is expanded over that domain with explicit
+closure. Finite UNSAT/UNKNOWN proves nothing and falls back to the unbounded
+solver. Safety queries retain the unbounded domain. Regression tests reject an
+unsafe arm, low transfer and offset placement, and ensure finite consistency
+checking cannot restrict safety queries.
+
+**Scalability and diagnostics:** archive members are decompressed once per
+trajectory, and predicate evaluation caches syntax rather than state values.
+CFG artifacts record structure and segment indices without recursively printing
+trajectory payloads. Per-obligation artifacts retain proof scope and countermodels;
+reports recognize `verified_model` as successful and show both proof stages.
+The Put text formatter now follows its constructor order, `Put(upper, base)`;
+the former reversed display did not change the stored operands or WP semantics.
+See the [workflow](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification)
+for the reproduction command and current acceptance scope. Full synthesis,
+termination and physical-controller refinement are separate claims.

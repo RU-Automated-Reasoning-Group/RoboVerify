@@ -27,10 +27,14 @@ retaining block separation and initial gripper clearance. Primitive ID/ByName
 instructions share configurable controllers and retain their 50-step budgets.
 See [controller settings](roboverify/synthesis/inference_lib/README.md#primitive-controller-settings).
 
-**End-to-end learning acceptance remains open.** Demonstration collection and
-saved-state replay do not establish synthesized-program verification. See
-[the review record](PAPER-DISCREPANCIES.md) for model boundaries and remaining
-acceptance work. Current archives contain full simulator states; old demo formats
+**The supplied Stack program passes verification mode** with a learned relational
+invariant and both symbolic and motion proofs. The documented configuration uses
+the monotone learner and explicit supported-tower geometry; geometric loop
+invariants are separately checked at entry and after the body. See the
+[reproduction command](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification)
+and [diagnosis](PAPER-DISCREPANCIES.md#27-stack-motion-needed-geometric-loop-invariants).
+**Full synthesis acceptance remains open:** this result starts from the supplied
+program and does not establish MCMC/CFG loop recovery. Current archives contain full simulator states; old demo formats
 are unsupported. Collect demonstrations before running the pipeline examples.
 
 The supported scope is structured chains and flat loops for the tower tasks;

@@ -52,8 +52,11 @@ scope; Stack reset bounds initial blocks to 0.70 m XY from the robot base.
 Stack collection holds the initial gripper position for 50 steps before
 recording; the settled full snapshot becomes state zero. Synthesis, candidate
 verification, and standalone MCMC restore archived states without repeating
-settling or recreating a layout from its seed. End-to-end learning acceptance
-remains open; collection and replay checks do not establish that result.
+settling or recreating a layout from its seed. The supplied Stack program passes
+verification mode with the monotone relational learner and explicit supported-tower
+geometry; see the [reproduction command](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification).
+Full synthesis acceptance remains open; verification of a supplied program does
+not establish search or loop recovery.
 Update the relevant status or entry when it changes, rather than maintaining a
 separate implementation-plan history.
 
@@ -345,7 +348,12 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   The driver requires validated current archives and has no historical-oracle
   fallback. `--reset-mode replay` is the default; Unstack retains its 60-second
   process alarm. Success is `verified_model` in the documented scope.
-  End-to-end learning acceptance remains open.
+  Supplied Stack verification passes with the documented configuration; full
+  synthesis acceptance remains open. `--supported-towers` adds explicit height
+  premises and checks arm-clearance, column-alignment and height loop invariants.
+  Finite SAT witnesses accelerate consistency only; motion safety stays unbounded.
+  `cfg/artifacts.py` records CFG structure and segment indices without expanding
+  trajectory arrays; the arrays remain in their NPZ archives.
 
 ## Monitoring runs
 
