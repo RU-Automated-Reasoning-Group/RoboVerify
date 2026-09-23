@@ -1,6 +1,5 @@
 import contextlib
 import io
-import itertools
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -20,6 +19,10 @@ from synthesis.inference_lib.demo_store import (
     LoopHeadState,
 )
 from synthesis.verification_lib.highlevel_verification_lib import HighLevelContext
+from synthesis.verification_lib.motion_verification import (
+    MotionCheck,
+    MotionVerificationResult,
+)
 from synthesis.verification_lib.symbolic_verify import (
     SymbolicVerificationResult,
     discharge_vc,
@@ -35,7 +38,11 @@ class BindingTask:
     def __init__(self):
         self.context = HighLevelContext()
         self.invariant = z3.BoolVal(False)
-        self.verify_motion = Mock(return_value=SimpleNamespace(checks=[]))
+        self.verify_motion = Mock(
+            return_value=MotionVerificationResult(
+                [MotionCheck("valid_contract", "valid")], checked_blocks=1
+            )
+        )
         self.describe = Mock(return_value={"task": "binding"})
         self.executions = 0
         self.valid = True
@@ -137,6 +144,50 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(result.status, "motion_failed")
         self.assertEqual(result.symbolic_status, "verified")
         self.assertEqual(result.motion_status, "failed")
+
+    def test_repeated_covered_execution_does_not_trigger_another_update(self):
+        task = BindingTask()
+        failure = task.verify_symbolic(1000)
+        task.verify_symbolic = Mock(return_value=failure)
+        result = run_experiment(task, ExperimentConfig())
+        self.assertEqual(result.status, "no_progress")
+        self.assertEqual(result.learner_updates, 1)
+
+    def test_nonmonotone_candidate_is_rejected_even_if_it_covers_data(self):
+        task = BindingTask()
+        rows = task.learning_states(None)
+        task.learning_states = Mock(side_effect=[[rows[0]], [rows[1]]])
+        a, b = task.context.get_consts("a"), task.context.get_consts("b")
+        with patch(
+            "synthesis.experiment.invariant_learning.runner.InvInference",
+            side_effect=[(a != b, None), (task.context.Higher(a, b), None)],
+        ):
+            result = run_experiment(task, ExperimentConfig())
+        self.assertEqual(result.status, "nonmonotone")
+        self.assertEqual(result.learner_updates, 1)
+
+    def test_unknown_proof_never_generates_an_execution(self):
+        task = BindingTask()
+        proof = task.verify_symbolic(1000)
+        proof.checks[0].status = "unknown"
+        task.verify_symbolic = Mock(return_value=proof)
+        result = run_experiment(task, ExperimentConfig())
+        self.assertEqual(result.status, "unknown")
+        self.assertEqual(task.executions, 0)
+
+    def test_exit_failure_does_not_add_more_positive_states(self):
+        task = BindingTask()
+        proof = task.verify_symbolic(1000)
+        proof.checks[0].vc = type(proof.checks[0].vc)("exit", "0", z3.BoolVal(False))
+        task.verify_symbolic = Mock(return_value=proof)
+        result = run_experiment(task, ExperimentConfig())
+        self.assertEqual(result.status, "needs_stronger_invariant")
+        self.assertEqual(task.executions, 0)
+
+    def test_final_verification_attempt_occurs_after_last_allowed_update(self):
+        result = run_experiment(BindingTask(), ExperimentConfig(max_rounds=1))
+        self.assertEqual(result.status, "verified_symbolic")
+        self.assertEqual(result.verification_attempts, 2)
 
     def test_learner_must_cover_every_accumulated_state(self):
         with patch(

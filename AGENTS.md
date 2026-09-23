@@ -69,6 +69,12 @@ Supplied Stack verification passes with `ON_star Higher Scattered equality`,
 the 1 mm Higher tolerance and the documented supported-tower motion model;
 the supplied-program bootstrap currently passes without invariant refinement.
 This supplied-program result does not establish search or loop recovery.
+The standalone [Section 6.2 experiment](roboverify/synthesis/experiment/invariant_learning/README.md)
+starts from no demos and False, generates initial environments with bounded
+coverage queries, and learns only from complete validated MuJoCo executions.
+`learn_invariant --verification-level symbolic|both` keeps the supplied program
+fixed; Stack is the initial adapter. Its proof is unbounded and separate from
+the bounded search for executable counterexamples.
 Update the relevant status or entry when it changes, rather than maintaining a
 separate implementation-plan history.
 
@@ -133,6 +139,7 @@ Use the environment and module commands above; the full-suite command is below.
 - [Trace workflow](roboverify/synthesis/inference_lib/README.md): collection and inference.
 - [Motion API](roboverify/synthesis/verification_lib/README.md): geometric checks and noise.
 - [Standalone CEGIS](roboverify/synthesis/verification_lib/CEGIS.md): existing-program refinement.
+- [Counterexample learning](roboverify/synthesis/experiment/invariant_learning/README.md): fixed-program Section 6.2 experiment, without initial demos.
 - [CFG workflow](roboverify/synthesis/cfg/VERIFICATION.md): integrated synthesis and verification.
 
 Instrumented MCMC entry point: `uv run python -m synthesis.experiment.mcmc.run`.
@@ -312,6 +319,18 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   `table_surface_height` separately (the world z of the simulator's table plane);
   `height_offset` is the resting block-center height, and relational `tbl` has no
   coordinates.
+
+- **`synthesis/experiment/invariant_learning/`** — a fixed-program experiment runner
+  and environment adapter protocol. `witness.py` builds finite initial-state
+  preimages with the shared placement WP and runtime first-ID binding;
+  `tasks.py` installs solver-generated Stack scenes, settles for 50 steps,
+  validates the saved start, and records full physical executions.
+  `runner.py` starts from False and no data, accumulates heads/exits through
+  `InvInference`, checks coverage/enlargement, and requires an unbounded proof.
+  Optional motion verification checks the unchanged program afterward.
+  The CLI is `synthesis.entry.learn_invariant`; artifacts live under
+  `runs/invariant-learning/`. Induction countermodels and executable initial
+  witnesses are distinct. Do not inject abstract successors into this dataset.
 
 - **`synthesis/experiment/`** — run logging and reporting, plus an instrumented copy of
   the MCMC search. `run_logger.py` owns the run-directory contract; `report.py` is the

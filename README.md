@@ -49,6 +49,13 @@ Archives must contain full simulator states and match the current task specifica
 collections from before the equal-height precondition require recollection for
 pipeline use. Collect demonstrations before running the examples.
 
+For paper Section 6.2, `synthesis.entry.learn_invariant` starts with an empty
+dataset and invariant False, generates valid initial counterexample environments,
+and runs the fixed supplied program in MuJoCo. It supports symbolic-only
+verification (default) or both symbolic and motion verification. Stack is
+implemented with an adapter interface for future environments. See the
+[counterexample-learning experiment](roboverify/synthesis/experiment/invariant_learning/README.md).
+
 The supported scope is structured chains and flat loops for the tower tasks;
 the integrated synthesis CLI exposes Stack and Unstack. A successful
 `verified_model` result establishes partial correctness in the documented
@@ -63,6 +70,7 @@ geometric model, not total termination or physical-controller refinement.
 | [CFG verification](roboverify/synthesis/cfg/VERIFICATION.md) | Integrated synthesis/verification workflow and model assumptions. |
 | [Motion API](roboverify/synthesis/verification_lib/README.md) | Motion contracts, collision/support checks, bounded noise and BMC distinctions. |
 | [Standalone CEGIS](roboverify/synthesis/verification_lib/CEGIS.md) | APIs and commands for refining existing programs. |
+| [Counterexample learning](roboverify/synthesis/experiment/invariant_learning/README.md) | Section 6.2 experiment from a fixed program and no demonstrations; symbolic or both proof stages. |
 | [Trace inference](roboverify/synthesis/inference_lib/README.md) | Collecting loop-head states and learning invariants with DemoStore. |
 
 Implementation lives in `roboverify/`. Configure MuJoCo through AGENTS.md and run

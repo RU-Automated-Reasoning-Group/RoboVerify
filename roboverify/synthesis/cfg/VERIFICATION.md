@@ -139,6 +139,15 @@ Higher tolerance, supported-tower premises, initial arm, table height and solver
 budgets unchanged. The three-block demonstration size does not restrict the proof
 to three blocks; no four-block learning states are required for this result.
 
+## Counterexample learning without initial demonstrations
+
+The separate [Section 6.2 experiment](../experiment/invariant_learning/README.md)
+uses `synthesis.entry.learn_invariant --program ...` with an empty dataset and
+invariant False. It generates valid initial environments, executes the fixed
+program, and accumulates loop heads and exits. `--verification-level symbolic`
+is the default; `both` also checks motion. It does not change the two pipeline
+modes above, which still require demonstration archives.
+
 ## Synthesis approaches
 
 `--synthesis-approach relational` is the default and retains the existing

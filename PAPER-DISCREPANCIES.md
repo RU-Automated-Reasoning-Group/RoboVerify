@@ -5,7 +5,7 @@ against the implementation. It covers §§2–5, Algorithms 1–6, Appendix A/Ta
 and the associated appendix algorithms/proofs; experimental numbers are not
 correctness targets. Neither paper nor code automatically wins a disagreement.
 
-Entry numbers 1–33 are stable, including resolved findings. Each entry records
+Entry numbers 1–34 are stable, including resolved findings. Each entry records
 its status, decision/reasoning and remaining action. Add new findings with the
 next unused ID. Detailed implementation history and completed audit checklists
 remain in Git history; use [README.md](README.md#project-status) for project status
@@ -36,6 +36,7 @@ model assumptions and APIs.
 | 31 | Equal initial heights added; intended-learner verification passes. |
 | 32 | Configurable Higher tolerance aligns saved height comparisons with ideal levels; Scattered differences are diagnosed in 33. |
 | 33 | Scattered mismatch diagnosed; further work deferred by user decision because of its low observed frequency. |
+| 34 | Section 6.2 fixed-program experiment implemented for Stack; initial-state witness generation and iteration counts made explicit. |
 
 ## 1. Theorem 5.2 contradicts the paper's own Table 7 (`R_Higher`)
 
@@ -944,3 +945,45 @@ margins. A smaller gripper stopping tolerance alone does not bound the held-bloc
 offset. Horizontal separations are continuous, unlike the separated height levels
 motivating Higher tolerance; a changed Scattered threshold would change the
 separation contract and needs its own justification.
+
+## 34. Section 6.2 does not explain how induction countermodels become initial environments
+
+**Status:** standalone Stack experiment implemented; paper clarification remains.
+
+**Decision/reasoning:** Section 6.2 starts from False and no demonstrations,
+requests a smallest counterexample satisfying the environment initial conditions,
+and executes the correct program. A preservation countermodel instead satisfies
+the invariant and guard at an intermediate state; it need not be reachable from
+any legal initial environment. These are distinct objects (see entries 7 and 8).
+
+The standalone `synthesis.entry.learn_invariant` checks the unbounded symbolic
+obligations, then searches increasing block counts for a valid initial environment
+whose bounded abstract execution reaches a head outside the current invariant.
+It uses shared WP rules and deterministic first-ID guard binding for this search;
+unbounded preservation still checks all matching bindings. Minimality is scoped
+to the configured initial domain and execution bounds, with unknown smaller
+queries stopping the search. The simulator must actually produce an uncovered
+state before any learning update is accepted. No induction countermodel or
+abstract successor is automatically inserted into the dataset.
+
+Generated Stack scenes use the current reset workspace and height assumptions,
+settle for 50 steps, and save a full snapshot. Only complete, converged physical
+executions satisfying the pre/post transition supply learning states. Normal
+exits are included, including the one-block zero-iteration case. This is necessary
+for initialization from False; a body-entry-only dataset would remain empty.
+The intended partition learner and explicit coverage/enlargement checks are used.
+An exit failure requiring strengthening, or failed induction without a reachable
+missing state within the search bounds, stops with an explicit diagnosis.
+
+Symbolic-only mode is the Section 6.2 default. Optional motion verification runs
+after symbolic success and does not repair the supplied program. The final
+symbolic result requires an unbounded proof; a bounded search cutoff is never
+reported as success. The new runner leaves the existing demonstration-based
+pipeline and abstract-successor refinement API unchanged. Future environments
+provide an adapter; this does not imply all paper benchmarks are implemented.
+
+**Remaining action:** clarify the paper's witness construction, normal-exit
+sampling, and counting convention. Report verification attempts (including False
+and the successful final check), accepted counterexample executions, and learner
+updates separately. Paper table counts and exact formula spellings are not
+correctness targets. See the [experiment guide](roboverify/synthesis/experiment/invariant_learning/README.md).

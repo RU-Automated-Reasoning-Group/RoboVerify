@@ -12,6 +12,7 @@ from synthesis.experiment.invariant_learning.tasks import StackExperiment
 from synthesis.experiment.invariant_learning.witness import (
     WitnessQuery,
     find_witness,
+    finite_formula,
     missing_head_query,
 )
 from synthesis.inference_lib.demo_store import DemoStore, InvInference, LoopHeadState
@@ -26,6 +27,24 @@ class WitnessTests(unittest.TestCase):
         return HighLevelContext(
             mode="enum", num_blocks=n, sort_name=f"WitnessTest{next(self.ids)}"
         )
+
+    def test_finite_expansion_preserves_nested_shadowed_quantifiers(self):
+        ctx = self.context(2)
+        x, y = ctx.get_consts("x"), ctx.get_consts("y")
+        formula = z3.ForAll(
+            [x],
+            z3.Exists(
+                [y],
+                z3.And(
+                    x == y,
+                    z3.ForAll([x], z3.Or(x == y, ctx.Higher(x, y))),
+                ),
+            ),
+        )
+        expanded = finite_formula(formula, ctx)
+        solver = z3.Solver()
+        solver.add(z3.Xor(formula, expanded))
+        self.assertEqual(solver.check(), z3.unsat)
 
     def test_first_id_binding_excludes_other_matching_witness(self):
         ctx = self.context(3)

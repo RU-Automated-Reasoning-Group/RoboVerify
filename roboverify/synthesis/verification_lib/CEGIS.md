@@ -5,6 +5,12 @@ program. The [integrated CFG workflow](../cfg/VERIFICATION.md)
 connects synthesis, verification, demonstration requests and structural repair;
 its capabilities are broader than the standalone offset-repair API below.
 
+For Section 6.2's experiment starting from **no demonstrations and False**, use
+[`synthesis.entry.learn_invariant`](../experiment/invariant_learning/README.md).
+It generates valid initial environments and executes the supplied physical
+program, with `--verification-level symbolic|both`. The standalone APIs below
+retain their existing demonstration/bootstrap and abstract-successor semantics.
+
 `symbolic_verify.py` labels each VC as establishment,
 preservation, exit, or straight-line body, and returns structured
 valid/invalid/vacuous/unknown checks. A result is truthy only when all checks pass.

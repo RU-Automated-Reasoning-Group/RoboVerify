@@ -29,6 +29,28 @@ class VerificationReportTests(unittest.TestCase):
             self.assertIn("True (unbounded)", report)
             self.assertIn("True (mode=noiseless)", report)
 
+    def test_symbolic_only_experiment_is_success_without_motion_claim(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            (path / "result.json").write_text(
+                json.dumps(
+                    dict(
+                        status="verified_symbolic",
+                        symbolic_status="verified",
+                        motion_status="not_requested",
+                        verification_attempts=4,
+                        counterexample_executions=3,
+                        learner_updates=3,
+                    )
+                )
+            )
+            summary = RunSummary(path)
+            self.assertFalse(summary.looks_unhealthy)
+            report = summary.render()
+            self.assertIn("not_requested", report)
+            self.assertIn("4 proof attempts", report)
+            self.assertNotIn("FAILED", report)
+
     def test_inconclusive_verification_is_still_unsuccessful(self):
         for status in (
             "unknown",
