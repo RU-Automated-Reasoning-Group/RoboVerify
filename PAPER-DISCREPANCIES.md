@@ -924,9 +924,41 @@ frames. `settling-comparison.json` records the measurements and video metadata;
 `generate_videos.py` and `compare_settling_durations.py` reproduce the experiment
 and comparisons. Production motion and reset code remain unchanged.
 
+**Saved settled-state replay:** The user selected 50 settling steps and asked
+whether collection can omit the settling prefix while preserving its benefit
+when a different environment restores the initial state. For seeds 0, 38, 73,
+and 499, the full snapshot after exactly 50 holding actions was saved alone in
+`initial-states.npz`: S50, the 51st state when counting the reset state as the
+first. Each snapshot was checked against both its saved prefix endpoint and the
+first snapshot of the earlier 50-step program execution; serialization and
+reload preserve every saved field exactly.
+
+A separate Python process constructed a fresh environment per seed, first
+resetting with a different seed (original seed plus 10000), then restored S50
+using the existing full-state restore API. It ran the unchanged DSL immediately,
+without replaying any settling actions. All four executions pass pre/postcondition
+validation, select blocks 1, 2, 3, and finish exactly three iterations. All 60
+primitive calls converge, with at most 21 steps per call. Compared with the
+earlier settled executions, actions and observation-to-action indices match
+exactly; the maximum observation difference is 4.657e-10 and the maximum saved
+simulator-state difference is 2.457e-10. Final observed block coordinates match
+exactly, including yellow's X offsets of +1.720, +1.327, +1.872, and +0.435 mm.
+Restoration does not reintroduce the original large first-placement bias in
+these four cases.
+
+The [replay video index](roboverify/demos/stack/4-blocks-settled-50-steps-restored/README.md)
+links four fresh-environment execution videos and four comparisons against the
+earlier settled runs. All eight MP4s decode at 20 FPS; the execution videos and
+accepted `demonstrations.npz` start at S50 and contain zero settling actions.
+`result.json` records the comparisons, while `check_saved_start.py --prepare`
+and `--replay` reproduce the separate-process experiment. This establishes the
+saved-state workflow for the tested cases using full snapshots, including robot
+positions/velocities, controls, mocap, and solver state; saving observations
+alone is insufficient. The production collector/reset default is unchanged.
+
 **Remaining action:** settle and validate the initial robot state before saving
 it for resets, and evaluate held-block feedback or grasp-offset compensation
 for placement. Verify actual block-centering errors as well as controller
 convergence and task predicates. These diagnostic settling trials provide
-evidence for the cause, not a validated new default or a universal fix. Recollect and rerun full
-program validation after choosing an implementation change.
+evidence for the cause, not a validated new default or a universal fix. Recollect
+and rerun full program validation after choosing an implementation change.
