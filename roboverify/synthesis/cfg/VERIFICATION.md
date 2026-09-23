@@ -122,6 +122,23 @@ quantify over unnamed objects. The demonstration count supplies inference data,
 not a bound on the proof's block count. Full MCMC/CFG synthesis acceptance remains
 open independently of supplied-program verification.
 
+### Three-block demonstrations
+
+Five three-block demonstrations also suffice for this supplied-program workflow.
+Candidate execution supplies 10 continuing heads and 5 normal exits; the intended
+learner recovers an invariant logically equivalent to the six clauses above.
+It passes the same 2–4-block and unbounded symbolic checks and all 63 noiseless
+motion obligations without counterexample refinement or program repair.
+
+Collect with `--num-blocks 3 --num-trajectories 5 --seed-start 0
+--max-loop-iterations 2 --higher-tolerance 0.001`, using the same Stack program
+factory. In the verification command above, use `--num-blocks 3`,
+`--max-loop-iterations 2`, and the resulting three-block archive (normally
+`demos/stack/3-blocks-5-trajectories/demonstrations.npz`). Keep the vocabulary,
+Higher tolerance, supported-tower premises, initial arm, table height and solver
+budgets unchanged. The three-block demonstration size does not restrict the proof
+to three blocks; no four-block learning states are required for this result.
+
 ## Synthesis approaches
 
 `--synthesis-approach relational` is the default and retains the existing
