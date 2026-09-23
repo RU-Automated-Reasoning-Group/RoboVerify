@@ -57,35 +57,46 @@ pickle queue. `optimize_motion_parameters` also supports a supplied demonstratio
 score; without one it is explicitly penalty-only repair. A zero training penalty
 is never substituted for the full verification query.
 
-Run the initial Stack integration from `roboverify/`, with the simulator environment
-variables from `AGENTS.md` set:
+Run the shared supplied-program workflow from `roboverify/`, with the simulator
+environment variables from `AGENTS.md` set:
 
 ```bash
-uv run python -m synthesis.entry.verified_synthesis \
-  --demo-store /tmp/phase-c-stack-traces.json \
-  --run-root runs/phase-e --max-blocks 4 --symbolic-iterations 20
-uv run python -m synthesis.experiment.report --run runs/phase-e/cegis/latest
+uv run python -m synthesis.entry.collect_demos \
+  --program synthesis.examples.stack:build_program --save-video
+uv run python -m synthesis.entry.synthesize_cfg --mode verify \
+  --program synthesis.examples.stack:build_program \
+  --demos demos/stack/3-blocks-5-trajectories/demonstrations.npz \
+  --run-name stack-verification
+uv run python -m synthesis.experiment.report --run runs/cfg/latest
 ```
 
-For motion repair, provide `--expert-states observations.npy` (a two-dimensional
-NumPy array in the normal environment observation layout) and matching
-`--num-blocks`/`--seeds`, or explicitly request diagnostic `--penalty-only` repair.
-`--motion-noise GRASP MOVE RELEASE` opts into bounded errors. `--bounded-only`
-limits the symbolic claim to sizes 2 through `--max-blocks`; it is not an unbounded
-proof. `--learner legacy` selects Phase C inference with progress checks. The
-current runnable task is Stack; the generic library interfaces support other
-single-loop programs. No Unstack run may exceed the standing 60-second cap.
+`--mode full` searches first; verify mode starts from the supplied program and
+enters the same inference and verification stages. Both rerun the actual physical
+candidate from recorded initial states to obtain loop heads and normal exits.
+Motion repairs trigger fresh execution, inference and both verification checks.
+The supplied program's executable fingerprint must match the archive. Expert
+recordings remain separate for imitation scoring and later resynthesis.
+The old `--demo-store`, `--expert-states`, `--run-root` and `--slug` interfaces are
+removed. `--demos` accepts current full-state NPZ archives; `--output-dir` changes
+the experiment root and `--run-name` labels a run. The old
+`synthesis.entry.verified_synthesis` command now forwards to this verify mode.
 
-RunLogger stores each invariant's full S-expression under `artifacts/invariants/`,
-models and scenes under `artifacts/counterexamples/`, and accumulated motion
-examples in `artifacts/penalties.json`. Metrics contain bounded fields and artifact
-paths, rather than repeating potentially large formulas. The report shows the
-latest eight refinement steps. Exit code 0 means both stages passed in the reported
-scope; 2 means a recorded verification/refinement failure. Budget exhaustion never
+`--motion-noise GRASP MOVE RELEASE` opts into bounded errors. `--learner legacy`
+is the default; `monotone` selects the Boolean-row learner. The generic standalone
+library APIs above remain available. No Unstack run may exceed the standing
+60-second cap.
+
+RunLogger stores candidate programs, actual execution traces and bootstrap
+invariants under `artifacts/candidates/<revision>/`, counterexamples and later
+invariant progression as referenced artifacts, and unresolved demonstration
+requests in `artifacts/resynthesis_request.json`. Use the report tool to inspect
+bounded summaries. Exit code 0 means both verification stages passed with result
+`verified_model`; 2 means an explicit unsuccessful result. Budget exhaustion never
 means verification succeeded.
 
-The real seed-0 Phase C Stack data reaches `NeedsResynthesis` after its first
-learned invariant. No verified Stack program is claimed. A separate regression
-fixture starts with False, strictly enlarges twice, and discharges all VCs including
-an unbounded check. A motion fixture generates genuine solver counterexamples,
-repairs its placement height, and passes the full motion recheck.
+Five real primitive Stack demonstrations pass initial/final validation; verify
+mode currently reaches `needs_demonstrations` after symbolic checking. No verified
+Stack program is claimed. Generated regression fixtures exercise both actual
+verification backends and the repair/resynthesis paths independently of these
+acceptance recordings. See [the integrated workflow](../cfg/VERIFICATION.md) for
+scope and [the collection guide](../inference_lib/README.md) for seeds and video.

@@ -66,6 +66,25 @@ object. Empty-gripper sweeps use a point; carried payloads use a cube. Primitive
 Release proves support and treats unsupported positions as arbitrary falls.
 These semantics differ from the legacy BMC Release formula described below.
 
+## Running the shared workflow
+
+The Stack command `synthesis.entry.synthesize_cfg --mode verify --program
+synthesis.examples.stack:build_program --demos <demonstrations.npz>` starts with a
+provided primitive program. `--mode full` synthesizes first. Both collect runtime
+loop heads and normal exits from the current candidate, infer invariants, and run
+symbolic verification before motion verification. A symbolic failure can stop the
+pipeline before motion is attempted. Physical repairs require new runtime traces,
+renewed inference, and both checks again. The expert archive remains the imitation
+target; candidate traces cannot silently replace it.
+
+Collect full-state demonstrations with `synthesis.entry.collect_demos`; use
+`--save-video` for fixed 20 FPS MP4s from the same executions. Old observation-only
+and loop-head JSON demonstration formats are removed. See the
+[collection guide](../inference_lib/README.md) and
+[integrated workflow](../cfg/VERIFICATION.md) for complete commands. Only
+`verified_model` reports successful symbolic and motion verification within the
+model described above.
+
 ## Opt-in noise
 
 `NoiseSpec(eps_grasp, eps_move, eps_release)` gives independent per-axis bounds in

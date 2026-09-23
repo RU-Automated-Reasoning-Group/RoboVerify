@@ -30,8 +30,9 @@ Run everything as a module from `roboverify/` — the `synthesis` package uses r
 imports and files under `synthesis/entry/` are not runnable as bare scripts:
 
 ```bash
-uv run python -m synthesis.entry.collect_stack_loop_traces --output /tmp/stack-loop-traces.json
-uv run python -m synthesis.entry.verify_stack_with_learned_invariant --demo-store /tmp/stack-loop-traces.json
+uv run python -m synthesis.entry.collect_demos --program synthesis.examples.stack:build_program --save-video
+uv run python -m synthesis.entry.synthesize_cfg --mode verify --program synthesis.examples.stack:build_program --demos demos/stack/3-blocks-5-trajectories/demonstrations.npz
+uv run python -m synthesis.entry.synthesize_cfg --mode full --quotient --demos demos/stack/3-blocks-5-trajectories/demonstrations.npz
 uv run python -m unittest synthesis.verification_lib.test_bmc_lib -v
 uv run python -m unittest synthesis.experiment.test_run_logger -v     # fast, no simulator
 uv run python -m unittest synthesis.experiment.test_mcmc_parity -v    # drives MuJoCo
@@ -45,7 +46,8 @@ Tests are `unittest`, not pytest. No linter is configured.
 Read [README.md](README.md#project-status) for current project status and
 [PAPER-DISCREPANCIES.md](PAPER-DISCREPANCIES.md) for numbered findings, settled
 reasoning and remaining actions. Implementation is complete within the supported
-scope; validated demonstrations and end-to-end learning acceptance remain open.
+scope; five primitive Stack demonstrations pass task validation. End-to-end
+learning acceptance remains open.
 Update the relevant status or entry when it changes, rather than maintaining a
 separate implementation-plan history.
 
@@ -108,7 +110,8 @@ Use the environment and module commands above; the full-suite command is below.
 - [CFG workflow](roboverify/synthesis/cfg/VERIFICATION.md): integrated synthesis and verification.
 
 Instrumented MCMC entry point: `uv run python -m synthesis.experiment.mcmc.run`.
-Use `--smoke --demo-dir demos` for a bounded search, or task/iteration options for
+Use `--smoke --demos demos/stack/3-blocks-5-trajectories/demonstrations.npz`
+with matching task/block options for a bounded search, or iteration options for
 longer runs. Read the resulting directory through the report tool described below.
 
 ### Validation
@@ -183,13 +186,14 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   - `lowlevel_verification_lib.py`: geometric low-level context, box-corner/cube drawing
     helpers used to visualize/verify concrete 3D placements.
 
-- **`synthesis/inference_lib/demo_store.py`** — loop-head demonstration storage and
+- **`synthesis/inference_lib/demo_store.py`** — in-memory loop-head data and
   adaptation to invariant inference. `Program.eval(..., on_loop_head=store.add)`
-  records one `LoopHeadState` after each successful guard binding, before the body.
-  All physical blocks are copied, including ones with no symbolic alias; every row
-  keeps its invocation's entry geometry for `ON_star_zero`. Loop IDs are instruction
-  paths (`"1"` for a loop following an initial assignment). `DemoStore.save/load`
-  round-trips JSON without Z3 objects and preserves the relational table marker.
+  records successful guard bindings before the body; `on_event` additionally
+  records normal exits (including zero iterations) and instruction boundaries.
+  Every row copies all physical blocks and its invocation's frozen geometry for
+  `ON_star_zero`. Loop IDs are instruction paths (`"1"` after an assignment).
+  `DemoStore.from_archive` reads the current full-state NPZ archive;
+  `save_diagnostic` exports JSON for inspection only. Old demo formats are removed.
   `InvInference(store, loop_id, vocab, context)` reuses the existing learner.
   See [the trace workflow](roboverify/synthesis/inference_lib/README.md).
 
@@ -236,18 +240,20 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   the MCMC reward/feature code call into these rather than duplicating geometry logic.
 
 - **`synthesis/entry/`** — runnable pipelines.
-  `verify_{stack,unstack,reverse,partial}_with_learned_invariant.py` require explicit
-  `--demo-store` input, learn an invariant and check a high-level Put/Assign/While
-  program, optionally in a finite `"enum"` context. Stack/Unstack also check a
-  lowered physical body; Reverse/Partial report unsupported motion because they
-  lack one. The separate 2D entry point is outside the supported tower-task scope.
-  `synthesize_cfg.py` is the instrumented relational CFG synthesis CLI and writes a standard
-  run directory; `main.py` is now only a shim that forwards to it, the scratch experiment
-  script it used to hold having been replaced by that driver.
-
-- **`synthesis/entry/verified_synthesis.py`** — instrumented Phase E Stack driver.
-  Runs symbolic refinement before motion repair, retains counterexamples and
-  invariant progression, and records failure/finite proof scope explicitly.
+  `collect_demos.py` loads `--program module:factory` or `path.py:factory`, runs
+  distinct seeds, validates pre/post transitions, and writes current archives to
+  `demos/stack/<blocks>-blocks-<count>-trajectories/`. Optional MP4s run at 20 FPS.
+  It requires primitive DSL programs; PickPlace and nested loops are rejected.
+  `synthesize_cfg.py` requires `--demos`. `--mode full` searches first;
+  `--mode verify --program ...` starts with the matching supplied program.
+  Both execute the actual candidate for inference, then perform symbolic and
+  motion verification with shared feedback. Changed executables get fresh traces.
+  Experiment results stay in `runs/`; `--output-dir` changes that root and
+  `--run-name` adds a label. `main.py` forwards to this driver.
+  `verified_synthesis.py` and the Stack verifier CLI forward to verify mode.
+  Unstack/Reverse/Partial standalone verifiers consume `--demos` via the in-memory
+  inference adapter; Reverse/Partial still report unsupported motion because they
+  lack lowered physical programs. The 2D entry point remains outside tower scope.
 
 - **`synthesis/environment/`** — MuJoCo/Gymnasium environments (Fetch pick-and-place block
   construction, ant maze, etc.), largely vendored/adapted from CEE-US and
@@ -289,18 +295,20 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   Multiple witnesses are permitted, without a separate uniqueness requirement.
   Extracted iterations share their invocation's frozen entry geometry.
 
-  Run `uv run python -m synthesis.entry.synthesize_cfg --task unstack --num-blocks 3
-  --smoke --quotient` (on one line) for a bounded integration smoke. `--demos` accepts
-  a lossless `.npz` recording; without it, the driver collects the historical oracle.
-  `--reset-mode replay` is the default, and Unstack has a 60-second process alarm.
-  The driver validates demonstrations and verifies the actual synthesized CFG
-  through `cfg/verified_synthesis.py`, including demo requests/resynthesis and
-  structural motion repair. Success is `verified_model` in the documented scope.
-  The historical Unstack oracle fails its final task condition in the seed-0
-  smoke; invalid demonstrations are rejected before synthesis.
+  `recordings.py` owns the current full-state NPZ format, `collection.py` executes
+  bounded recorded programs, and `program_source.py` loads/fingerprints factories.
+  `program_adapter.py` adapts supplied primitive programs to the CFG;
+  `candidate_traces.py` maps runtime events to explicit CFG locations for invariant
+  inference. Expert recordings remain imitation/resynthesis targets across repairs.
 
-- **`synthesis/topdown/`** — retired. `topdown.py` is a thin compatibility wrapper over
-  the `synthesis/predicates/` enumerator; the hand-rolled BFS and its DSL are gone.
+  Run `uv run python -m synthesis.entry.synthesize_cfg --task stack --num-blocks 3
+  --mode full --demos demos/stack/3-blocks-5-trajectories/demonstrations.npz
+  --smoke --quotient` (on one line) for a bounded integration smoke.
+  The driver requires validated current archives and has no historical-oracle
+  fallback. `--reset-mode replay` is the default; Unstack retains its 60-second
+  process alarm. Success is `verified_model` in the documented scope. Current
+  Stack acceptance runs stop at a demonstration request or exhausted search
+  budget; neither is successful verification.
 
 ## Monitoring runs
 

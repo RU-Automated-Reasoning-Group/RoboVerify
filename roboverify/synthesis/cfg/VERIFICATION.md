@@ -4,31 +4,64 @@
 both verification stages on the same candidate and task conditions. It no
 longer substitutes a tower fixture at the verification boundary.
 
+## Collection and pipeline modes
+
+First collect a supplied primitive DSL program using
+`synthesis.entry.collect_demos`. The [collection guide](../inference_lib/README.md)
+describes seeds, full-state archives, and optional 20 FPS videos. Demonstrations
+belong under `demos/`; experiment results belong under `runs/`.
+
+The shared Stack precondition requires unstacked, pairwise-scattered blocks;
+the postcondition requires every block to be ON* b0. Every supplied demonstration
+must complete and satisfy these initial/final conditions. The driver requires
+`--demos` and no longer automatically collects a historical oracle.
+
+```bash
+uv run python -m synthesis.entry.synthesize_cfg --task stack --num-blocks 3 \
+  --mode full --quotient --demos demos/stack/3-blocks-5-trajectories/demonstrations.npz
+uv run python -m synthesis.entry.synthesize_cfg --task stack --num-blocks 3 \
+  --mode verify --program synthesis.examples.stack:build_program \
+  --demos demos/stack/3-blocks-5-trajectories/demonstrations.npz
+uv run python -m synthesis.experiment.report --run runs/cfg/latest
+```
+
+`--mode full` performs search and optional flat-loop recovery (`--quotient`).
+`--mode verify` adapts the supplied executable into the same CFG and skips initial
+search. Its fingerprint must match the demonstration source. PickPlace and nested
+loops are unsupported in this workflow. `--output-dir` changes the experiment
+results root; `--run-name` adds an optional readable label. `--smoke` is a small
+search budget, not an acceptance criterion.
+
 ## Verification workflow
 
-`verified_synthesis.py` implements the bounded Algorithm 6 workflow:
+1. Acquire the synthesized or supplied CFG and propose checked placement summaries.
+2. Execute that exact physical candidate from every recorded initial simulator
+   state. Record instruction boundaries, continuing loop heads, and normal exits;
+   learn initial invariants from these runtime states. The False invariant is
+   logged before bootstrap. A loop may execute before its invariant is learned.
+3. Search finite universes for symbolic counterexamples, then request the unbounded
+   proof. Unknown, inconsistent, and finite-only outcomes cannot become verified.
+4. Refine preservation failures with uncovered successors obtained by executing the
+   abstract body, enumerating Get witnesses. This feedback is abstract contract
+   replay, not a new MuJoCo trajectory. Coverage and monotonicity checks remain.
+5. For other symbolic failures, export `resynthesis_request.json`. Validated
+   `--additional-demos` archives are added to complete expert recordings and
+   synthesis is rerun. Without requested recordings, return `needs_demonstrations`.
+   Verify mode records explicitly when it enters resynthesis.
+6. Run motion verification and bounded structural repair using accumulated
+   counterexamples. The abstract program, guards and bindings must be preserved.
+   Re-execute changed physical candidates, collect new traces, infer and recheck
+   invariants, and rerun both verification stages.
 
-1. Synthesize/refine the CFG and propose relational placement summaries.
-2. Check finite universes for counterexamples, then run the unbounded symbolic
-   proof. Unknown, inconsistent and bounded results cannot become verified.
-3. For preservation failures, execute the abstract body over the concretized
-   counterexample (enumerating Get witnesses), add an uncovered successor, and
-   re-learn with an explicit monotonicity check. This is the documented abstract
-   replay model of paper discrepancy 7, not a simulator trajectory.
-4. For other symbolic failures, export `resynthesis_request.json`. Supplied
-   `--additional-demos` recordings are validated, added to complete task demos,
-   and repartitioned through synthesis. Without new recordings, the result is
-   `needs_demonstrations`.
-5. Motion counterexamples accumulate per CFG block. Straight-line synthesis uses
-   their failure count alongside imitation distance. Physical instruction
-   structure may change, but the entire symbolic program, Get bindings, and
-   loop structure must remain unchanged. Every repair is rechecked.
+Candidate traces never replace expert demonstrations as resynthesis inputs.
+Physical and symbolic instruction paths map explicitly to the same CFG regions;
+loop traversal order or equal instruction counts are not assumed. Runtime traces and program identities are saved by candidate
+revision; traces from earlier executables are not reused as later executions.
+`--max-loop-iterations` (100) and `--trajectory-timeout-seconds` (60) bound candidate
+execution. Incomplete executions return an unsuccessful result.
 
-Standalone CEGIS defaults to monotone Boolean-row learning; the integrated CLI
-defaults to the legacy learner. Both require explicit invariant-progress checks.
-False is logged before bootstrap from demos; unconditional convergence is not
-promised. The standalone offset-repair API has a narrower contract than the
-integrated structural-repair workflow above.
+The integrated learner defaults to `legacy`; `--learner monotone` selects Boolean
+rows. Both enforce positive-state coverage and explicit progress checks.
 
 ## Scope and model
 
@@ -103,10 +136,11 @@ or unsupported summary produces an explicit unsupported result.
 
 ## Demonstration and loop semantics
 
-Demo segments use absolute inclusive indices and share their cut state. Recorded
-snapshots or deterministic replay reproduce segment starts; replay is the default,
-and observation-only demos need a faithful replay source. CFG invariant inference
-includes terminal loop heads and frozen invocation-entry geometry.
+Demo segments use absolute inclusive indices and share their cut state. Current
+archives contain full snapshots and recorded actions. Direct restoration and
+action replay reproduce segment starts; replay is the default. Observation-only
+and older archive formats are removed. Inference uses candidate runtime loop
+heads and normal terminal heads with frozen invocation-entry geometry.
 
 A split replaces `P -> v0 -> Q` with `P -> v1 --C--> v2 -> Q`. Validate
 `first(C) <= last(Q)` on the original unsplit segment, with P at the start, C's

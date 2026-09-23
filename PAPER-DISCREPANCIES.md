@@ -5,7 +5,7 @@ against the implementation. It covers §§2–5, Algorithms 1–6, Appendix A/Ta
 and the associated appendix algorithms/proofs; experimental numbers are not
 correctness targets. Neither paper nor code automatically wins a disagreement.
 
-Entry numbers 1–18 are stable, including resolved findings. Each entry records
+Entry numbers 1–20 are stable, including resolved findings. Each entry records
 its status, decision/reasoning and remaining action. Add new findings with the
 next unused ID. Detailed implementation history and completed audit checklists
 remain in Git history; use [README.md](README.md#project-status) for project status
@@ -15,12 +15,14 @@ model assumptions and APIs.
 | Entries | Remaining work |
 | --- | --- |
 | 1, 2, 7, 8, 9, 13, 14 | Paper/formalization corrections; implementation decisions are recorded below. |
-| 3, 10 | Validated demonstrations and full end-to-end learning acceptance. |
+| 3, 10 | Representative demonstration coverage and full end-to-end learning acceptance. |
 | 4 | Paper scope correction; physical-controller refinement is outside scope. |
 | 5, 6, 11, 12 | Resolved; retain the decisions and alignment proof. |
 | 15 | Paper termination claim; runtime cap mismatch is fixed. |
 | 16 | Paper rules/assumptions; general solver height premises deferred until needed. |
 | 17, 18 | Paper edits only; code fixes complete. |
+| 19 | Resolved integration defect: recorded and candidate imitation features. |
+| 20 | Shared Stack specification and runtime inference implemented; acceptance remains open. |
 
 ## 1. Theorem 5.2 contradicts the paper's own Table 7 (`R_Higher`)
 
@@ -49,9 +51,9 @@ to force the paper's original theorem.
 segment's start. An observation lacks the full arm, velocity, control and solver
 state needed to reproduce that execution. `cfg/reset.py` records full simulator
 snapshots, control/mocap/warm-start arrays and bindings. It supports direct reset
-and deterministic replay; replay remains the default. Observation-only recordings
-need a faithful replay source. Solver-generated scenes instead use geometric
-concretization, not recorded-state restoration.
+and deterministic replay; replay remains the default. Current archives require full snapshots and actions; observation-only
+formats and their replay compatibility adapter have been removed. Solver-generated
+scenes instead use geometric concretization, not recorded-state restoration.
 
 **Remaining action:** document faithful segment starts and reset/replay costs in
 the paper. No remaining reset implementation task.
@@ -68,8 +70,10 @@ geometry. Observing states and learning a candidate do not prove inductiveness
 or task success. Tests do not require saved demonstration files.
 
 **Remaining action:** use validated task demonstrations for full-pipeline
-acceptance and any renewed empirical claims. Follow the concrete acceptance
-procedure in entry 10; do not treat old fixtures or paper numbers as targets.
+acceptance and renewed empirical claims. Stack is the current first task (20).
+Five three-block primitive Stack recordings at seeds 0–4 pass initial/final
+validation; this is demonstration acceptance, not synthesized-program verification.
+Do not treat old fixtures or paper numbers as targets.
 
 ## 4. Motion proofs depend on a waypoint abstraction, not physical controller dynamics
 
@@ -403,3 +407,51 @@ settling or physical controller refinement (entry 4).
 **Remaining action:** state the contact exception, geometry and Release support
 assumptions, remove the incorrect grasp-noise argument, and limit the paper's
 claim to the documented model. No additional code fix is required for this entry.
+
+## 19. Recorded and candidate CFG trajectories used different imitation features
+
+**Status:** implementation defect fixed during the Stack workflow integration.
+
+**Finding:** Raw demonstration observations retained gripper xyz, finger opening,
+and block xyz, but candidate rollouts converted to relational Scenes discarded
+the five gripper features. Three-block scoring therefore tried to compare
+14-dimensional demonstrations against 9-dimensional candidates and crashed.
+
+**Resolution:** Observation-derived Scenes retain a copy of their source
+observation. Both sides use the existing shared comparison indices; no objective
+features or distance thresholds were removed or rescaled. Synthetic scenes
+without observations retain their geometric feature path. A regression checks
+identical feature vectors, and the real full-search smoke now proceeds through
+search and refinement to an explicit budget-exhausted outcome.
+
+## 20. Stack entry conditions and invariant data now agree across both modes
+
+**Status:** user-selected workflow implemented; end-to-end acceptance remains open.
+
+**Decision:** Stack starts with unstacked, pairwise-scattered blocks and ends with
+all blocks ON* b0. The former integrated True precondition and the standalone
+scattered-block precondition were different tasks. Collection and both new modes
+now use one specification. The public supplied-program path uses explicit
+Pick/Move/Release primitives, not the old PickPlace macro program.
+
+Initial invariants are learned from the actual candidate's recorded continuing
+heads and normal guard-false exits after synthesis (or supplied-program loading).
+This replaces demonstration-partition inference as the integrated bootstrap.
+Guard learning still uses the expert demonstrations, and preservation feedback
+still uses checked abstract successor replay (7). Frozen entry geometry and
+arbitrary-witness verification are unchanged. Physical repairs cause new runtime
+traces and renewed inference/verification; collected observations alone never
+prove inductiveness or the physical-controller refinement excluded in entry 4.
+
+**Evidence:** Five real three-block Stack collections, seeds 0–4, satisfy their
+initial/final conditions and have 20 FPS videos. Video on/off actions are identical
+and observations agree within the existing 1e-8 restoration tolerance. The
+five-demo verification smoke collects 15 heads/exits, reaches symbolic checking,
+and requests additional demonstrations. The full smoke reaches search/refinement
+and exhausts its budget.
+Neither is successful verification. Tests use generated data and exercise both
+real verifiers and their feedback paths separately from these acceptance runs.
+
+**Remaining action:** supply the requested coverage or improve the candidate as
+justified by the failed obligations, recover the full loop through search, and
+obtain `verified_model` on that same synthesized candidate.

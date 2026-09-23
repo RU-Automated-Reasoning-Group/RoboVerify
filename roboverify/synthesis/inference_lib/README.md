@@ -1,70 +1,110 @@
-# Learning invariants from execution traces
+# Collecting demonstrations and learning loop invariants
 
-The four tower verification entry points require a `DemoStore` of loop-head states.
-They no longer learn from literal examples embedded in `inference.py`. The legacy
-examples live in `golden_tower_fixtures.py` for regression tests only.
+Use one full-state NPZ archive for collection, synthesis, and inference. Old
+observation-only NumPy/pickle datasets and loop-head JSON inputs are removed;
+recollect demonstrations instead of converting them.
 
-Run from `roboverify/`, with the simulator environment configured as in `AGENTS.md`:
+## Collect Stack demonstrations
+
+Run from `roboverify/`:
 
 ```bash
 unset LD_PRELOAD
 export LD_LIBRARY_PATH="$HOME/.mujoco/mujoco210/bin:/usr/lib/nvidia"
-uv run python -m synthesis.entry.collect_stack_loop_traces \
-  --output /tmp/stack-loop-traces.json --num-blocks 4 --seeds 0 1 --max-iters 3
+uv run python -m synthesis.entry.collect_demos \
+  --program synthesis.examples.stack:build_program \
+  --num-blocks 3 --num-trajectories 5 --save-video
+```
+
+The editable factory in `synthesis/examples/stack.py` uses explicit Pick, Move,
+and Release primitives. A custom `--program module:factory` or
+`--program path/to/program.py:factory` must return a `Program` from
+`factory(context, *, num_blocks)`. Named and numeric physical operands, Assign,
+Get, Skip, and flat While loops are supported. PickPlace and nested loops are
+rejected. Numeric operands get fixed aliases; their identities are not learned.
+
+Collection runs exactly N distinct seeds, defaulting to five seeds starting at
+zero. Use `--seed-start 10` for another consecutive range or `--seeds 3 8 12`
+for explicit seeds. An explicit trajectory count must match the explicit list.
+Failed seeds are retained as failures, never replaced by easier seeds.
+
+Default output:
+
+```text
+demos/stack/3-blocks-5-trajectories/
+  demonstrations.npz
+  collection.json
+  videos/seed_0000.mp4
+  videos/seed_0001.mp4
+  ...
+```
+
+Repeated default collections use numbered suffixes. `--output-dir demos/my-stack-demonstrations` chooses a new destination; an existing explicit
+directory is rejected. There is no collection run-name flag.
+
+Every accepted trajectory must finish normally, start with unstacked,
+pairwise-scattered blocks, and end with all blocks in the tower rooted at b0.
+Transient success is insufficient. The accepted archive is published only if
+all requested trajectories pass. Diagnostic archives and the per-seed report
+retain failures. `--max-loop-iterations` defaults to 100 and
+`--trajectory-timeout-seconds` to 60; exhaustion is incomplete execution.
+
+`--save-video` records the same execution, headlessly, at fixed **20 FPS**. Each
+seed gets its own MP4, including partial failed executions where possible.
+`--render` independently displays a live window. The ffmpeg executable is
+required for videos. Encoding failures are reported separately and produce a
+nonzero command result without discarding valid trajectory data. Frames are
+streamed rather than retained in memory. No extra simulator steps are added.
+
+## Run either pipeline mode
+
+```bash
+uv run python -m synthesis.entry.synthesize_cfg \
+  --mode full --task stack --num-blocks 3 --quotient \
+  --demos demos/stack/3-blocks-5-trajectories/demonstrations.npz
+uv run python -m synthesis.entry.synthesize_cfg \
+  --mode verify --task stack --num-blocks 3 \
+  --program synthesis.examples.stack:build_program \
+  --demos demos/stack/3-blocks-5-trajectories/demonstrations.npz
+uv run python -m synthesis.experiment.report --run runs/cfg/latest
+```
+
+Full mode synthesizes from the archive. Verify mode starts from the supplied
+program, whose executable fingerprint must match the collected source. Both
+execute the current candidate from the saved initial simulator states, infer
+invariants, and perform the same symbolic and motion verification with feedback.
+Verification-only mode may enter resynthesis later; this is recorded explicitly.
+See [the integrated workflow](../cfg/VERIFICATION.md).
+
+For inference alone from collected runtime loop events:
+
+```bash
 uv run python -m synthesis.entry.inference \
-  --demo-store /tmp/stack-loop-traces.json --task stack --loop-id 1
-uv run python -m synthesis.entry.verify_stack_with_learned_invariant \
-  --demo-store /tmp/stack-loop-traces.json --loop-id 1 \
-  --verification-mode finite --num-blocks 4 --disable-scene-viz
+  --demos demos/stack/3-blocks-5-trajectories/demonstrations.npz \
+  --task stack --loop-id 1
 ```
 
-The collector runs the existing physical Stack program and reports task success
-separately. Its traces are observations, not a certificate of successful execution
-or an inductive invariant. A rollout can hit its iteration limit or fail its task
-and still supply observed states. The existing verifier must check the resulting
-candidate; [counterexample-guided refinement](../verification_lib/CEGIS.md)
-provides the standalone feedback workflow.
+## Recording and invariant data
 
-For another executable tower program, pass the callback directly:
+Archives retain full simulator snapshots, controls, mocap and solver arrays,
+actions, observation/action indices, aliases, instruction boundaries, and loop
+events. `cfg.recordings.save_traces/load_traces` handle this one current format.
+`--reset-mode replay` remains the pipeline default; `reset` restores a segment
+snapshot directly. Observations alone cannot restore a segment.
 
-```python
-from synthesis.inference_lib.demo_store import DemoStore, InvInference, tower_vocabulary
+Runtime events identify each loop path, invocation, iteration, continuing head,
+and normal guard-false exit, including zero-iteration loops. Frozen geometry
+belongs to that loop invocation. Budget failures are never normal exits.
+Candidates use their own execution traces; the expert recordings remain separate
+for imitation and resynthesis. Persistent in-scope aliases become invariant
+constants; selected guard witnesses are retained as metadata, not assumed to
+remain defined at loop exit. Symbolic preservation covers every matching witness.
 
-store = DemoStore()
-trajectory = physical_program.eval(env, on_loop_head=store.add)
-store.save("loop-traces.json")
-invariant, clauses = InvInference(store, "1", tower_vocabulary("reverse"), context)
-```
+`DemoStore` remains the in-memory inference adapter. `from_archive` extracts
+heads and exits, and `save_diagnostic` writes solver/debugging samples only.
+The old `on_loop_head` callback still records successful guard bindings before
+bodies; the richer `on_event` interface also reports normal exits and instruction
+boundaries. Physical candidate execution does not require an invariant.
 
-Use the vocabulary for the program's task and its corresponding high-level context
-(`use_tbl=True` for Unstack and Reverse). The collector CLI currently supplies the
-existing Stack program; other tasks use their own executable program and the same
-callback. Unstack end-to-end runs remain capped at 60 seconds.
-
-`Program.eval_from_observation` and `run_program_rollouts` accept the same callback.
-Calling `While.eval` directly uses loop ID `"loop"` by default, or an explicit
-`loop_id`. Through `Program`, IDs are zero-based instruction paths: `"1"` is the
-second top-level instruction and `"1.0"` its first nested instruction. The four
-tower tasks use flat loops.
-
-Each row stores every physical block under a stable ID (`x1` for block 0), the
-current symbolic bindings, and a copy of the geometry at entry to that loop
-invocation. All iterations from one invocation share that entry geometry;
-a later rollout captures a fresh entry. Guard witnesses are bound before the
-callback, so `b_prime` describes the iteration being entered. Exit states, false
-guards, and iterations beyond `max_iters` do not produce callback rows.
-The separate CFG adapter in `cfg/invariants.py` includes terminal loop heads from
-recovered iteration segments; it does not rely on this callback to record exits.
-
-The adapter emits three equally sized lists for `compute_dataset`, resolves
-constant names in the supplied Z3 context, and projects the relational `tbl`
-marker according to `context.use_tbl`. It preserves every physical block even
-when no instruction names that block. Missing bindings and empty datasets raise
-errors. Recording is optional and does not change evaluation's return value.
-
-The legacy Stack example has four empty initial dictionaries but two current
-states. The golden test compares its two consumed current states and bindings
-exactly and proves the two learned invariants equivalent with Z3. Recorded rows
-instead contain complete initial geometry; Stack does not use `ON_star_zero`, so
-this changes no truth-table values. Reverse's regression separately checks that
-`ON_star_zero` uses entry geometry with current bindings.
+Tests use generated scenes and recordings. Golden literal fixtures remain
+historical learner regressions, not accepted demonstrations or correctness targets.

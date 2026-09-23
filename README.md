@@ -7,13 +7,19 @@ learned invariants and counterexample-guided refinement.
 
 ## Project status
 
-The supported implementation and audit fixes are complete and integrated into
-local `main`. **End-to-end learning acceptance remains open:** validate or replace
-task demonstrations, recover the complete loop and verify the same synthesized
-CFG against the intended specification. See
-[entry 10](PAPER-DISCREPANCIES.md#10-the-historical-unstack-oracle-does-not-establish-its-final-task-condition)
-for the next steps. Existing demos and the paper's experimental results are not correctness
-oracles. Paper corrections and explicitly deferred work remain in the review record.
+The Stack workflow now has a standalone multi-seed DSL demonstration collector,
+full-state archives, optional 20 FPS videos, and shared `full` / `verify` pipeline
+modes. Both modes learn invariants from executions of the actual candidate and
+perform symbolic and motion verification with feedback. See the
+[collection guide](roboverify/synthesis/inference_lib/README.md).
+
+Five real three-block Stack recordings (seeds 0–4) pass initial/final task
+validation and have saved videos. **End-to-end learning acceptance remains open:**
+the verification-mode smoke requests additional demonstrations after symbolic
+checking; the full-search smoke exhausts its configured budget. Neither result
+is verified. See [the review record](PAPER-DISCREPANCIES.md) for model boundaries,
+remaining acceptance work, and recorded implementation findings. Old demonstration
+formats are removed; recollect instead of using the historical datasets.
 
 The supported scope is structured chains and flat loops for the tower tasks;
 the integrated synthesis CLI exposes Stack and Unstack. A successful
