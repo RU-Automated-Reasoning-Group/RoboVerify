@@ -1,14 +1,14 @@
-# Counterexample-guided verification (Phase E)
+# Counterexample-guided verification
 
-This guide covers the standalone Phase E APIs for refining an existing
-single-loop program. The [integrated CFG workflow](../cfg/VERIFICATION.md) now
+This guide covers the standalone APIs for refining an existing single-loop
+program. The [integrated CFG workflow](../cfg/VERIFICATION.md)
 connects synthesis, verification, demonstration requests and structural repair;
 its capabilities are broader than the standalone offset-repair API below.
 
 `symbolic_verify.py` labels each VC as establishment,
 preservation, exit, or straight-line body, and returns structured
 valid/invalid/vacuous/unknown checks. A result is truthy only when all checks pass.
-`Program.highlevel_verification` now returns this object while remaining compatible
+`Program.highlevel_verification` returns this object while remaining compatible
 with Boolean callers. Vacuous means the premise and domain axioms are inconsistent.
 Unsat cores provide a one-sided shortcut; a core containing the negated conclusion
 requires a separate premise satisfiability check. Solver timeouts remain failures.
@@ -16,8 +16,11 @@ requires a separate premise satisfiability check. Solver timeouts remain failure
 `SymbolicVerify(build_problem, ...)` searches finite sizes in increasing order,
 then requests an unbounded proof unless disabled. `build_problem(n)` returns
 `(program, precondition, postcondition, context)`; `n=None` requests DeclareSort.
-Finite success is labeled with its checked range. Unknown/vacuous smaller instances
-stop the search rather than making a later counterexample appear smallest.
+Finite-only success (`prove_unbounded=False`) is labeled with its checked range
+and does not establish correctness for arbitrary block counts. Unknown/vacuous
+smaller instances stop the search rather than making a later counterexample appear
+smallest. The integrated CLI requires an unbounded proof; its [finite schedule](../cfg/VERIFICATION.md#finite-checks-and-unbounded-proof)
+depends on the selected synthesis approach.
 
 `run_symbolic_cegis` records `False`, calls `InvInference` on the supplied
 `DemoStore`, checks strict enlargement, verifies, and adds preservation-failure
@@ -53,7 +56,7 @@ frozen positions and aliases while retaining the configured universal noise boun
 Multiple failing obligations in one environment count once. The maximizing score
 is `-MMD - weight * failed_environments` when no optional legacy goal reward is used.
 The original and instrumented Runner/optimizer/MCMC APIs accept `motion_penalty` and
-`motion_penalty_weight`; defaults preserve their old scores. Penalty-bearing CEM
+`motion_penalty_weight`; the penalty is off by default. Penalty-bearing CEM
 runs serially because live Z3 objects cannot be sent through the multiprocessing
 pickle queue. `optimize_motion_parameters` also supports a supplied demonstration
 score; without one it is explicitly penalty-only repair. A zero training penalty
@@ -61,7 +64,9 @@ is never substituted for the full verification query.
 
 Run the shared supplied-program workflow from `roboverify/`, with the simulator
 environment variables from `AGENTS.md` set. Generated demo archives are not
-bundled; use the actual output path printed by the collection command:
+bundled; use the actual output path printed by the collection command. This
+example shows the interfaces; the [complete Stack proof configuration](../cfg/VERIFICATION.md#provided-stack-verification)
+also supplies the explicit motion premises:
 
 ```bash
 uv run python -m synthesis.entry.collect_demos \
@@ -81,16 +86,16 @@ execution restores it directly without repeating that preparation. Motion repair
 trigger fresh execution, inference and both verification checks.
 The supplied program's executable fingerprint must match the archive. Expert
 recordings remain separate for imitation scoring and later resynthesis.
-For this integrated CLI, `--demos` replaces the old `--demo-store` and
-`--expert-states` inputs, while `--output-dir` and `--run-name` replace its old
-`--run-root` and `--slug` options. The separate
-`synthesis.experiment.mcmc.run` CLI still uses `--run-root` and `--slug`. The old
-`synthesis.entry.verified_synthesis` command now forwards to this verify mode.
+The integrated CLI takes `--demos`, with `--output-dir` and `--run-name` for
+experiment output. The separate `synthesis.experiment.mcmc.run` CLI uses
+`--run-root` and `--slug`. `synthesis.entry.verified_synthesis` forwards to verify
+mode.
 
-`--motion-noise GRASP MOVE RELEASE` opts into bounded errors. The learner-selection
-flag has been removed. The standalone library APIs above remain available with the
-same fixed symbolic inference algorithm. No Unstack run may exceed the standing
-60-second cap.
+`--motion-noise GRASP MOVE RELEASE` opts into bounded errors. The integrated CLI
+also accepts `--higher-tolerance METRES`, default 0.001. Direct Python callers
+configure Higher through `using_higher_tolerance(...)`; see the [tolerance guide](../inference_lib/README.md#higher-height-tolerance).
+The standalone library APIs use the same fixed symbolic inference algorithm. There
+is no learner-selection flag. No Unstack run may exceed the standing 60-second cap.
 
 `inference_lib/observed_patterns.py` retains `MonotoneInvariantLearner` as an
 independent observed-pattern utility for other analyses. Symbolic verification
@@ -105,9 +110,10 @@ bounded summaries. Exit code 0 means both verification stages passed with result
 means verification succeeded.
 
 Supplied Stack verification passes with the intended learner, the shared
-equal-height entry premise, the full default vocabulary and the documented motion
-model. Preservation counterexamples refine the initial learned invariant before
-both proof stages pass. Full synthesis acceptance remains open; collection and
-replay checks alone do not establish a verified program. See
+equal-height entry premise, the full default vocabulary, the 1 mm Higher
+tolerance and the documented supported-tower motion model. The six-clause
+bootstrap invariant passes both proof stages without counterexample refinement.
+Full synthesis acceptance remains open; collection and replay checks alone do not
+establish a verified program. See
 [the integrated workflow](../cfg/VERIFICATION.md) for scope and
 [the collection guide](../inference_lib/README.md) for seeds and video.

@@ -1,6 +1,6 @@
 # Motion verification and bounded errors
 
-`Program.lowlevel_verification` now requires an explicit `MotionContract` for each
+`Program.lowlevel_verification` requires an explicit `MotionContract` for each
 loop. The contract identifies the manipulated source and placement target.
 `frame_base` is a compatibility hint; root discovery must prove the reference.
 The frame obligation protects all non-manipulated objects. Contract names refer
@@ -125,12 +125,10 @@ including noise when supplied, and do not establish robustness. Fresh BMC solver
 have a 10-second timeout; caller-supplied solver settings remain in effect for both
 consistency and counterexample queries.
 
-The default BMC Pick and Release formulas remain unchanged. Move's support-frame
-assumption was deliberately weakened in D2; on scenes with no supported blocks
-it is equivalent to the legacy transition. The legacy nominal BMC Release still
-changes only end-effector z, leaving block positions fixed. Release noise perturbs
-that nominal block location. Neither BMC nor the waypoint verifier is a complete
-model of the physical release controller; this limitation is logged in
+BMC Move leaves blocks supported by a manipulated object unconstrained. Nominal
+BMC Release changes only end-effector z, leaving block positions fixed; release
+noise perturbs that nominal block location. Neither BMC nor the waypoint verifier
+is a complete model of the physical release controller; this limitation is logged in
 `PAPER-DISCREPANCIES.md`.
 
 ## Validation and timing
@@ -156,7 +154,7 @@ be a conservative overapproximation for diagonal paths, not an equivalent
 rewrite; it is not implemented. Run the benchmark to measure current outcomes
 and performance.
 
-Phase E adds [counterexample-guided refinement](CEGIS.md), typed symbolic results,
+The [standalone refinement APIs](CEGIS.md) provide typed symbolic results,
 partition-based invariant inference with checked progress, and fixed-environment
 motion penalties.
 
@@ -172,8 +170,8 @@ invariant, and failure behavior.
 Higher uses the shared comparison `z1 >= z2 - tolerance`, defaulting to 1 mm.
 The numerical evaluator, low-level Z3 interpretation and geometric counterexample
 realizer use the same setting. `LowLevelContext(higher_tolerance=0)` explicitly
-selects exact geometry; otherwise a context captures the active setting when
-constructed. The integrated pipeline and collector expose `--higher-tolerance`;
+selects exact Higher comparison; otherwise a context captures the active setting
+when constructed. The integrated pipeline and collector expose `--higher-tolerance`;
 see the [configuration and saved-state comparison](../inference_lib/README.md#higher-height-tolerance).
 
 The abstract ordering axioms are unchanged. A pairwise tolerance need not be

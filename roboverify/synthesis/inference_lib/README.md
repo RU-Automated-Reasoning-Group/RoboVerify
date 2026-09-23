@@ -1,9 +1,9 @@
 # Collecting demonstrations and learning loop invariants
 
-Use one full-state NPZ archive for collection, synthesis, and inference. Old
-observation-only NumPy/pickle datasets and loop-head JSON inputs are removed;
-recollect demonstrations instead of converting them. Generated demonstration
-archives are not bundled in the repository.
+Use full-state NPZ archives for collection, synthesis, and inference. The pipeline
+requires archives matching the current task specification; observation-only and
+loop-head JSON demonstration inputs are unsupported. Generated archives are not
+bundled in the repository.
 
 ## Collect Stack demonstrations
 
@@ -43,8 +43,10 @@ standalone MCMC restore this archived full state when restarting a demo. They
 do not reconstruct it by calling reset with the seed, and do not settle it
 again. Seeds identify trajectories; snapshots define their actual starting
 states. Later segments use their saved snapshot or replay only the recorded
-program actions from state zero. Recollect older demonstrations to adopt the
-settled start; existing archives always replay their own stored states.
+program actions from state zero. Archives replay their own stored states.
+Recollect archives made before the settling policy to obtain settled starts, and
+archives made before the equal-height precondition to match the current task
+identity. A current file format alone does not establish task compatibility.
 
 Default output:
 
@@ -63,7 +65,7 @@ subsequent commands; examples below assume the first default collection. There
 is no collection run-name flag.
 
 Every accepted trajectory must finish normally, start with unstacked,
-pairwise-scattered blocks at equal heights, and end with all blocks in the tower
+pairwise-scattered blocks at one height level, and end with all blocks in the tower
 rooted at b0. The entry premise is `forall x,y. Higher(x,y)`; since Higher means
 at least as high within the configured tolerance, both ordered pairs enforce
 one initial height level (at most 1 mm spread by default). This is an entry
@@ -90,7 +92,7 @@ of separated block levels. `Higher(x,x)` remains true, and the table remains an
 isolated logical marker.
 
 Both `collect_demos` and `synthesize_cfg` accept `--higher-tolerance METRES`.
-Use `--higher-tolerance 0` for the former exact comparison. Values must be finite,
+Use `--higher-tolerance 0` for exact comparison. Values must be finite,
 nonnegative and below half a block length (0.025 m). Collection metadata and
 pipeline configuration record the setting. Archived coordinates are never
 rewritten; existing observations can be re-evaluated at another tolerance.
@@ -99,6 +101,7 @@ New candidate executions record their active setting as well.
 For direct Python calls, use a scoped setting:
 
 ```python
+from synthesis.inference_lib.demo_store import InvInference
 from synthesis.util.on import using_higher_tolerance
 
 with using_higher_tolerance(0.001):
@@ -115,7 +118,8 @@ comparison is not transitive for arbitrary continuous heights; interpreting it
 as an order requires a suitable separated-level domain. The threshold is not
 a controller tolerance and does not establish physical/model equivalence.
 
-Compare already recorded Stack loop heads and normal exits with ideal placements:
+Compare already recorded Stack loop heads and normal exits with ideal placements.
+Use your own collection path; this example assumes a local 500-trajectory archive:
 
 ```bash
 uv run python -m synthesis.experiment.compare_stack_heights \
@@ -130,14 +134,15 @@ Higher results, and separately checks ON*, frozen ON*, Scattered and equality.
 It also checks Higher reflexivity, totality and transitivity on each saved state.
 Reports go under `runs/height-comparison/`; `--output-dir` and `--run-name` change
 the destination. A difference in any checked predicate produces a nonzero exit;
-a Higher match must not hide an independent Scattered mismatch.
+a Higher match must not hide an independent Scattered mismatch. This analysis can
+read saved states from an earlier task specification without making that archive
+compatible with the current synthesis/verification pipeline.
 
 ## Stack reset workspace
 
 New Stack resets sample block centers relative to the robot base: X is
 0.54–0.70 m forward, Y is within ±0.20 m, and horizontal distance from the base
-is at most **0.70 m**. This replaces the former square around the initial
-gripper, which allowed distant approach targets. Every layout retains at least
+is at most **0.70 m**. Every layout retains at least
 0.10 m separation in X or Y between blocks and 0.10 m horizontal clearance from
 the initial gripper. Blocks start at the resting table height; b0 is unchanged.
 Sampling restarts a crowded layout with bounded retries and reports an error if
@@ -145,8 +150,8 @@ it cannot fit the requested count; it never expands the region as a fallback.
 
 The bound applies to every newly sampled layout, independently of seed. It is
 an XY workspace restriction, not a proof of reachability at every height or for
-every tower size. Existing archives restore their saved initial states; recollect
-to use the new region. Candidate runs restore their archived starts.
+every tower size. Archives collected with earlier reset bounds keep their saved
+layouts; recollect them to use this region.
 
 ## Primitive controller settings
 
@@ -214,6 +219,9 @@ program fingerprints identify the executable used by each archive.
 
 ## Run either pipeline mode
 
+These commands show the two interfaces. For the checked supplied Stack result,
+use the [complete configuration and motion premises](../cfg/VERIFICATION.md#provided-stack-verification).
+
 ```bash
 uv run python -m synthesis.entry.synthesize_cfg \
   --mode full --task stack --num-blocks 3 --quotient \
@@ -242,6 +250,10 @@ uv run python -m synthesis.entry.inference \
   --task stack --loop-id 1
 ```
 
+This standalone inference CLI uses the default 1 mm Higher tolerance and has no
+`--higher-tolerance` option. For another threshold, call the Python inference API
+inside `using_higher_tolerance(...)` as shown above.
+
 ## Recording and invariant data
 
 Archives retain full simulator snapshots, controls, mocap and solver arrays,
@@ -264,7 +276,7 @@ remain defined at loop exit. Symbolic preservation covers every matching witness
 
 `DemoStore` remains the in-memory inference adapter. `from_archive` extracts
 heads and exits, and `save_diagnostic` writes solver/debugging samples only.
-The old `on_loop_head` callback still records successful guard bindings before
+The `on_loop_head` callback records successful guard bindings before
 bodies; the richer `on_event` interface also reports normal exits and instruction
 boundaries. Physical candidate execution does not require an invariant.
 

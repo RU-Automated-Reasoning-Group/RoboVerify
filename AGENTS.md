@@ -42,13 +42,17 @@ uv run python -m unittest synthesis.experiment.test_mcmc_parity -v    # drives M
 Tests are `unittest`, not pytest. No linter is configured. Generated demos are
 not bundled; collect them before running the pipeline examples. If collection
 prints a numbered output directory, use that archive path in subsequent commands.
+The commands above illustrate the interfaces. For the supplied Stack proof, use
+the [complete verification configuration](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification),
+including its motion premises.
 
 ## Project status and decisions — read before starting
 
 Read [README.md](README.md#project-status) for current project status and
 [PAPER-DISCREPANCIES.md](PAPER-DISCREPANCIES.md) for numbered findings, settled
-reasoning and remaining actions. Implementation is complete within the supported
-scope; Stack reset bounds initial blocks to 0.70 m XY from the robot base.
+reasoning and remaining actions. Collection and supplied-program verification
+are implemented; full synthesis acceptance remains open. Stack reset bounds
+initial blocks to 0.70 m XY from the robot base.
 Stack collection holds the initial gripper position for 50 steps before
 recording; the settled full snapshot becomes state zero. Synthesis, candidate
 verification, and standalone MCMC restore archived states without repeating
@@ -64,8 +68,7 @@ there is no alternate learner flag or callback. See the
 Supplied Stack verification passes with `ON_star Higher Scattered equality`,
 the 1 mm Higher tolerance and the documented supported-tower motion model;
 the supplied-program bootstrap currently passes without invariant refinement.
-Full synthesis acceptance remains open; the earlier alternate-learner
-result is separate from this intended-algorithm verification.
+This supplied-program result does not establish search or loop recovery.
 Update the relevant status or entry when it changes, rather than maintaining a
 separate implementation-plan history.
 
@@ -208,7 +211,7 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   - `cegis.py`: bounded symbolic/motion refinement using the intended
     `InvInference` algorithm, explicit coverage/progress checks,
     `NeedsResynthesis` for entry failures, and counterexample penalties.
-    See [Phase E workflow](roboverify/synthesis/verification_lib/CEGIS.md).
+    See [standalone CEGIS workflow](roboverify/synthesis/verification_lib/CEGIS.md).
   - `motion_verification.py`: explicit placement contracts, frame preservation, and
     swept-cube checks for lowered loop bodies. Results retain proof mode, failed
     obligations, counterexamples, and timings. `NoiseSpec` is opt-in, off by default;
@@ -226,7 +229,7 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   `ON_star_zero`. Loop IDs are instruction paths (`"1"` after an assignment).
   `DemoStore.from_archive` reads the current full-state NPZ archive;
   `save_diagnostic` exports JSON for inspection only. Old demo formats are removed.
-  `InvInference(store, loop_id, vocab, context)` reuses the existing learner.
+  `InvInference(store, loop_id, vocab, context)` calls the intended partition learner.
   See [the trace workflow](roboverify/synthesis/inference_lib/README.md).
 
 - **`synthesis/inference_lib/inference.py`** — invariant learning. Builds a
@@ -269,10 +272,14 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   for program identities, fixed vocabulary, and intentionally shared BMC state
   symbols. Never rebuild an auxiliary by guessing or reusing its printed name.
 
-- **`synthesis/util/on.py`** — the ground-truth geometric implementations of the block algebra
+- **`synthesis/util/on.py`** — shared geometric interpretations of the block algebra
   (`on_star_implementation`, `higher_implementation`, `scattered_implementation`)
-  operating on raw `obs` arrays; both the `While` runtime interpreter and
-  the MCMC reward/feature code call into these rather than duplicating geometry logic.
+  on block coordinates. Runtime guards, features, inference and geometric
+  verification share these definitions. `using_higher_tolerance(value)` scopes
+  Higher to `z1 >= z2 - value`, default 0.001 m; values must be finite and in
+  `[0, 0.025)` m. Construct low-level contexts within that scope. Abstract ordering
+  axioms are unchanged; tolerant comparisons require a suitable separated-level
+  domain to satisfy them. See the [tolerance guide](roboverify/synthesis/inference_lib/README.md#higher-height-tolerance).
 
 - **`synthesis/entry/`** — runnable pipelines.
   `collect_demos.py` loads `--program module:factory` or `path.py:factory`, runs
@@ -308,7 +315,11 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
 
 - **`synthesis/experiment/`** — run logging and reporting, plus an instrumented copy of
   the MCMC search. `run_logger.py` owns the run-directory contract; `report.py` is the
-  bounded reader; `config.py` captures every knob into `config.json`. Under `mcmc/`,
+  bounded reader; `config.py` resolves standalone MCMC settings for `config.json`.
+  Other entry points pass their own resolved configuration to the logger.
+  `compare_stack_heights.py` compares saved Stack heads and exits with ideal
+  placement levels and reports every predicate mismatch, including Scattered.
+  Under `mcmc/`,
   `search.py`, `cem.py` and `run.py` reimplement only the four functions that need to
   emit records (`MCMC`, `score_candidate_program`, `optimize_program`, `cem_optimize`)
   and import the remaining implementation from `synthesis.mcmc`. Both copies share
@@ -341,6 +352,9 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   matching witness in ascending physical ID order; symbolic preservation verification covers every matching choice.
   Multiple witnesses are permitted, without a separate uniqueness requirement.
   Extracted iterations share their invocation's frozen entry geometry.
+  Symbolic checks use sizes 2–4 for `relational`, or `num_blocks` through
+  `max(4, num_blocks)` for `id-first`, followed by an unbounded proof. The CLI
+  applies this schedule in both full and verify mode; see [proof scope](roboverify/synthesis/cfg/VERIFICATION.md#finite-checks-and-unbounded-proof).
 
   `recordings.py` owns the current full-state NPZ format, `collection.py` executes
   bounded recorded programs, and `program_source.py` loads/fingerprints factories.

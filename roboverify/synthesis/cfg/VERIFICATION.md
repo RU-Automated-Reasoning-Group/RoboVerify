@@ -1,8 +1,7 @@
 # Synthesis and verification
 
-`synthesis.entry.synthesize_cfg` now runs the structured CFG synthesizer and
-both verification stages on the same candidate and task conditions. It no
-longer substitutes a tower fixture at the verification boundary.
+`synthesis.entry.synthesize_cfg` runs the structured CFG synthesizer and both
+verification stages on the same candidate and task conditions.
 
 ## Collection and pipeline modes
 
@@ -19,14 +18,17 @@ preparation is excluded from program actions, loop events, and video. Both
 pipeline modes restore archived starts for candidates and repairs; standalone
 MCMC uses the same saved starts for CEM/scoring and candidate videos. Seeds
 identify recordings rather than reconstructing their initial state. Restoration
-never repeats settling. Recollect older demos to use the new settled starts.
+never repeats settling. Recollect demonstrations made before this preparation
+policy to obtain settled starts.
 
 The shared Stack precondition requires unstacked, pairwise-scattered blocks
 at the same height level (`forall x,y. Higher(x,y)`, using the configured
 Higher tolerance for observed geometry);
 the postcondition requires every block to be ON* b0. Every supplied demonstration
 must complete and satisfy these initial/final conditions. The driver requires
-`--demos` and no longer automatically collects a historical oracle.
+`--demos`; collection is a separate step. These commands illustrate the two
+interfaces. The [supplied Stack configuration](#provided-stack-verification) below
+includes the explicit motion premises used by the successful proof.
 
 ```bash
 uv run python -m synthesis.entry.collect_demos \
@@ -91,8 +93,6 @@ precondition establishes the initial height facts. With the 1 mm Higher toleranc
 the bootstrap invariant passes all three symbolic obligations at sizes 2–4 and
 in the unbounded context, followed by all 63 motion obligations. No counterexample
 refinement, program change or motion repair is needed for this configuration.
-The former exact comparison admitted a spurious simulator-height correlation;
-its successful run required two refinement updates (review entries 30–31).
 
 Write `O(x,y)` for ON*, `H(x,y)` for Higher, and `S(x,y)` for Scattered. The learned
 invariant has these six universally quantified clauses:
@@ -110,7 +110,7 @@ These constrain the tower's clear top and root, relative heights and separation.
 All clauses in this configuration are learned from candidate executions;
 none is substituted by a handwritten invariant. The explicit progress checks and
 nonvacuity checks remain in force. See the [height-precondition decision](../../../PAPER-DISCREPANCIES.md#31-stack-resets-equal-height-assumption-belongs-in-the-task-precondition)
-and [bootstrap failure diagnosis](../../../PAPER-DISCREPANCIES.md#30-stack-invariant-vocabulary-and-attachment-semantics).
+and [Higher interpretation](../../../PAPER-DISCREPANCIES.md#32-higher-tolerance-for-contact-induced-height-differences).
 
 The narrower `ON_star equality` vocabulary can pass symbolic verification but
 omits separation facts needed for motion. The `ON_star Scattered equality` vocabulary can
@@ -153,7 +153,7 @@ those names, and allow existential classifiers to introduce scoped bindings.
    named representation as before, and candidate execution records fresh states
    after generalization. Later motion repair uses that named representation.
 
-Using the collection created above:
+Using the three-block collection from the first example:
 
 ```bash
 uv run python -m synthesis.entry.synthesize_cfg --task stack --num-blocks 3 \
@@ -169,12 +169,11 @@ the latter also records any fixed ID bindings. The standalone
 `synthesis.experiment.mcmc.run` already searches numeric primitives and does not
 perform CFG refinement or quotienting; this switch belongs to the integrated CLI.
 
-ID-first expects the same physical ID universe across demonstrations. Its finite
-counterexample checks start at the demonstrated block count, so a smaller
-universe does not make fixed-alias distinctness premises inconsistent; the
-existing unbounded proof is still required afterward. Runtime
-witness selection remains deterministic (first match in ascending physical ID
-order). Quotienting is conservative: a carried role must initialize from an
+ID-first expects the same physical ID universe across demonstrations. Its
+[finite checks](#finite-checks-and-unbounded-proof) start at the demonstrated block
+count so smaller universes cannot contradict fixed-alias distinctness premises.
+Runtime witness selection remains deterministic (first match in ascending physical
+ID order). Quotienting is conservative: a carried role must initialize from an
 available alias, and repeated physical fragments must have matching instruction
 shapes and recoverable operand roles. A successful numeric search does not prove
 the generalized loop; the shared inference and verification pipeline still has
@@ -213,6 +212,29 @@ programs, and complete replay archives.
 The script distinguishes automatic continuation from isolated calls to quotient
 and from replaying rejected candidate loops; none is a formal verification result.
 
+## Finite checks and unbounded proof
+
+The integrated CLI checks the same candidate and learned invariant at increasing
+finite block counts before requesting an unbounded proof:
+
+| Synthesis approach | Finite block counts | Final check |
+| --- | --- | --- |
+| `relational` (default) | 2, 3, 4 | Uninterpreted domain, with no fixed block count |
+| `id-first` | `num_blocks` through `max(4, num_blocks)` | Uninterpreted domain, with no fixed block count |
+
+Thus ID-first with four demonstration blocks checks size 4, then the unbounded
+case; with five it checks size 5, then the unbounded case. The selected approach
+controls this schedule even in `--mode verify`, where initial search is skipped.
+There is no new learning step for each size. An invalid, vacuous or unknown check
+stops the attempt; a preservation refinement triggers a new attempt with the
+updated invariant. Failure of the unbounded query does not automatically extend
+the finite range.
+
+Finite success alone is not `verified_model`. The underlying Python
+`symbolic_verify(..., prove_unbounded=False)` API can return an explicitly bounded
+result, but the integrated CLI requires the unbounded proof. These block counts
+are separate from runtime loop-iteration limits and BMC instruction horizons.
+
 ## Verification workflow
 
 1. Acquire the synthesized or supplied CFG and propose checked placement summaries.
@@ -224,11 +246,15 @@ and from replaying rejected candidate loops; none is a formal verification resul
    proof. Unknown, inconsistent, and finite-only outcomes cannot become verified.
 4. Refine preservation failures with uncovered successors obtained by executing the
    abstract body, enumerating Get witnesses. This feedback is abstract contract
-   replay, not a new MuJoCo trajectory. Coverage and monotonicity checks remain.
-5. For other symbolic failures, export `resynthesis_request.json`. Validated
-   `--additional-demos` archives are added to complete expert recordings and
-   synthesis is rerun. Without requested recordings, return `needs_demonstrations`.
-   Verify mode records explicitly when it enters resynthesis.
+   replay, not a new MuJoCo trajectory. The learner must cover all positive states
+   and prove `I_old => I_new`; an uncovered successor witnesses strict enlargement.
+   Failed coverage, implication, realization or progress checks stop refinement.
+5. Invalid establishment/body/exit checks can export `resynthesis_request.json`
+   while refinement budget remains. Validated `--additional-demos` archives are
+   added to complete expert recordings and synthesis is rerun. Without requested
+   recordings, return `needs_demonstrations`. Unknown/vacuous queries and exhausted
+   budgets stop with their own unsuccessful statuses. Verify mode records
+   explicitly when it enters resynthesis.
 6. Run motion verification and bounded structural repair using accumulated
    counterexamples. The abstract program, guards and bindings must be preserved.
    Re-execute changed physical candidates, collect new traces, infer and recheck
@@ -243,8 +269,10 @@ execution. Incomplete executions return an unsuccessful result.
 
 Bootstrap and counterexample refinement both use `InvInference`, implemented by
 `inference.loop_inference`. The standalone symbolic CEGIS API uses the same
-algorithm. Positive-state coverage and explicit progress checks remain mandatory;
-an unsuccessful inference attempt never switches to another learner.
+algorithm. This invariant refinement adds abstract successor states to learning
+data; it differs from CFG refinement, which splits demonstration segments with
+new predicates during synthesis. Positive-state coverage and explicit progress
+checks remain mandatory; an unsuccessful inference attempt never switches learners.
 
 Each verification attempt records structured obligations under
 `artifacts/verification/`: symbolic files retain VC kinds, formulas, proof scope,
@@ -349,9 +377,11 @@ archives contain full snapshots and recorded actions. Direct restoration and
 action replay reproduce segment starts. Replay is the default: it restores
 archive state zero, then replays only recorded program actions up to the segment.
 Direct reset restores the requested segment snapshot. Newly collected Stack
-archives start at the settled state; old archives retain their own saved starts. Observation-only
-and older archive formats are removed. Inference uses candidate runtime loop
-heads and normal terminal heads with frozen invocation-entry geometry.
+archives start at the settled state. Archives from earlier collection policies
+retain their saved starts, but must still pass current task validation to enter the
+pipeline. Observation-only and older archive formats are unsupported. Inference
+uses candidate runtime loop heads and normal terminal heads with frozen
+invocation-entry geometry.
 
 A split replaces `P -> v0 -> Q` with `P -> v1 --C--> v2 -> Q`. Validate
 `first(C) <= last(Q)` on the original unsplit segment, with P at the start, C's

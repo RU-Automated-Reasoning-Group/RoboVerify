@@ -7,7 +7,7 @@ learned invariants and counterexample-guided refinement.
 
 ## Project status
 
-The Stack workflow now has a standalone multi-seed DSL demonstration collector,
+The Stack workflow has a standalone multi-seed DSL demonstration collector,
 full-state archives, optional 20 FPS videos, and shared `full` / `verify` pipeline
 modes. Collection holds the initial gripper position for **50 settling steps**,
 then saves that full simulator state as demonstration state zero. Settling is
@@ -17,7 +17,7 @@ learn invariants from executions of the actual candidate and perform symbolic
 and motion verification with feedback. See the
 [collection guide](roboverify/synthesis/inference_lib/README.md).
 
-Synthesis offers `--synthesis-approach relational` (the existing default) and
+Synthesis offers `--synthesis-approach relational` (the default) and
 `--synthesis-approach id-first` (numeric MCMC/refinement, followed by quotienting).
 Both return named programs to inference and verification. See the
 [approach guide](roboverify/synthesis/cfg/VERIFICATION.md#synthesis-approaches).
@@ -27,8 +27,8 @@ retaining block separation and initial gripper clearance. The shared Stack
 precondition also requires one initial block-height level, expressed as
 `forall x,y. Higher(x,y)`. The shared Higher predicate has a configurable
 **1 mm tolerance** (`--higher-tolerance`, with 0 restoring exact comparison).
-Primitive ID/ByName
-instructions share configurable controllers and retain their 50-step budgets.
+Primitive ID/ByName instructions share configurable controllers and retain their
+50-step budgets.
 See [controller settings](roboverify/synthesis/inference_lib/README.md#primitive-controller-settings).
 
 **Symbolic invariant inference uses the partition-based algorithm in
@@ -43,9 +43,11 @@ noiseless motion checks with explicit supported-tower geometry. Full synthesis
 acceptance remains open; verifying the supplied program does not establish search
 or loop recovery.
 See the [verification command](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification)
-and [height-precondition decision](PAPER-DISCREPANCIES.md#31-stack-resets-equal-height-assumption-belongs-in-the-task-precondition).
-Current archives contain full simulator states; old demo formats are unsupported.
-Collect demonstrations before running the pipeline examples.
+and the decisions on [initial heights](PAPER-DISCREPANCIES.md#31-stack-resets-equal-height-assumption-belongs-in-the-task-precondition)
+and [Higher tolerance](PAPER-DISCREPANCIES.md#32-higher-tolerance-for-contact-induced-height-differences).
+Archives must contain full simulator states and match the current task specification;
+collections from before the equal-height precondition require recollection for
+pipeline use. Collect demonstrations before running the examples.
 
 The supported scope is structured chains and flat loops for the tower tasks;
 the integrated synthesis CLI exposes Stack and Unstack. A successful
