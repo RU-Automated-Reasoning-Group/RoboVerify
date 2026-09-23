@@ -88,6 +88,31 @@ shapes and recoverable operand roles. A successful numeric search does not prove
 the generalized loop; the shared inference and verification pipeline still has
 to accept that returned candidate.
 
+### Manual continuation experiment
+
+To replace MCMC with supplied placement candidates while retaining real simulator
+execution, refinement, and quotienting, run:
+
+```bash
+uv run python -m synthesis.experiment.id_first_continuation \
+  --demos demos/stack/3-blocks-5-trajectories-base-aligned/demonstrations.npz
+uv run python -m synthesis.experiment.report --run runs/id-first-continuation/latest
+```
+
+This diagnostic requires three-block recordings from the current Stack example.
+It saves `artifacts/summary.json`, named programs, and complete replay archives.
+The script distinguishes automatic continuation from isolated calls to quotient
+and from replaying rejected candidate loops; none is a formal verification result.
+
+On the five seed-0–4 recordings, a failed remaining-block search refines to
+`not(Scattered(b0, 2))`, not `ON(2, 1)`. The first learned cut is mid-placement.
+Supplying fragments that carry the pending placement across that cut yields a
+successful straight-line program, but no loop. Separately, complete placement
+fragments propose a `Scattered(b, b_prime)` loop which succeeds on all five
+simulator replays. Quotient validation rejects its reconstructed seed-3 exit
+one observation before the task postcondition holds. This is recorded in
+[review entry 22](../../../PAPER-DISCREPANCIES.md#22-id-first-continuation-exposes-placement-and-loop-exit-boundary-limits).
+
 ## Verification workflow
 
 1. Acquire the synthesized or supplied CFG and propose checked placement summaries.

@@ -513,3 +513,56 @@ learning acceptance.
 **Remaining action:** demonstrate complete learning acceptance with representative
 recordings and compare the two search policies. The early-Get policy's fixed
 prefix remains an explicit limitation of the retained relational variant.
+
+## 22. ID-first continuation exposes placement and loop-exit boundary limits
+
+**Status:** observed implementation limits; diagnostic recorded, synthesis behavior
+unchanged. This experiment substitutes known controllers for MCMC, so it is not
+end-to-end learning acceptance or formal verification.
+
+**Setup:** Run `synthesis.experiment.id_first_continuation` on the five validated,
+base-aligned three-block Stack recordings (seeds 0–4). Predicate enumeration,
+segment replay, CFG refinement, quotienting, and full-program simulator execution
+are real. Only straight-line search is replaced by supplied numeric fragments
+from the demonstration program.
+
+**Findings:**
+
+- The actual classifier first learns `ON(1, b0)`. A complete first-placement
+  controller achieves it on all five seeds. With a failed/no-op remaining block,
+  the next classifier is `not(Scattered(b0, 2))`. Refinement labels states just
+  *before* the final task goal becomes true: `ON(2, 1)` holds in only one of these
+  five positive states, so it cannot be an exact separator for this dataset.
+  In a three-block task, the second placement completes the goal; it need not
+  appear as a separately learned intermediate predicate.
+- The earliest `ON(1, b0)` cuts occur at observations 25–30, with block 1 still
+  approximately 0.186–0.203 m above b0. First Release completes at observations
+  50–65. A controller that assumes the first placement is finished fails on all
+  five restored cut states, but succeeds on all five restored post-Release
+  states. Relation satisfaction alone does not identify the controller's grasp
+  state or the completion of a placement.
+- Supplied fragments that respect that pending placement (3 instructions before
+  the cut, 7 after it) pass both block targets and produce a successful named
+  straight-line program on all five full replays. Quotient is called but makes
+  no change: the remaining block begins by completing the preceding transfer,
+  and its quantified task goal does not become a second standalone placement
+  letter under the current structural recognition.
+- In a separate isolated quotient call, two complete five-instruction placement
+  fragments provide letters `ON(1, b0), ON(2, 1)`. Anti-unification recovers
+  `b = b0`, the rebound `b_prime`, and `b = b_prime`; guard learning returns
+  `Scattered(b, b_prime)`. However, the fold is rejected by whole-CFG validation:
+  for seed 3 its extracted terminal head is observation 95, while the task goal
+  first holds at observation 96. At 95, the numeric XY distances are about
+  0.014 m (1 to b0), 0.022 m (2 to 1), and 0.036 m (2 to b0), against the 0.025 m
+  ON* XY tolerance. Adjacent ON relations therefore precede all-to-b0 alignment
+  in this intermediate simulator state. This is a fact about the concrete
+  interpretation, not a counterexample to an abstract transitivity axiom.
+- Replaying that **rejected** proposed loop separately succeeds on all five
+  seeds, choosing blocks 1 then 2. These replays do not override rejection or
+  establish an invariant, arbitrary-witness correctness, or motion-model proof.
+
+**Remaining action:** handle pending physical transfers across relational CFG
+cuts and preserve the required task-completing continuation when recovering loop
+exits. Do not force the desired classifier, bypass validation, or silently change
+ON/ON* semantics to make this diagnostic pass. The prior observation-only unit
+fixtures did not expose these intermediate-motion and boundary cases.
