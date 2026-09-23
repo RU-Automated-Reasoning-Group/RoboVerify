@@ -651,6 +651,46 @@ agree within 1e-8. The older recordings that required recovery are not accepted
 as the intended three-iteration demonstration baseline. No new synthesis or
 formal-verification acceptance is claimed from these controller tests.
 
-**Remaining action:** none for the numeric/named mismatch. Full learning and
-verification acceptance (20–22) must use recollected demonstrations and fresh
-candidate execution under these controller settings.
+**100-seed check:** With the same program and thresholds at commit `a840a54`,
+collect seeds 0–99 with four blocks, a three-iteration cap, and no video:
+
+```bash
+uv run python -m synthesis.entry.collect_demos \
+  --program synthesis.examples.stack:build_program --task stack \
+  --num-blocks 4 --num-trajectories 100 --seed-start 0 \
+  --max-loop-iterations 3 \
+  --output-dir demos/stack/4-blocks-100-trajectories-precise
+```
+
+The result is **96/100 accepted**, with failures at seeds **38, 46, 73, 85**.
+All 100 initial states satisfy the precondition and all select blocks 1, 2, 3
+in their first three iterations. The four failures do not satisfy the final task
+condition and still have a guard witness at the iteration cap. Every failure
+includes a 50-step exhaustion in the third Pick's approach:
+
+| Seed | Final approach error | Additional unconverged primitive |
+| --- | --- | --- |
+| 38 | 16.65 mm | None |
+| 46 | 13.81 mm | None |
+| 73 | 11.37 mm | Third lift: 2.42 mm error after 50 steps |
+| 85 | 20.17 mm | Third lift: 3.59 mm error after 50 steps |
+
+The Pick threshold is 10 mm; the lift threshold is 2 mm. Failed approach targets
+retain a gripper height of approximately 0.675–0.677 m. Error changes by only
+0.03–0.15 mm over the final ten recorded observations, suggesting a difficult
+approach configuration rather than establishing that a larger budget will fix it.
+The specific physical cause is not yet established. All 1,440 primitives in the
+96 successful trials converge within at most 21 steps.
+
+The collector correctly rejects the complete requested batch and publishes no
+accepted `demonstrations.npz`. All 100 trajectories, including the successes,
+are retained under `diagnostics/`; `collection.json` records per-seed verdicts
+and `validation-summary.json` records the independent iteration, controller,
+pre/postcondition, and final-geometry audit. No seeds were replaced, and no
+controller settings or step budgets were changed during this check.
+
+**Remaining action:** none for the numeric/named mismatch. Controller robustness
+is not established by the five-seed result: diagnose the third-pick approach on
+these four failing seeds, then rerun the same 100-seed acceptance check. Full
+learning and verification acceptance (20–22) must use validated demonstrations
+and fresh candidate execution under the chosen controller settings.

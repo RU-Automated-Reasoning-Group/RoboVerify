@@ -118,6 +118,11 @@ uv run python -m synthesis.entry.collect_demos \
 Seeds 0–4 finish normally with exactly three iterations, all 15 primitives
 converged, and at most 20 steps per primitive. Videos use 20 FPS. These results
 validate this collection, not all possible scenes or formal verification.
+A subsequent check of seeds 0–99 passes 96/100 under the same settings; seeds
+38, 46, 73, and 85 exhaust the third Pick's approach budget and fail the final
+task condition. The 96 successes use at most 21 steps per primitive. The whole
+100-seed batch is rejected, with all trajectories retained as diagnostics; see
+[review entry 23](../../../PAPER-DISCREPANCIES.md#23-numeric-and-named-release-use-different-physical-stopping-tolerances).
 Recollect after changing controller settings; older fingerprints describe the
 previous executable. The earlier continuation findings in review entry 22 refer
 to the former controllers and waypoints.

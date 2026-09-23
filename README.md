@@ -20,6 +20,9 @@ Both return named programs to inference and verification. See the
 
 Five current four-block Stack recordings (seeds 0–4) finish in exactly three
 iterations, pass initial/final task validation, and have saved 20 FPS videos.
+A broader check of seeds 0–99 passes **96/100**; seeds 38, 46, 73, and 85 exhaust
+the third Pick's approach budget. Controller robustness remains open (review
+entry 23).
 Primitive ID/ByName instructions share configurable controllers and retain their
 50-step budgets. See [controller settings](roboverify/synthesis/inference_lib/README.md#primitive-controller-settings).
 **End-to-end learning acceptance remains open:**

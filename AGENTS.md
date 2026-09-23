@@ -46,8 +46,10 @@ Tests are `unittest`, not pytest. No linter is configured.
 Read [README.md](README.md#project-status) for current project status and
 [PAPER-DISCREPANCIES.md](PAPER-DISCREPANCIES.md) for numbered findings, settled
 reasoning and remaining actions. Implementation is complete within the supported
-scope; five current four-block Stack demonstrations pass task validation in
-exactly three iterations each. End-to-end learning acceptance remains open.
+scope; current four-block Stack demos pass 96/100 seeds (0–99) with exactly
+three iterations. Seeds 38, 46, 73, and 85 fail the third Pick's approach within
+50 steps (review entry 23). Controller robustness and end-to-end learning
+acceptance remain open.
 Update the relevant status or entry when it changes, rather than maintaining a
 separate implementation-plan history.
 
