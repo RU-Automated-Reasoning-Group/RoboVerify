@@ -40,6 +40,7 @@ from z3 import (
 )
 
 import synthesis.api.instructions as instructions
+from synthesis.util import on
 from synthesis.util.symbols import fresh_const, open_quantifier
 
 
@@ -153,9 +154,15 @@ class LowLevelContext:
         sort_name: str = "Box",
         default_L: float = 1.0,
         use_tbl: bool = False,
+        higher_tolerance: float | None = None,
     ):
         self.sort_name = sort_name
         self.default_L = default_L
+        self.higher_tolerance = (
+            on.get_higher_tolerance()
+            if higher_tolerance is None
+            else on.validate_higher_tolerance(higher_tolerance)
+        )
         # Mirrors HighLevelContext.use_tbl: the tbl axioms are only asserted when
         # the task actually has a table, and the relations below are only
         # narrowed when those axioms are in force. Turning it on for a task with
@@ -293,7 +300,7 @@ class LowLevelContext:
     def lowlevel_higher(self, b1, b2):
         """b1 is at least as high as b2; mirrors ``on.higher_implementation``."""
         return self._isolate_table(
-            self.Z(b1) >= self.Z(b2),
+            on.higher_z3(self.Z(b1), self.Z(b2), tolerance=self.higher_tolerance),
             b1,
             b2,
             reflexive=True,

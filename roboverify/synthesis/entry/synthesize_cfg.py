@@ -32,6 +32,7 @@ from synthesis.cfg.straightline import (
 from synthesis.cfg.tasks import task_identity, task_spec
 from synthesis.cfg.verified_synthesis import verified_synthesis
 from synthesis.entry.motion_options import add_motion_options, motion_noise_from_args
+from synthesis.entry.predicate_options import add_predicate_options
 from synthesis.experiment.run_logger import RunLogger
 from synthesis.mcmc.synthesis import (
     make_roboverify_env,
@@ -39,11 +40,19 @@ from synthesis.mcmc.synthesis import (
     set_np_seed,
 )
 from synthesis.predicates.language import Language
+from synthesis.util.on import DEFAULT_HIGHER_TOLERANCE, using_higher_tolerance
 from synthesis.verification_lib.bmc_lib import NoiseSpec
 from synthesis.verification_lib.highlevel_verification_lib import HighLevelContext
 
 
 def run(args, logger):
+    with using_higher_tolerance(
+        getattr(args, "higher_tolerance", DEFAULT_HIGHER_TOLERANCE)
+    ):
+        return _run(args, logger)
+
+
+def _run(args, logger):
     context = HighLevelContext(use_tbl=args.task == "unstack")
     traces = load_traces(args.demos, require_valid=True)
     if any(t.metadata.get("task_spec") != task_identity(args.task) for t in traces):
@@ -360,6 +369,7 @@ def main(argv=None):
     )
     parser.add_argument("--invariant-variables", type=int, default=2)
     add_motion_options(parser)
+    add_predicate_options(parser)
     parser.add_argument(
         "--table-surface-height",
         type=float,

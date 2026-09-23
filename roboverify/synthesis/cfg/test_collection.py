@@ -89,7 +89,7 @@ class CollectionTests(unittest.TestCase):
             self.assertFalse(validate_trace(trace))
 
     def test_unequal_initial_heights_are_rejected_even_when_stacking_succeeds(self):
-        for offset in (-0.001, 0.001):
+        for offset in (-0.002, 0.002):
             with self.subTest(offset=offset):
                 trace = example_trace()
                 trace.states[0][24] += offset
@@ -100,6 +100,15 @@ class CollectionTests(unittest.TestCase):
                 self.assertEqual(
                     validation["issues"][0]["reason"], "Initial task condition is false"
                 )
+
+    def test_initial_contact_drift_uses_configured_tolerance(self):
+        from synthesis.util.on import using_higher_tolerance
+
+        for tolerance, expected in ((0, False), (0.0001, False), (0.001, True)):
+            with self.subTest(tolerance=tolerance), using_higher_tolerance(tolerance):
+                trace = example_trace()
+                trace.states[0][24] += 0.00025
+                self.assertEqual(validate_trace(trace), expected)
 
     def test_archive_roundtrip_and_rejection(self):
         trace = example_trace()

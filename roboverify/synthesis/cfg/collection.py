@@ -19,6 +19,7 @@ from synthesis.cfg.reset import (
     restore,
 )
 from synthesis.cfg.tasks import task_spec
+from synthesis.util.on import get_higher_tolerance
 
 STACK_SETTLING_STEPS = 50
 
@@ -176,6 +177,7 @@ def record_execution(
 
     recording = Recording()
     metadata = dict(definition.metadata)
+    metadata["higher_tolerance"] = get_higher_tolerance()
     metadata["initialization"] = dict(
         source="reset" if initial_snapshot is None else "snapshot", settling_steps=0
     )

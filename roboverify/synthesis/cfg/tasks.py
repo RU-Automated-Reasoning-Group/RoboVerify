@@ -26,7 +26,8 @@ def task_spec(task):
                         ),
                     ),
                 ),
-                # Higher is >=; both ordered pairs enforce equal initial heights.
+                # Both ordered pairs enforce one initial height level; concrete
+                # observations use the configured Higher tolerance.
                 forall(["x", "y"], atom("Higher", x, y)),
             ),
             forall(["x"], atom("ON_star", x, b0)),

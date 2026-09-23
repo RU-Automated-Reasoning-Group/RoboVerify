@@ -1,11 +1,50 @@
 from __future__ import annotations
 
+import math
+from contextlib import contextmanager
+from contextvars import ContextVar
+
 import numpy as np
 import z3
 
 BLOCK_LENGTH = (
     0.025 * 2
 )  # (0.025, 0.025, 0.025) in the xml file of the gym env is half length
+
+
+DEFAULT_HIGHER_TOLERANCE = 0.001  # metres; small relative to a 50 mm block level
+_higher_tolerance = ContextVar("higher_tolerance", default=DEFAULT_HIGHER_TOLERANCE)
+
+
+def validate_higher_tolerance(value):
+    value = float(value)
+    if not math.isfinite(value) or not 0 <= value < BLOCK_LENGTH / 2:
+        raise ValueError("Higher tolerance must be finite and in [0, 0.025) metres")
+    return value
+
+
+def get_higher_tolerance():
+    return _higher_tolerance.get()
+
+
+@contextmanager
+def using_higher_tolerance(value):
+    """Scope predicate semantics to one run, restoring them even after errors."""
+    token = _higher_tolerance.set(validate_higher_tolerance(value))
+    try:
+        yield
+    finally:
+        _higher_tolerance.reset(token)
+
+
+def higher_z3(z1, z2, *, tolerance=None):
+    """Geometric Higher comparison; table isolation belongs to the caller."""
+    tolerance = (
+        get_higher_tolerance()
+        if tolerance is None
+        else validate_higher_tolerance(tolerance)
+    )
+    return z1 >= z2 - z3.RealVal(repr(tolerance))
 
 
 class NoGeometry:
@@ -168,25 +207,27 @@ def r_star_implementation(block1, block2) -> bool:
     return y1 == y2 and z1 == z2 and x1 <= x2
 
 
-def higher_implementation(block1, block2) -> bool:
-    """Numeric reading of ``Higher(block1, block2)``: block1 is at least as high.
+def higher_implementation(block1, block2, *, tolerance=None) -> bool:
+    """Read Higher as ``z1 >= z2 - tolerance``; the default is 1 mm.
 
-    ``higher_tbl`` isolates the table and ``higher2`` makes ``Higher`` reflexive,
-    so again ``(tbl, tbl)`` is the only true pair involving it.
-
-    For real blocks this is exactly ``z1 >= z2``, which is what
-    ``LowLevelContext.lowlevel_higher`` checks. The two extra conjuncts this
-    used to carry, ``z1 >= 0`` and ``z2 >= 0``, were how the table's sentinel
-    position was excluded; they also dropped any genuine block sitting below the
-    plane ``z = 0`` out of the relation, which is a silent wrong answer rather
-    than a table check. The old second disjunct (identical positions) is
-    subsumed: equal ``z`` already satisfies ``z1 >= z2``.
+    Runtime guards, learning and geometric verification share this tolerance.
+    Zero recovers exact ordering. Tolerance treats near-equal resting heights
+    as one level; it changes neither coordinates nor control tolerances.
+    On arbitrary continuous heights this comparison need not be transitive.
+    The abstract ordering axioms therefore still require a suitable domain,
+    such as sufficiently separated uniform block levels. The table remains
+    isolated: only Higher(tbl, tbl) holds for pairs involving the table.
     """
+    tolerance = (
+        get_higher_tolerance()
+        if tolerance is None
+        else validate_higher_tolerance(tolerance)
+    )
     if is_table(block1) or is_table(block2):
         return is_table(block1) and is_table(block2)
     _, _, z1 = _xyz(block1)
     _, _, z2 = _xyz(block2)
-    return z1 >= z2
+    return z1 >= z2 - tolerance
 
 
 def scattered_implementation(block1, block2) -> bool:

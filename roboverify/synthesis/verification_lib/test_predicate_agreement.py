@@ -80,6 +80,7 @@ def _on_a_threshold(first, second):
         (abs(x1 - x2), length / 2),
         (abs(y1 - y2), length / 2),
         (z1 - z2, 0.0),
+        (z1 - z2, -on.get_higher_tolerance()),
         (z1 - z2, 1.5 * length),
         (abs(x1 - x2), 2 * length),
         (abs(y1 - y2), 2 * length),

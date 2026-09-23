@@ -148,7 +148,7 @@ def model_to_loop_head(context, model, loop_id, constants, *, timeout_ms=5000):
         formulas = (
             on_star(p, q),
             on_star(p0, q0),
-            p[2] >= q[2],
+            on.higher_z3(p[2], q[2]),
             z3.Or(z3.Abs(p[0] - q[0]) >= 2 * length, z3.Abs(p[1] - q[1]) >= 2 * length),
         )
         for relation, formula in zip(

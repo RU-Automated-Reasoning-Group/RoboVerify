@@ -8,6 +8,8 @@ from synthesis.cfg.collection import VideoRecorder, record_execution, validate_t
 from synthesis.cfg.program_source import load_program
 from synthesis.cfg.recordings import save_traces
 from synthesis.cfg.tasks import task_identity
+from synthesis.entry.predicate_options import add_predicate_options
+from synthesis.util.on import using_higher_tolerance
 from synthesis.verification_lib.highlevel_verification_lib import HighLevelContext
 
 
@@ -82,12 +84,18 @@ def build_parser():
     )
     parser.add_argument("--max-loop-iterations", type=int, default=100)
     parser.add_argument("--trajectory-timeout-seconds", type=float, default=60)
+    add_predicate_options(parser)
     return parser
 
 
 def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
+    with using_higher_tolerance(args.higher_tolerance):
+        return collect(args, parser)
+
+
+def collect(args, parser):
     try:
         seeds = resolve_seeds(args)
         if (
@@ -110,6 +118,7 @@ def main(argv=None):
         program=reference.metadata,
         seeds=seeds,
         num_blocks=args.num_blocks,
+        higher_tolerance=args.higher_tolerance,
         trajectories=[],
         status="collecting",
     )
@@ -188,7 +197,7 @@ def main(argv=None):
         import shlex
 
         archive = shlex.quote(str(output / "demonstrations.npz"))
-        common = f"uv run python -m synthesis.entry.synthesize_cfg --task stack --num-blocks {args.num_blocks} --demos {archive}"
+        common = f"uv run python -m synthesis.entry.synthesize_cfg --task stack --num-blocks {args.num_blocks} --demos {archive} --higher-tolerance {args.higher_tolerance}"
         print(f"Full pipeline: {common} --mode full --quotient")
         print(
             f"Verify program: {common} --mode verify --program {shlex.quote(args.program)}"
