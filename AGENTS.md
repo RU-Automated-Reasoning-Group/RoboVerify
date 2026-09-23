@@ -49,15 +49,11 @@ Read [README.md](README.md#project-status) for current project status and
 [PAPER-DISCREPANCIES.md](PAPER-DISCREPANCIES.md) for numbered findings, settled
 reasoning and remaining actions. Implementation is complete within the supported
 scope; Stack reset bounds initial blocks to 0.70 m XY from the robot base.
-Before adding settling, four-block demos passed 500/500 seeds (0–499), with
-exactly three iterations and at most 22 steps per primitive (review entry 23).
-Stack collection now holds the initial gripper position for 50 steps before
+Stack collection holds the initial gripper position for 50 steps before
 recording; the settled full snapshot becomes state zero. Synthesis, candidate
 verification, and standalone MCMC restore archived states without repeating
-settling or recreating a layout from its seed. Four production seeds pass and
-replay with yellow-block X offsets of 0.4–1.9 mm (review entry 24); this is not a
-new 500-seed acceptance result or a guarantee of exact centering. Recollect older
-demos to adopt settled starts. End-to-end learning acceptance remains open.
+settling or recreating a layout from its seed. End-to-end learning acceptance
+remains open; collection and replay checks do not establish that result.
 Update the relevant status or entry when it changes, rather than maintaining a
 separate implementation-plan history.
 
@@ -348,10 +344,8 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   --smoke --quotient` (on one line) for a bounded integration smoke.
   The driver requires validated current archives and has no historical-oracle
   fallback. `--reset-mode replay` is the default; Unstack retains its 60-second
-  process alarm. Success is `verified_model` in the documented scope. Earlier
-  Stack smoke runs stopped at a demonstration request or exhausted search budget.
-  End-to-end acceptance has not been rerun after the controller and settling
-  changes; the latest four-seed checks validate collection and replay only.
+  process alarm. Success is `verified_model` in the documented scope.
+  End-to-end learning acceptance remains open.
 
 ## Monitoring runs
 

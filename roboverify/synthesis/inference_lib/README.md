@@ -139,9 +139,8 @@ rejects a trace containing an unconverged primitive, even if its final task
 predicate happens to hold. Convergence alone does not certify a grasp or goal.
 
 The Stack example uses a 0.10 m transfer height above the current top, then
-lowers to 0.05 m. Tighter tolerances with the original 0.20 m transfer waypoint
-exposed controller stalls in the tested scenes. For the intended four-block
-three-placement demonstrations, collect with a three-iteration cap:
+lowers to 0.05 m. For four-block, three-placement demonstrations, collect with
+a three-iteration cap:
 
 ```bash
 uv run python -m synthesis.entry.collect_demos \
@@ -150,32 +149,13 @@ uv run python -m synthesis.entry.collect_demos \
   --output-dir demos/stack/4-blocks-5-trajectories-precise
 ```
 
-With the former reset region, seeds 0–4 finished in three iterations with
-20 FPS videos, but a broader check passed only 96/100: seeds 38, 46, 73, and 85
-failed the third Pick's approach; the failures were retained during diagnosis.
-With the bounded reset region above and identical program/controller settings,
-the earlier collection before settling passed **500/500** seeds (0–499): exactly
-three iterations, all 15 primitives converged, and at most 22 steps per primitive.
-Ten separately rendered runs (seeds 0, 38, 46, 73, 85, 150, 250, 350, 450, 499)
-had 20 FPS videos. All ten passed validation and reproduced their matching batch
-actions exactly; observations agreed within 1e-8.
-Those earlier accepted traces exhibit a systematic first-placement offset of
-about 13 mm: the initial robot state had not fully settled, and Move controls
-the gripper site without compensating for the held block's offset. The task's
-25 mm per-axis ON tolerance accepts it. The adopted 50-step preparation reduces
-yellow's final X offset to 0.4–1.9 mm on seeds 0, 38, 73, and 499; the normal
-collector passes all four in three iterations and fresh-environment replay
-reproduces every action. This is not a new 500-seed validation.
-The generated collections, videos, and diagnostics were removed during cleanup;
-use the collection command above to create new demonstrations. See
-[review entry 24](../../../PAPER-DISCREPANCIES.md#24-the-first-stack-placement-inherits-a-transient-robot-state-and-a-grasp-offset)
-for the diagnosis; controller convergence does not certify block centering.
-These collection results do not establish formal verification or arbitrary-scene
-success;
-see [review entry 23](../../../PAPER-DISCREPANCIES.md#23-numeric-and-named-release-use-different-physical-stopping-tolerances).
-Recollect after changing controller settings; older fingerprints describe the
-previous executable. The earlier continuation findings in review entry 22 refer
-to the former controllers and waypoints.
+Move controls the gripper site, so controller convergence does not guarantee
+exact centering of a held block. The task's ON relation allows 25 mm per axis;
+its tolerance is distinct from the controller's stopping tolerance. The 50-step
+preparation removes the initial robot transient before demonstration recording.
+See [review entry 24](../../../PAPER-DISCREPANCIES.md#24-the-first-stack-placement-inherits-a-transient-robot-state-and-a-grasp-offset)
+for the saved-state policy. Recollect after changing controller settings;
+program fingerprints identify the executable used by each archive.
 
 ## Run either pipeline mode
 

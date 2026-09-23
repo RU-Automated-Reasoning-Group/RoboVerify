@@ -22,29 +22,16 @@ Synthesis offers `--synthesis-approach relational` (the existing default) and
 Both return named programs to inference and verification. See the
 [approach guide](roboverify/synthesis/cfg/VERIFICATION.md#synthesis-approaches).
 
-Stack reset now scatters blocks within **0.70 m horizontally of the robot base**,
-retaining block separation and initial gripper clearance. Before adding settling,
-**500/500 four-block demos (seeds 0–499)** finished in exactly three iterations,
-passed initial/final task validation, and converged in every primitive within at
-most 22 steps. The earlier region passed 96/100; see review entry 23 for the
-reset bounds and physical diagnosis. This validates the tested four-block
-collection, not arbitrary tower sizes or robot configurations. Ten selected
-seeds also passed 20 FPS video validation (review entry 23). Those earlier demos
-had a systematic first-placement offset of about 13 mm within the task tolerance.
-With the adopted settling policy, four production runs (seeds 0, 38, 73, 499)
-pass in three iterations and retain yellow-block X offsets of 0.4–1.9 mm after
-fresh-environment replay. This is four-seed validation, not a new 500-seed result;
-see review entry 24. Recollect older demos to use settled starting states.
-Primitive ID/ByName instructions share configurable controllers and retain their
-50-step budgets. See [controller settings](roboverify/synthesis/inference_lib/README.md#primitive-controller-settings).
-**End-to-end learning acceptance remains open:**
-earlier verification-mode and full-search smokes requested additional
-demonstrations or exhausted their budgets. Those runs predate the current
-controllers and settling policy; current validation covers collection/replay,
-not a new end-to-end learning result. See [the review record](PAPER-DISCREPANCIES.md) for model boundaries,
-remaining acceptance work, and recorded implementation findings. Old demonstration
-formats are removed. Generated demo artifacts have also been cleaned up;
-collect fresh demonstrations before running the pipeline examples.
+Stack reset scatters blocks within **0.70 m horizontally of the robot base**,
+retaining block separation and initial gripper clearance. Primitive ID/ByName
+instructions share configurable controllers and retain their 50-step budgets.
+See [controller settings](roboverify/synthesis/inference_lib/README.md#primitive-controller-settings).
+
+**End-to-end learning acceptance remains open.** Demonstration collection and
+saved-state replay do not establish synthesized-program verification. See
+[the review record](PAPER-DISCREPANCIES.md) for model boundaries and remaining
+acceptance work. Current archives contain full simulator states; old demo formats
+are unsupported. Collect demonstrations before running the pipeline examples.
 
 The supported scope is structured chains and flat loops for the tower tasks;
 the integrated synthesis CLI exposes Stack and Unstack. A successful

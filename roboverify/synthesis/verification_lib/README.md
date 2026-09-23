@@ -139,17 +139,16 @@ uv run python -m unittest synthesis.verification_lib.test_bmc_lib \
 uv run python -m synthesis.entry.benchmark_motion_verification
 ```
 
-The benchmark uses the historical three-`PickPlaceByName` Stack fixture from
+The benchmark uses the three-`PickPlaceByName` Stack fixture from
 `build_stack_programs`, not the current primitive DSL demo program in
 `synthesis/examples/stack.py`.
 Its synthetic entry conditions explicitly establish the destination tower root;
 numeric coordinates alone do not substitute for symbolic root discovery.
-Its final `1.5 * L` release offset fails the strict direct-on height band, even
-though its noiseless paths are clear in the concrete fixture. The solver spike
-keeps the exact bilinear swept-cube encoding. The endpoint bounding-box fallback
-would be a conservative overapproximation for diagonal paths, not an equivalent
-rewrite; it has not been needed or implemented. Use the benchmark to measure
-current performance; historical timings are not regression targets.
+The benchmark checks placement contracts and noiseless/noisy swept paths using
+the exact bilinear swept-cube encoding. An endpoint bounding-box fallback would
+be a conservative overapproximation for diagonal paths, not an equivalent
+rewrite; it is not implemented. Run the benchmark to measure current outcomes
+and performance.
 
 Phase E adds [counterexample-guided refinement](CEGIS.md), typed symbolic results,
 monotone invariant learning, and fixed-environment motion penalties.

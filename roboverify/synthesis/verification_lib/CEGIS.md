@@ -98,11 +98,8 @@ bounded summaries. Exit code 0 means both verification stages passed with result
 `verified_model`; 2 means an explicit unsuccessful result. Budget exhaustion never
 means verification succeeded.
 
-An earlier five-demo Stack smoke reached `needs_demonstrations` after symbolic
-checking. It predates the current controllers and settling policy; the latest
-four-seed checks validate collection and saved-state replay only. End-to-end
-verification has not been rerun under that policy, and no verified Stack program
-is claimed. The generated acceptance recordings were removed during cleanup. Generated regression fixtures exercise both actual
-verification backends and the repair/resynthesis paths independently of these
-acceptance recordings. See [the integrated workflow](../cfg/VERIFICATION.md) for
-scope and [the collection guide](../inference_lib/README.md) for seeds and video.
+End-to-end Stack learning acceptance remains open. Generated regression fixtures
+exercise both verification backends and the repair/resynthesis paths; collection
+and replay checks alone do not establish a verified program. See
+[the integrated workflow](../cfg/VERIFICATION.md) for scope and
+[the collection guide](../inference_lib/README.md) for seeds and video.

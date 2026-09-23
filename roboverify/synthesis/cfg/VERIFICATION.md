@@ -136,30 +136,6 @@ programs, and complete replay archives.
 The script distinguishes automatic continuation from isolated calls to quotient
 and from replaying rejected candidate loops; none is a formal verification result.
 
-The following findings describe the earlier controllers and 0.20 m transfer
-waypoint, before the reset-region and settling changes. The continuation
-diagnostic has not been rerun with the adopted 50-step preparation; these
-historical results are not acceptance evidence for the current pipeline.
-
-On the five earlier three-block seed-0–4 recordings, a failed remaining-block search refines to
-`not(Scattered(b0, 2))`, not `ON(2, 1)`. The first learned cut is mid-placement.
-Supplying fragments that carry the pending placement across that cut yields a
-successful straight-line program, but no loop. Separately, complete placement
-fragments propose a `Scattered(b, b_prime)` loop which succeeds on all five
-simulator replays. Quotient validation rejects its reconstructed seed-3 exit
-one observation before the task postcondition holds. This is recorded in
-[review entry 22](../../../PAPER-DISCREPANCIES.md#22-id-first-continuation-exposes-placement-and-loop-exit-boundary-limits).
-
-In that earlier four-block experiment, refinement learned `ON(1, b0)` and then
-`ON(2, 1)`. Complete placement controllers failed from mid-transfer cuts, so
-normal continuation did not reach quotient. An isolated fold over three placements
-learns the same `Scattered` guard, but validation rejects seed 1's exit at
-observation 169 (the task first holds at 171). That rejected loop passes only
-three of five full replays. The original demos all pass but require 3, 6, 8, 3,
-and 3 iterations; their recovery behavior is missing from the extracted simple
-chain. The numeric/named Release retreat mismatch found in that experiment is now
-resolved by shared controllers, recorded in [entry 23](../../../PAPER-DISCREPANCIES.md#23-numeric-and-named-release-use-different-physical-stopping-tolerances).
-
 ## Verification workflow
 
 1. Acquire the synthesized or supplied CFG and propose checked placement summaries.
