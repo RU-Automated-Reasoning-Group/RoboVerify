@@ -5,7 +5,7 @@ from copy import copy, deepcopy
 
 from synthesis.cfg.graph import Edge, Node
 from synthesis.cfg.validate import first_true, last_true, validate_cfg, validate_split
-from synthesis.predicates.classifier import learn_classifier
+from synthesis.predicates.classifier import learn_classifier, learn_ground_classifier
 from synthesis.predicates.scene import Scene, evaluate, scene_from_obs
 from synthesis.predicates.term import open_existentials
 
@@ -54,7 +54,17 @@ def refine_cfg(cfg, node, negative, available_scope, *, language=None, on_split=
     negative = [
         scene for scene in negative if set(available_scope) <= set(scene.bindings)
     ]
-    result = learn_classifier(positive, negative, available_scope, language=language)
+    classifier = (
+        learn_ground_classifier
+        if cfg.synthesis_approach == "id-first"
+        else learn_classifier
+    )
+    # Fixed aliases introduced at a previous synthesis boundary are encoding
+    # details, not new object variables for ID-first refinement.
+    classifier_scope = set(available_scope) - set(
+        getattr(cfg, "_fixed_id_bindings", {})
+    )
+    result = classifier(positive, negative, classifier_scope, language=language)
     if not result:
         return result
     predicate = result.term

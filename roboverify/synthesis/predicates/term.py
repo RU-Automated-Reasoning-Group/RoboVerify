@@ -26,7 +26,7 @@ class Term:
         )
 
     def __str__(self):
-        if self.op == "ref":
+        if self.op in ("ref", "id"):
             return str(self.value)
         if self.op == "bool":
             return str(self.value)
@@ -46,6 +46,13 @@ def ref(name):
     return _term("ref", value=name)
 
 
+def block_id(value):
+    """A concrete physical ID, never a free variable or existential witness."""
+    if type(value) is not int or value < 0:
+        raise ValueError("Block IDs must be nonnegative integers")
+    return _term("id", value=value)
+
+
 def boolean(value):
     if not isinstance(value, bool):
         raise TypeError("Boolean literal required")
@@ -55,7 +62,7 @@ def boolean(value):
 def atom(name, left, right):
     if name not in {"ON_star", "ON_star_zero", "Higher", "Scattered", "ON", "eq"}:
         raise ValueError(f"Unknown predicate: {name}")
-    if left.op != "ref" or right.op != "ref":
+    if left.op not in ("ref", "id") or right.op not in ("ref", "id"):
         raise TypeError("Predicate arguments must be object references")
     return _term(name, (left, right))
 
@@ -138,6 +145,8 @@ def to_z3(term, context, bindings=None):
             if term.value in bindings
             else context.get_consts(term.value)
         )
+    if term.op == "id":
+        raise ValueError("Concrete IDs must be named before symbolic lowering")
     if term.op == "bool":
         return z3.BoolVal(term.value)
     if term.op in ("exists", "forall"):
@@ -194,8 +203,9 @@ def open_existentials(term, prefix, occupied=()):
 def from_z3(expr):
     """Convert the executable relational guard subset, preserving binder scope."""
     import z3
-    from synthesis.util.symbols import fresh_name
     from z3.z3util import get_vars
+
+    from synthesis.util.symbols import fresh_name
 
     occupied = {str(v) for v in get_vars(expr)}
 

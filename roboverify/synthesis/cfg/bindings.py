@@ -2,6 +2,8 @@
 
 from copy import deepcopy
 
+from z3.z3util import get_vars
+
 from synthesis.api.instructions import (
     Assign,
     Get,
@@ -13,7 +15,6 @@ from synthesis.api.instructions import (
 from synthesis.api.program import Program
 from synthesis.cfg.physical import name_operands
 from synthesis.predicates.term import atom, boolean, free_names, negate, ref, to_z3
-from z3.z3util import get_vars
 
 
 def require_closed(instructions, available):
@@ -118,3 +119,32 @@ def mutate_scoped(program, available):
     instructions = deepcopy(prefix) + candidate.instructions
     require_closed(instructions, available)
     return Program(len(instructions), instructions)
+
+
+def require_ids(instructions, num_blocks):
+    """ID-first MCMC admits physical primitives and Skip, with bounded IDs."""
+    from synthesis.api.instructions import Move, Pick, Release
+
+    for instruction in instructions:
+        if type(instruction) not in (Pick, Move, Release, Skip):
+            raise ValueError("ID-first search requires Pick/Move/Release by ID or Skip")
+        if any(
+            o["type"] != "Box"
+            or type(o["val"]) is not int
+            or not 0 <= o["val"] < num_blocks
+            for o in instruction.get_operand()
+        ):
+            raise ValueError("ID-first operand outside the physical block universe")
+
+
+def mutate_ids(program, num_blocks):
+    """Keep every MCMC proposal numeric; binding happens at synthesis exit."""
+    from synthesis.api.instructions import Move, Pick, Release
+    from synthesis.mcmc.synthesis import mutate_program
+
+    require_ids(program.instructions, num_blocks)
+    result, _, _ = mutate_program(
+        program, {"Box": list(range(num_blocks))}, [Pick, Move, Release, Skip]
+    )
+    require_ids(result.instructions, num_blocks)
+    return result

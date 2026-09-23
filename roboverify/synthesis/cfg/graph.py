@@ -9,6 +9,7 @@ class Node:
     name: str
     region: object = None
     available_scope: frozenset = frozenset()
+    synthesis_approach: str = "relational"
 
 
 @dataclass(frozen=True)
@@ -32,9 +33,10 @@ class RelationalCFG:
     entry: str = "entry"
     exit: str = "exit"
     initial_scope: frozenset = frozenset()
+    synthesis_approach: str = "relational"
 
     @classmethod
-    def initial(cls, demos, pre, post, scope=()):
+    def initial(cls, demos, pre, post, scope=(), *, synthesis_approach="relational"):
         return cls(
             {"v0": Node("v0")},
             [Edge("entry", "v0", pre), Edge("v0", "exit", post)],
@@ -43,6 +45,7 @@ class RelationalCFG:
             pre,
             post,
             initial_scope=frozenset(scope),
+            synthesis_approach=synthesis_approach,
         )
 
     def incoming(self, node):

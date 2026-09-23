@@ -63,6 +63,10 @@ def evaluate(term, scene, bindings=None):
     def ev(node, values):
         if node.op == "ref":
             return values[node.value]
+        if node.op == "id":
+            if node.value not in scene.positions:
+                raise ValueError(f"Unknown physical block ID: {node.value}")
+            return node.value
         if node.op == "bool":
             return node.value
         if node.op in ("exists", "forall"):

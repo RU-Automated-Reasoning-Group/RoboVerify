@@ -7,6 +7,7 @@ from time import monotonic
 from synthesis.predicates.language import Language
 from synthesis.predicates.scene import evaluate
 from synthesis.predicates.term import (
+    Term,
     atom,
     conjunction,
     disjunction,
@@ -46,8 +47,10 @@ def enumerate_separator(
     not just the closed formula's output, so it remains valid under quantifiers.
     """
     language = language or Language()
-    constants = tuple(constants)
-    reserved_names = set(constants)
+    constants = tuple(c if isinstance(c, Term) else ref(c) for c in constants)
+    if any(c.op not in ("ref", "id") for c in constants):
+        raise ValueError("Constants must be object references or block IDs")
+    reserved_names = {c.value for c in constants if c.op == "ref"}
     if mode not in ("classifier", "guard") or not examples:
         raise ValueError("A supported mode and nonempty examples are required")
     if language.max_candidates < 1 or language.timeout_seconds <= 0:
@@ -72,7 +75,7 @@ def enumerate_separator(
                     (name for name in candidates if name not in reserved_names), count
                 )
             )
-            references = [ref(name) for name in (*constants, *variables)]
+            references = [*constants, *(ref(name) for name in variables)]
             scenes = [
                 (scene, dict(zip(variables, assignment)))
                 for scene, _ in examples
