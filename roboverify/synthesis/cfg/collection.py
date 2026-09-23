@@ -246,6 +246,19 @@ def validate_trace(trace):
     """A valid demonstration completes and satisfies the initial/final task predicates."""
     if trace.metadata.get("status") != "completed" or not trace.states:
         return False
+    failed_controls = [
+        e
+        for e in trace.events
+        if e["kind"] == "instruction_end"
+        and not e.get("control", {}).get("converged", True)
+    ]
+    if failed_controls:
+        event = failed_controls[0]
+        trace.metadata.update(
+            status="incomplete",
+            reason=f"Controller step limit at {event['path']}: {event['control']}",
+        )
+        return False
     pre, post = task_spec(trace.task)
     segment = DemoSegment(
         0, 0, len(trace.states) - 1, trace, trace.metadata["initial_bindings"]

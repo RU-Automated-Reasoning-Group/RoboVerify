@@ -36,6 +36,7 @@ from synthesis.cfg.straightline import postcondition_reached, segment_rollout
 from synthesis.cfg.synthesize import synthesize_cfg
 from synthesis.cfg.tasks import task_identity, task_spec
 from synthesis.cfg.validate import validate_cfg
+from synthesis.examples.stack import TRANSFER_HEIGHT
 from synthesis.experiment.run_logger import RunLogger
 from synthesis.mcmc.synthesis import make_roboverify_env
 from synthesis.predicates.guard import loop_guard_synthesis
@@ -50,8 +51,8 @@ def placement(source, target):
         5,
         [
             Pick(source),
-            Move(source, source, target, target_offset=[0, 0, 0.20]),
-            Move(0, 0, target, target_offset=[0, 0, 0.20]),
+            Move(source, source, target, target_offset=[0, 0, TRANSFER_HEIGHT]),
+            Move(0, 0, target, target_offset=[0, 0, TRANSFER_HEIGHT]),
             Move(0, 0, target, target_offset=[0, 0, 0.05]),
             Release(source, target_z=0.15),
         ],

@@ -4,7 +4,7 @@ import hashlib
 import importlib
 import importlib.util
 import json
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import numpy as np
@@ -51,7 +51,9 @@ def describe_program(program):
         elif isinstance(i, Skip):
             result["steps"] = i.skip_steps
         elif type(i) in (Pick, PickByName, Move, MoveByName, Release, ReleaseByName):
-            result.update(operands=i.get_operand(), limit=i.limit)
+            result.update(
+                operands=i.get_operand(), limit=i.limit, control=asdict(i.control)
+            )
             if hasattr(i, "target_offset"):
                 result["offsets"] = [p.numeric_val() for p in i.target_offset]
             if hasattr(i, "target_z_offset"):
