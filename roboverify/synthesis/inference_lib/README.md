@@ -17,7 +17,9 @@ uv run python -m synthesis.entry.collect_demos \
 ```
 
 The editable factory in `synthesis/examples/stack.py` uses explicit Pick, Move,
-and Release primitives. A custom `--program module:factory` or
+and Release primitives. Its transfer and placement waypoints use the base block
+`b0` for X/Y alignment and the current tower top `b` for Z. A custom
+`--program module:factory` or
 `--program path/to/program.py:factory` must return a `Program` from
 `factory(context, *, num_blocks)`. Named and numeric physical operands, Assign,
 Get, Skip, and flat While loops are supported. PickPlace and nested loops are

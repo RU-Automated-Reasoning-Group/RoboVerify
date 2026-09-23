@@ -1,6 +1,7 @@
 """Stack scattered blocks using only explicit physical primitives."""
 
 import z3
+
 from synthesis.api.instructions import (
     Assign,
     MoveByName,
@@ -22,8 +23,8 @@ def build_program(context, *, num_blocks):
     body = [
         PickByName("b_prime"),
         MoveByName("b_prime", "b_prime", "b", target_offset=[0, 0, 0.20]),
-        MoveByName("b", "b", "b", target_offset=[0, 0, 0.20]),
-        MoveByName("b", "b", "b", target_offset=[0, 0, 0.05]),
+        MoveByName("b0", "b0", "b", target_offset=[0, 0, 0.20]),
+        MoveByName("b0", "b0", "b", target_offset=[0, 0, 0.05]),
         ReleaseByName("b_prime", target_z=0.15),
         Assign("b", "b_prime"),
     ]
