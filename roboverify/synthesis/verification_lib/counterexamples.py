@@ -2,6 +2,7 @@
 
 import itertools
 from copy import deepcopy
+from functools import lru_cache
 
 import z3
 
@@ -29,41 +30,48 @@ def stacks_to_positions(stacks, *, block_length=0.05, table_height=0.4):
     return positions
 
 
-def state_holds(expr, state):
-    """Evaluate the finite tower predicate language on a complete saved scene."""
-    universe = tuple(state.positions)
+@lru_cache(maxsize=256)
+def _compile_state_predicate(expr):
+    """Compile syntax once; each call still reads the current scene and aliases."""
 
-    def evaluate(term, bound=()):
+    def compile_term(term):
         if isinstance(term, bool):
-            return term
+            return lambda state, bound: term
         if z3.is_true(term):
-            return True
+            return lambda state, bound: True
         if z3.is_false(term):
-            return False
+            return lambda state, bound: False
         if z3.is_var(term):
-            return bound[z3.get_var_index(term)]
+            index = z3.get_var_index(term)
+            return lambda state, bound: bound[index]
         if z3.is_quantifier(term):
-            values = (
-                evaluate(term.body(), tuple(reversed(xs)) + bound)
-                for xs in itertools.product(universe, repeat=term.num_vars())
+            body = compile_term(term.body())
+            count = term.num_vars()
+            reduce = all if term.is_forall() else any
+            return lambda state, bound: reduce(
+                body(state, tuple(reversed(values)) + bound)
+                for values in itertools.product(state.positions, repeat=count)
             )
-            return all(values) if term.is_forall() else any(values)
-        args = [evaluate(a, bound) for a in term.children()]
+        args = [compile_term(a) for a in term.children()]
         if z3.is_and(term):
-            return all(args)
+            return lambda state, bound: all(a(state, bound) for a in args)
         if z3.is_or(term):
-            return any(args)
+            return lambda state, bound: any(a(state, bound) for a in args)
         if z3.is_not(term):
-            return not args[0]
+            return lambda state, bound: not args[0](state, bound)
         if z3.is_implies(term):
-            return not args[0] or args[1]
+            return lambda state, bound: not args[0](state, bound) or args[1](
+                state, bound
+            )
         if z3.is_eq(term):
-            return args[0] == args[1]
+            return lambda state, bound: args[0](state, bound) == args[1](state, bound)
         if z3.is_distinct(term):
-            return len(set(args)) == len(args)
+            return lambda state, bound: len({a(state, bound) for a in args}) == len(
+                args
+            )
         name = str(term.decl().name())
         if not args:
-            return state.constants[name]
+            return lambda state, bound: state.constants[name]
         predicates = {
             "ON_star": on.on_star_implementation,
             "ON_star_zero": on.on_star_implementation,
@@ -72,10 +80,22 @@ def state_holds(expr, state):
         }
         if name not in predicates:
             raise ValueError(f"Unsupported predicate: {name}")
-        positions = state.entry_positions if name == "ON_star_zero" else state.positions
-        return bool(predicates[name](*(positions[a] for a in args)))
+        predicate = predicates[name]
 
-    return bool(evaluate(expr))
+        def evaluate_relation(state, bound):
+            positions = (
+                state.entry_positions if name == "ON_star_zero" else state.positions
+            )
+            return bool(predicate(*(positions[a(state, bound)] for a in args)))
+
+        return evaluate_relation
+
+    return compile_term(expr)
+
+
+def state_holds(expr, state):
+    """Evaluate the finite tower predicate language on a complete saved scene."""
+    return bool(_compile_state_predicate(expr)(state, ()))
 
 
 def model_to_loop_head(context, model, loop_id, constants, *, timeout_ms=5000):

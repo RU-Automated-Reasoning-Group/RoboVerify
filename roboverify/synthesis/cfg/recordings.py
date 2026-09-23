@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+
 from synthesis.cfg.demos import DemoTrace
 from synthesis.cfg.reset import Snapshot
 
@@ -103,12 +104,17 @@ def load_traces(path, *, require_valid=False):
             traces = []
             for i, row in enumerate(meta["traces"]):
                 key = f"d{i}"
+                # NPZ indexing decompresses the entire member. Read each array
+                # once per trajectory rather than once per observation.
+                snapshot_arrays = {
+                    name: data[key + "_" + name] for name in row["arrays"]
+                }
                 snapshots = tuple(
                     Snapshot(
                         gt.copy(),
                         {
-                            name: data[key + "_" + name][t].copy()
-                            for name in row["arrays"]
+                            name: values[t].copy()
+                            for name, values in snapshot_arrays.items()
                         },
                         row["bindings"][t],
                     )
