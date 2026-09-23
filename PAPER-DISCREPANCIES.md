@@ -5,7 +5,7 @@ against the implementation. It covers §§2–5, Algorithms 1–6, Appendix A/Ta
 and the associated appendix algorithms/proofs; experimental numbers are not
 correctness targets. Neither paper nor code automatically wins a disagreement.
 
-Entry numbers 1–32 are stable, including resolved findings. Each entry records
+Entry numbers 1–33 are stable, including resolved findings. Each entry records
 its status, decision/reasoning and remaining action. Add new findings with the
 next unused ID. Detailed implementation history and completed audit checklists
 remain in Git history; use [README.md](README.md#project-status) for project status
@@ -34,7 +34,8 @@ model assumptions and APIs.
 | 29 | Intended symbolic inference enforced; alternate learner selection removed. |
 | 30 | Vocabulary/attachment limits and exact-height failure diagnosed; the default tolerance removes the spurious bootstrap clause (32). |
 | 31 | Equal initial heights added; intended-learner verification passes. |
-| 32 | Configurable Higher tolerance aligns saved height comparisons with ideal levels; separate Scattered boundary differences remain. |
+| 32 | Configurable Higher tolerance aligns saved height comparisons with ideal levels; Scattered differences are diagnosed in 33. |
+| 33 | Scattered mismatch comes from held-block XY offsets crossing the reset separation boundary; primitive/model alignment remains open. |
 
 ## 1. Theorem 5.2 contradicts the paper's own Table 7 (`R_Higher`)
 
@@ -890,3 +891,52 @@ The [current reproduction command](roboverify/synthesis/cfg/VERIFICATION.md#prov
 and [comparison interface](roboverify/synthesis/inference_lib/README.md#higher-height-tolerance)
 describe the supported workflow. Full synthesis and physical-controller
 refinement remain separate claims.
+
+
+## 33. Scattered's sharp XY boundary exposes held-block placement error
+
+**Status:** diagnosed simulator/model mismatch. Numeric evaluation and the
+low-level Z3 predicate agree; no predicate or controller change is made here.
+
+**Observation:** saved Stack heads can contain a placed tower block that is not
+Scattered from an untouched block, although ideal placement at b0 would keep the
+pair Scattered. The diagnosed cases occur at intermediate heads; initial layouts
+and final towers agree with the ideal Scattered table. Successful collection and
+primitive convergence do not require every intermediate relation to match ideal
+placement.
+
+**Cause:** Scattered requires `abs(dx) >= 2L or abs(dy) >= 2L`, with L=0.05 m.
+Height is irrelevant. Reset accepts layouts arbitrarily close to that boundary
+without an additional placement-error margin. Move controls the gripper site;
+its convergence test does not measure the held block's error or compensate its
+changing offset from the gripper. Archived instruction boundaries show that the
+held block can remain millimetres off-center even when the gripper is much closer
+to its target. Most diagnosed crossings already exist before Release; opening
+and retreat can add enough displacement to cross the remaining small margins.
+The offset changes during lifting and transfer, including in the gripper frame,
+so it cannot be treated solely as an initial Pick-centering error or wrist rotation.
+The evidence does not isolate the individual contributions of contact compliance,
+friction, jaw motion and block rotation.
+
+**Checks:** align only the recorded tower blocks' XY with either initial or current
+b0, leaving untouched blocks as recorded: every diagnosed mismatch disappears.
+Freezing untouched blocks to their initial XY changes nothing. Restoring the
+saved simulator snapshots and reading full-precision site coordinates preserves
+all the mismatches; archive rounding is far smaller than the threshold deficits.
+The independent tower-membership oracle agrees with the ideal coordinate table.
+Detailed pair counts, margins, instruction-boundary decomposition and replayable
+analysis scripts belong in the generated `runs/scattered-analysis/` artifacts.
+
+**Verification implication:** these states violate the clause
+`Higher(x,y) => Scattered(x,y) or ON_star(x,y)` in the invariant learned from the
+five supplied-program executions. The noiseless supported-tower proof assumes
+and preserves exact XY columns (27), which exclude these recorded scenes; it
+therefore does not establish refinement of the physical controller. The final
+stacking postcondition can still hold because ON* permits horizontal offsets.
+
+**Remaining action:** decide how the reliable primitive abstraction should be
+realized, for example through block-center feedback and validated placement/error
+margins. A smaller gripper stopping tolerance alone does not bound the held-block
+offset. Horizontal separations are continuous, unlike the separated height levels
+motivating Higher tolerance; a changed Scattered threshold would change the
+separation contract and needs its own justification.
