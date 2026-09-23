@@ -897,9 +897,36 @@ four full executions extend the earlier isolated first-placement evidence;
 they do not establish a new default or broad seed acceptance after settling.
 Production motion and reset code remain unchanged.
 
+**Ten-step follow-up:** The same four saved initial states and unchanged Stack
+program were rerun with only 10 holding steps before execution. All four pass
+pre/postcondition validation, finish exactly three iterations, and converge in
+all 60 primitive calls (at most 21 steps per call). Final yellow-block X offsets
+from b0 are:
+
+| Seed | 10 settling steps | 50 settling steps |
+| --- | --- | --- |
+| 0 | -5.945 mm | +1.720 mm |
+| 38 | -6.221 mm | +1.327 mm |
+| 73 | -6.553 mm | +1.872 mm |
+| 499 | -7.034 mm | +0.435 mm |
+
+Ten steps roughly halve the original bias, but leave 5.9–7.0 mm toward the
+robot. The corresponding 50-step runs have only 0.4–1.9 mm of X displacement.
+This is evidence from four seeds, not broad acceptance of either intervention.
+
+The [video index](roboverify/demos/stack/4-blocks-settled-10-steps-videos/README.md)
+links four full 10-step videos, four original-versus-10 comparisons, and four
+10-versus-50 comparisons. All 12 public MP4s decode at 20 FPS. Full videos include
+the 0.5-second settling prefix; comparisons align program starts and hold final
+frames. `settling-comparison.json` records the measurements and video metadata;
+`demonstrations.npz` saves accepted program executions, and the separately saved
+`settling-prefixes.npz` was checked to contain exactly 10 actions per seed.
+`generate_videos.py` and `compare_settling_durations.py` reproduce the experiment
+and comparisons. Production motion and reset code remain unchanged.
+
 **Remaining action:** settle and validate the initial robot state before saving
 it for resets, and evaluate held-block feedback or grasp-offset compensation
 for placement. Verify actual block-centering errors as well as controller
-convergence and task predicates. A 50-step diagnostic wait is evidence for the
-cause, not a validated new default or a universal fix. Recollect and rerun full
+convergence and task predicates. These diagnostic settling trials provide
+evidence for the cause, not a validated new default or a universal fix. Recollect and rerun full
 program validation after choosing an implementation change.
