@@ -10,7 +10,6 @@ from typing import Any, Callable, Optional, Tuple
 import ffmpeg
 import imageio
 import numpy as np
-
 from synthesis.api import program
 from synthesis.environment.cee_us_env.fpp_construction_env import (
     FetchPickAndPlaceConstruction,
@@ -956,62 +955,6 @@ def images_to_video(input_dir, output_video_path="output.mp4", framerate=30):
         print("FFmpeg error:", e.stderr.decode())
 
 
-def save_demo_trajectories(
-    trajectories: list,
-    demo_dir: str,
-    *,
-    seeds: Optional[list] = None,
-    num_blocks: Optional[int] = None,
-    expert_states: Optional[list] = None,
-) -> None:
-    """Persist per-demo and combined trajectory files under ``demo_dir``."""
-    os.makedirs(demo_dir, exist_ok=True)
-    if seeds is None:
-        seeds = list(range(len(trajectories)))
-
-    traj_arrays = []
-    for i, traj in enumerate(trajectories):
-        arr = np.array(traj)
-        traj_arrays.append(arr)
-        np.save(os.path.join(demo_dir, f"demo_{i:04d}.npy"), arr)
-        with open(os.path.join(demo_dir, f"demo_{i:04d}.pkl"), "wb") as f:
-            pickle.dump({"seed": seeds[i], "obs": list(traj)}, f)
-
-    with open(os.path.join(demo_dir, "all_trajectories.pkl"), "wb") as f:
-        pickle.dump(
-            {
-                "trajectories": traj_arrays,
-                "seeds": seeds,
-                "num_blocks": num_blocks,
-            },
-            f,
-        )
-    np.save(
-        os.path.join(demo_dir, "all_trajectories.npy"),
-        np.array(traj_arrays, dtype=object),
-    )
-    if expert_states is not None:
-        np.save(os.path.join(demo_dir, "expert_states.npy"), np.array(expert_states))
-
-    print(f"Saved {len(trajectories)} demo trajectories to {demo_dir}/")
-
-
-def load_demo_trajectories(
-    demo_dir: str = "demos",
-) -> Tuple[list, list, Optional[int]]:
-    """Load trajectories saved by :func:`save_demo_trajectories`.
-
-    Returns ``(trajectories, seeds, num_blocks)`` where each trajectory is a
-    list of observation vectors.
-    """
-    pkl_path = os.path.join(demo_dir, "all_trajectories.pkl")
-    with open(pkl_path, "rb") as f:
-        data = pickle.load(f)
-    trajectories = [list(traj) for traj in data["trajectories"]]
-    seeds = list(data.get("seeds", range(len(trajectories))))
-    return trajectories, seeds, data.get("num_blocks")
-
-
 def group_trajectory_images(flat_imgs: list, trajectories: list) -> list[list]:
     """Group a flat frame list into one sequence per trajectory."""
     expected = sum(len(traj) for traj in trajectories)
@@ -1330,7 +1273,6 @@ def collect_trajectories(
     *,
     num_blocks: int = 4,
     save_imgs: bool = False,
-    demo_dir: Optional[str] = "demos",
     img_dir: str = "images",
     verify_reproducible: bool = False,
     repro_atol: float = 1e-5,
@@ -1341,8 +1283,8 @@ def collect_trajectories(
     ``task`` is ``"stack"`` (RoboVerifyStack) or ``"unstack"`` (RoboVerifyUnstack).
 
     Seed ``i`` is used for demo ``i`` (via :func:`set_np_seed`), so rollouts are
-    reproducible. Trajectories are written under ``demo_dir`` (default
-    ``"demos"``) via :func:`save_demo_trajectories`.
+    reproducible. This helper returns observations in memory. Use
+    synthesis.entry.collect_demos to persist validated resettable demonstrations.
 
     When ``verify_reproducible`` is True, runs a second collection and checks
     that every seed yields the same state trajectory.
@@ -1357,15 +1299,6 @@ def collect_trajectories(
         verbose=True,
         task=task,
     )
-
-    if demo_dir is not None:
-        save_demo_trajectories(
-            individual_traj,
-            demo_dir,
-            seeds=list(range(num_demo)),
-            num_blocks=num_blocks,
-            expert_states=states,
-        )
 
     if save_imgs:
         save_numpy_arrays_as_images(imgs, img_dir)

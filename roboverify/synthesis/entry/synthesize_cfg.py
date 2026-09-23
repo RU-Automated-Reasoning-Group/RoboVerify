@@ -5,97 +5,44 @@ import random
 import signal
 from functools import partial
 
-from synthesis.api.instructions import (
-    Move,
-    MoveByName,
-    Pick,
-    PickByName,
-    Release,
-    ReleaseByName,
-    Skip,
-)
 from synthesis.api.program import Program, generate_random_program
 from synthesis.cfg.bindings import close_objects, mutate_scoped, require_closed
-from synthesis.cfg.demo_sources import unstack_oracle
-from synthesis.cfg.demos import DemoSegment, DemoTrace
+from synthesis.cfg.candidate_traces import prepare_candidate
+from synthesis.cfg.demos import DemoSegment
 from synthesis.cfg.execute import execute_cfg
 from synthesis.cfg.graph import RelationalCFG
 from synthesis.cfg.lower import lower, lower_region
-from synthesis.cfg.recordings import load_traces, save_traces
+from synthesis.cfg.program_adapter import program_to_cfg
+from synthesis.cfg.program_source import load_program
+from synthesis.cfg.recordings import load_traces
 from synthesis.cfg.region import BlockRegion, LoopRegion
-from synthesis.cfg.reset import collect_recording
 from synthesis.cfg.straightline import (
     SearchBudget,
     postcondition_reached,
     segment_rollout,
     straight_line_synthesize,
 )
+from synthesis.cfg.tasks import task_identity, task_spec
 from synthesis.cfg.verified_synthesis import verified_synthesis
 from synthesis.entry.motion_options import add_motion_options, motion_noise_from_args
 from synthesis.experiment.run_logger import RunLogger
 from synthesis.mcmc.synthesis import (
     make_roboverify_env,
-    mutate_program,
     preserved_global_rng,
     set_np_seed,
 )
 from synthesis.predicates.language import Language
-from synthesis.predicates.scene import evaluate
-from synthesis.predicates.term import (
-    atom,
-    boolean,
-    conjunction,
-    disjunction,
-    forall,
-    implies,
-    ref,
-)
 from synthesis.verification_lib.bmc_lib import NoiseSpec
 from synthesis.verification_lib.highlevel_verification_lib import HighLevelContext
 
 
-def task_spec(task):
-    x, y, b0 = ref("x"), ref("y"), ref("b0")
-    if task == "unstack":
-        return forall(
-            ["x"], disjunction(atom("eq", x, ref("tbl")), atom("ON_star", x, b0))
-        ), forall(["x", "y"], implies(atom("ON_star", x, y), atom("eq", x, y)))
-    return boolean(True), forall(["x"], atom("ON_star", x, b0))
-
-
 def run(args, logger):
     context = HighLevelContext(use_tbl=args.task == "unstack")
-    if args.demos:
-        traces = load_traces(args.demos)
-    else:
-        if args.task == "unstack":
-            oracle = unstack_oracle()
-        else:
-            from synthesis.entry.verify_stack_with_learned_invariant import (
-                build_stack_programs,
-            )
-
-            _, oracle = build_stack_programs(context, max_iters=args.num_blocks)
-        traces = []
-        for seed in args.seeds:
-            with preserved_global_rng():
-                set_np_seed(seed)
-                env = make_roboverify_env(args.task, num_blocks=args.num_blocks)
-                try:
-                    states, recording = collect_recording(oracle, env)
-                finally:
-                    env.close()
-            traces.append(
-                DemoTrace(
-                    states,
-                    tuple(recording.snapshots),
-                    (tuple(recording.actions), tuple(recording.action_indices)),
-                    seed,
-                    args.task,
-                    args.num_blocks,
-                )
-            )
-        save_traces(logger.artifact_dir() / "demonstrations.npz", traces)
+    traces = load_traces(args.demos, require_valid=True)
+    if any(t.metadata.get("task_spec") != task_identity(args.task) for t in traces):
+        raise ValueError(
+            "Demonstration specification differs from the requested task; recollect demonstrations"
+        )
     if any(t.task != args.task or t.num_blocks != args.num_blocks for t in traces):
         raise ValueError(
             "Demonstration task/block count differs from requested synthesis"
@@ -107,7 +54,7 @@ def run(args, logger):
             len(t.states) - 1,
             t,
             {
-                "b0": 0,
+                **t.metadata["initial_bindings"],
                 **{f"o{j}": j for j in range(t.num_blocks)},
                 **({"tbl": "tbl"} if context.use_tbl else {}),
             },
@@ -116,7 +63,6 @@ def run(args, logger):
     ]
     pre, post = task_spec(args.task)
     from synthesis.cfg.demo_validation import validate_demonstrations
-    from synthesis.cfg.refine import scene_at
 
     validation = validate_demonstrations(segments, pre, post)
     demo_checks = validation.as_dict()
@@ -134,6 +80,19 @@ def run(args, logger):
     cfg = RelationalCFG.initial(
         segments, pre, post, ("b0", "tbl") if context.use_tbl else ("b0",)
     )
+    if args.mode == "verify":
+        if args.task != "stack":
+            raise ValueError("The supplied-program mode currently supports Stack")
+        definition = load_program(args.program, context, args.num_blocks)
+        if any(
+            t.metadata.get("fingerprint") != definition.metadata["fingerprint"]
+            for t in traces
+        ):
+            raise ValueError(
+                "Provided program differs from the demonstration source; recollect demonstrations"
+            )
+        cfg = program_to_cfg(definition, segments, pre, post)
+    cfg._task_demos = list(segments)
     budget = SearchBudget(
         iterations=args.iterations,
         cem_iterations=args.cem_iterations,
@@ -219,20 +178,10 @@ def run(args, logger):
 
     quotient_fn = None
     if args.quotient:
-        from synthesis.cfg.invariants import infer_loop_invariant
         from synthesis.cfg.quotient import quotient
 
-        infer_invariant = partial(
-            infer_loop_invariant,
-            context=context,
-            learner=args.learner,
-            relations=args.invariant_relations,
-            variables=args.invariant_variables,
-        )
         quotient_fn = partial(
-            quotient,
-            language=Language(timeout_seconds=args.predicate_seconds),
-            infer_invariant=infer_invariant,
+            quotient, language=Language(timeout_seconds=args.predicate_seconds)
         )
     extra_paths = iter(args.additional_demos)
 
@@ -240,18 +189,30 @@ def run(args, logger):
         path = next(extra_paths, None)
         if path is None:
             return None
-        extra = load_traces(path)
-        if any(t.task != args.task for t in extra):
-            raise ValueError("Additional demonstrations must use the same task")
+        extra = load_traces(path, require_valid=True)
+        if any(
+            t.task != args.task
+            or t.num_blocks != args.num_blocks
+            or t.metadata.get("task_spec") != task_identity(args.task)
+            for t in extra
+        ):
+            raise ValueError(
+                "Additional demonstrations must use the same task, specification, and block count"
+            )
         return [
             DemoSegment(
                 i,
                 0,
                 len(t.states) - 1,
                 t,
-                {"b0": 0, **({"tbl": "tbl"} if context.use_tbl else {})},
+                {
+                    **t.metadata["initial_bindings"],
+                    **getattr(cfg, "_initial_bindings", {}),
+                    **{f"o{j}": j for j in range(t.num_blocks)},
+                    **({"tbl": "tbl"} if context.use_tbl else {}),
+                },
             )
-            for i, t in enumerate(extra, start=len(segments))
+            for i, t in enumerate(extra, start=len(cfg._task_demos))
         ]
 
     def repair(node, demos, post, penalty):
@@ -269,6 +230,18 @@ def run(args, logger):
         ),
         context,
         quotient=quotient_fn,
+        initial_candidate=args.mode == "verify",
+        prepare=lambda candidate, revision: prepare_candidate(
+            candidate,
+            context,
+            learner=args.learner,
+            relations=args.invariant_relations,
+            variables=args.invariant_variables,
+            max_loop_iterations=args.max_loop_iterations,
+            timeout_seconds=args.trajectory_timeout_seconds,
+            logger=logger,
+            revision=revision,
+        ),
         demo_provider=provide_demos,
         repair_motion=repair,
         symbolic_iterations=args.symbolic_iterations,
@@ -340,15 +313,23 @@ def run(args, logger):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--task", choices=("stack", "unstack"), default="unstack")
+    parser.add_argument("--task", choices=("stack", "unstack"), default="stack")
+    parser.add_argument("--mode", choices=("full", "verify"), default="full")
+    parser.add_argument("--program", help="DSL factory required by --mode verify")
+    parser.add_argument("--max-loop-iterations", type=int, default=100)
+    parser.add_argument("--trajectory-timeout-seconds", type=float, default=60)
     parser.add_argument(
         "--demos",
-        help="Lossless .npz recording; omit to collect the named historical oracle",
+        required=True,
+        help="Validated archive produced by synthesis.entry.collect_demos",
     )
-    parser.add_argument("--run-root", default="runs")
-    parser.add_argument("--slug", default="cfg")
-    parser.add_argument("--num-blocks", type=int, default=4)
-    parser.add_argument("--seeds", type=int, nargs="+", default=[0])
+    parser.add_argument(
+        "--output-dir", default="runs", help="Directory for experiment results"
+    )
+    parser.add_argument(
+        "--run-name", default=None, help="Optional readable label for this experiment"
+    )
+    parser.add_argument("--num-blocks", type=int, default=3)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--slots", type=int, default=4)
     parser.add_argument("--iterations", type=int, default=20)
@@ -399,6 +380,12 @@ def main(argv=None):
     parser.add_argument("--smoke", action="store_true")
     args = parser.parse_args(argv)
     motion_noise_from_args(parser, args)
+    if args.mode == "verify" and not args.program:
+        parser.error("--mode verify requires --program module:factory")
+    if args.max_loop_iterations < 1 or not 0 < args.trajectory_timeout_seconds < float(
+        "inf"
+    ):
+        parser.error("Execution budgets must be positive and finite")
     if args.smoke:
         args.iterations, args.cem_iterations, args.cem_samples, args.cem_elites = (
             2,
@@ -423,7 +410,12 @@ def main(argv=None):
         raise TimeoutError("Unstack end-to-end 60-second budget exhausted")
 
     previous = signal.signal(signal.SIGALRM, deadline)
-    with RunLogger(args.run_root, "cfg", vars(args), slug=args.slug) as logger:
+    with RunLogger(
+        args.output_dir,
+        "cfg",
+        vars(args),
+        slug=args.run_name or f"{args.task}-{args.mode}",
+    ) as logger:
         logger.progress_line(f"CFG run: {logger.run_dir}")
         if args.task == "unstack":
             signal.alarm(60)

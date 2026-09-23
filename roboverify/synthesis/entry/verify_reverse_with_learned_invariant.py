@@ -4,8 +4,6 @@ import time
 from copy import deepcopy
 
 import numpy as np
-from z3 import And, Consts, ForAll, Implies, Not, Or
-
 import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
 from synthesis.api.instructions import PickPlaceByName
 from synthesis.api.program import Assign, Program, Put, While
@@ -20,6 +18,7 @@ from synthesis.verification_lib.motion_verification import (
     MotionCheck,
     MotionVerificationResult,
 )
+from z3 import And, Consts, ForAll, Implies, Not, Or
 
 
 def verify_reverse_program_with_learned_invariant(
@@ -157,9 +156,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     add_motion_options(parser)
     parser.add_argument(
-        "--demo-store",
+        "--demos",
         required=True,
-        help="JSON loop-head traces saved by DemoStore.save().",
+        help="Current full-state demonstration archive with loop events.",
     )
     parser.add_argument(
         "--loop-id",
@@ -195,7 +194,7 @@ if __name__ == "__main__":
     verify_reverse_program_with_learned_invariant(
         noise=noise,
         motion_timeout_ms=args.motion_timeout_ms,
-        demo_store=DemoStore.load(args.demo_store),
+        demo_store=DemoStore.from_archive(args.demos),
         loop_id=args.loop_id,
         verification_mode=args.verification_mode,
         num_blocks=args.num_blocks,

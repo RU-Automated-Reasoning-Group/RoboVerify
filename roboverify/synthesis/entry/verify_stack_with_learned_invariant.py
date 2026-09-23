@@ -4,8 +4,6 @@ import time
 from copy import deepcopy
 
 import numpy as np
-from z3 import And, Consts, ForAll, Implies, Not, Or
-
 import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
 from synthesis.api.instructions import PickPlaceByName
 from synthesis.api.program import Assign, Program, Put, While
@@ -17,6 +15,7 @@ from synthesis.inference_lib.inference import (
     serialize_invariant,
 )
 from synthesis.verification_lib.motion_verification import MotionContract
+from z3 import And, Consts, ForAll, Implies, Not, Or
 
 
 def build_stack_programs(
@@ -147,51 +146,8 @@ def verify_stack_program_with_learned_invariant(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    add_motion_options(parser)
-    parser.add_argument(
-        "--demo-store",
-        required=True,
-        help="JSON loop-head traces saved by DemoStore.save().",
-    )
-    parser.add_argument(
-        "--loop-id",
-        default="1",
-        help="Instruction path of the recorded loop (default: 1).",
-    )
-    parser.add_argument(
-        "--verification-mode",
-        choices=["infinite", "finite"],
-        default="infinite",
-        help="Use infinite (DeclareSort) or finite (EnumSort) verification.",
-    )
-    parser.add_argument(
-        "--num-blocks",
-        type=int,
-        default=4,
-        help="Number of blocks when verification mode is finite.",
-    )
-    parser.add_argument(
-        "--disable-scene-viz",
-        action="store_true",
-        help="Disable image generation for finite-mode verification.",
-    )
-    parser.add_argument(
-        "--viz-prefix",
-        type=str,
-        default="verify_stack",
-        help="Output prefix for generated finite-mode scene images.",
-    )
-    args = parser.parse_args()
-    noise = motion_noise_from_args(parser, args)
+    import sys
 
-    verify_stack_program_with_learned_invariant(
-        noise=noise,
-        motion_timeout_ms=args.motion_timeout_ms,
-        demo_store=DemoStore.load(args.demo_store),
-        loop_id=args.loop_id,
-        verification_mode=args.verification_mode,
-        num_blocks=args.num_blocks,
-        visualize_finite_scene=not args.disable_scene_viz,
-        visualization_prefix=args.viz_prefix,
-    )
+    from synthesis.entry.synthesize_cfg import main
+
+    raise SystemExit(main(["--mode", "verify", *sys.argv[1:]]))

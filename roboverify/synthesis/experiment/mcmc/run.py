@@ -9,12 +9,12 @@ search a real, reproducible invocation whose every argument is recorded in
 Examples::
 
     # Fast pathology check -- 20 iterations, no videos, finishes in minutes.
-    uv run python -m synthesis.experiment.mcmc.run --smoke --demo-dir demos
+    uv run python -m synthesis.experiment.mcmc.run --smoke --demos path/to/demonstrations.npz
 
     # A real search against a goal feature, with BMC pruning.
     uv run python -m synthesis.experiment.mcmc.run \
         --task stack --num-blocks 4 --iters 2000 \
-        --demo-dir demos --goal-feature 'ON(1,0)' --slug stack-nb4
+        --demos path/to/demonstrations.npz --goal-feature 'ON(1,0)' --slug stack-nb4
 
 Then read it with::
 
@@ -93,11 +93,18 @@ def main(argv=None) -> int:
         bmc_goal = synthesis.bmc_goal_from_on_feature(goal_feature)
         bmc_initial_constraints = synthesis.roboverify_bmc_initial_constraints()
 
-    trajectories, seeds, demo_num_blocks = synthesis.load_demo_trajectories(
-        config.demo_dir
-    )
+    from synthesis.cfg.recordings import load_traces
+
+    if not config.demos:
+        raise ValueError("--demos is required; first run synthesis.entry.collect_demos")
+    traces = load_traces(config.demos, require_valid=True)
+    if any(t.task != config.task or t.num_blocks != config.num_blocks for t in traces):
+        raise ValueError("Demonstration task/block count does not match this search")
+    trajectories = [list(t.states) for t in traces]
+    seeds = [t.seed for t in traces]
+    demo_num_blocks = traces[0].num_blocks
     if not trajectories:
-        print(f"no demo trajectories found in {config.demo_dir!r}", file=sys.stderr)
+        print(f"no demo trajectories found in {config.demos!r}", file=sys.stderr)
         return 1
     if demo_num_blocks is not None and demo_num_blocks != config.num_blocks:
         # Silently evaluating against demos from a different block count would

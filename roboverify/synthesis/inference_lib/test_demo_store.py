@@ -107,15 +107,16 @@ class TraceCollection(unittest.TestCase):
         self.assertEqual(rows[3].entry_positions["x2"][2], 0.4)
         self.assertEqual(store.for_loop("0"), [])
 
-    def test_json_roundtrip_preserves_table_identity(self):
+    def test_diagnostic_export_preserves_table_marker(self):
+        import json
+
         store = DemoStore()
         self.loop.eval(self.env, [self.obs], on_loop_head=store.add)
         with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "traces.json"
-            store.save(path)
-            loaded = DemoStore.load(path)
-        self.assertEqual(loaded.for_loop("loop"), store.for_loop("loop"))
-        self.assertIs(loaded.for_loop("loop")[0].positions["tbl"], on.TABLE)
+            path = Path(tmp) / "diagnostic.json"
+            store.save_diagnostic(path)
+            payload = json.loads(path.read_text())
+        self.assertIsNone(payload["states"][0]["positions"]["tbl"])
 
 
 class InferenceAdapter(unittest.TestCase):

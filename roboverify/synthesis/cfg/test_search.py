@@ -16,6 +16,17 @@ from synthesis.predicates.term import atom, boolean, ref
 
 
 class SearchTests(unittest.TestCase):
+    def test_recorded_and_scene_features_retain_identical_gripper_and_block_state(self):
+        from synthesis.cfg.straightline import _features
+        from synthesis.predicates.scene import scene_from_obs
+
+        obs = np.arange(58, dtype=float)
+        scenes = [scene_from_obs(obs, 3), scene_from_obs(obs + 0.1, 3)]
+        np.testing.assert_array_equal(
+            _features([obs, obs + 0.1], 3), _features(scenes, 3)
+        )
+        self.assertEqual(_features(scenes, 3).shape, (2, 14))
+
     def test_shared_acceptance_and_pool_filters_before_ranking(self):
         self.assertEqual(acceptance_probability(1, 0.1), 1.0)
         self.assertLess(

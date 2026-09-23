@@ -11,7 +11,6 @@ from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 
 import z3
-
 from synthesis.inference_lib.demo_store import DemoStore, LoopHeadState
 from synthesis.verification_lib.counterexamples import (
     UnrealizableCounterexample,
@@ -227,7 +226,7 @@ def run_symbolic_cegis(
                     f"counterexamples/{iteration}.smt2", str(result.model)
                 )
             if result.loop_head_state is not None:
-                DemoStore([result.loop_head_state]).save(
+                DemoStore([result.loop_head_state]).save_diagnostic(
                     logger.artifact_dir("counterexamples") / f"{iteration}.json"
                 )
         if failure.status != "invalid":
@@ -279,7 +278,7 @@ def run_symbolic_cegis(
             )
         store.add(successor)
         if logger:
-            store.save(logger.artifact_dir() / "demo_store.json")
+            store.save_diagnostic(logger.artifact_dir() / "invariant_examples.json")
     return CEGISResult("budget_exhausted", max_iterations, invariant, history=history)
 
 

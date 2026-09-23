@@ -29,7 +29,7 @@ def lower_region(region, context, *, physical=False):
         return instructions
     if not isinstance(region, LoopRegion):
         raise ValueError("Cannot lower an unresolved region")
-    if region.invariant is None:
+    if region.invariant is None and not physical:
         raise ValueError("Loop lowering requires an explicit inferred invariant")
     body = (
         list(lower(region.body_cfg, context, physical=physical).instructions)
@@ -74,3 +74,34 @@ def lower(cfg, context, *, physical=False):
             lower_region(cfg.nodes[key].region, context, physical=physical)
         )
     return Program(len(instructions), instructions)
+
+
+def lower_with_locations(cfg, context, *, physical=True):
+    """Map actual physical or symbolic instruction paths to their CFG regions."""
+    program = lower(cfg, context, physical=physical)
+    locations = {"loops": {}, "blocks": {}}
+
+    def locate(graph, instructions, prefix="", graph_prefix=""):
+        cursor = 0
+        for name in graph.order:
+            region = graph.nodes[name].region
+            if graph.incoming(name)[0].binds:
+                cursor += 1
+            path = graph_prefix + name
+            if isinstance(region, LoopRegion):
+                cursor += len(region.init)
+                loop_path = prefix + str(cursor)
+                instruction = instructions[cursor]
+                if not isinstance(instruction, While):
+                    raise ValueError("Loop location differs from lowered executable")
+                locations["loops"][loop_path] = (path, region)
+                locate(region.body_cfg, instruction.body, loop_path + ".", path + "/")
+                cursor += 1
+            else:
+                count = len(region.physical if physical else region.symbolic)
+                paths = tuple(prefix + str(i) for i in range(cursor, cursor + count))
+                locations["blocks"][path] = (graph, name, paths)
+                cursor += count
+
+    locate(cfg, program.instructions)
+    return program, locations

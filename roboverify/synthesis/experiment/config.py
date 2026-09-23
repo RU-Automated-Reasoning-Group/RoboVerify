@@ -22,7 +22,7 @@ class MCMCConfig:
     # Task / environment
     task: str = "stack"
     num_blocks: int = 4
-    demo_dir: str = "demos"
+    demos: str = ""
 
     # Search
     iters: int = 2000
@@ -97,7 +97,7 @@ class MCMCConfig:
                 runtime["expert_states"] = {
                     "shape": list(arr.shape),
                     "dtype": str(arr.dtype),
-                    "source_dir": self.demo_dir,
+                    "source_archive": self.demos,
                 }
             except Exception:  # pragma: no cover - descriptor only
                 runtime["expert_states"] = {"len": len(expert_states)}
@@ -124,7 +124,11 @@ def add_cli_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParse
     task = parser.add_argument_group("task")
     task.add_argument("--task", default=defaults.task)
     task.add_argument("--num-blocks", type=int, default=defaults.num_blocks)
-    task.add_argument("--demo-dir", default=defaults.demo_dir)
+    task.add_argument(
+        "--demos",
+        default=defaults.demos,
+        help="Validated full-state demonstration archive",
+    )
     task.add_argument(
         "--num-seeds",
         type=int,
@@ -201,7 +205,7 @@ def config_from_args(args: argparse.Namespace) -> MCMCConfig:
     config = MCMCConfig(
         task=args.task,
         num_blocks=args.num_blocks,
-        demo_dir=args.demo_dir,
+        demos=args.demos,
         iters=args.iters,
         program_slots=args.program_slots,
         rng_seed=args.rng_seed,

@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Mapping
 
 import numpy as np
-
 from synthesis.util import on
 
 
@@ -106,7 +105,7 @@ class DemoStore:
     def __len__(self):
         return len(self._states)
 
-    def save(self, path):
+    def save_diagnostic(self, path):
         def encode(positions):
             return {
                 name: None if on.is_table(pos) else pos
@@ -127,26 +126,10 @@ class DemoStore:
         )
 
     @classmethod
-    def load(cls, path):
-        payload = json.loads(Path(path).read_text())
-        if payload.get("version") != 1:
-            raise ValueError("Unsupported DemoStore version")
+    def from_archive(cls, path):
+        from synthesis.cfg.recordings import load_traces, loop_store
 
-        def decode(positions):
-            return {
-                name: on.TABLE if name == "tbl" and pos is None else pos
-                for name, pos in positions.items()
-            }
-
-        return cls(
-            LoopHeadState(
-                row["loop_id"],
-                decode(row["positions"]),
-                decode(row["entry_positions"]),
-                row["constants"],
-            )
-            for row in payload["states"]
-        )
+        return loop_store(load_traces(path, require_valid=True))
 
 
 @dataclass(frozen=True)

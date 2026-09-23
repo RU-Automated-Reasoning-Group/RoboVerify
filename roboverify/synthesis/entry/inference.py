@@ -1,8 +1,7 @@
 import itertools
 
-from sympy import And, Equivalent, Implies, Not, Or, symbols, to_cnf
-
 import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
+from sympy import And, Equivalent, Implies, Not, Or, symbols, to_cnf
 from synthesis.inference_lib import inference
 
 
@@ -59,7 +58,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Infer a tower invariant from loop-head traces."
     )
-    parser.add_argument("--demo-store", required=True)
+    parser.add_argument("--demos", required=True)
     parser.add_argument("--loop-id", default="1")
     parser.add_argument(
         "--task", choices=["stack", "unstack", "reverse", "partial"], default="stack"
@@ -71,7 +70,7 @@ if __name__ == "__main__":
         exists_top=args.task in {"unstack", "reverse"},
     )
     inferred_invariant, candidate_lists = InvInference(
-        DemoStore.load(args.demo_store),
+        DemoStore.from_archive(args.demos),
         args.loop_id,
         tower_vocabulary(args.task),
         context,

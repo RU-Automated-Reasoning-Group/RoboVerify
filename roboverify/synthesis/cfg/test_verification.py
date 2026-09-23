@@ -213,6 +213,40 @@ class VerifiedSynthesisTests(unittest.TestCase):
             [h["stage"] for h in result.history], ["synthesis", "symbolic", "motion"]
         )
 
+    def test_supplied_candidate_skips_search_and_reaches_both_verifiers(self):
+        from unittest.mock import Mock
+
+        from synthesis.cfg.verified_synthesis import verified_synthesis
+
+        cfg = placement_cfg()
+        realize = Mock(side_effect=AssertionError("Initial search must be skipped"))
+        prepare = Mock(return_value={})
+        result = verified_synthesis(
+            cfg,
+            realize,
+            lambda _: [],
+            HighLevelContext(),
+            initial_candidate=True,
+            prepare=prepare,
+            symbolic_iterations=0,
+            motion_iterations=0,
+            min_blocks=2,
+            max_blocks=2,
+            motion_options={
+                "initial_positions": {
+                    "a": [0.3, 0, -0.1],
+                    "b": [0, 0, 0],
+                    "b0": [0, 0, 0],
+                },
+                "initial_arm": [0.3, 0, 0.2],
+            },
+        )
+        self.assertTrue(result, result.reason)
+        realize.assert_not_called()
+        prepare.assert_called_once_with(cfg, 0)
+        self.assertTrue(result.symbolic)
+        self.assertTrue(result.motion)
+
     def test_symbolic_failure_exports_a_concrete_demo_request(self):
         from synthesis.api.instructions import Skip
         from synthesis.cfg.verified_synthesis import verified_synthesis
@@ -240,6 +274,7 @@ class VerifiedSynthesisTests(unittest.TestCase):
         cfg = placement_cfg()
         cfg.nodes["v0"].region.physical = tuple(primitives(0.1))
         penalized = []
+        revisions = []
 
         def repair(node, demos, post, penalty):
             bad = Program(len(node.region.physical), list(node.region.physical))
@@ -259,6 +294,7 @@ class VerifiedSynthesisTests(unittest.TestCase):
             lambda _: [],
             HighLevelContext(),
             repair_motion=repair,
+            prepare=lambda cfg, revision: revisions.append(revision) or {},
             min_blocks=2,
             max_blocks=2,
             motion_options={
@@ -274,10 +310,11 @@ class VerifiedSynthesisTests(unittest.TestCase):
             bool(result), f"{result.status}: {result.reason}; {result.motion}"
         )
         self.assertEqual(len(penalized), 1)
+        self.assertEqual(revisions, [0, 1])
         self.assertEqual(len(result.cfg.nodes["v0"].region.physical), 6)
         self.assertGreater(penalized[0][0], 0)
         self.assertEqual(penalized[0][1], 0)
-        self.assertEqual([h["stage"] for h in result.history].count("symbolic"), 1)
+        self.assertEqual([h["stage"] for h in result.history].count("symbolic"), 2)
         self.assertEqual([h["stage"] for h in result.history].count("motion"), 2)
 
     def test_motion_repair_cannot_change_get_bindings(self):

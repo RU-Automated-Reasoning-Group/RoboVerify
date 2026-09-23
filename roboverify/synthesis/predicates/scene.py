@@ -11,8 +11,11 @@ class Scene:
     positions: dict
     bindings: dict = field(default_factory=dict)
     entry_positions: dict = None
+    observation: object = field(default=None, compare=False, repr=False)
 
     def __post_init__(self):
+        if self.observation is not None:
+            self.observation = self.observation.copy()
         self.positions = {
             key: on.TABLE if on.is_table(value) else tuple(value)
             for key, value in self.positions.items()
@@ -32,7 +35,9 @@ class Scene:
 
     def __deepcopy__(self, memo):
         # Preserve identity of the relational table marker.
-        return Scene(self.positions, self.bindings, self.entry_positions)
+        return Scene(
+            self.positions, self.bindings, self.entry_positions, self.observation
+        )
 
 
 def scene_from_obs(
@@ -48,7 +53,7 @@ def scene_from_obs(
     if include_table:
         positions["tbl"] = initial["tbl"] = on.TABLE
         aliases["tbl"] = "tbl"
-    return Scene(positions, aliases, initial)
+    return Scene(positions, aliases, initial, obs)
 
 
 def evaluate(term, scene, bindings=None):

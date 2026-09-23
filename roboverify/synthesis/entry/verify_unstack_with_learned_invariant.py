@@ -4,8 +4,6 @@ import time
 from copy import deepcopy
 
 import numpy as np
-from z3 import And, Consts, ForAll, Implies, Not, Or
-
 import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
 from synthesis.api.instructions import PickPlaceByName
 from synthesis.api.program import Assign, Program, Put, While
@@ -17,6 +15,7 @@ from synthesis.inference_lib.inference import (
     serialize_invariant,
 )
 from synthesis.verification_lib.motion_verification import MotionContract
+from z3 import And, Consts, ForAll, Implies, Not, Or
 
 
 def build_unstack_programs(
@@ -196,9 +195,9 @@ if __name__ == "__main__":
         help="Physical environment table_surface_height in metres.",
     )
     parser.add_argument(
-        "--demo-store",
+        "--demos",
         required=True,
-        help="JSON loop-head traces saved by DemoStore.save().",
+        help="Current full-state demonstration archive with loop events.",
     )
     parser.add_argument(
         "--loop-id",
@@ -235,7 +234,7 @@ if __name__ == "__main__":
         noise=noise,
         motion_timeout_ms=args.motion_timeout_ms,
         table_surface_height=args.table_surface_height,
-        demo_store=DemoStore.load(args.demo_store),
+        demo_store=DemoStore.from_archive(args.demos),
         loop_id=args.loop_id,
         verification_mode=args.verification_mode,
         num_blocks=args.num_blocks,

@@ -43,9 +43,18 @@ class DemoValidationTests(unittest.TestCase):
         from types import SimpleNamespace
         from unittest.mock import Mock, patch
 
+        from synthesis.cfg.tasks import task_identity
         from synthesis.entry.synthesize_cfg import run
 
-        trace = DemoTrace((self.low, self.on, self.low), task="stack", num_blocks=2)
+        trace = DemoTrace(
+            (self.low, self.on, self.low),
+            task="stack",
+            num_blocks=2,
+            metadata={
+                "task_spec": task_identity("stack"),
+                "initial_bindings": {"b0": 0},
+            },
+        )
         args = SimpleNamespace(demos="unused.npz", task="stack", num_blocks=2)
         logger = Mock()
         with patch(

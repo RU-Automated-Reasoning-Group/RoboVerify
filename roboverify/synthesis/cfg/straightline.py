@@ -50,6 +50,12 @@ class StraightLineResult:
 
 def _features(states, num_blocks):
     if isinstance(states[0], Scene):
+        if states[0].observation is not None:
+            if any(s.observation is None for s in states):
+                raise ValueError("Cannot mix recorded and observation-free scenes")
+            return np.asarray([s.observation for s in states])[
+                :, on.state_comparison_indices(num_blocks)
+            ]
         return np.asarray(
             [
                 [
@@ -85,7 +91,9 @@ def segment_rollout(program, segment, env_factory, reset_mode="replay"):
                     bindings,
                     include_table="tbl" in bindings,
                 )
-                scenes.append(Scene(scene.positions, scene.bindings, entry))
+                scenes.append(
+                    Scene(scene.positions, scene.bindings, entry, scene.observation)
+                )
 
             execute_current(program, env, first, on_state=record)
             return scenes

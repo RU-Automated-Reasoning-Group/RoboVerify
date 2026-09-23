@@ -5,6 +5,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 
 import z3
+
 from synthesis.api.instructions import While
 from synthesis.cfg.demo_validation import validate_demonstrations
 from synthesis.cfg.graph import RelationalCFG
@@ -159,24 +160,51 @@ def verified_synthesis(
     demo_provider=None,
     repair_motion=None,
     motion_options=None,
-    logger=None
+    logger=None,
+    initial_candidate=False,
+    prepare=None,
 ):
-    """Return success only when both verifiers certify this exact candidate.
+    """Both modes share symbolic feedback and motion repair on the same CFG.
 
-    demo_provider(request) returns new validated task segments or None. Missing
-    demonstrations are exported as a concrete request; they are never invented.
-    repair_motion(node, demos, post, penalty) may change the physical instruction
-    structure while preserving the complete abstract program and bindings.
+    prepare(cfg, revision) executes this revision and returns invariant datasets.
+    initial_candidate skips only the first synthesis, never subsequent feedback.
     """
+    from synthesis.cfg.candidate_traces import CandidateTraceError
+    from synthesis.cfg.lower import lower_with_locations
+
     history, stores, pen = [], {}, PenStore()
     options = dict(motion_options or {})
     options.setdefault("timeout_ms", timeout_ms)
     result = VerifiedResult(cfg, "not_started", history=history)
+    revision = 0
 
     def event(stage, **fields):
         history.append(dict(stage=stage, **fields))
         if logger:
             logger.log_event(stage, json.dumps(fields), force=True)
+
+    def prepare_revision():
+        nonlocal revision
+        try:
+            propose_summaries(cfg, context)
+            if prepare is not None:
+                stores.clear()
+                stores.update(prepare(cfg, revision))
+                event("candidate_execution", revision=revision, status="completed")
+                revision += 1
+        except CandidateTraceError as exc:
+            result.status, result.reason = "candidate_execution_failed", str(exc)
+            event(
+                "candidate_execution",
+                revision=revision,
+                status="failed",
+                reason=str(exc),
+            )
+            return False
+        except ValueError as exc:
+            result.status, result.reason = "unsupported_summary", str(exc)
+            return False
+        return True
 
     def synthesize():
         attempt = synthesize_cfg(
@@ -192,159 +220,159 @@ def verified_synthesis(
         if not attempt:
             result.status, result.reason = attempt.status, attempt.reason
             return False
-        try:
-            propose_summaries(cfg, context)
-        except ValueError as exc:
-            result.status, result.reason = "unsupported_summary", str(exc)
-            return False
-        return True
+        return prepare_revision()
 
     if not hasattr(cfg, "_task_demos"):
         cfg._task_demos = list(cfg.demos.for_node(cfg.order[0]))
-    if not synthesize():
+    if initial_candidate:
+        event("provided_candidate", status="loaded")
+        if not prepare_revision():
+            return result
+    elif not synthesize():
         return result
-    for iteration in range(symbolic_iterations + 1):
-        result.symbolic = verify_cfg_symbolic(
-            cfg,
-            context,
-            min_blocks=min_blocks,
-            max_blocks=max_blocks,
-            timeout_ms=timeout_ms,
-        )
-        event("symbolic", iteration=iteration, ok=bool(result.symbolic))
-        if result.symbolic:
-            break
-        failure = result.symbolic.failure
-        if failure.status != "invalid":
-            result.status, result.reason = failure.status, failure.reason
-            return result
-        if iteration == symbolic_iterations:
-            result.status = "symbolic_budget_exhausted"
-            return result
-        state = result.symbolic.loop_head_state
-        if failure.vc.kind != "preserve":
-            request = {
-                "kind": failure.vc.kind,
-                "loop_id": failure.vc.loop_id,
-                "model": str(result.symbolic.model),
-                "reason": result.symbolic.reason,
-                "configuration": (
-                    None
-                    if state is None
-                    else {
-                        "positions": {
-                            k: None if k == "tbl" else v
-                            for k, v in state.positions.items()
-                        },
-                        "entry_positions": {
-                            k: None if k == "tbl" else v
-                            for k, v in state.entry_positions.items()
-                        },
-                        "constants": state.constants,
-                    }
-                ),
-            }
-            result.request = request
+
+    for motion_iteration in range(motion_iterations + 1):
+        for iteration in range(symbolic_iterations + 1):
+            result.symbolic = verify_cfg_symbolic(
+                cfg,
+                context,
+                min_blocks=min_blocks,
+                max_blocks=max_blocks,
+                timeout_ms=timeout_ms,
+            )
+            event("symbolic", iteration=iteration, ok=bool(result.symbolic))
+            if result.symbolic:
+                break
+            failure = result.symbolic.failure
+            if failure.status != "invalid":
+                result.status, result.reason = failure.status, failure.reason
+                return result
+            if iteration == symbolic_iterations:
+                result.status = "symbolic_budget_exhausted"
+                return result
+            state = result.symbolic.loop_head_state
+            if failure.vc.kind != "preserve":
+                request = dict(
+                    kind=failure.vc.kind,
+                    loop_id=failure.vc.loop_id,
+                    model=str(result.symbolic.model),
+                    reason=result.symbolic.reason,
+                    configuration=(
+                        None
+                        if state is None
+                        else dict(
+                            positions={
+                                k: None if k == "tbl" else v
+                                for k, v in state.positions.items()
+                            },
+                            entry_positions={
+                                k: None if k == "tbl" else v
+                                for k, v in state.entry_positions.items()
+                            },
+                            constants=state.constants,
+                        )
+                    ),
+                )
+                result.request = request
+                if logger:
+                    logger.write_artifact(
+                        "resynthesis_request.json", json.dumps(request, indent=2)
+                    )
+                more = None if demo_provider is None else demo_provider(request)
+                if not more:
+                    result.status = "needs_demonstrations"
+                    return result
+                validation = validate_demonstrations(
+                    more, cfg.precondition, cfg.postcondition
+                )
+                if not validation:
+                    result.status, result.reason = "invalid_demonstrations", str(
+                        validation.as_dict()
+                    )
+                    return result
+                all_demos = cfg._task_demos + list(more)
+                replacement = RelationalCFG.initial(
+                    all_demos, cfg.precondition, cfg.postcondition, cfg.initial_scope
+                )
+                cfg.__dict__.update(replacement.__dict__)
+                cfg._task_demos = all_demos
+                stores.clear()
+                event(
+                    "resynthesis_requested",
+                    initial_mode="verify" if initial_candidate else "full",
+                )
+                if not synthesize():
+                    return result
+                continue
+            if state is None:
+                result.status, result.reason = (
+                    "unrealizable_counterexample",
+                    result.symbolic.reason,
+                )
+                return result
+            program, locations = lower_with_locations(cfg, context, physical=False)
+            loop = locations["loops"][failure.vc.loop_id][1]
+            instruction = dict(loop_instructions(program))[failure.vc.loop_id]
+            try:
+                successors = replay_successors(state, instruction.body)
+                successor = next(
+                    (
+                        row
+                        for row in successors
+                        if not state_holds(
+                            loop.invariant, _project(row, context.use_tbl)
+                        )
+                    ),
+                    None,
+                )
+            except UnrealizableCounterexample as exc:
+                result.status, result.reason = "unsupported_replay", str(exc)
+                return result
+            if successor is None:
+                result.status, result.reason = (
+                    "no_progress",
+                    "Counterexample successor does not enlarge observed loop heads",
+                )
+                return result
+            key = id(loop)
+            if key not in stores:
+                heads = list(loop.body_demos[0]) + list(loop.exit_demos)
+                stores[key] = loop_learning_data(
+                    heads,
+                    loop.body_cfg.initial_scope,
+                    relations=relations,
+                    variables=variables,
+                )
+            store, vocabulary = stores[key]
+            successor.loop_id = "loop"
+            store.add(successor)
+            candidate = (
+                InvInference(store, "loop", vocabulary, context)[0]
+                if learner == "legacy"
+                else MonotoneInvariantLearner()(store, "loop", vocabulary, context)
+            )
+            if not all(
+                state_holds(candidate, _project(row, context.use_tbl))
+                for row in store.for_loop("loop")
+            ):
+                result.status = "learning_failed"
+                return result
+            solver = context.new_solver(timeout_ms)
+            solver.add(loop.invariant, z3.Not(candidate))
+            if solver.check() != z3.unsat:
+                result.status = "nonmonotone_or_unknown"
+                return result
+            loop.invariant = candidate
             if logger:
                 logger.write_artifact(
-                    "resynthesis_request.json", json.dumps(request, indent=2)
+                    f"invariants/revision-{revision}-step-{iteration}-{failure.vc.loop_id}.smt2",
+                    candidate.sexpr(),
                 )
-            more = None if demo_provider is None else demo_provider(request)
-            if not more:
-                result.status = "needs_demonstrations"
-                return result
-            validation = validate_demonstrations(
-                more, cfg.precondition, cfg.postcondition
-            )
-            if not validation:
-                result.status, result.reason = "invalid_demonstrations", str(
-                    validation.as_dict()
-                )
-                return result
-            # Repartition from complete recordings; old internal cuts cannot be
-            # assigned to a new environment without re-running refinement.
-            original = getattr(cfg, "_task_demos", None)
-            if original is None:
-                result.status, result.reason = (
-                    "unsupported_resynthesis",
-                    "Complete task demonstrations were not retained",
-                )
-                return result
-            all_demos = original + list(more)
-            replacement = RelationalCFG.initial(
-                all_demos, cfg.precondition, cfg.postcondition, cfg.initial_scope
-            )
-            cfg.__dict__.update(replacement.__dict__)
-            cfg._task_demos = all_demos
-            stores.clear()
-            if not synthesize():
-                return result
-            continue
-        if state is None:
-            result.status, result.reason = (
-                "unrealizable_counterexample",
-                result.symbolic.reason,
-            )
-            return result
-        program = lower(cfg, context)
-        mapping = dict(
-            zip((p for p, _ in loop_instructions(program)), loop_regions(cfg))
-        )
-        loop = mapping[failure.vc.loop_id]
-        instruction = dict(loop_instructions(program))[failure.vc.loop_id]
-        try:
-            successors = replay_successors(state, instruction.body)
-            successor = next(
-                (
-                    row
-                    for row in successors
-                    if not state_holds(loop.invariant, _project(row, context.use_tbl))
-                ),
-                None,
-            )
-        except UnrealizableCounterexample as exc:
-            result.status, result.reason = "unsupported_replay", str(exc)
-            return result
-        if successor is None:
-            result.status, result.reason = (
-                "no_progress",
-                "Counterexample successor does not enlarge the observed loop heads",
-            )
-            return result
-        key = id(loop)
-        if key not in stores:
-            heads = list(loop.body_demos[0]) + list(loop.exit_demos)
-            stores[key] = loop_learning_data(
-                heads,
-                loop.body_cfg.initial_scope,
-                relations=relations,
-                variables=variables,
-            )
-        store, vocabulary = stores[key]
-        successor.loop_id = "loop"
-        store.add(successor)
-        candidate = (
-            InvInference(store, "loop", vocabulary, context)[0]
-            if learner == "legacy"
-            else MonotoneInvariantLearner()(store, "loop", vocabulary, context)
-        )
-        if not all(
-            state_holds(candidate, _project(row, context.use_tbl))
-            for row in store.for_loop("loop")
-        ):
-            result.status = "learning_failed"
-            return result
-        solver = context.new_solver(timeout_ms)
-        solver.add(loop.invariant, z3.Not(candidate))
-        if solver.check() != z3.unsat:
-            result.status = "nonmonotone_or_unknown"
-            return result
-        loop.invariant = candidate
-        event("invariant_refined", iteration=iteration, loop_id=failure.vc.loop_id)
-    signature = str(lower(cfg, context))
-    for iteration in range(motion_iterations + 1):
+            event("invariant_refined", iteration=iteration, loop_id=failure.vc.loop_id)
+
+        signature = str(lower(cfg, context))
         result.motion = verify_cfg_motion(cfg, context, **options)
-        event("motion", iteration=iteration, ok=bool(result.motion))
+        event("motion", iteration=motion_iteration, ok=bool(result.motion))
         if result.motion:
             result.status = "verified_model"
             return result
@@ -353,7 +381,7 @@ def verified_synthesis(
         if logger:
             pen.save(logger.artifact_dir() / "motion_penalties.json")
         if (
-            iteration == motion_iterations
+            motion_iteration == motion_iterations
             or repair_motion is None
             or not result.motion.counterexamples
         ):
@@ -377,5 +405,7 @@ def verified_synthesis(
                 raise ValueError("Motion repair changed the abstract program")
         except ValueError as exc:
             result.status, result.reason = "invalid_motion_repair", str(exc)
+            return result
+        if not prepare_revision():
             return result
     raise AssertionError("Unreachable verification exit")
