@@ -9,6 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
+from synthesis.api.control import get_move_action
 from synthesis.cfg.demo_validation import validate_demonstrations
 from synthesis.cfg.demos import DemoSegment, DemoTrace
 from synthesis.cfg.reset import (
@@ -18,6 +19,8 @@ from synthesis.cfg.reset import (
     restore,
 )
 from synthesis.cfg.tasks import task_spec
+
+STACK_SETTLING_STEPS = 50
 
 
 @contextlib.contextmanager
@@ -158,7 +161,12 @@ def record_execution(
     video_path=None,
     render=False,
 ):
-    """Return a complete or diagnostic trace without dropping a failed seed."""
+    """Record a program from a settled Stack reset or an exact saved snapshot.
+
+    Fresh Stack collection holds the reset gripper position for 50 steps before
+    recording. A supplied snapshot is already the requested start: never reset
+    or settle it again. Settling is outside demo actions, events, and video.
+    """
     from synthesis.api.instructions import LoopBudgetExceeded
     from synthesis.mcmc.synthesis import (
         make_roboverify_env,
@@ -168,6 +176,9 @@ def record_execution(
 
     recording = Recording()
     metadata = dict(definition.metadata)
+    metadata["initialization"] = dict(
+        source="reset" if initial_snapshot is None else "snapshot", settling_steps=0
+    )
     video = VideoRecorder(video_path) if video_path is not None else None
     env = None
     render_error = None
@@ -199,11 +210,17 @@ def record_execution(
                 env_factory
                 or (lambda: make_roboverify_env(task, num_blocks=num_blocks))
             )()
-            first = (
-                env.reset()[0]
-                if initial_snapshot is None
-                else restore(env, initial_snapshot)
-            )
+            if initial_snapshot is None:
+                first = env.reset()[0]
+                if task == "stack":
+                    target = first[:3].copy()
+                    inner = inner_env(env)
+                    for _ in range(STACK_SETTLING_STEPS):
+                        env.step(get_move_action(first, target, close_gripper=False))
+                        metadata["initialization"]["settling_steps"] += 1
+                        first = inner.flatten_observation(inner._get_obs())
+            else:
+                first = restore(env, initial_snapshot)
             inner_env(env).symbolic_name_to_box_id.update(definition.initial_bindings)
             collect_recording(
                 definition.program,

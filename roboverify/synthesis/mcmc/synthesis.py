@@ -10,7 +10,9 @@ from typing import Any, Callable, Optional, Tuple
 import ffmpeg
 import imageio
 import numpy as np
+
 from synthesis.api import program
+from synthesis.cfg.reset import restore
 from synthesis.environment.cee_us_env.fpp_construction_env import (
     FetchPickAndPlaceConstruction,
 )
@@ -366,6 +368,7 @@ def score_candidate_program(
     video_fps: int = 30,
     motion_penalty=None,
     motion_penalty_weight: float = 1.0,
+    initial_snapshots: Optional[dict] = None,
 ) -> tuple[float, program.Program, bool, str, str]:
     """Optionally require BMC feasibility, then CEM-optimize ``p``."""
     bmc_passed, bmc_report = check_bmc_candidate(
@@ -395,6 +398,7 @@ def score_candidate_program(
         cem_K,
         cem_iterations,
         seeds=seeds,
+        initial_snapshots=initial_snapshots,
         goal_feature=goal_feature,
         goal_feature_reward_weight=goal_feature_reward_weight,
         motion_penalty=motion_penalty,
@@ -412,6 +416,7 @@ def score_candidate_program(
             num_block=num_block,
             video_dir=video_dir,
             seeds=seeds,
+            initial_snapshots=initial_snapshots,
             video_fps=video_fps,
         )
     return (
@@ -445,6 +450,7 @@ def MCMC(
     video_fps: int = 30,
     motion_penalty=None,
     motion_penalty_weight: float = 1.0,
+    initial_snapshots: Optional[dict] = None,
 ):
     # Ensure save_dir exists
     os.makedirs(save_dir, exist_ok=True)
@@ -468,6 +474,7 @@ def MCMC(
         cem_K,
         cem_iterations,
         seeds=seeds,
+        initial_snapshots=initial_snapshots,
         bmc_goal=bmc_goal,
         bmc_initial_constraints=bmc_initial_constraints,
         bmc_failed_cost=bmc_failed_cost,
@@ -535,6 +542,7 @@ def MCMC(
                 cem_K,
                 cem_iterations,
                 seeds=seeds,
+                initial_snapshots=initial_snapshots,
                 bmc_goal=bmc_goal,
                 bmc_initial_constraints=bmc_initial_constraints,
                 bmc_failed_cost=bmc_failed_cost,
@@ -661,6 +669,7 @@ def optimize_program(
     goal_feature_reward_weight: float = DEFAULT_GOAL_FEATURE_REWARD_WEIGHT,
     motion_penalty=None,
     motion_penalty_weight: float = 1.0,
+    initial_snapshots: Optional[dict] = None,
 ) -> tuple[float, program.Program, float, str]:
     f = Runner(
         p,
@@ -668,6 +677,7 @@ def optimize_program(
         num_seeds,
         num_block,
         seeds=seeds,
+        initial_snapshots=initial_snapshots,
         goal_feature=goal_feature,
         goal_feature_reward_weight=goal_feature_reward_weight,
         motion_penalty=motion_penalty,
@@ -1023,9 +1033,12 @@ def rollout_demos(
     verbose: bool = True,
     seeds: Optional[list] = None,
     task: str = "stack",
+    initial_snapshots: Optional[dict] = None,
 ) -> Tuple[list, list, list, list]:
     """Roll out ``p`` once per seed without saving to disk.
 
+    ``initial_snapshots`` maps each seed to its archived full simulator start.
+    Supplied starts are restored directly, with no reset or additional settling.
     Returns ``(individual_traj, flat_states, successes, imgs)``.
     """
     rollout_seeds = list(seeds) if seeds is not None else list(range(num_demo))
@@ -1038,11 +1051,22 @@ def rollout_demos(
     imgs = []
     individual_traj = []
     successes = []
+    if initial_snapshots is not None:
+        missing = set(rollout_seeds) - initial_snapshots.keys()
+        if missing:
+            raise ValueError(
+                f"Missing saved initial snapshots for seeds {sorted(missing)}"
+            )
     for seed in rollout_seeds:
         set_np_seed(seed)
         env = make_roboverify_env(task, num_blocks=num_blocks)
         try:
-            result = p.eval(env, return_img=save_imgs)
+            first = (
+                None
+                if initial_snapshots is None
+                else restore(env, initial_snapshots[seed])
+            )
+            result = p.eval(env, return_img=save_imgs, initial_observation=first)
             if save_imgs:
                 traj, traj_imgs = result
                 imgs.extend(traj_imgs)
@@ -1084,6 +1108,7 @@ def save_program_seed_videos(
     video_fps: int = 30,
     verbose: bool = True,
     task: str = "stack",
+    initial_snapshots: Optional[dict] = None,
 ) -> list[str]:
     """Roll out ``p`` once per seed and write ``seed_XXXX.mp4`` under ``video_dir``."""
     os.makedirs(video_dir, exist_ok=True)
@@ -1094,11 +1119,22 @@ def save_program_seed_videos(
         )
 
     saved_paths: list[str] = []
+    if initial_snapshots is not None:
+        missing = set(rollout_seeds) - initial_snapshots.keys()
+        if missing:
+            raise ValueError(
+                f"Missing saved initial snapshots for seeds {sorted(missing)}"
+            )
     for seed in rollout_seeds:
         set_np_seed(seed)
         env = make_roboverify_env(task, num_blocks=num_block)
         try:
-            traj, imgs = p.eval(env, return_img=True)
+            first = (
+                None
+                if initial_snapshots is None
+                else restore(env, initial_snapshots[seed])
+            )
+            traj, imgs = p.eval(env, return_img=True, initial_observation=first)
             success = roboverify_env_success(env, traj[-1] if traj else None)
             if verbose:
                 print(
@@ -1323,6 +1359,7 @@ def evaluate_program(
     return_img: bool = False,
     seeds: Optional[list] = None,
     task: str = "stack",
+    initial_snapshots: Optional[dict] = None,
 ):
     """Evaluate ``p`` using the same RoboVerify env as demo collection."""
     individual_traj, states, _successes, imgs = rollout_demos(
@@ -1332,6 +1369,7 @@ def evaluate_program(
         save_imgs=return_img,
         verbose=False,
         seeds=seeds,
+        initial_snapshots=initial_snapshots,
         task=task,
     )
     print("number of policy states", len(states))
@@ -1352,6 +1390,7 @@ class Runner:
         goal_feature_reward_weight: float = DEFAULT_GOAL_FEATURE_REWARD_WEIGHT,
         motion_penalty=None,
         motion_penalty_weight: float = 1.0,
+        initial_snapshots: Optional[dict] = None,
     ):
         if not np.isfinite(motion_penalty_weight) or motion_penalty_weight < 0:
             raise ValueError("Motion penalty weight must be finite and nonnegative")
@@ -1367,6 +1406,7 @@ class Runner:
         self.num_seeds = num_seeds
         self.num_block = num_block
         self.seeds = seeds
+        self.initial_snapshots = initial_snapshots
         self.goal_feature = goal_feature
         self.goal_feature_reward_weight = goal_feature_reward_weight
         self.last_goal_feature_reward = 0.0
@@ -1376,7 +1416,11 @@ class Runner:
         p = deepcopy(self.p)
         p.update_trainable_parameter(new_parameters)
         policy_states, individual_trajs, _imgs = evaluate_program(
-            p, self.num_seeds, self.num_block, seeds=self.seeds
+            p,
+            self.num_seeds,
+            self.num_block,
+            seeds=self.seeds,
+            initial_snapshots=self.initial_snapshots,
         )
         policy_states = np.array(policy_states)[self.tuple_slices]
         mmd_value = cost_func.maximum_mean_discrepancy_rbf(

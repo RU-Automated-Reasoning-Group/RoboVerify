@@ -1,4 +1,4 @@
-"""Collect validated, resettable DSL demonstrations and optional 20 FPS videos."""
+"""Collect DSL demonstrations after 50 settling steps, with optional 20 FPS videos."""
 
 import argparse
 import json

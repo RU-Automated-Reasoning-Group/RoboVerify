@@ -18,6 +18,8 @@ import tempfile
 import unittest
 
 from synthesis.api import program
+from synthesis.cfg.collection import record_execution
+from synthesis.cfg.program_source import ProgramDefinition
 from synthesis.experiment.config import MCMCConfig
 from synthesis.experiment.mcmc import search
 from synthesis.experiment.run_logger import RunLogger
@@ -72,24 +74,31 @@ class TestBMCReasonClassification(unittest.TestCase):
 def load_expert_states():
     """Fresh motion data; no saved demonstrations or task oracle required."""
     seed = 29
-    with original.preserved_global_rng():
-        original.set_np_seed(seed)
-        env = original.make_roboverify_stack_env(num_blocks=NUM_BLOCKS)
-        try:
-            probe = program.Program(
-                2, [program.Pick(0), program.Move(0, 0, 0, target_offset=[0, 0, 0.1])]
-            )
-            states = probe.eval(env)
-        finally:
-            env.close()
-    return states, [seed], NUM_BLOCKS
+    probe = program.Program(
+        2, [program.Pick(0), program.Move(0, 0, 0, target_offset=[0, 0, 0.1])]
+    )
+    trace = record_execution(
+        ProgramDefinition(probe, {"b0": 0}, "parity probe"),
+        seed=seed,
+        num_blocks=NUM_BLOCKS,
+    )
+    if trace.metadata["status"] != "completed":
+        raise AssertionError(trace.metadata)
+    return list(trace.states), [seed], NUM_BLOCKS, {seed: trace.snapshots[0]}
 
 
 class TestMCMCParity(unittest.TestCase):
     """The instrumented search must reproduce the original's cost sequence."""
 
     def test_cost_sequence_matches_original(self):
-        expert_states, seeds, demo_blocks = load_expert_states()
+        self.check_cost_sequence(saved_starts=False)
+
+    def test_cost_sequence_matches_with_saved_starts(self):
+        self.check_cost_sequence(saved_starts=True)
+
+    def check_cost_sequence(self, *, saved_starts):
+        expert_states, seeds, demo_blocks, snapshots = load_expert_states()
+        initial_snapshots = snapshots if saved_starts else None
         num_blocks = demo_blocks or NUM_BLOCKS
         operands = {"Box": list(range(num_blocks))}
         instructions = [program.Pick, program.Move, program.Release]
@@ -107,6 +116,7 @@ class TestMCMCParity(unittest.TestCase):
                 num_block=num_blocks,
                 save_dir=os.path.join(tmp, "original"),
                 seeds=seeds,
+                initial_snapshots=initial_snapshots,
                 save_candidate_videos=False,
                 **CEM_KWARGS,
             )
@@ -147,6 +157,7 @@ class TestMCMCParity(unittest.TestCase):
                 expert_states,
                 logger=logger,
                 seeds=seeds,
+                initial_snapshots=initial_snapshots,
                 bmc_goal=None,
                 goal_feature=None,
                 refresh_best_metrics=False,

@@ -242,15 +242,21 @@ class CollectionTests(unittest.TestCase):
         candidate = copy.deepcopy(expert)
         with patch(
             "synthesis.cfg.candidate_traces.record_execution", return_value=candidate
-        ):
+        ) as execute:
             prepare_candidate(cfg, context)
+            self.assertIs(
+                execute.call_args.kwargs["initial_snapshot"], expert.snapshots[0]
+            )
             self.assertIs(cfg.demos.for_node("v0")[0].trace, expert)
             self.assertIs(cfg._candidate_demos["v0"][0].trace, candidate)
         revised = copy.deepcopy(candidate)
         with patch(
             "synthesis.cfg.candidate_traces.record_execution", return_value=revised
-        ):
+        ) as execute:
             prepare_candidate(cfg, context, revision=1)
+            self.assertIs(
+                execute.call_args.kwargs["initial_snapshot"], expert.snapshots[0]
+            )
             self.assertIs(cfg.demos.for_node("v0")[0].trace, expert)
             self.assertIs(cfg._candidate_demos["v0"][0].trace, revised)
 

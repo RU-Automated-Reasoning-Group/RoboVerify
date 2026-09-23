@@ -120,6 +120,9 @@ def main(argv=None) -> int:
         config.num_seeds = len(trajectories)
     config.num_seeds = min(config.num_seeds, len(trajectories))
     active_seeds = list(seeds[: config.num_seeds])
+    if len(set(active_seeds)) != len(active_seeds):
+        raise ValueError("MCMC demonstration seeds must be distinct")
+    initial_snapshots = {t.seed: t.snapshots[0] for t in traces[: config.num_seeds]}
     trajectories = trajectories[: config.num_seeds]
     expert_states = [state for traj in trajectories for state in traj]
     config.seeds = active_seeds
@@ -136,6 +139,10 @@ def main(argv=None) -> int:
         initial_program=initial_program,
         available_instructions=AVAILABLE_INSTRUCTIONS,
         available_operands=available_operands,
+    )
+
+    config.runtime["initial_states"] = dict(
+        source="archive_snapshots", state_index=0, seeds=active_seeds
     )
 
     logger = RunLogger(
@@ -161,6 +168,7 @@ def main(argv=None) -> int:
             expert_states,
             logger=logger,
             seeds=active_seeds,
+            initial_snapshots=initial_snapshots,
             bmc_goal=bmc_goal,
             bmc_initial_constraints=bmc_initial_constraints,
             goal_feature=goal_feature,

@@ -107,6 +107,7 @@ class InstrumentedRunner(Runner):
             save_imgs=False,
             verbose=False,
             seeds=self.seeds,
+            initial_snapshots=self.initial_snapshots,
             task=self.task,
         )
 
@@ -197,6 +198,7 @@ def optimize_program(
     refresh_best_metrics: bool = True,
     motion_penalty=None,
     motion_penalty_weight: float = 1.0,
+    initial_snapshots: Optional[dict] = None,
 ) -> tuple:
     """CEM-optimize ``p``'s float offsets and report what happened.
 
@@ -215,6 +217,7 @@ def optimize_program(
         num_seeds,
         num_block,
         seeds=seeds,
+        initial_snapshots=initial_snapshots,
         task=task,
         goal_feature=goal_feature,
         goal_feature_reward_weight=goal_feature_reward_weight,
@@ -262,6 +265,7 @@ def score_candidate_program(
     refresh_best_metrics: bool = True,
     motion_penalty=None,
     motion_penalty_weight: float = 1.0,
+    initial_snapshots: Optional[dict] = None,
 ) -> CandidateResult:
     """Require BMC feasibility if configured, then optimize ``p``'s parameters."""
     bmc_feasible, bmc_report = check_bmc_candidate(
@@ -289,6 +293,7 @@ def score_candidate_program(
         cem_K,
         cem_iterations,
         seeds=seeds,
+        initial_snapshots=initial_snapshots,
         task=task,
         goal_feature=goal_feature,
         goal_feature_reward_weight=goal_feature_reward_weight,
@@ -332,6 +337,7 @@ def MCMC(
     refresh_best_metrics: bool = True,
     motion_penalty=None,
     motion_penalty_weight: float = 1.0,
+    initial_snapshots: Optional[dict] = None,
 ) -> MCMCResult:
     """Run the instrumented search, writing records through ``logger``."""
     num_seeds = config.num_seeds if config.num_seeds is not None else len(seeds or [])
@@ -351,6 +357,7 @@ def MCMC(
             config.cem_K,
             config.cem_iterations,
             seeds=seeds,
+            initial_snapshots=initial_snapshots,
             task=config.task,
             bmc_goal=bmc_goal,
             bmc_initial_constraints=bmc_initial_constraints,
@@ -565,6 +572,7 @@ def MCMC(
                 num_block=config.num_blocks,
                 video_dir=str(target),
                 seeds=seeds,
+                initial_snapshots=initial_snapshots,
                 video_fps=30,
                 verbose=False,
                 task=config.task,
