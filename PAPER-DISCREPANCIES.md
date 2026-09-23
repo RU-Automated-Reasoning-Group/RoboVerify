@@ -35,7 +35,7 @@ model assumptions and APIs.
 | 30 | Vocabulary/attachment limits and exact-height failure diagnosed; the default tolerance removes the spurious bootstrap clause (32). |
 | 31 | Equal initial heights added; intended-learner verification passes. |
 | 32 | Configurable Higher tolerance aligns saved height comparisons with ideal levels; Scattered differences are diagnosed in 33. |
-| 33 | Scattered mismatch comes from held-block XY offsets crossing the reset separation boundary; primitive/model alignment remains open. |
+| 33 | Scattered mismatch diagnosed; further work deferred by user decision because of its low observed frequency. |
 
 ## 1. Theorem 5.2 contradicts the paper's own Table 7 (`R_Higher`)
 
@@ -895,8 +895,11 @@ refinement remain separate claims.
 
 ## 33. Scattered's sharp XY boundary exposes held-block placement error
 
-**Status:** diagnosed simulator/model mismatch. Numeric evaluation and the
-low-level Z3 predicate agree; no predicate or controller change is made here.
+**Status:** diagnosed simulator/model mismatch; further work deferred at the
+user's request because of its low observed frequency. Focus on other project
+directions first. Numeric evaluation and the low-level Z3 predicate agree.
+The limitation remains unresolved; retain the investigation and reproduction
+artifacts, with no change to predicates, controllers or reset sampling.
 
 **Observation:** saved Stack heads can contain a placed tower block that is not
 Scattered from an untouched block, although ideal placement at b0 would keep the
@@ -934,8 +937,9 @@ and preserves exact XY columns (27), which exclude these recorded scenes; it
 therefore does not establish refinement of the physical controller. The final
 stacking postcondition can still hold because ON* permits horizontal offsets.
 
-**Remaining action:** decide how the reliable primitive abstraction should be
-realized, for example through block-center feedback and validated placement/error
+**Deferred follow-up:** if this direction is revisited, decide how the reliable
+primitive abstraction should be realized, for example through block-center
+feedback and validated placement/error
 margins. A smaller gripper stopping tolerance alone does not bound the held-block
 offset. Horizontal separations are continuous, unlike the separated height levels
 motivating Higher tolerance; a changed Scattered threshold would change the
