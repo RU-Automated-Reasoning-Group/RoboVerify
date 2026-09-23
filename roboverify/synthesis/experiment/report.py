@@ -24,7 +24,7 @@ from typing import Any, Iterator, Optional
 DEFAULT_MAX_LINES = 60
 CURVE_POINTS = 16
 STDOUT_TAIL_LINES = 15
-HEALTHY_STATUSES = {"completed", "verified_model"}
+HEALTHY_STATUSES = {"completed", "verified_model", "verified_symbolic"}
 FLOOR_THRESHOLD = -1e5  # costs at or below this are the BMC-failure sentinel
 
 
@@ -119,7 +119,12 @@ class RunSummary:
                     }
                 )
                 self.cfg_progress = self.cfg_progress[-6:]
-            if record.get("phase") in ("symbolic_initial", "symbolic", "motion"):
+            if record.get("phase") in (
+                "symbolic_initial",
+                "symbolic",
+                "motion",
+                "invariant_learning",
+            ):
                 self.cegis_progress.append(
                     {
                         key: record.get(key)
@@ -258,6 +263,15 @@ class RunSummary:
             lines.append(f"  verification {self.result['formal_verification']}")
             lines.append(f"  symbolic     {self.result.get('symbolic', 'not run')}")
             lines.append(f"  motion       {self.result.get('motion', 'not run')}")
+        if "verification_attempts" in self.result:
+            lines.append(f"  symbolic     {self.result.get('symbolic_status')}")
+            lines.append(f"  motion       {self.result.get('motion_status')}")
+            lines.append(
+                f"  invariant experiment: {self.result['verification_attempts']} proof attempts, "
+                f"{self.result.get('counterexample_executions', 0)} accepted executions, "
+                f"{self.result.get('learner_updates', 0)} learner updates"
+            )
+            lines.append("  progression: artifacts/summary.md")
         if self.cfg_progress:
             lines.append(
                 f"  CFG result: {self.result.get('status','running')}  formal verification: {self.result.get('formal_verification','not established')}"
