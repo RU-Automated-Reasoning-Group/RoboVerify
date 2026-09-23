@@ -11,7 +11,8 @@ class DemoTrace:
     seed: int = 0
     task: str = "stack"
     num_blocks: int = 0
-    replay: object = None
+    events: tuple = ()
+    metadata: dict = field(default_factory=dict)
 
 
 @dataclass

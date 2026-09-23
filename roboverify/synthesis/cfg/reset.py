@@ -58,27 +58,65 @@ class Recording:
     snapshots: list = field(default_factory=list)
     action_indices: list = field(default_factory=list)
     actions: list = field(default_factory=list)
+    states: list = field(default_factory=list)
+    events: list = field(default_factory=list)
 
 
-def collect_recording(program, env):
-    """Capture at every observation append, including controller-internal steps."""
-    recording = Recording()
+def collect_recording(
+    program,
+    env,
+    *,
+    recording=None,
+    initial_observation=None,
+    max_loop_iterations=None,
+    on_frame=None
+):
+    """Record the same execution used for learning and optional video rendering.
+
+    A caller-supplied Recording retains the partial execution if the program raises.
+    Frames are captured initially and after actions; rendering never adds actions.
+    """
+    recording = Recording() if recording is None else recording
     original_step = env.step
+    invocations = {}
 
     def step(action):
+        result = original_step(action)
         recording.actions.append(np.array(action, copy=True))
-        return original_step(action)
+        if on_frame is not None:
+            on_frame(env)
+        return result
 
     def on_state(obs):
+        actual = inner_env(env).flatten_observation(inner_env(env)._get_obs())
+        if not np.allclose(obs, actual, atol=1e-8, rtol=0):
+            raise ValueError(
+                "Recorded observation does not match its simulator snapshot"
+            )
+        recording.states.append(np.array(obs, copy=True))
         recording.snapshots.append(capture(env))
         recording.action_indices.append(len(recording.actions))
+        if len(recording.states) == 1 and on_frame is not None:
+            on_frame(env)
+
+    def on_event(event):
+        if event["kind"] == "loop_enter":
+            invocations[event["path"]] = invocations.get(event["path"], -1) + 1
+        event["invocation"] = invocations.get(event["path"])
+        recording.events.append(deepcopy(event))
 
     env.step = step
     try:
-        states = program.eval(env, on_state=on_state)
+        program.eval(
+            env,
+            on_state=on_state,
+            on_event=on_event,
+            initial_observation=initial_observation,
+            max_loop_iterations=max_loop_iterations,
+        )
     finally:
         env.step = original_step
-    return tuple(states), recording
+    return tuple(recording.states), recording
 
 
 def reset_segment(env, segment, *, mode="replay"):
@@ -97,11 +135,9 @@ def reset_segment(env, segment, *, mode="replay"):
         inner_env(env).symbolic_name_to_box_id = dict(
             trace.snapshots[segment.t_start].bindings
         )
-    elif trace.replay is not None:
-        observation = trace.replay(env, segment.t_start)
     else:
         raise ValueError(
-            "Legacy observation-only demos require their deterministic replay source"
+            "Full simulator snapshots and action recordings are required; recollect demonstrations"
         )
     inner_env(env).symbolic_name_to_box_id.update(segment.bindings)
     if not np.allclose(observation, trace.states[segment.t_start], atol=1e-8, rtol=0):
@@ -109,32 +145,3 @@ def reset_segment(env, segment, *, mode="replay"):
             "Segment replay/reset did not reproduce its recorded observation"
         )
     return observation
-
-
-def legacy_replay(program, seed):
-    """Replay an observation-only demo when its generating program/seed are known."""
-
-    def replay(env, target):
-        from synthesis.mcmc.synthesis import preserved_global_rng, set_np_seed
-
-        class Reached(Exception):
-            pass
-
-        seen, result = 0, None
-
-        def observe(obs):
-            nonlocal seen, result
-            if seen == target:
-                result = np.array(obs, copy=True)
-                raise Reached()
-            seen += 1
-
-        with preserved_global_rng():
-            set_np_seed(seed)
-            try:
-                program.eval(env, on_state=observe)
-            except Reached:
-                return result
-        raise ValueError("Replay ended before segment start")
-
-    return replay

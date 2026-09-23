@@ -189,3 +189,58 @@ def open_existentials(term, prefix, occupied=()):
             mapping[old] = ref(name)
         term = term.args[0]
     return tuple(names), substitute(term, mapping)
+
+
+def from_z3(expr):
+    """Convert the executable relational guard subset, preserving binder scope."""
+    import z3
+    from synthesis.util.symbols import fresh_name
+    from z3.z3util import get_vars
+
+    occupied = {str(v) for v in get_vars(expr)}
+
+    def convert(node, bound=()):
+        if z3.is_var(node):
+            return ref(bound[z3.get_var_index(node)])
+        if z3.is_true(node):
+            return boolean(True)
+        if z3.is_false(node):
+            return boolean(False)
+        if z3.is_quantifier(node):
+            names = tuple(
+                fresh_name("guard_var", occupied) for _ in range(node.num_vars())
+            )
+            body = convert(node.body(), tuple(reversed(names)) + bound)
+            return (forall if node.is_forall() else exists)(names, body)
+        if z3.is_const(node) and node.sort().kind() != z3.Z3_BOOL_SORT:
+            return ref(str(node))
+        args = tuple(convert(a, bound) for a in node.children())
+        if z3.is_and(node):
+            return conjunction(*args)
+        if z3.is_or(node):
+            return disjunction(*args)
+        if z3.is_not(node):
+            return negate(args[0])
+        if z3.is_implies(node):
+            return implies(*args)
+        if z3.is_eq(node):
+            if node.arg(0).sort().kind() == z3.Z3_BOOL_SORT:
+                return conjunction(implies(*args), implies(*reversed(args)))
+            return atom("eq", *args)
+        if z3.is_distinct(node):
+            import itertools
+
+            return conjunction(
+                *(negate(atom("eq", a, b)) for a, b in itertools.combinations(args, 2))
+            )
+        if str(node.decl().name()) in {
+            "ON",
+            "ON_star",
+            "ON_star_zero",
+            "Higher",
+            "Scattered",
+        }:
+            return atom(str(node.decl().name()), *args)
+        raise ValueError(f"Unsupported DSL guard: {node}")
+
+    return convert(expr)

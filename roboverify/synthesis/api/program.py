@@ -6,6 +6,29 @@ from pathlib import Path
 from typing import List, Optional, Sequence, Union
 
 import numpy as np
+import synthesis.inference_lib.inference
+import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
+import synthesis.verification_lib.lowlevel_verification_lib as lowlevel_verification_lib
+from synthesis.api.instructions import (
+    Assign,
+    Get,
+    GoalAssign,
+    Instruction,
+    MarkGoal,
+    Move,
+    MoveByName,
+    MoveDown,
+    MoveRight,
+    Pick,
+    PickByName,
+    Put,
+    Release,
+    ReleaseByName,
+    Seq,
+    Skip,
+    While,
+)
+from synthesis.util.symbols import fresh_const, rewrite_quantifier
 from z3 import (
     Z3_OP_UNINTERPRETED,
     And,
@@ -31,30 +54,6 @@ from z3 import (
     substitute_vars,
     unsat,
 )
-
-import synthesis.inference_lib.inference
-import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
-import synthesis.verification_lib.lowlevel_verification_lib as lowlevel_verification_lib
-from synthesis.api.instructions import (
-    Assign,
-    Get,
-    GoalAssign,
-    Instruction,
-    MarkGoal,
-    Move,
-    MoveByName,
-    MoveDown,
-    MoveRight,
-    Pick,
-    PickByName,
-    Put,
-    Release,
-    ReleaseByName,
-    Seq,
-    Skip,
-    While,
-)
-from synthesis.util.symbols import fresh_const, rewrite_quantifier
 
 
 def _outer_while_direct_body_move_down_var(
@@ -836,9 +835,23 @@ class Program:
         else:
             self.instructions = [Skip() for _ in range(self.length)]
 
-    def eval(self, env, return_img: bool = False, *, on_loop_head=None, on_state=None):
+    def eval(
+        self,
+        env,
+        return_img: bool = False,
+        *,
+        on_loop_head=None,
+        on_state=None,
+        on_event=None,
+        initial_observation=None,
+        max_loop_iterations=None,
+    ):
         """evaluate the program in the environment and return the trajectories"""
-        initial_obs = env.reset()[0]
+        from synthesis.api.runtime import execute_instruction
+
+        initial_obs = (
+            env.reset()[0] if initial_observation is None else initial_observation
+        )
         if on_state is None:
             traj = [initial_obs]
         else:
@@ -853,10 +866,16 @@ class Program:
         if return_img:
             imgs = [env.render()]
         for index, line in enumerate(self.instructions):
-            kwargs = {}
-            if on_loop_head is not None and isinstance(line, While):
-                kwargs = dict(on_loop_head=on_loop_head, loop_id=str(index))
-            line_imgs = line.eval(env, traj, return_img, **kwargs)
+            line_imgs = execute_instruction(
+                line,
+                env,
+                traj,
+                path=str(index),
+                return_image=return_img,
+                on_loop_head=on_loop_head,
+                on_event=on_event,
+                max_loop_iterations=max_loop_iterations,
+            )
             if return_img:
                 imgs.extend(line_imgs)
         if return_img:

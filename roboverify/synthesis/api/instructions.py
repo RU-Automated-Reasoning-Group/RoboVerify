@@ -3,7 +3,6 @@ from typing import Dict, List, Optional
 
 import numpy as np
 import z3
-
 from synthesis.util import on as on_util
 
 
@@ -922,7 +921,15 @@ class While(Instruction):
         return find_and_bind(self, env, traj)
 
     def eval(
-        self, env, traj, return_image=False, *, on_loop_head=None, loop_id="loop"
+        self,
+        env,
+        traj,
+        return_image=False,
+        *,
+        on_loop_head=None,
+        loop_id="loop",
+        on_event=None,
+        max_loop_iterations=None,
     ) -> List:
         """Execute the loop, optionally reporting a snapshot before each body.
 
@@ -931,7 +938,11 @@ class While(Instruction):
         an earlier rollout. Exit states and iterations beyond max_iters are not
         learning rows.
         """
+        from synthesis.api.runtime import emit, execute_instruction
         from synthesis.predicates.scene import scene_from_obs
+
+        entry_index = len(traj) - 1
+        emit(on_event, "loop_enter", loop_id, env, traj, entry_index=entry_index)
 
         self._guard_entry_positions = scene_from_obs(
             traj[-1],
@@ -949,12 +960,24 @@ class While(Instruction):
             entry_positions = observation_positions(traj[-1], num_blocks)
         imgs: List = []
         iters = 0
+        limits = [v for v in (self.max_iters, max_loop_iterations) if v is not None]
+        limit = min(limits) if limits else None
         while self._find_and_bind_guard_exists(env, traj):
             iters += 1
-            if self.max_iters is not None and iters > self.max_iters:
+            if limit is not None and iters > limit:
                 raise LoopBudgetExceeded(
-                    f"Loop {loop_id} still has a guard witness after {self.max_iters} iterations"
+                    f"Loop {loop_id} still has a guard witness after {limit} iterations"
                 )
+            emit(
+                on_event,
+                "loop_head",
+                loop_id,
+                env,
+                traj,
+                entry_index=entry_index,
+                iteration=iters - 1,
+                witnesses=list(map(str, self.guard_exists_vars)),
+            )
             if on_loop_head is not None:
                 on_loop_head(
                     LoopHeadState.from_observation(
@@ -966,12 +989,28 @@ class While(Instruction):
                     )
                 )
             for index, instr in enumerate(self.body):
-                kwargs = {}
-                if on_loop_head is not None and isinstance(instr, While):
-                    kwargs = dict(
-                        on_loop_head=on_loop_head, loop_id=f"{loop_id}.{index}"
+                imgs.extend(
+                    execute_instruction(
+                        instr,
+                        env,
+                        traj,
+                        path=f"{loop_id}.{index}",
+                        return_image=return_image,
+                        on_loop_head=on_loop_head,
+                        on_event=on_event,
+                        max_loop_iterations=max_loop_iterations,
                     )
-                imgs.extend(instr.eval(env, traj, return_image=return_image, **kwargs))
+                )
+        emit(
+            on_event,
+            "loop_exit",
+            loop_id,
+            env,
+            traj,
+            entry_index=entry_index,
+            iteration=iters,
+            witnesses=list(map(str, self.guard_exists_vars)),
+        )
         return imgs
 
     def register_trainable_parameter(self, parameters: List):

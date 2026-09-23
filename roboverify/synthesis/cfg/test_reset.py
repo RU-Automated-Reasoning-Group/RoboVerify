@@ -1,7 +1,6 @@
 import unittest
 
 import numpy as np
-
 from synthesis.api.instructions import MoveByName, PickByName
 from synthesis.api.program import Program
 from synthesis.cfg.demos import DemoSegment, DemoTrace
@@ -57,13 +56,12 @@ if __name__ == "__main__":
 
 
 class RecordingTests(unittest.TestCase):
-    def test_archive_roundtrip_and_legacy_replay(self):
+    def test_archive_roundtrip_and_observation_only_rejected(self):
         import tempfile
         from pathlib import Path
 
         from synthesis.api.instructions import Skip
         from synthesis.cfg.recordings import load_traces, save_traces
-        from synthesis.cfg.reset import legacy_replay
 
         with preserved_global_rng():
             set_np_seed(0)
@@ -88,12 +86,8 @@ class RecordingTests(unittest.TestCase):
                     np.testing.assert_allclose(
                         reset_segment(env, segment, mode="reset"), states[1]
                     )
-                legacy = DemoTrace(
-                    states, num_blocks=2, replay=legacy_replay(program, 0)
-                )
-                np.testing.assert_allclose(
-                    reset_segment(env, DemoSegment(0, 1, 3, legacy, {"b0": 0})),
-                    states[1],
-                )
+                observations = DemoTrace(states, num_blocks=2)
+                with self.assertRaisesRegex(ValueError, "recollect"):
+                    reset_segment(env, DemoSegment(0, 1, 3, observations, {"b0": 0}))
             finally:
                 env.close()
