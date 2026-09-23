@@ -292,7 +292,11 @@ def verified_synthesis(
                     return result
                 all_demos = cfg._task_demos + list(more)
                 replacement = RelationalCFG.initial(
-                    all_demos, cfg.precondition, cfg.postcondition, cfg.initial_scope
+                    all_demos,
+                    cfg.precondition,
+                    cfg.postcondition,
+                    cfg.initial_scope,
+                    synthesis_approach=cfg.synthesis_approach,
                 )
                 cfg.__dict__.update(replacement.__dict__)
                 cfg._task_demos = all_demos

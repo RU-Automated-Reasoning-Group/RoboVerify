@@ -6,7 +6,13 @@ import signal
 from functools import partial
 
 from synthesis.api.program import Program, generate_random_program
-from synthesis.cfg.bindings import close_objects, mutate_scoped, require_closed
+from synthesis.cfg.bindings import (
+    close_objects,
+    mutate_ids,
+    mutate_scoped,
+    require_closed,
+    require_ids,
+)
 from synthesis.cfg.candidate_traces import prepare_candidate
 from synthesis.cfg.demos import DemoSegment
 from synthesis.cfg.execute import execute_cfg
@@ -92,6 +98,7 @@ def run(args, logger):
                 "Provided program differs from the demonstration source; recollect demonstrations"
             )
         cfg = program_to_cfg(definition, segments, pre, post)
+    cfg.synthesis_approach = args.synthesis_approach
     cfg._task_demos = list(segments)
     budget = SearchBudget(
         iterations=args.iterations,
@@ -128,18 +135,27 @@ def run(args, logger):
         if isinstance(node.region, BlockRegion) and node.region.physical:
             initial = Program(len(node.region.physical), list(node.region.physical))
 
+        id_first = node.synthesis_approach == "id-first"
+
         def propose(candidate, rng):
             with preserved_global_rng():
                 set_np_seed(int(rng.integers(2**31)))
-                return mutate_scoped(candidate, node.available_scope)
+                return (
+                    mutate_ids(candidate, args.num_blocks)
+                    if id_first
+                    else mutate_scoped(candidate, node.available_scope)
+                )
 
-        initial = close_objects(
-            initial,
-            demos,
-            node.available_scope,
-            context,
-            prefix="object_" + node.name.replace(".", "_"),
-        )
+        if id_first:
+            require_ids(initial.instructions, args.num_blocks)
+        else:
+            initial = close_objects(
+                initial,
+                demos,
+                node.available_scope,
+                context,
+                prefix="object_" + node.name.replace(".", "_"),
+            )
 
         result = straight_line_synthesize(
             demos,
@@ -163,8 +179,12 @@ def run(args, logger):
             postscore_seconds=result.postscore_seconds,
         )
         exports = (
-            require_closed(result.program.instructions, node.available_scope)
-            - node.available_scope
+            frozenset()
+            if id_first
+            else (
+                require_closed(result.program.instructions, node.available_scope)
+                - node.available_scope
+            )
         )
         # No unsupported relational summary is invented for arbitrary physical code.
         return (
@@ -208,6 +228,7 @@ def run(args, logger):
                 {
                     **t.metadata["initial_bindings"],
                     **getattr(cfg, "_initial_bindings", {}),
+                    **getattr(cfg, "_fixed_id_bindings", {}),
                     **{f"o{j}": j for j in range(t.num_blocks)},
                     **({"tbl": "tbl"} if context.use_tbl else {}),
                 },
@@ -244,6 +265,13 @@ def run(args, logger):
         ),
         demo_provider=provide_demos,
         repair_motion=repair,
+        # Concrete IDs assume the demonstrated universe exists. Checking a
+        # smaller universe can make fixed-alias premises inconsistent. The
+        # existing verifier still requests its unbounded proof afterward.
+        min_blocks=args.num_blocks if args.synthesis_approach == "id-first" else 2,
+        max_blocks=(
+            max(4, args.num_blocks) if args.synthesis_approach == "id-first" else 4
+        ),
         symbolic_iterations=args.symbolic_iterations,
         motion_iterations=args.motion_iterations,
         timeout_ms=args.verification_timeout_ms,
@@ -268,6 +296,8 @@ def run(args, logger):
         "cfg.json",
         json.dumps(
             {
+                "synthesis_approach": cfg.synthesis_approach,
+                "fixed_id_bindings": getattr(cfg, "_fixed_id_bindings", {}),
                 "order": cfg.order,
                 "nodes": {name: str(node.region) for name, node in cfg.nodes.items()},
                 "edges": [
@@ -316,6 +346,12 @@ def main(argv=None):
     parser.add_argument("--task", choices=("stack", "unstack"), default="stack")
     parser.add_argument("--mode", choices=("full", "verify"), default="full")
     parser.add_argument("--program", help="DSL factory required by --mode verify")
+    parser.add_argument(
+        "--synthesis-approach",
+        choices=("relational", "id-first"),
+        default="relational",
+        help="relational: bind names before search; id-first: search/refine IDs, then quotient and return ByName",
+    )
     parser.add_argument("--max-loop-iterations", type=int, default=100)
     parser.add_argument("--trajectory-timeout-seconds", type=float, default=60)
     parser.add_argument(
@@ -380,6 +416,8 @@ def main(argv=None):
     parser.add_argument("--smoke", action="store_true")
     args = parser.parse_args(argv)
     motion_noise_from_args(parser, args)
+    if args.synthesis_approach == "id-first":
+        args.quotient = True
     if args.mode == "verify" and not args.program:
         parser.error("--mode verify requires --program module:factory")
     if args.max_loop_iterations < 1 or not 0 < args.trajectory_timeout_seconds < float(

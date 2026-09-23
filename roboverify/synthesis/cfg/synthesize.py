@@ -35,8 +35,11 @@ def synthesize_cfg(
     realized prefix and stop at the first unresolved block. A successful search
     is a candidate synthesis result, not a formal verification result.
     """
+    if cfg.synthesis_approach not in ("relational", "id-first"):
+        raise ValueError(f"Unknown synthesis approach: {cfg.synthesis_approach}")
+    id_first = cfg.synthesis_approach == "id-first"
     for round_id in range(max_refinements + 1):
-        if quotient is not None:
+        if quotient is not None and not id_first:
             changed = quotient(cfg)
             if changed and logger:
                 logger.log_event(
@@ -76,6 +79,7 @@ def synthesize_cfg(
                     tuple(body_cfg.demos.for_node(n)) for n in body_cfg.order
                 )
             node.available_scope = scope(cfg)[name]
+            node.synthesis_approach = cfg.synthesis_approach
             region, ok = realize(
                 node, cfg.demos.for_node(name), cfg.outgoing(name)[0].label
             )
@@ -85,6 +89,19 @@ def synthesize_cfg(
                 failed = name
                 break
         if failed is None:
+            if id_first:
+                # Numeric search/refinement finishes before any loop variables
+                # are introduced. The public synthesis boundary is named only.
+                from synthesis.cfg.id_first import close_id_candidate
+
+                if quotient is not None and quotient(cfg) and logger:
+                    logger.log_event(
+                        "quotient_loop_found",
+                        "Generalized concrete repetitions",
+                        step=round_id,
+                        force=True,
+                    )
+                close_id_candidate(cfg)
             return SynthesisResult(cfg, "synthesized", round_id)
         if round_id == max_refinements:
             return SynthesisResult(cfg, "budget_exhausted", round_id, failed)

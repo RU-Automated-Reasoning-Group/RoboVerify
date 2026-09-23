@@ -46,7 +46,12 @@ def anti_unify(first, second):
     def match(a, b, bound=frozenset()):
         if a == b:
             return a
-        if a.op == b.op == "ref" and a.value not in bound and b.value not in bound:
+        if (
+            a.op in ("ref", "id")
+            and b.op in ("ref", "id")
+            and (a.op == "id" or a.value not in bound)
+            and (b.op == "id" or b.value not in bound)
+        ):
             pair = (a, b)
             if pair not in memo:
                 name = fresh_name(f"p{len(memo)}", occupied)
@@ -86,7 +91,7 @@ def match_template(template, word):
 
     def match(pattern, actual):
         if pattern.op == "ref" and pattern.value in variables:
-            if actual.op != "ref":
+            if actual.op not in ("ref", "id"):
                 return False
             existing = result.setdefault(pattern.value, actual)
             return existing == actual

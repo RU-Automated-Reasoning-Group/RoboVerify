@@ -5,10 +5,13 @@ from dataclasses import dataclass
 
 from synthesis.api.instructions import (
     Assign,
+    Move,
     MoveByName,
+    Pick,
     PickByName,
     PickPlaceByName,
     Put,
+    Release,
     ReleaseByName,
     Skip,
 )
@@ -29,7 +32,15 @@ from synthesis.cfg.region import BlockRegion, LoopRegion
 from synthesis.cfg.scope import scope as graph_scope
 from synthesis.predicates.guard import loop_guard_synthesis
 from synthesis.predicates.scene import Scene, evaluate
-from synthesis.predicates.term import conjunction, exists, negate, ref, substitute
+from synthesis.predicates.term import (
+    atom,
+    block_id,
+    conjunction,
+    exists,
+    negate,
+    ref,
+    substitute,
+)
 from synthesis.util.symbols import fresh_name
 
 
@@ -128,15 +139,33 @@ def _fold(cfg, repetition, language, infer_invariant):
         right in {a for a, _ in updates[:i]} for i, (_, right) in enumerate(updates)
     ):
         return False
-    init = tuple((names[key], r.template.first[key].value) for key in carry)
+    examples = cfg.demos.for_node(cfg.order[r.start])
+    if not examples:
+        return False
+    initial_values = {}
+    for key in carry:
+        value = r.template.first[key]
+        if value.op == "id":
+            # Initialize only from a demonstrated, already scoped alias.
+            alias = next(
+                (
+                    name
+                    for name in sorted(available)
+                    if all(row.bindings.get(name) == value.value for row in examples)
+                ),
+                None,
+            )
+            if alias is None:
+                return False
+            initial_values[key] = alias
+        else:
+            initial_values[key] = value.value
+    init = tuple((names[key], initial_values[key]) for key in carry)
     posts = tuple(
         substitute(letter.predicate, {key: ref(value) for key, value in names.items()})
         for letter in r.template.word
     )
     rebound_names = tuple(names[key] for key in rebound)
-    examples = cfg.demos.for_node(cfg.order[r.start])
-    if not examples:
-        return False
     extracted = []
     for row in examples:
         try:
@@ -209,7 +238,14 @@ def _fold(cfg, repetition, language, infer_invariant):
     for slot, node in enumerate(cfg.order[r.start : r.start + r.width]):
         old = cfg.nodes[node].region
         region = BlockRegion(None)
-        if isinstance(old, BlockRegion):
+        if cfg.synthesis_approach == "id-first":
+            # A completed numeric search must not become an unresolved named
+            # body requiring another (named) MCMC search after quotienting.
+            try:
+                region = _generalize_id_body(cfg, r, slot, names, available)
+            except (KeyError, ValueError):
+                return False
+        elif isinstance(old, BlockRegion):
             try:
                 aliases = {}
                 for name in sorted(loop_scope | set(rebound_names)):
@@ -355,6 +391,131 @@ def _fold(cfg, repetition, language, infer_invariant):
     return True
 
 
+def _generalize_id_body(cfg, repetition, slot, names, available):
+    """Match operands across completed iterations, including independent XYZ.
+
+    A constant base reference stays b0; a changing target follows the carried
+    role. Reusing a first-iteration alias alone cannot distinguish these cases.
+    """
+    regions, examples = [], []
+    for index in range(len(repetition.substitutions)):
+        node = cfg.order[repetition.start + index * repetition.width + slot]
+        region = cfg.nodes[node].region
+        if not isinstance(region, BlockRegion) or not region.physical:
+            raise ValueError("Quotient needs completed numeric fragments")
+        regions.append(region)
+        examples.append(cfg.demos.for_node(node))
+    if len({len(r.physical) for r in regions}) != 1:
+        raise ValueError("Different physical fragment shapes")
+
+    def resolves(term, rows):
+        if term.op == "id":
+            return term.value
+        values = {row.bindings.get(term.value) for row in rows}
+        if len(values) != 1 or None in values:
+            raise ValueError("Template reference has no consistent ID")
+        return values.pop()
+
+    roles = {
+        names[key]: tuple(
+            resolves(mapping[key], rows)
+            for mapping, rows in zip(repetition.substitutions, examples)
+        )
+        for key in names
+    }
+    fixed = {}
+    for name in sorted(available):
+        values = {row.bindings.get(name) for rows in examples for row in rows}
+        if len(values) == 1 and None not in values:
+            fixed[name] = (values.pop(),) * len(regions)
+    instructions = []
+    for column in zip(*(r.physical for r in regions)):
+        first = column[0]
+        if type(first) not in (Pick, Move, Release, Skip) or any(
+            type(i) is not type(first) for i in column
+        ):
+            raise ValueError("Different physical instruction shapes")
+        # Numeric parameters may differ; retain the first controller as a
+        # candidate. Its generalized execution is recollected and verified.
+        operands = [i.get_operand() for i in column]
+        chosen = []
+        for index in range(len(operands[0])):
+            values = tuple(o[index]["val"] for o in operands)
+            name = next(
+                (n for n, ids in {**fixed, **roles}.items() if ids == values), None
+            )
+            if name is None:
+                raise ValueError("Operand has no fixed or repeated relational role")
+            chosen.append(name)
+        # The first ID can denote different roles on different coordinate axes.
+        # Lift once, then assign each independently recovered operand by name.
+        if chosen:
+            lifted = name_operands(
+                first, {o["val"]: n for o, n in zip(operands[0], chosen)}
+            )
+            lifted.set_operand([{"type": "BoxName", "val": n} for n in chosen])
+        else:
+            lifted = deepcopy(first)
+        instructions.append(lifted)
+    return BlockRegion(None, tuple(instructions))
+
+
+def _quotient_label(cfg, name, edge):
+    if edge.binding_condition is not None:
+        return edge.binding_condition
+    if (
+        cfg.synthesis_approach != "id-first"
+        or edge.target != cfg.exit
+        or edge.label.op in ("ON", "ON_star")
+    ):
+        return edge.label
+    region = cfg.nodes[name].region
+    if not isinstance(region, BlockRegion):
+        return edge.label
+    # The final task goal may be quantified. A completed final placement can
+    # provide its concrete repetition letter without changing that task goal.
+    held, target, completed = None, None, []
+    for instruction in region.physical:
+        if isinstance(instruction, Pick):
+            if held is not None:
+                return edge.label
+            held, target = instruction.grab_box_id, None
+        elif isinstance(instruction, Move) and held is not None:
+            target = instruction.target_box_id_z
+        elif isinstance(instruction, Release):
+            if held != instruction.release_box_id or target is None:
+                return edge.label
+            completed.append((held, target))
+            held = None
+        elif not isinstance(instruction, (Move, Skip)):
+            return edge.label
+    if held is not None or len(completed) != 1:
+        return edge.label
+    source, target = completed[0]
+    rows = cfg.demos.for_node(name)
+    if not rows:
+        return edge.label
+    available = graph_scope(cfg)[name]
+
+    def term(value):
+        alias = next(
+            (
+                n
+                for n in sorted(available)
+                if all(row.bindings.get(n) == value for row in rows)
+            ),
+            None,
+        )
+        return ref(alias) if alias is not None else block_id(value)
+
+    candidate = atom("ON", term(source), term(target))
+    return (
+        candidate
+        if all(evaluate(candidate, scene_at(row, row.t_end)) for row in rows)
+        else edge.label
+    )
+
+
 def quotient(cfg, *, language=None, infer_invariant=None):
     """Collapse flat repetitions to a fixed point; failed matches leave no edits."""
     cfg.validate_structure()
@@ -362,7 +523,7 @@ def quotient(cfg, *, language=None, infer_invariant=None):
     while True:
         word = [
             Letter(
-                e.binding_condition if e.binding_condition is not None else e.label,
+                _quotient_label(cfg, name, e),
                 e.binds,
                 isinstance(cfg.nodes[name].region, LoopRegion),
             )
