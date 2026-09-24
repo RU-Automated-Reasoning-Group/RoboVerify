@@ -5,7 +5,7 @@ against the implementation. It covers §§2–5, Algorithms 1–6, Appendix A/Ta
 and the associated appendix algorithms/proofs; experimental numbers are not
 correctness targets. Neither paper nor code automatically wins a disagreement.
 
-Entry numbers 1–34 are stable, including resolved findings. Each entry records
+Entry numbers 1–35 are stable, including resolved findings. Each entry records
 its status, decision/reasoning and remaining action. Add new findings with the
 next unused ID. Detailed implementation history and completed audit checklists
 remain in Git history; use [README.md](README.md#project-status) for project status
@@ -37,6 +37,7 @@ model assumptions and APIs.
 | 32 | Configurable Higher tolerance aligns saved height comparisons with ideal levels; Scattered differences are diagnosed in 33. |
 | 33 | Scattered mismatch diagnosed; further work deferred by user decision because of its low observed frequency. |
 | 34 | Section 6.2 fixed-program experiment implemented for Stack; initial-state witness generation and iteration counts made explicit. |
+| 35 | Named collision and Move-support checks duplicate an unrestricted arbitrary-object check; simplification deferred by user decision. |
 
 ## 1. Theorem 5.2 contradicts the paper's own Table 7 (`R_Higher`)
 
@@ -995,3 +996,23 @@ sampling, and counting convention. Report verification attempts (including False
 and the successful final check), accepted counterexample executions, and learner
 updates separately. Paper table counts and exact formula spellings are not
 correctness targets. See the [experiment guide](roboverify/synthesis/experiment/invariant_learning/README.md).
+
+## 35. Named motion checks overlap the arbitrary-object witness
+
+**Status:** optional simplification deferred at the user's request. Keep the
+existing checks and their reporting unchanged.
+
+**Observation:** primitive collision sweeps and Move-support checks iterate over
+all tracked names, including `sym`. In the general Stack proof, `sym` is an
+arbitrary physical block and may alias a named block. A valid arbitrary-object
+obligation therefore covers the corresponding named cases; separate checks for
+`b`, `b0`, and `b_prime` add no logical coverage. The names are discovered from the
+program, so this duplication also applies to other operand names.
+
+**Deferred follow-up:** preserve operand coordinates, alias updates, intentional
+contact exclusions, and the placement/effect obligations if these repeated
+checks are consolidated. The concrete-scene API currently permits fixing `sym`
+to a particular position, and tests use that facility. Such a fixed object is
+not an unrestricted witness: removing named checks globally without separating
+concrete obstacles from a fresh arbitrary witness would lose coverage. Any
+future simplification must retain named-obstacle and alias regression coverage.
