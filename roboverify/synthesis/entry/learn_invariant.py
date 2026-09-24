@@ -41,7 +41,7 @@ def build_parser():
     parser.add_argument(
         "--max-loop-iterations",
         type=int,
-        help="Counterexample execution bound; Stack defaults to num_blocks-1",
+        help="Maximum total loop bodies, including a failing body; Stack defaults to num_blocks-1",
     )
     parser.add_argument("--verification-timeout-ms", type=int, default=10000)
     parser.add_argument("--trajectory-timeout-seconds", type=float, default=60)

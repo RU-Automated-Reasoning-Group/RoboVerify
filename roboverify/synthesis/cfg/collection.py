@@ -161,13 +161,17 @@ def record_execution(
     timeout_seconds=60,
     video_path=None,
     render=False,
+    guard_choices=None,
 ):
     """Record a program from a settled Stack reset or an exact saved snapshot.
 
     Fresh Stack collection holds the reset gripper position for 50 steps before
     recording. A supplied snapshot is already the requested start: never reset
     or settle it again. Settling is outside demo actions, events, and video.
+    Optional guard_choices replay an enabled binding prefix for counterexamples;
+    after that prefix, execution uses its ordinary guard-selection policy.
     """
+    from synthesis.api.guard_eval import replay_guard_choices
     from synthesis.api.instructions import LoopBudgetExceeded
     from synthesis.mcmc.synthesis import (
         make_roboverify_env,
@@ -178,6 +182,8 @@ def record_execution(
     recording = Recording()
     metadata = dict(definition.metadata)
     metadata["higher_tolerance"] = get_higher_tolerance()
+    if guard_choices is not None:
+        metadata["guard_choices"] = guard_choices
     metadata["initialization"] = dict(
         source="reset" if initial_snapshot is None else "snapshot", settling_steps=0
     )
@@ -206,7 +212,9 @@ def record_execution(
                 render_error = str(exc)
 
     try:
-        with preserved_global_rng(), execution_deadline(timeout_seconds):
+        with preserved_global_rng(), execution_deadline(
+            timeout_seconds
+        ), replay_guard_choices(guard_choices):
             set_np_seed(seed)
             env = (
                 env_factory

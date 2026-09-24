@@ -1,6 +1,10 @@
 """Shared guard evaluation for While and Get, including legacy Z3 guards."""
 
 import itertools
+from collections import deque
+from contextlib import contextmanager
+from contextvars import ContextVar
+from copy import deepcopy
 
 import z3
 
@@ -11,6 +15,26 @@ from synthesis.util import on
 
 class NoGuardWitness(RuntimeError):
     pass
+
+
+_guard_replay = ContextVar("guard_replay", default=None)
+
+
+@contextmanager
+def replay_guard_choices(choices):
+    """Replay a validated prefix of enabled choices, then resume normal selection.
+
+    Scoped to this execution: never change a program or the default ID policy.
+    Unconsumed or disabled choices fail rather than silently taking another path.
+    """
+    pending = None if choices is None else deque(deepcopy(choices))
+    token = _guard_replay.set(pending)
+    try:
+        yield
+        if pending:
+            raise NoGuardWitness(f"Execution left {len(pending)} solver choices unused")
+    finally:
+        _guard_replay.reset(token)
 
 
 def evaluate_z3(expr, scene, bindings=None):
@@ -67,7 +91,7 @@ def evaluate_z3(expr, scene, bindings=None):
 
 
 def find_and_bind(instruction, env, traj):
-    """Choose the first matching binding; verification covers every matching choice."""
+    """Replay an enabled prescribed choice, or choose the first matching binding."""
     mapping = getattr(env, "symbolic_name_to_box_id", None)
     if not isinstance(mapping, dict):
         raise ValueError("Guard execution requires symbolic_name_to_box_id")
@@ -82,7 +106,22 @@ def find_and_bind(instruction, env, traj):
     ]
     condition = getattr(instruction, "guard_term", None)
     condition = instruction.instantiated_cond if condition is None else condition
-    for values in itertools.product(scene.positions, repeat=len(names)):
+    pending = _guard_replay.get()
+    prescribed = pending[0] if pending else None
+    if prescribed is not None:
+        selected = prescribed["bindings"]
+        if prescribed["kind"] != type(instruction).__name__ or set(selected) != set(
+            names
+        ):
+            raise NoGuardWitness(
+                "Solver choice does not match the next guard instruction"
+            )
+        if any(value not in scene.positions for value in selected.values()):
+            raise NoGuardWitness("Solver choice refers to a nonexistent block")
+        candidates = [tuple(selected[name] for name in names)]
+    else:
+        candidates = itertools.product(scene.positions, repeat=len(names))
+    for values in candidates:
         bindings = dict(mapping, **dict(zip(names, values)))
         holds = (
             evaluate(condition, scene, bindings)
@@ -91,5 +130,11 @@ def find_and_bind(instruction, env, traj):
         )
         if holds:
             mapping.update((name, bindings[name]) for name in names)
+            if prescribed is not None:
+                pending.popleft()
             return True
+    if prescribed is not None:
+        raise NoGuardWitness(
+            f"Solver choice is not enabled in the actual scene: {prescribed}"
+        )
     return False

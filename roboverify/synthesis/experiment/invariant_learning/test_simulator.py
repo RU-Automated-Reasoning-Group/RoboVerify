@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 import numpy as np
+import z3
 
 from synthesis.cfg.collection import record_execution
 from synthesis.cfg.recordings import load_traces, save_traces
@@ -17,6 +18,64 @@ from synthesis.mcmc.synthesis import make_roboverify_stack_env
 
 
 class SimulatorTests(unittest.TestCase):
+    def test_preservation_failure_replays_descending_ids_and_rejects_wrong_target(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            task = StackExperiment("synthesis.examples.stack:build_program")
+            ctx = task.context
+            x, y, b, base = [ctx.get_consts(name) for name in ("x", "y", "b", "b0")]
+            o, h, scattered = ctx.ON_star, ctx.Higher, ctx.Scattered
+            # Regression candidate from the two-block stage: its three-block
+            # preservation failure must be reproduced by the first placement.
+            task.set_invariant(
+                z3.ForAll(
+                    [x, y],
+                    z3.And(
+                        z3.Or(o(x, y), h(y, x)),
+                        z3.Implies(o(x, b), x == b),
+                        z3.Implies(o(b, x), o(x, base)),
+                        z3.Or(o(y, x), h(x, b)),
+                        z3.Implies(h(y, x), z3.Or(o(y, x), scattered(x, y))),
+                    ),
+                )
+            )
+            query = task.search_query(3, 10000)
+            path = next(
+                p
+                for p in query.paths
+                if p.failure_kind == "preserve" and p.head_iteration == 0
+            )
+            query.solver.add(
+                path.condition,
+                path.choices[0].values[0] == query.context.enum_blocks[2],
+            )
+            self.assertEqual(query.solver.check(), z3.sat)
+            model = query.solver.model()
+            search = WitnessSearch(
+                "found",
+                size=3,
+                query=query,
+                witness=query.decode(model),
+                plan=path.decode(model, query.context),
+            )
+            self.assertEqual(
+                [c["bindings"]["b_prime"] for c in search.plan.guard_choices], [2]
+            )
+            trace = task.execute(search, seed=0, timeout_seconds=60, video_path=None)
+            self.assertTrue(task.validate(trace, search), trace.metadata)
+            heads = [e for e in trace.events if e["kind"] == "loop_head"]
+            self.assertEqual([e["bindings"]["b_prime"] for e in heads], [2, 1])
+            self.assertTrue(trace.metadata["counterexample_reproduced"])
+            # A trajectory with some missing state is insufficient: the claimed
+            # failure must occur at the planned head, where I is still true.
+            search.plan.head_iteration = 1
+            trace.metadata["status"] = (
+                "completed"  # validate_trace consumes this status
+            )
+            self.assertFalse(task.validate(trace, search))
+            self.assertEqual(
+                trace.metadata["failure_kind"], "counterexample_not_reproduced"
+            )
+
     def test_generated_snapshot_preparation_archive_and_replay(self):
         with contextlib.redirect_stdout(io.StringIO()):
             task = StackExperiment("synthesis.examples.stack:build_program")
@@ -26,10 +85,14 @@ class SimulatorTests(unittest.TestCase):
 
             self.assertEqual(query.solver.check(), z3.sat)
             search = WitnessSearch(
-                "found", size=2, query=query, witness=query.decode(query.solver.model())
+                "found",
+                size=2,
+                query=query,
+                witness=query.decode(query.solver.model()),
+                plan=query.replay_plan(query.solver.model()),
             )
             trace = task.execute(search, seed=0, timeout_seconds=60, video_path=None)
-            self.assertTrue(task.validate(trace), trace.metadata)
+            self.assertTrue(task.validate(trace, search), trace.metadata)
             self.assertEqual(
                 trace.metadata["counterexample_initialization"]["settling_steps"], 50
             )

@@ -26,7 +26,7 @@ from synthesis.cfg.verification import (
 from synthesis.cfg.verified_synthesis import loop_regions
 from synthesis.experiment.invariant_learning.witness import (
     WitnessQuery,
-    missing_head_query,
+    failure_paths,
 )
 from synthesis.inference_lib.demo_store import (
     InferenceVocabulary,
@@ -48,7 +48,7 @@ class ExperimentTask(Protocol):
 
     An adapter must preserve the fixed executable across sizes, validate complete
     simulator executions, and expose all physical heads/exits with frozen entry
-    geometry. search_query returns a bounded *initial-state* coverage query.
+    geometry. search_query targets a selected VC failure from a valid initial state.
     """
 
     context: object
@@ -58,9 +58,9 @@ class ExperimentTask(Protocol):
     def describe(self) -> dict: ...
     def set_invariant(self, invariant): ...
     def verify_symbolic(self, timeout_ms): ...
-    def search_query(self, size, timeout_ms): ...
+    def search_query(self, size, timeout_ms, failures=None): ...
     def execute(self, search, *, seed, timeout_seconds, video_path): ...
-    def validate(self, trace) -> bool: ...
+    def validate(self, trace, search) -> bool: ...
     def learning_states(self, trace): ...
     def verify_motion(self, options): ...
 
@@ -135,6 +135,8 @@ class StackExperiment:
             ),
             initial_domain="Stack reset workspace; equal tabletop heights",
             settling_steps=STACK_SETTLING_STEPS,
+            search_target="reachable failure of a selected unbounded VC",
+            witness_selection="any enabled binding; replayed with physical guard checks",
             execution_bound=(
                 self.max_loop_iterations
                 if self.max_loop_iterations is not None
@@ -190,7 +192,7 @@ class StackExperiment:
                     env.close()
         return self._geometry
 
-    def search_query(self, size, timeout_ms):
+    def search_query(self, size, timeout_ms, failures=None):
         from synthesis.environment.stack_reset import (
             STACK_GRIPPER_CLEARANCE,
             STACK_MAX_BASE_DISTANCE,
@@ -199,11 +201,26 @@ class StackExperiment:
         )
 
         self._definition(size)
-        program, pre, _, context = symbolic_problem(self.cfg, self.context, size)
+        program, pre, post, context = symbolic_problem(self.cfg, self.context, size)
         iterations = (
             size - 1 if self.max_loop_iterations is None else self.max_loop_iterations
         )
-        coverage = missing_head_query(program, context, iterations)
+        # Rebuild failed VC formulas in this query's finite context. Only their
+        # identities are carried over; never constrain to the first returned model.
+        if failures is None:
+            failures = [
+                c
+                for c in self.verify_symbolic(timeout_ms).checks
+                if c.status == "invalid"
+            ]
+        selected = {(c.vc.kind, c.vc.loop_id) for c in failures}
+        targets = [
+            vc
+            for vc in program.VC_gen(pre, post, context)
+            if (vc.kind, vc.loop_id) in selected
+        ]
+        paths = failure_paths(program, context, targets, iterations)
+        coverage = z3.Or(*[path.condition for path in paths])
         base, gripper, height = self._read_geometry()
         solver = context.new_solver(timeout_ms)
         solver.add(pre, context.get_consts("b0") == context.enum_blocks[0])
@@ -255,7 +272,7 @@ class StackExperiment:
             xyz = [[number(v) for v in pos] for pos in positions]
             return InitialScene(xyz, base.tolist(), gripper.tolist(), height)
 
-        return WitnessQuery(solver, coverage, decode, iterations, context)
+        return WitnessQuery(solver, coverage, decode, iterations, context, paths)
 
     def execute(self, search, *, seed, timeout_seconds, video_path):
         from synthesis.api.control import get_move_action
@@ -303,7 +320,7 @@ class StackExperiment:
                 # Both expressions use names/relations, evaluated over the actual
                 # settled geometry, not the solver's pre-settling coordinates.
                 if not state_holds(pre, settled) or not state_holds(
-                    search.query.coverage, settled
+                    search.plan.condition, settled
                 ):
                     return DemoTrace(
                         (first,),
@@ -317,7 +334,7 @@ class StackExperiment:
                             definition.metadata,
                             status="realization_mismatch",
                             failure_kind="realization_mismatch",
-                            reason="Settled scene does not satisfy the initial-state coverage query",
+                            reason="Settled scene does not satisfy the selected failure-reachability query",
                             task_spec=task_identity("stack"),
                             higher_tolerance=on.get_higher_tolerance(),
                             counterexample_initialization=dict(
@@ -338,8 +355,10 @@ class StackExperiment:
                 max_loop_iterations=search.query.iterations,
                 timeout_seconds=timeout_seconds,
                 video_path=video_path,
+                guard_choices=search.plan.guard_choices,
             )
         trace.metadata["task_spec"] = task_identity("stack")
+        trace.metadata["counterexample_replay"] = search.plan.metadata()
         trace.metadata["counterexample_initialization"] = dict(
             source="solver",
             settling_steps=STACK_SETTLING_STEPS,
@@ -347,8 +366,50 @@ class StackExperiment:
         )
         return trace
 
-    def validate(self, trace):
-        return validate_trace(trace)
+    def validate(self, trace, search=None):
+        if not validate_trace(trace):
+            return False
+        if search is None:
+            return True
+        from synthesis.verification_lib.cegis import _project
+
+        plan = search.plan
+        names = {name for event in trace.events for name in event.get("bindings", {})}
+        states = [
+            _project(s, self.context.use_tbl)
+            for s in loop_store([trace], loop_id=self.loop_id, names=names).for_loop(
+                self.loop_id
+            )
+        ]
+        depth = plan.head_iteration
+        if plan.failure_kind == "establish":
+            reproduced = bool(states) and not state_holds(
+                self.loop.invariant, states[0]
+            )
+        else:
+            program, pre, post, context = symbolic_problem(self.cfg, self.context)
+            failed_vc = next(
+                vc
+                for vc in program.VC_gen(pre, post, context)
+                if vc.kind == plan.failure_kind and vc.loop_id == plan.loop_id
+            )
+            # Check the exact symbolic failure on the observed head as well as
+            # the actual successor. A physics/model mismatch alone is not a
+            # reproduction of the targeted symbolic VC counterexample.
+            reproduced = (
+                len(states) > depth + 1
+                and state_holds(z3.Not(failed_vc.expr), states[depth])
+                and state_holds(self.loop.invariant, states[depth])
+                and not state_holds(self.loop.invariant, states[depth + 1])
+            )
+        trace.metadata["counterexample_reproduced"] = reproduced
+        if not reproduced:
+            trace.metadata.update(
+                status="counterexample_not_reproduced",
+                failure_kind="counterexample_not_reproduced",
+                reason="Actual execution did not reproduce the selected VC failure at the predicted iteration",
+            )
+        return reproduced
 
     def learning_states(self, trace):
         return loop_store(

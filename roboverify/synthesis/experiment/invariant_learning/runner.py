@@ -231,7 +231,9 @@ def run_experiment(task, config, *, motion_options=None, logger=None):
 
             started = perf_counter()
             search = find_witness(
-                lambda size: task.search_query(size, config.verification_timeout_ms),
+                lambda size: task.search_query(
+                    size, config.verification_timeout_ms, invalid
+                ),
                 config.max_counterexample_blocks,
                 record=record,
             )
@@ -240,6 +242,15 @@ def run_experiment(task, config, *, motion_options=None, logger=None):
             if search.status != "found":
                 return finish(search.status, search.reason)
             row["num_blocks"] = search.size
+            row["replay"] = search.plan.metadata()
+            artifact(f"counterexamples/{revision}-replay.json", search.plan.metadata())
+            search.query.solver.push()
+            search.query.solver.add(search.plan.condition)
+            artifact(
+                f"queries/{revision}-{search.size}-selected-path.smt2",
+                search.query.solver.to_smt2(),
+            )
+            search.query.solver.pop()
             scene = (
                 asdict(search.witness)
                 if hasattr(search.witness, "__dataclass_fields__")
@@ -267,7 +278,7 @@ def run_experiment(task, config, *, motion_options=None, logger=None):
                 video_path=video_path,
             )
             row["execution_seconds"] = perf_counter() - started
-            valid = task.validate(trace)
+            valid = task.validate(trace, search)
             if logger and trace.states:
                 save_traces(
                     logger.artifact_dir("trajectories")

@@ -12,7 +12,11 @@ from synthesis.experiment.invariant_learning.runner import (
     ExperimentConfig,
     run_experiment,
 )
-from synthesis.experiment.invariant_learning.witness import WitnessQuery
+from synthesis.experiment.invariant_learning.witness import (
+    WitnessQuery,
+    failure_paths,
+    find_witness,
+)
 from synthesis.inference_lib.demo_store import (
     InferenceVocabulary,
     InvInference,
@@ -50,28 +54,63 @@ class BindingTask:
     def set_invariant(self, value):
         self.invariant = value
 
-    def verify_symbolic(self, timeout_ms):
-        a, b = self.context.get_consts("a"), self.context.get_consts("b")
-        program = Program(1, [While(a != b, [], [Assign("a", "b")], self.invariant)])
-        return SymbolicVerificationResult(
-            [
-                discharge_vc(vc, self.context, timeout_ms)
-                for vc in program.VC_gen(a != b, a == b, self.context)
-            ],
-            scope="unbounded",
+    def problem(self, size=None):
+        from uuid import uuid4
+
+        ctx = (
+            self.context
+            if size is None
+            else HighLevelContext(
+                mode="enum", num_blocks=size, sort_name="Binding_" + uuid4().hex
+            )
+        )
+        invariant = ctx.spec_to_expr(
+            self.context.expr_to_spec(self.invariant), known_const_names=["a", "b"]
+        )
+        a, b = ctx.get_consts("a"), ctx.get_consts("b")
+        return (
+            Program(1, [While(a != b, [], [Assign("a", "b")], invariant)]),
+            a != b,
+            a == b,
+            ctx,
         )
 
-    def search_query(self, size, timeout_ms):
-        solver = z3.Solver()
+    def verify_symbolic(self, timeout_ms, size=None):
+        program, pre, post, ctx = self.problem(size)
+        return SymbolicVerificationResult(
+            [
+                discharge_vc(vc, ctx, timeout_ms)
+                for vc in program.VC_gen(pre, post, ctx)
+            ],
+            scope="unbounded" if size is None else f"finite:{size}",
+            num_blocks=size,
+        )
+
+    def search_query(self, size, timeout_ms, failures):
+        program, pre, post, ctx = self.problem(size)
+        selected = {(c.vc.kind, c.vc.loop_id) for c in failures}
+        checks = [
+            vc
+            for vc in program.VC_gen(pre, post, ctx)
+            if (vc.kind, vc.loop_id) in selected
+        ]
+        paths = failure_paths(program, ctx, checks, 1)
+        solver = ctx.new_solver(timeout_ms)
+        solver.add(pre)
         return WitnessQuery(
-            solver, z3.BoolVal(size >= 2), lambda model: {"size": size}, 1
+            solver,
+            z3.Or(*[p.condition for p in paths]),
+            lambda model: {"size": size},
+            1,
+            ctx,
+            paths,
         )
 
     def execute(self, search, **kwargs):
         self.executions += 1
         return SimpleNamespace(states=(), metadata={"status": "completed"})
 
-    def validate(self, trace):
+    def validate(self, trace, search):
         return self.valid
 
     def learning_states(self, trace):
@@ -148,8 +187,18 @@ class RunnerTests(unittest.TestCase):
     def test_repeated_covered_execution_does_not_trigger_another_update(self):
         task = BindingTask()
         failure = task.verify_symbolic(1000)
+        search = find_witness(
+            lambda size: task.search_query(
+                size, 1000, [c for c in failure.checks if c.status == "invalid"]
+            ),
+            2,
+        )
         task.verify_symbolic = Mock(return_value=failure)
-        result = run_experiment(task, ExperimentConfig())
+        with patch(
+            "synthesis.experiment.invariant_learning.runner.find_witness",
+            return_value=search,
+        ):
+            result = run_experiment(task, ExperimentConfig())
         self.assertEqual(result.status, "no_progress")
         self.assertEqual(result.learner_updates, 1)
 
