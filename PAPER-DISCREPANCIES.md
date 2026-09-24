@@ -957,14 +957,22 @@ the invariant and guard at an intermediate state; it need not be reachable from
 any legal initial environment. These are distinct objects (see entries 7 and 8).
 
 The standalone `synthesis.entry.learn_invariant` checks the unbounded symbolic
-obligations, then searches increasing block counts for a valid initial environment
-whose bounded abstract execution reaches a head outside the current invariant.
-It uses shared WP rules and deterministic first-ID guard binding for this search;
-unbounded preservation still checks all matching bindings. Minimality is scoped
-to the configured initial domain and execution bounds, with unknown smaller
-queries stopping the search. The simulator must actually produce an uncovered
-state before any learning update is accepted. No induction countermodel or
-abstract successor is automatically inserted into the dataset.
+obligations, then directly searches increasing block counts for a valid initial
+environment and an execution reaching a selected failed VC. No separate finite
+inductiveness check minimizes unreachable countermodels. Establishment targets
+the first head outside I; preservation targets I-and-guard followed by a successful
+body outside I, retaining the negated VC. Earlier heads do not assume I.
+
+The original ordered generic-coverage query has been replaced by explicit
+unrolling with fresh symbolic guard witnesses and shared placement WP rules.
+Every enabled binding is eligible, and assignments carry witnesses into later
+iterations. Solver choices are saved and physically replayed with guard checks;
+ordinary executions retain their lowest-ID policy. A complete trajectory must
+reproduce the selected failure at the predicted iteration before supplying data.
+Merely encountering some other uncovered state is insufficient. No induction
+countermodel or abstract successor is automatically inserted into the dataset.
+Minimality is scoped to the initial domain and execution bound; UNKNOWN stops
+search, and absent bounded witnesses do not prove unrestricted unreachability.
 
 Generated Stack scenes use the current reset workspace and height assumptions,
 settle for 50 steps, and save a full snapshot. Only complete, converged physical

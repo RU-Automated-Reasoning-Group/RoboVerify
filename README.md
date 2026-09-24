@@ -50,9 +50,12 @@ collections from before the equal-height precondition require recollection for
 pipeline use. Collect demonstrations before running the examples.
 
 For paper Section 6.2, `synthesis.entry.learn_invariant` starts with an empty
-dataset and invariant False, generates valid initial counterexample environments,
-and runs the fixed supplied program in MuJoCo. It supports symbolic-only
-verification (default) or both symbolic and motion verification. Stack is
+dataset and invariant False, searches increasing block counts directly for valid
+initial environments reaching a failed VC, and runs the fixed program in MuJoCo.
+Symbolic guard witnesses have no ID-order restriction; physical replay checks
+those choices and confirms the selected failure at the predicted iteration.
+It supports symbolic-only verification (default) or both symbolic and motion
+verification. Stack is
 implemented with an adapter interface for future environments. See the
 [counterexample-learning experiment](roboverify/synthesis/experiment/invariant_learning/README.md).
 

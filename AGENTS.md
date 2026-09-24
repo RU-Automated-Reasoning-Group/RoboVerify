@@ -70,8 +70,10 @@ the 1 mm Higher tolerance and the documented supported-tower motion model;
 the supplied-program bootstrap currently passes without invariant refinement.
 This supplied-program result does not establish search or loop recovery.
 The standalone [Section 6.2 experiment](roboverify/synthesis/experiment/invariant_learning/README.md)
-starts from no demos and False, generates initial environments with bounded
-coverage queries, and learns only from complete validated MuJoCo executions.
+starts from no demos and False, directly minimizes reachable VC failures with
+bounded unordered execution queries, and learns only from complete validated
+MuJoCo executions that reproduce the selected failure. Solver guard choices are
+replayed and checked; ordinary execution retains lowest-ID selection.
 `learn_invariant --verification-level symbolic|both` keeps the supplied program
 fixed; Stack is the initial adapter. Its proof is unbounded and separate from
 the bounded search for executable counterexamples.
@@ -322,9 +324,11 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
 
 - **`synthesis/experiment/invariant_learning/`** — a fixed-program experiment runner
   and environment adapter protocol. `witness.py` builds finite initial-state
-  preimages with the shared placement WP and runtime first-ID binding;
+  preimages to selected VC failures with shared placement WP and fresh symbolic
+  guard witnesses, without ordering or separate finite inductiveness checks;
   `tasks.py` installs solver-generated Stack scenes, settles for 50 steps,
-  validates the saved start, and records full physical executions.
+  validates the saved start, replays enabled solver choices, and checks the
+  selected failure at its predicted iteration in a complete physical execution.
   `runner.py` starts from False and no data, accumulates heads/exits through
   `InvInference`, checks coverage/enlargement, and requires an unbounded proof.
   Optional motion verification checks the unchanged program afterward.

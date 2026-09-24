@@ -51,7 +51,7 @@ training data.
 | `--max-counterexample-blocks` | 4; search sizes 1 through this bound, starting again at 1 after each update. |
 | `--max-rounds` | 10 accepted learner updates at most; up to 11 verification attempts including the final check. |
 | `--max-loop-iterations` | Stack uses `num_blocks - 1`; override for a different bounded execution horizon. |
-| `--verification-timeout-ms` | 10000 per symbolic/initial-domain/coverage solver query; does not bound Python formula construction or learning. |
+| `--verification-timeout-ms` | 10000 per symbolic/initial-domain/reachability solver query; does not bound Python formula construction or learning. |
 | `--trajectory-timeout-seconds` | 60 for generated-scene preparation and execution together. |
 | `--invariant-relations` | `ON_star Higher Scattered equality`. |
 | `--invariant-variables` | 2 quantified learner variables. |
@@ -69,39 +69,60 @@ current invariant. A preservation countermodel can be an unreachable intermediat
 state; it is **not** automatically a valid simulator reset. The experiment saves
 verification countermodels separately from generated initial-state witnesses.
 
-After an establishment or preservation failure, the initial-state query asks:
+After an establishment or preservation failure, search block counts 1, 2, 3,
+... directly for a **reachable failure of a selected failed VC**:
 
 ```text
-valid_initial_environment(s0)
-and execution of the supplied symbolic program from s0
-    reaches a loop head outside the current invariant within the configured bound
+valid_initial_environment(s0) and task_precondition(s0)
+and an enabled execution of the supplied symbolic program from s0
+    reproduces the selected VC failure within the configured bound
 ```
 
-The query is a bounded preimage built with the existing placement WP rules.
-Finite guards select the first matching physical ID, including deterministic
-`Get` bindings. The final guard-false head counts as an invariant state. Thus a
-one-block Stack environment contributes its normal exit despite executing zero
-loop iterations. The unbounded preservation proof still covers every matching
-witness, as in the existing verifier.
+There is no separate finite-domain inductiveness check or minimization of
+unreachable countermodels. Each size checks initial-domain consistency and then
+the combined reachability query. UNSAT at smaller sizes establishes minimality
+**within the adapter's initial domain and execution bounds**; UNKNOWN stops the
+search. The first unbounded countermodel's relation table is not fixed: any
+reachable countermodel of the selected VC is eligible.
 
-Block counts are tried in increasing order. Each size first checks initial-domain
-consistency, then existence of a missing head. UNSAT at smaller sizes establishes
-minimality **within the adapter's initial domain and execution bounds**. UNKNOWN
-stops the search. The selected environment is a witness to missing invariant
-coverage; it need not be the same relation table as the induction countermodel.
-The query uses the current abstract placement semantics, so physical replay must
-independently confirm that a missing state is actually encountered.
+For establishment, the target is a first loop head outside the invariant after
+executing the program prefix. For preservation, the target is a head satisfying
+`I` and the guard, whose actual symbolic body execution violates `I`. The query
+also retains the negated preservation VC. All earlier iterations are unrolled
+explicitly; the candidate invariant is not assumed along the path.
+
+Preimages use the existing placement WP rules. Each unrolled guard gets fresh
+symbolic block witnesses; every enabled binding is allowed, without an ID-order
+constraint. Assignments propagate witnesses normally: `b := w_i` makes the next
+iteration use `w_i` for `b`. `Get` choices are existential too. The loop itself
+is never replaced by its unproven invariant during reachability search.
+
+The bound counts total loop bodies, including the failing preservation body.
+At bound K, preservation targets heads after 0 through K-1 preceding iterations;
+establishment can fail with zero iterations. A normal guard-false head is still
+an invariant state, including the one-block zero-iteration exit.
+
+The solver returns a replay plan containing the chosen bindings and target head
+index. During physical execution, the collector follows these choices and checks
+each guard on the actual scene. A disabled, mismatched, or unused choice rejects
+the execution. After the prescribed prefix, ordinary lowest-ID selection resumes
+so the supplied program completes. Ordinary collection and synthesis retain their
+existing selection policy. The executable instructions and parameters are unchanged.
 
 Stack's solver domain uses the existing reset workspace, gripper clearance,
 Scattered separation, and equal tabletop heights. The adapter installs the
 requested block poses into a full simulator state, settles for 50 steps, and
-rechecks the task precondition and coverage query on the settled geometry. That
-full snapshot is state zero and is restored without further settling. Failed
+rechecks the task precondition and selected path condition on the settled
+geometry. That full snapshot is state zero and is restored without further settling. Failed
 settling checks are retained as diagnostic archives.
 
 An accepted execution must complete with converged primitives and satisfy the
-actual task precondition and postcondition. At least one observed head/exit must
-violate the previous invariant. All observed heads/exits then enter the cumulative
+actual task precondition and postcondition. It must reproduce the selected
+failure at the predicted head: establishment has `not I` at the first head;
+preservation must refute the selected symbolic VC on the observed head, with
+`I` before the selected body and `not I` at its actual successor. A different
+uncovered state alone is insufficient (`counterexample_not_reproduced`).
+All observed heads/exits then enter the cumulative
 dataset, with each trajectory's own block universe and frozen entry geometry.
 The next invariant must cover all accumulated states and satisfy the existing
 strict-enlargement checks. No abstract successor or handwritten clause enters
@@ -109,7 +130,7 @@ this dataset.
 
 An exit failure needs a stronger invariant; enlargement cannot remove its bad
 state, so this experiment reports `needs_stronger_invariant`. A failed induction
-proof with no reachable missing state in the searched bounds reports
+proof with no reachable selected VC failure in the searched bounds reports
 `no_reachable_counterexample`. Neither case is silently repaired. The abstract
 WP limitations and deferred Scattered mismatch remain documented in
 [PAPER-DISCREPANCIES.md](../../../../PAPER-DISCREPANCIES.md).
@@ -129,7 +150,8 @@ Use a distinct `--run-name` for simultaneous experiments. Each run records:
 - `artifacts/queries/`: executable SMT-LIB queries and outcomes at each size.
 - `artifacts/verification/`: unbounded symbolic checks and countermodels;
   requested motion checks include their geometric counterexamples.
-- `artifacts/counterexamples/`: generated coordinates and execution metadata.
+- `artifacts/counterexamples/`: generated coordinates, replay plans (zero-based
+  physical IDs and target head iterations), and physical reproduction metadata.
 - `artifacts/trajectories/`: current full-state NPZ archives, including rejected
   executions when states were recorded. These remain experiment artifacts.
 - `artifacts/learning-states.json`: the accumulated learning dataset;
@@ -153,11 +175,13 @@ The CLI obtains its task choices from this registry. The adapter supplies:
 
 1. Context, vocabulary, loop ID, fixed-program/task description, and invariant
    installation into that program's verification representation.
-2. Unbounded symbolic verification and `search_query(size, timeout_ms)`, returning
-   a `WitnessQuery` with initial-domain constraints, missing-head query, execution
-   bound, and model decoder. The shared flat-loop preimage helper is optional.
-3. Physical execution from the decoded scene, initialization/settling, complete
-   trace validation, and learning states with correct frozen geometry.
+2. Unbounded symbolic verification and `search_query(size, timeout_ms, failures)`,
+   returning a `WitnessQuery` with initial-domain constraints, the selected VC
+   reachability query, execution bound, scene decoder, and replayable paths.
+   The shared flat-loop preimage helper is optional.
+3. Physical execution from the decoded scene and replay plan, initialization/
+   settling, `validate(trace, search)` checking both the complete pre/post transition
+   and reproduction of the selected failure, and learning states with frozen geometry.
 4. Motion verification for `both` mode, or an explicit unsupported result.
 
 `run_experiment` owns dataset accumulation, the fixed `InvInference` call,
