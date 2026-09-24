@@ -217,6 +217,33 @@ See [review entry 24](../../../PAPER-DISCREPANCIES.md#24-the-first-stack-placeme
 for the saved-state policy. Recollect after changing controller settings;
 program fingerprints identify the executable used by each archive.
 
+### Measuring physical path straightness
+
+The current backend clips each Cartesian action coordinate separately. With
+gain 20, errors above 50 mm on an axis saturate and can change the requested
+direction. Endpoint convergence does not guarantee a straight path between
+waypoints. The measured Stack discrepancy and scope are recorded in
+[entry 36](../../../PAPER-DISCREPANCIES.md#36-component-wise-saturation-bends-the-physical-gripper-path).
+
+Run a diagnostic of the supplied Stack program, optionally comparing uniform XYZ
+scaling from identical saved initial states. Configure the simulator environment
+as above, then run from `roboverify/`:
+
+```bash
+uv run python -m synthesis.experiment.compare_stack_paths \
+  --num-blocks 4 --num-seeds 100 --compare-uniform
+uv run python -m synthesis.experiment.report --run runs/controller-paths/latest
+```
+
+This serial diagnostic observes each fixed-target motion phase and temporarily
+patches action scaling only inside the optional trial. It does not change the
+production controller. Both variants are checked against the current task's
+pre/postconditions; failed seeds remain in the results. Artifacts include a
+phase table, raw commands and gripper paths, execution outcomes and `paths.png`.
+Bend measures distance from the original phase line at control-step boundaries;
+it excludes intentional waypoint turns and does not bound substep or held-block
+motion. Opening/closing and the initial settling period are not motion phases.
+
 ## Run either pipeline mode
 
 These commands show the two interfaces. For the checked supplied Stack result,

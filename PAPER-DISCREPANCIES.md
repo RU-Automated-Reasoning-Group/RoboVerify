@@ -5,7 +5,7 @@ against the implementation. It covers §§2–5, Algorithms 1–6, Appendix A/Ta
 and the associated appendix algorithms/proofs; experimental numbers are not
 correctness targets. Neither paper nor code automatically wins a disagreement.
 
-Entry numbers 1–35 are stable, including resolved findings. Each entry records
+Entry numbers 1–36 are stable, including resolved findings. Each entry records
 its status, decision/reasoning and remaining action. Add new findings with the
 next unused ID. Detailed implementation history and completed audit checklists
 remain in Git history; use [README.md](README.md#project-status) for project status
@@ -38,6 +38,7 @@ model assumptions and APIs.
 | 33 | Scattered mismatch diagnosed; further work deferred by user decision because of its low observed frequency. |
 | 34 | Section 6.2 fixed-program experiment implemented for Stack; initial-state witness generation and iteration counts made explicit. |
 | 35 | Named collision and Move-support checks duplicate an unrestricted arbitrary-object check; simplification deferred by user decision. |
+| 36 | Component-wise action clipping bends measured Stack paths; diagnostic uniform scaling sharply reduces it. Production controller unchanged. |
 
 ## 1. Theorem 5.2 contradicts the paper's own Table 7 (`R_Higher`)
 
@@ -1064,3 +1065,69 @@ to a particular position, and tests use that facility. Such a fixed object is
 not an unrestricted witness: removing named checks globally without separating
 concrete obstacles from a fresh arbitrary witness would lose coverage. Any
 future simplification must retain named-obstacle and alias regression coverage.
+
+## 36. Component-wise saturation bends the physical gripper path
+
+**Status:** measured controller/model discrepancy; investigation only. No change
+to production control, motion premises, or the physical-refinement scope of entry 4.
+
+**Mechanism:** `api/control.py::get_move_action` sends `20 * position_error`.
+The active CEE-US Fetch backend clips each action coordinate to [-1, 1], then
+multiplies XYZ by 0.05 m before updating the mocap target. An axis saturates above
+50 mm error. Unequal multi-axis errors can therefore change direction; pure
+single-axis saturation need not. Feedback follows the current-to-target vector
+and has no explicit correction to the original segment. Release retreat sends
+zero X/Y commands, so horizontal drift is not corrected there.
+
+**Experiment (2026-09-24):** `synthesis.experiment.compare_stack_paths` executed
+the supplied four-block Stack program at seeds 0–99 with the current precondition,
+default gains/tolerances and 50 settling steps. Each of 100 paired uniform-scaling
+trials restored the corresponding baseline's full settled initial snapshot in a
+fresh environment. No seeds were replaced. Both variants validated 100/100 current
+pre/post transitions and all primitive controllers converged.
+
+A motion phase is one fixed-target approach, descent, lift, transfer, lowering,
+or retreat. Bend is its maximum perpendicular gripper distance from the original
+start-to-target line, sampled at control-step boundaries. Intentional waypoint
+turns, gripper opening/closing and preparation steps are excluded. A command
+direction change is greater than 1 degree; 5 mm is a descriptive bend threshold,
+not a safety margin. These measurements omit substep excursions and held-block,
+finger and arm geometry.
+
+| Phase (300 of each) | Baseline bend >5 mm | Baseline median / max (mm) | Uniform median / max (mm) |
+| --- | ---: | ---: | ---: |
+| Pick approach | 252 (84%) | 13.75 / 69.37 | 0.73 / 2.52 |
+| Pick descent | 41 (13.7%) | 2.26 / 6.86 | 0.74 / 1.75 |
+| Lift | 0 | 0.70 / 0.91 | 0.83 / 1.37 |
+| Loaded transfer | 270 (90%) | 17.51 / 66.90 | 0.93 / 2.47 |
+| Lower | 0 | 0.23 / 0.59 | 0.22 / 0.60 |
+| Release retreat | 5 (1.7%) | 2.19 / 11.71 | 2.19 / 11.78 |
+
+Baseline clipping changed direction in 2,174/10,724 motion control steps (20.3%)
+and 887/1,800 phases (49.3%). All 100 executions had such changes and at least one
+phase over 5 mm. Raw XYZ saturated in 6,633 steps (61.9%); this is a different
+count from changed directions. Maximum observed bend was 69.37 mm.
+
+The diagnostic variant uniformly scales XYZ by `max(1, max(abs(XYZ)))`, preserving
+the gripper command. It eliminated measured command-direction distortion and
+reduced the approach/transfer maximum to 2.52 mm. The five phases still over 5 mm
+were Release retreats. Mean program action counts were 117.24 baseline and
+117.54 uniform. This paired intervention supports clipping as the dominant cause
+of the large approach/transfer bends in this sample; it does not establish exact
+straightness or a physical safety proof.
+
+Artifacts are in `roboverify/runs/controller-paths/20260924-210823-dec9223-paired-100/artifacts/`:
+`comparison.md`, `comparison.json`, `phases.json`, `executions.json`, and
+`paths.png`. The completed analysis in
+`roboverify/runs/controller-paths/20260924-211351-d6439c5-paired-100-report/`
+recomputes all 3,600 phase metrics from those saved positions/actions and checks
+all 100 paired starting positions. Metric tests cover the 4:1 example, single-axis saturation, phase
+boundaries, unchanged baseline commands, and uniform scaling in an ideal servo.
+All 16 focused diagnostic/controller tests passed, including simulator tests.
+An instrumented baseline replay of the existing current-task seed-0 archive
+matched all 124 recorded actions exactly and observations within 1e-8.
+
+**Remaining action:** consider adopting uniform XYZ scaling and separately
+correcting Release horizontal drift if physical path fidelity is required.
+These results concern the supplied four-block Stack program, not arbitrary
+synthesized programs or a certified bound on deviation from the motion model.
