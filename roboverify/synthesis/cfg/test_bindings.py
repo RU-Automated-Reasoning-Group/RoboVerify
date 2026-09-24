@@ -2,7 +2,6 @@ import unittest
 from unittest.mock import Mock, patch
 
 import numpy as np
-
 from synthesis.api.instructions import (
     Assign,
     Get,
@@ -13,7 +12,12 @@ from synthesis.api.instructions import (
     Skip,
 )
 from synthesis.api.program import Program
-from synthesis.cfg.bindings import close_objects, mutate_scoped, require_closed
+from synthesis.cfg.bindings import (
+    close_objects,
+    mutate_scoped,
+    require_closed,
+    seed_from_scope,
+)
 from synthesis.cfg.demos import DemoSegment, DemoTrace
 from synthesis.cfg.graph import RelationalCFG
 from synthesis.cfg.region import BlockRegion
@@ -69,6 +73,28 @@ class BindingTests(unittest.TestCase):
             None, tuple(p.instructions), frozenset({"object"})
         )
         self.assertIn("object", scope(cfg)[cfg.exit])
+
+    def test_new_loop_body_seed_uses_only_its_existing_names(self):
+        import random
+
+        available = {"base", "top", "selected", "tbl"}
+        first = seed_from_scope(30, available, random.Random(7))
+        second = seed_from_scope(30, available, random.Random(7))
+        from synthesis.cfg.program_source import describe_program
+
+        self.assertEqual(describe_program(first), describe_program(second))
+        self.assertEqual(len(first.instructions), 30)
+        names = set()
+        for instruction in first.instructions:
+            self.assertNotIsInstance(instruction, Get)
+            for operand in instruction.get_operand():
+                self.assertEqual(operand["type"], "BoxName")
+                self.assertIn(operand["val"], available - {"tbl"})
+                names.add(operand["val"])
+        self.assertEqual(names, available - {"tbl"})
+        require_closed(first.instructions, available)
+        with self.assertRaisesRegex(ValueError, "in-scope"):
+            seed_from_scope(1, {"tbl"}, random.Random(7))
 
     def test_rollout_scores_bindings_after_assignment(self):
         obs = np.zeros(43)

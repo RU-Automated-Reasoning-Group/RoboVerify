@@ -2,8 +2,6 @@
 
 from copy import deepcopy
 
-from z3.z3util import get_vars
-
 from synthesis.api.instructions import (
     Assign,
     Get,
@@ -15,6 +13,7 @@ from synthesis.api.instructions import (
 from synthesis.api.program import Program
 from synthesis.cfg.physical import name_operands
 from synthesis.predicates.term import atom, boolean, free_names, negate, ref, to_z3
+from z3.z3util import get_vars
 
 
 def require_closed(instructions, available):
@@ -94,6 +93,22 @@ def close_objects(program, demos, available, context, *, prefix="object"):
     instructions = gets + [name_operands(i, aliases) for i in program.instructions]
     require_closed(instructions, available)
     return Program(len(instructions), instructions)
+
+
+def seed_from_scope(length, available, rng=None):
+    """Seed a new relational body directly with its in-scope object names.
+
+    Integer indices here only select names; they are never physical block IDs
+    in a search candidate. Loop bindings can vary between extracted iterations.
+    """
+    from synthesis.api.program import generate_random_program
+
+    names = sorted(set(available) - {"tbl"})
+    if not names:
+        raise ValueError("Named primitive search needs an in-scope physical operand")
+    sampled = generate_random_program(length, range(len(names)), rng)
+    aliases = dict(enumerate(names))
+    return Program(length, [name_operands(i, aliases) for i in sampled.instructions])
 
 
 def mutate_scoped(program, available):

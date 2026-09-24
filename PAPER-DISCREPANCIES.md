@@ -24,7 +24,7 @@ model assumptions and APIs.
 | 19 | Resolved integration defect: recorded and candidate imitation features. |
 | 20 | Supplied Stack verification passes with the intended learner (32); full synthesis acceptance remains open. |
 | 21 | Switchable ID-first policy implemented; full learning acceptance and policy comparison remain open. |
-| 22 | Placement-cut and loop-exit limits identified; full loop recovery remains open. |
+| 22 | Physical-shape restriction removed; folded bodies enter named search. Placement-cut and loop-exit limits remain open. |
 | 23 | Resolved primitive-controller discrepancy; shared configurable control and execution parity checks. |
 | 24 | Settled collection starts and saved-state replay implemented; residual grasp offsets and full learning acceptance remain. |
 | 25 | Resolved motion translation defect: normalize negative quantifiers before weakening premises. |
@@ -500,11 +500,13 @@ acceptance remains an open comparison.
 
 **Decision and implementation:** The user selected a switchable alternative,
 `--synthesis-approach id-first`, while retaining `relational` as the default.
-ID-first MCMC uses only numeric physical operands; CFG refinement learns ground
-ID predicates without existential binders. After concrete search finishes,
-quotienting introduces loop roles from repeated predicates and physical operand
-sequences. This is an explicit user-selected search schedule, not a claim that
-the paper uniquely prescribes it. Runtime first-witness selection is unchanged.
+Initial ID-first MCMC uses only numeric physical operands; CFG refinement learns
+ground ID predicates without existential binders. After concrete search finishes,
+quotienting introduces loop roles from repeated relational predicates. The user
+subsequently authorized ByName MCMC for the new loop bodies, over all extracted
+iterations. Matching numeric instruction sequences provide an optional seed.
+This is an explicit user-selected search schedule, not a claim that the paper
+uniquely prescribes it. Runtime first-witness selection is unchanged.
 
 The user additionally requires a named synthesis output. Before synthesis
 returns, residual IDs become fixed entry aliases with preserved identity and
@@ -525,8 +527,9 @@ prefix remains an explicit limitation of the retained relational variant.
 
 ## 22. ID-first continuation exposes placement and loop-exit boundary limits
 
-**Status:** continuation and quotient acceptance remain open under the current
-collection policy.
+**Status:** the extra physical-shape restriction is removed, and folded bodies
+enter named MCMC/CEM search. End-to-end loop acceptance remains open under the
+current collection and partition policy.
 
 **Decision/reasoning:** A geometric relation can become true during a placement,
 before the primitive finishes. Refinement cuts must preserve the actual grasp
@@ -544,11 +547,18 @@ learning acceptance or formal verification. See the
 **Boundary diagnosis:** complete supplied placements can replay successfully when
 concatenated yet fail to resume from the earliest relational cuts, which can occur
 before lowering/release finishes. Splitting at those cuts can create fragments
-with different instruction shapes that the current quotient cannot fold.
+with different instruction shapes. These no longer prevent relational folding,
+but a shared controller still has to work from the extracted physical heads.
 An isolated quotient may also produce a loop that replays successfully while its
 extracted demonstration exit precedes the task goal. Such a fold must be rejected.
 Neither whole-demo success nor a fitted guard establishes valid segment boundaries
-or inductiveness.
+or inductiveness. For a loop with a remaining continuation, the shared CFG
+validator also requires the extracted exit to be the *first* recorded state
+satisfying the outgoing condition (the negated guard). That condition can become
+true before the final relational milestone. The resulting fold is currently
+rejected even when its entry and exit predicates hold. This separate temporal
+restriction remains unchanged and needs its own review; removing the physical
+shape gate alone does not resolve it.
 
 **Paper versus implementation:** Section 3.3, Algorithm 4 and Definitions 3.1–3.2
 (pp. 14–16) match relational Kleene encodings, not primitive instruction lists.
@@ -558,28 +568,33 @@ how actions are realized. Thus `ON(1,b0)` and `ON(2,1)` remain relational
 quotient candidates even if their physical fragments have different lengths.
 Algorithm 2 calls quotient before the subsequent straight-line realization.
 
-The ID-first helper `_generalize_id_body` adds a stronger implementation
+The former ID-first helper `_generalize_id_body` added a stronger implementation
 restriction: equal physical instruction counts, identical instruction classes
-at corresponding positions, and operands explainable by fixed or repeated roles.
-This was introduced in commit `3c03803` when implementing ID-first synthesis.
-It enables direct reuse of completed numeric candidates as a named body without
-another body search. It is not a paper requirement, and the user's requirement
-that synthesis return only named instructions does not imply this restriction.
-Relational loop discovery and physical body realization could instead be
-separated, with subsequent execution and verification deciding acceptance.
-Removing the shape restriction alone would not establish a reusable body or
-resolve the independently observed invalid extracted loop exits.
+at corresponding positions, and recoverable operand roles. This was introduced
+in commit `3c03803` to directly reuse numeric candidates without another body
+search. It was not a paper requirement, and named synthesis output did not imply it.
+
+At the user's request, this condition is now removed from fold acceptance.
+`_seed_id_body` may reuse matching code as an initial candidate; failure to align
+leaves an unimplemented body instead of rejecting the relational fold. After a
+fold, synthesis invokes ByName MCMC/CEM on all extracted iterations, then checks
+the loop and any repartitioned continuation. Its returned program remains named,
+and the original ID-first policy is retained for later whole-task resynthesis.
+The user explicitly chose named body search after quotient, while keeping the
+initial search numeric. New body-search failures and loop execution failures
+remain unsuccessful synthesis results. The independent demo-boundary validation
+is unchanged; structural discovery does not establish a usable or verified body.
 
 **CFG granularity:** a perfect straight-line oracle does not by itself force
 loop recovery. If it supplies the entire unrolled solution at the initial node,
 synthesis can finish without refinement. Quotient compares repeated CFG
 fragments; it does not split repetitions inside a single physical block. An
 oracle supplying fragments compatible with the recorded relational cuts can
-instead finish with unequal instruction shapes, which the current quotient
-also cannot merge. These are synthesis-structure limits independent of finding
-good continuous motion parameters. A proposed guard may differ from the source
-program while fitting all recorded heads and exits; replay success alone does
-not establish its symbolic correctness.
+instead finish with unequal instruction shapes. These can now fold structurally,
+but require a new shared body search over the extracted heads. This remains
+separate from finding parameters for the original straight-line fragments.
+A proposed guard may differ from the source program while fitting all recorded
+heads and exits; replay success alone does not establish its symbolic correctness.
 
 **Remaining action:** recover physically compatible repeated fragments and valid
 loop exits through search, then verify the returned candidate. Account for

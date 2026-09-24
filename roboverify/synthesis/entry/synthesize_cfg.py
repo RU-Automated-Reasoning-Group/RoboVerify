@@ -5,6 +5,7 @@ import random
 import signal
 from functools import partial
 
+from synthesis.api.instructions import LoopBudgetExceeded, While
 from synthesis.api.program import Program, generate_random_program
 from synthesis.cfg.artifacts import describe_cfg
 from synthesis.cfg.bindings import (
@@ -13,8 +14,10 @@ from synthesis.cfg.bindings import (
     mutate_scoped,
     require_closed,
     require_ids,
+    seed_from_scope,
 )
 from synthesis.cfg.candidate_traces import prepare_candidate
+from synthesis.cfg.collection import execution_deadline
 from synthesis.cfg.demos import DemoSegment
 from synthesis.cfg.execute import execute_cfg
 from synthesis.cfg.graph import RelationalCFG
@@ -136,16 +139,45 @@ def _run(args, logger):
                 len(lower_region(node.region, context, physical=True)),
                 lower_region(node.region, context, physical=True),
             )
-            return node.region, all(
-                postcondition_reached(rollout(physical, s), s, post) for s in demos
-            )
-        initial = generate_random_program(
-            args.slots, range(args.num_blocks), random.Random(args.seed)
-        )
+
+            def bound_loops(instructions):
+                for instruction in instructions:
+                    if isinstance(instruction, While):
+                        instruction.max_iters = min(
+                            args.max_loop_iterations,
+                            (
+                                instruction.max_iters
+                                if instruction.max_iters is not None
+                                else args.max_loop_iterations
+                            ),
+                        )
+                        bound_loops(instruction.body)
+
+            # Bound only the lowered execution copy, not the returned program.
+            bound_loops(physical.instructions)
+            ok = True
+            try:
+                for segment in demos:
+                    with execution_deadline(args.trajectory_timeout_seconds):
+                        ok = postcondition_reached(
+                            rollout(physical, segment), segment, post
+                        )
+                    if not ok:
+                        break
+            except LoopBudgetExceeded:
+                ok = False
+            return node.region, ok
+        id_first = node.synthesis_approach == "id-first"
         if isinstance(node.region, BlockRegion) and node.region.physical:
             initial = Program(len(node.region.physical), list(node.region.physical))
-
-        id_first = node.synthesis_approach == "id-first"
+        elif not id_first and isinstance(node.region, BlockRegion):
+            initial = seed_from_scope(
+                args.slots, node.available_scope, random.Random(args.seed)
+            )
+        else:
+            initial = generate_random_program(
+                args.slots, range(args.num_blocks), random.Random(args.seed)
+            )
 
         def propose(candidate, rng):
             with preserved_global_rng():
@@ -183,6 +215,7 @@ def _run(args, logger):
             f"{node.name}: {result.status}",
             force=True,
             block_id=node.name,
+            search_approach=node.synthesis_approach,
             distance=result.distance,
             post_score=result.post_score,
             elapsed=result.elapsed,

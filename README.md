@@ -18,7 +18,8 @@ and motion verification with feedback. See the
 [collection guide](roboverify/synthesis/inference_lib/README.md).
 
 Synthesis offers `--synthesis-approach relational` (the default) and
-`--synthesis-approach id-first` (numeric MCMC/refinement, followed by quotienting).
+`--synthesis-approach id-first` (initial numeric MCMC/refinement, followed by
+relational quotienting and named loop-body search).
 Both return named programs to inference and verification. See the
 [approach guide](roboverify/synthesis/cfg/VERIFICATION.md#synthesis-approaches).
 

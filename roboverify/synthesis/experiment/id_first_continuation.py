@@ -14,7 +14,7 @@ from copy import deepcopy
 from functools import partial
 from unittest.mock import patch
 
-from synthesis.api.instructions import Move, Pick, Release, Skip
+from synthesis.api.instructions import Move, Pick, Release, Skip, While
 from synthesis.api.program import Program
 from synthesis.cfg.collection import record_execution, validate_trace
 from synthesis.cfg.demo_validation import validate_demonstrations
@@ -22,7 +22,7 @@ from synthesis.cfg.demos import DemoSegment
 from synthesis.cfg.execute import execute_cfg
 from synthesis.cfg.graph import RelationalCFG
 from synthesis.cfg.id_first import close_id_candidate
-from synthesis.cfg.lower import lower
+from synthesis.cfg.lower import lower, lower_region
 from synthesis.cfg.program_source import (
     ProgramDefinition,
     describe_program,
@@ -312,6 +312,14 @@ def run(args, logger):
                         end=row.t_end,
                         pre_holds=evaluate(incoming.label, start_scene),
                         post_holds=evaluate(outgoing.label, end_scene),
+                        first_post=next(
+                            (
+                                t
+                                for t in range(row.t_start, row.t_end + 1)
+                                if evaluate(outgoing.label, scene_at(row, t))
+                            ),
+                            None,
+                        ),
                         end_positions={
                             str(k): list(map(float, v))
                             for k, v in end_scene.positions.items()
@@ -328,7 +336,12 @@ def run(args, logger):
                 )
         fold_validations.append(dict(valid=valid, boundaries=boundaries))
         if not valid:
-            attempted = lower(candidate, context, physical=True)
+            try:
+                attempted = lower(candidate, context, physical=True)
+            except ValueError as error:
+                # A relational fold need not have a physical body seed.
+                fold_validations[-1]["physical_lowering_error"] = str(error)
+                return valid
             rejected_programs.append(attempted)
             logger.write_artifact(
                 "rejected_quotient_program.json",
@@ -337,7 +350,40 @@ def run(args, logger):
             logger.write_artifact("rejected_quotient_program.txt", str(attempted))
         return valid
 
+    def named_oracle(node, demos, target):
+        # The supplied candidate replaces the new named MCMC call too. Keep
+        # actual per-iteration execution and whole-loop acceptance checks.
+        if isinstance(node.region, LoopRegion):
+            instructions = lower_region(node.region, context, physical=True)
+            for instruction in instructions:
+                if isinstance(instruction, While):
+                    instruction.max_iters = 10
+            program = Program(len(instructions), instructions)
+            region = node.region
+        else:
+            instructions = (
+                list(node.region.physical)
+                if node.region.physical
+                else deepcopy(expected.program.instructions[1].body[:-1])
+            )
+            program = Program(len(instructions), instructions)
+            region = BlockRegion(None, tuple(instructions))
+        results = check(program, demos, target)
+        summary.setdefault("post_quotient_oracle_calls", []).append(
+            dict(
+                node=node.name,
+                target=str(target),
+                search_approach=node.synthesis_approach,
+                program=describe_program(program),
+                checks=results,
+            )
+        )
+        save()
+        return region, all(row["reached"] for row in results)
+
     def realize(node, demos, target):
+        if node.synthesis_approach == "relational":
+            return named_oracle(node, demos, target)
         return BlockRegion(None, tuple(candidates[node.name].instructions)), all(
             r["reached"] for r in checks[node.name]
         )
@@ -456,6 +502,8 @@ def run(args, logger):
     }
 
     def matched_realize(node, demos, target):
+        if node.synthesis_approach == "relational":
+            return named_oracle(node, demos, target)
         return BlockRegion(None, tuple(matched_programs[node.name].instructions)), all(
             row["reached"] for row in matched_checks[node.name]
         )
@@ -465,9 +513,16 @@ def run(args, logger):
             _quotient_label(candidate, n, candidate.outgoing(n)[0])
             for n in candidate.order
         ]
-        changed = quotient(candidate, language=language)
+        guard_start, validation_start = len(guard_searches), len(fold_validations)
+        with patch("synthesis.cfg.quotient.loop_guard_synthesis", observe_guard), patch(
+            "synthesis.cfg.validate.validate_cfg", observe_validation
+        ):
+            changed = quotient(candidate, language=language)
         summary["boundary_matched_quotient"] = dict(
-            letters=list(map(str, letters)), changed=changed
+            letters=list(map(str, letters)),
+            changed=changed,
+            guard_searches=guard_searches[guard_start:],
+            fold_validations=fold_validations[validation_start:],
         )
         return changed
 

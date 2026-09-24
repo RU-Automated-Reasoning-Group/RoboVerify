@@ -1,5 +1,6 @@
 """Algorithm 2 over structured single-entry CFGs, with bounded refinement."""
 
+from copy import copy
 from dataclasses import dataclass
 
 from synthesis.cfg.refine import refine_cfg
@@ -94,7 +95,8 @@ def synthesize_cfg(
                 # are introduced. The public synthesis boundary is named only.
                 from synthesis.cfg.id_first import close_id_candidate
 
-                if quotient is not None and quotient(cfg) and logger:
+                changed = quotient is not None and quotient(cfg)
+                if changed and logger:
                     logger.log_event(
                         "quotient_loop_found",
                         "Generalized concrete repetitions",
@@ -102,6 +104,44 @@ def synthesize_cfg(
                         force=True,
                     )
                 close_id_candidate(cfg)
+                if changed:
+                    # Quotient establishes structure, not an executable body.
+                    # Search every extracted body with its new named bindings,
+                    # and recheck the loop and any repartitioned continuation.
+                    # A shallow working graph selects this phase's policy while
+                    # preserving ID-first for a later whole-task resynthesis.
+                    named = copy(cfg)
+                    named.synthesis_approach = "relational"
+                    if logger:
+                        logger.log_event(
+                            "post_quotient_synthesis",
+                            "Search named loop bodies and check the folded program",
+                            step=round_id,
+                            force=True,
+                        )
+                    continuation = synthesize_cfg(
+                        named,
+                        realize,
+                        execute,
+                        max_refinements=max_refinements,
+                        language=language,
+                        logger=logger,
+                    )
+                    cfg.__dict__.update(named.__dict__)
+                    cfg.synthesis_approach = "id-first"
+                    return SynthesisResult(
+                        cfg,
+                        continuation.status,
+                        round_id + continuation.rounds,
+                        continuation.failed_block,
+                        continuation.reason
+                        or (
+                            ""
+                            if continuation
+                            else "Post-quotient named synthesis failed at "
+                            + str(continuation.failed_block)
+                        ),
+                    )
             return SynthesisResult(cfg, "synthesized", round_id)
         if round_id == max_refinements:
             return SynthesisResult(cfg, "budget_exhausted", round_id, failed)

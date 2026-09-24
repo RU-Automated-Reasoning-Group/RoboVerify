@@ -157,7 +157,7 @@ those names, and allow existential classifiers to introduce scoped bindings.
 
 `--synthesis-approach id-first` selects **ID-first synthesis**:
 
-1. MCMC and CEM search only numeric `Pick`, `Move`, and `Release` primitives
+1. Initial MCMC and CEM search only numeric `Pick`, `Move`, and `Release` primitives
    (plus `Skip`), over IDs `0 .. num_blocks-1`. There is no early `Get(True)`
    conversion. Move still optimizes all three coordinate offsets.
 2. CFG refinement learns ground predicates over those IDs and existing fixed
@@ -166,14 +166,23 @@ those names, and allow existential classifiers to introduce scoped bindings.
    an unsuccessful search; there is no fallback to quantified refinement.
 3. After the concrete CFG is synthesized, flat-loop quotienting generalizes
    repeated fragments to roles such as `b` and `b_prime`, starting from `b0`.
-   ID-first enables quotienting automatically. It compares operand sequences
-   across completed fragments, so a fixed base used for XY can remain `b0` while
-   the changing Z reference becomes `b`. Incompatible controllers are not folded.
+   ID-first enables quotienting automatically. Matching is relational; physical
+   instruction counts and classes need not agree. Matching physical sequences
+   can seed the next search, preserving fixed-base XY versus carried-top Z;
+   incompatible sequences leave the new body unimplemented until search.
    A final completed placement may supply a concrete repetition letter when the
    outgoing task goal is quantified; the task postcondition itself is retained.
-4. **Before synthesis returns, every physical instruction is ByName.** Any
-   remaining concrete IDs become fixed entry aliases, with their identity map
-   and equality/distinctness facts preserved. They are not arbitrary `Get`
+4. After a successful fold, the shared MCMC/CEM search realizes each loop body
+   with **ByName operands** over all extracted iterations. An unimplemented body
+   starts directly from in-scope names, without inventing bindings for the IDs
+   of a particular iteration. Body refinement uses the relational policy in this
+   phase. The driver also executes the resulting loop and checks any repartitioned
+   continuation. Search failure, exhausted execution budgets, or a failed loop
+   rollout prevents synthesis success. Supplied physical seeds are searched and
+   checked too; structural quotienting alone never certifies an executable.
+5. **Before synthesis returns, every physical instruction is ByName.** Any
+   remaining concrete IDs become fixed entry aliases before the named phase,
+   with their identity map and equality/distinctness facts preserved. They are not arbitrary `Get`
    witnesses. This also covers straight-line candidates when no loop is found.
    Inference, symbolic verification, and motion verification receive the same
    named representation as before, and candidate execution records fresh states
@@ -199,11 +208,12 @@ ID-first expects the same physical ID universe across demonstrations. Its
 [finite checks](#finite-checks-and-unbounded-proof) start at the demonstrated block
 count so smaller universes cannot contradict fixed-alias distinctness premises.
 Runtime witness selection remains deterministic (first match in ascending physical
-ID order). Quotienting is conservative: a carried role must initialize from an
-available alias, and repeated physical fragments must have matching instruction
-shapes and recoverable operand roles. A successful numeric search does not prove
-the generalized loop; the shared inference and verification pipeline still has
-to accept that returned candidate.
+ID order). A carried role must initialize from an available alias, and extracted
+demonstration boundaries must pass CFG validation. Physical shape compatibility
+is only a warm-start opportunity, not a quotient condition. A successful numeric
+search or later named body search does not prove the generalized loop; the shared
+inference and verification pipeline still has to accept that returned candidate.
+The selected ID-first policy is retained for any later whole-task resynthesis.
 
 ### Manual continuation experiment
 
@@ -237,6 +247,9 @@ example, with `b0` bound to physical ID 0. It saves `artifacts/summary.json`, na
 programs, and complete replay archives.
 The script distinguishes automatic continuation from isolated calls to quotient
 and from replaying rejected candidate loops; none is a formal verification result.
+If folding succeeds, it also supplies a candidate for the new named body-search
+call and records its actual per-iteration rollouts in `post_quotient_oracle_calls`.
+That diagnostic replaces MCMC in both phases; the integrated CLI runs real MCMC.
 
 ## Finite checks and unbounded proof
 

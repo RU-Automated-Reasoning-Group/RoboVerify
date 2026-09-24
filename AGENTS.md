@@ -363,13 +363,17 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   `straightline.py` (Algorithm 5), `synthesize.py` (the Algorithm 2 recursive driver),
   `quotient.py`/`kleene.py` (Algorithm 4, flat case only), plus demo recording,
   segment reset/replay and split validation. `--synthesis-approach relational`
-  retains early scoped binding and is the default. `id-first` keeps MCMC and CFG
-  refinement numeric, then runs quotienting after concrete search completes.
-  `id_first.py` converts any residual IDs to fixed entry aliases before synthesis
-  returns; inference and both verifiers receive only named instructions and
-  predicates. Quotienting compares repeated coordinate operands independently,
-  preserving fixed-base XY versus carried-top Z. Neither conversion establishes
-  a relational summary; the shared verification stages still check it. Learned guards
+  retains early scoped binding and is the default. `id-first` keeps the initial
+  MCMC and CFG refinement numeric, then runs relational quotienting after concrete
+  search completes. Folded loop bodies are searched again with ByName operands
+  over all extracted iterations, followed by execution checks of the loop and
+  repartitioned continuation. Physical shape matching supplies an optional seed;
+  different instruction counts or classes do not prevent relational folding.
+  `id_first.py` converts residual IDs to fixed entry aliases before the named
+  phase; inference and both verifiers receive only named instructions and
+  predicates. Optional seed alignment compares coordinate operands independently,
+  preserving fixed-base XY versus carried-top Z. Neither conversion nor body
+  search establishes a relational summary; the shared verification stages check it. Learned guards
   accept demonstrated witnesses and reject all bindings at demonstrated exits;
   unselected continuing-state bindings are unlabeled. Runtime chooses the first
   matching witness in ascending physical ID order; symbolic preservation verification covers every matching choice.

@@ -4,13 +4,16 @@ from unittest.mock import patch
 from synthesis.api.instructions import (
     Get,
     Move,
+    MoveByName,
     Pick,
     PickByName,
     Release,
+    ReleaseByName,
+    Skip,
     While,
 )
 from synthesis.api.program import Program
-from synthesis.cfg.bindings import mutate_ids, require_ids
+from synthesis.cfg.bindings import mutate_ids, require_closed, require_ids
 from synthesis.cfg.demos import DemoAssignment, DemoSegment, DemoTrace
 from synthesis.cfg.graph import Edge, Node, RelationalCFG
 from synthesis.cfg.id_first import close_id_candidate
@@ -49,6 +52,16 @@ def numeric_placement(source, target):
         Move(0, 0, target, target_offset=[0, 0, 0.20]),
         Move(0, 0, target, target_offset=[0, 0, 0.05]),
         Release(source, target_z=0.15),
+    )
+
+
+def named_placement():
+    return (
+        PickByName("b_prime"),
+        MoveByName("b_prime", "b_prime", "b", target_offset=[0, 0, 0.20]),
+        MoveByName("b0", "b0", "b", target_offset=[0, 0, 0.20]),
+        MoveByName("b0", "b0", "b", target_offset=[0, 0, 0.05]),
+        ReleaseByName("b_prime", target_z=0.15),
     )
 
 
@@ -195,38 +208,162 @@ class IDFirstTests(unittest.TestCase):
         self.assertIsInstance(program.instructions[1], While)
         self.assertEqual(cfg._fixed_id_bindings, {})
 
-    def test_search_is_numeric_until_quotient_and_returns_only_named_program(self):
-        cfg = ground_cfg(3)
+    def test_quotient_accepts_different_physical_lengths_and_instruction_classes(self):
+        for replacement in (
+            (Pick(2),),
+            (Move(2, 2, 1), *numeric_placement(2, 1)[1:]),
+        ):
+            with self.subTest(length=len(replacement)):
+                cfg = ground_cfg()
+                cfg.nodes["v1"].region.physical = replacement
+                self.assertTrue(quotient(cfg))
+                loop = cfg.nodes[cfg.order[0]].region
+                self.assertEqual(loop.init, (("b", "b0"),))
+                self.assertEqual(loop.update, (("b", "b_prime"),))
+                self.assertEqual(loop.body[0].physical, ())
+                self.assertEqual(len(loop.body_cfg.demos.for_node("body0")), 6)
+                with self.assertRaisesRegex(ValueError, "no physical implementation"):
+                    lower(cfg, HighLevelContext(), physical=True)
+
+    def test_numeric_search_is_followed_by_named_body_search_and_loop_execution(self):
+        for compatible in (False, True):
+            with self.subTest(compatible=compatible):
+                cfg = ground_cfg()
+                if not compatible:
+                    cfg.nodes["v1"].region.physical = (Pick(2),)
+                seen = []
+
+                def realize(node, demos, post):
+                    seen.append((node.name, node.synthesis_approach))
+                    if node.synthesis_approach == "id-first":
+                        require_ids(node.region.physical, 4)
+                        return node.region, True
+                    if isinstance(node.region, LoopRegion):
+                        self.assertEqual(len(node.region.body[0].physical), 5)
+                        return node.region, True
+                    self.assertEqual(node.name, "body0")
+                    self.assertEqual(len(demos), 6)
+                    self.assertEqual({d.bindings["b_prime"] for d in demos}, {1, 2, 3})
+                    self.assertEqual({d.bindings["b"] for d in demos}, {0, 1, 2})
+                    self.assertEqual(bool(node.region.physical), compatible)
+                    require_closed(node.region.physical, node.available_scope)
+                    return BlockRegion(None, named_placement()), True
+
+                def fold(candidate):
+                    self.assertEqual(
+                        seen, [(n, "id-first") for n in ("v0", "v1", "v2")]
+                    )
+                    return quotient(candidate)
+
+                result = synthesize_cfg(cfg, realize, lambda c: [], quotient=fold)
+                self.assertTrue(result, result.reason)
+                self.assertEqual(
+                    seen[-2:], [("body0", "relational"), ("v0.loop", "relational")]
+                )
+                self.assertEqual(cfg.synthesis_approach, "id-first")
+                self.assertIs(result.cfg, cfg)
+                loop = cfg.nodes[cfg.order[0]].region
+                self.assertEqual(
+                    loop.body,
+                    tuple(loop.body_cfg.nodes[n].region for n in loop.body_cfg.order),
+                )
+                program = lower(cfg, HighLevelContext(), physical=True)
+                for inst in program.instructions[1].body:
+                    self.assertFalse(
+                        any(o["type"] == "Box" for o in inst.get_operand())
+                    )
+                self.assertTrue(
+                    all(
+                        n.synthesis_approach == "relational" for n in cfg.nodes.values()
+                    )
+                )
+
+    def test_failed_named_body_search_cannot_return_a_synthesized_loop(self):
+        cfg = ground_cfg()
+        cfg.nodes["v1"].region.physical = (Pick(2),)
+        phases = []
+
+        def realize(node, demos, post):
+            phases.append(node.synthesis_approach)
+            if node.synthesis_approach == "id-first":
+                return node.region, True
+            self.assertNotIsInstance(node.region, LoopRegion)
+            return BlockRegion(None, (Skip(0),)), False
+
+        result = synthesize_cfg(
+            cfg, realize, lambda c: [], quotient=quotient, max_refinements=0
+        )
+        self.assertFalse(result)
+        self.assertEqual(result.status, "budget_exhausted")
+        self.assertEqual(result.failed_block, "v0.loop/body0")
+        self.assertIn("Post-quotient", result.reason)
+        self.assertEqual(phases, ["id-first"] * 3 + ["relational"])
+        self.assertEqual(cfg.synthesis_approach, "id-first")
+
+    def test_repartitioned_continuation_is_rechecked_with_named_operands(self):
+        cfg = ground_cfg()
+        # Only the first two edges contribute repeated ON letters. The loop
+        # explains the final placement too, so the remaining node gets new cuts.
+        cfg.nodes["v1"].region.physical = (Pick(2),)
+        cfg.nodes["v2"].region.physical = (Release(2), *numeric_placement(3, 2))
         seen = []
 
         def realize(node, demos, post):
-            self.assertEqual(node.synthesis_approach, "id-first")
-            require_ids(node.region.physical, 3)
-            seen.append(node.name)
-            return node.region, True
+            seen.append((node.name, node.synthesis_approach))
+            if node.synthesis_approach == "id-first":
+                return node.region, True
+            if isinstance(node.region, LoopRegion):
+                return node.region, True
+            if node.name == "body0":
+                return BlockRegion(None, named_placement()), True
+            self.assertEqual(node.name, "v2")
+            self.assertTrue(all(d.t_start == 3 for d in demos))
+            require_closed(node.region.physical, node.available_scope)
+            return node.region, False
 
-        def fold(candidate):
-            self.assertEqual(seen, ["v0", "v1"])
-            return quotient(candidate)
-
-        result = synthesize_cfg(cfg, realize, lambda c: [], quotient=fold)
-        self.assertTrue(result)
-        self.assertIsInstance(cfg.nodes[cfg.order[0]].region, LoopRegion)
-        program = lower(cfg, HighLevelContext(), physical=True)
-        for inst in program.instructions[1].body:
-            self.assertFalse(any(o["type"] == "Box" for o in inst.get_operand()))
-        self.assertTrue(
-            all(n.synthesis_approach == "relational" for n in cfg.nodes.values())
+        result = synthesize_cfg(
+            cfg, realize, lambda c: [], quotient=quotient, max_refinements=0
         )
+        self.assertFalse(result)
+        self.assertEqual(result.failed_block, "v2")
+        self.assertEqual(result.status, "budget_exhausted")
+        self.assertEqual(
+            seen[-3:],
+            [("body0", "relational"), ("v0.loop", "relational"), ("v2", "relational")],
+        )
+        self.assertEqual(cfg.synthesis_approach, "id-first")
+
+    def test_folded_loop_is_executed_after_successful_body_search(self):
+        cfg = ground_cfg()
+        body_calls = []
+
+        def realize(node, demos, post):
+            if node.synthesis_approach == "id-first":
+                return node.region, True
+            if isinstance(node.region, LoopRegion):
+                return node.region, False
+            body_calls.append(node.name)
+            return BlockRegion(None, named_placement()), True
+
+        result = synthesize_cfg(
+            cfg, realize, lambda c: [], quotient=quotient, max_refinements=1
+        )
+        self.assertFalse(result)
+        self.assertEqual(result.status, "loop_execution_failed")
+        self.assertEqual(body_calls, ["body0"])
+        self.assertEqual(cfg.synthesis_approach, "id-first")
 
     def test_unfolded_program_gets_fixed_aliases_not_arbitrary_witnesses(self):
         cfg = ground_cfg(3)
-        # A shape mismatch conservatively retains a straight-line program.
-        cfg.nodes["v1"].region.physical = cfg.nodes["v1"].region.physical[1:]
+        # Nonmatching relational labels retain a straight-line program.
+        edge = cfg.edges[1]
+        cfg.edges[1] = Edge(
+            edge.source, edge.target, atom("Higher", block_id(1), ref("b0"))
+        )
         self.assertFalse(quotient(cfg))
         close_id_candidate(cfg)
         self.assertEqual(cfg._fixed_id_bindings, {"block_1": 1, "block_2": 2})
-        self.assertEqual(str(cfg.edges[1].label), "ON(block_1, b0)")
+        self.assertEqual(str(cfg.edges[1].label), "Higher(block_1, b0)")
         context = HighLevelContext()
         self.assertIn("block_1", str(to_z3(cfg.precondition, context)))
         program = lower(cfg, context, physical=True)
@@ -300,6 +437,107 @@ class IDFirstTests(unittest.TestCase):
             initial_arm=[0.3, 0, 0.2],
         )
         self.assertTrue(motion, str(motion))
+
+    def test_cli_calls_named_mcmc_after_quotient_and_bounds_loop_execution(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+
+        import numpy as np
+        from synthesis.api.instructions import LoopBudgetExceeded
+        from synthesis.cfg.straightline import StraightLineResult
+        from synthesis.cfg.tasks import task_identity
+        from synthesis.cfg.verified_synthesis import VerifiedResult
+        from synthesis.entry.synthesize_cfg import main
+
+        for exhaust_loop in (False, True):
+            with self.subTest(exhaust_loop=exhaust_loop):
+                trace = stacking_trace()
+                trace.metadata = {
+                    "task_spec": task_identity("stack"),
+                    "initial_bindings": {"b0": 0},
+                }
+                searches, outcomes = [], []
+
+                def mcmc(demos, post, initial, propose, **kwargs):
+                    searches.append(kwargs["block_id"])
+                    if kwargs["block_id"] != "body0":
+                        require_ids(initial.instructions, 4)
+                        return StraightLineResult(
+                            initial, True, "test_oracle", 0.0, 1.0
+                        )
+                    self.assertEqual(len(demos), 6)
+                    self.assertEqual({d.bindings["b_prime"] for d in demos}, {1, 2, 3})
+                    self.assertFalse(
+                        any(isinstance(i, Get) for i in initial.instructions)
+                    )
+                    available = {"b0", "b", "b_prime"}
+                    require_closed(initial.instructions, available)
+                    mutated = propose(initial, np.random.default_rng(7))
+                    require_closed(mutated.instructions, available)
+                    return StraightLineResult(
+                        Program(5, list(named_placement())),
+                        True,
+                        "test_oracle",
+                        0.0,
+                        1.0,
+                    )
+
+                def rollout(program, segment, **kwargs):
+                    loops = [i for i in program.instructions if isinstance(i, While)]
+                    self.assertEqual(len(loops), 1)
+                    self.assertEqual(loops[0].max_iters, 3)
+                    if exhaust_loop:
+                        raise LoopBudgetExceeded("test loop budget")
+                    return list(segment.states)
+
+                def driver(cfg, realize, execute, context, **kwargs):
+                    fixture = ground_cfg()
+                    fixture.nodes["v1"].region.physical = (Pick(2),)
+                    cfg.__dict__.update(fixture.__dict__)
+                    result = synthesize_cfg(
+                        cfg,
+                        realize,
+                        execute,
+                        quotient=kwargs["quotient"],
+                        max_refinements=1,
+                    )
+                    outcomes.append(result.status)
+                    self.assertEqual(cfg.synthesis_approach, "id-first")
+                    self.assertIsNone(cfg.nodes[cfg.order[0]].region.iteration_limit)
+                    return VerifiedResult(cfg, "test_stopped_after_synthesis")
+
+                with patch("synthesis.entry.synthesize_cfg.RunLogger"), patch(
+                    "synthesis.entry.synthesize_cfg.load_traces", return_value=[trace]
+                ), patch(
+                    "synthesis.entry.synthesize_cfg.straight_line_synthesize",
+                    side_effect=mcmc,
+                ), patch(
+                    "synthesis.entry.synthesize_cfg.segment_rollout",
+                    side_effect=rollout,
+                ), patch(
+                    "synthesis.entry.synthesize_cfg.verified_synthesis",
+                    side_effect=driver,
+                ), redirect_stdout(
+                    StringIO()
+                ):
+                    code = main(
+                        [
+                            "--demos",
+                            "unused.npz",
+                            "--num-blocks",
+                            "4",
+                            "--synthesis-approach",
+                            "id-first",
+                            "--max-loop-iterations",
+                            "3",
+                        ]
+                    )
+                self.assertEqual(code, 2)
+                self.assertEqual(searches, ["v0", "v1", "v2", "body0"])
+                self.assertEqual(
+                    outcomes,
+                    ["loop_execution_failed" if exhaust_loop else "synthesized"],
+                )
 
     def test_cli_selects_approach_and_enables_id_first_quotient(self):
         from contextlib import redirect_stdout

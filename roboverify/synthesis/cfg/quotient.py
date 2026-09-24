@@ -239,12 +239,13 @@ def _fold(cfg, repetition, language, infer_invariant):
         old = cfg.nodes[node].region
         region = BlockRegion(None)
         if cfg.synthesis_approach == "id-first":
-            # A completed numeric search must not become an unresolved named
-            # body requiring another (named) MCMC search after quotienting.
+            # Physical alignment provides an optional search seed, never a
+            # requirement for the relational fold. The synthesis driver must
+            # realize and execute the new body on its extracted iterations.
             try:
-                region = _generalize_id_body(cfg, r, slot, names, available)
+                region = _seed_id_body(cfg, r, slot, names, available)
             except (KeyError, ValueError):
-                return False
+                pass
         elif isinstance(old, BlockRegion):
             try:
                 aliases = {}
@@ -391,11 +392,12 @@ def _fold(cfg, repetition, language, infer_invariant):
     return True
 
 
-def _generalize_id_body(cfg, repetition, slot, names, available):
-    """Match operands across completed iterations, including independent XYZ.
+def _seed_id_body(cfg, repetition, slot, names, available):
+    """Optionally seed body search by aligning existing numeric instructions.
 
     A constant base reference stays b0; a changing target follows the carried
     role. Reusing a first-iteration alias alone cannot distinguish these cases.
+    Incompatible realizations simply leave the folded body without a seed.
     """
     regions, examples = [], []
     for index in range(len(repetition.substitutions)):
