@@ -550,6 +550,26 @@ extracted demonstration exit precedes the task goal. Such a fold must be rejecte
 Neither whole-demo success nor a fitted guard establishes valid segment boundaries
 or inductiveness.
 
+**Paper versus implementation:** Section 3.3, Algorithm 4 and Definitions 3.1–3.2
+(pp. 14–16) match relational Kleene encodings, not primitive instruction lists.
+A basic block contributes its relational label regardless of its physical
+realization; Appendix D (p. 49) explicitly distinguishes encoding shape from
+how actions are realized. Thus `ON(1,b0)` and `ON(2,1)` remain relational
+quotient candidates even if their physical fragments have different lengths.
+Algorithm 2 calls quotient before the subsequent straight-line realization.
+
+The ID-first helper `_generalize_id_body` adds a stronger implementation
+restriction: equal physical instruction counts, identical instruction classes
+at corresponding positions, and operands explainable by fixed or repeated roles.
+This was introduced in commit `3c03803` when implementing ID-first synthesis.
+It enables direct reuse of completed numeric candidates as a named body without
+another body search. It is not a paper requirement, and the user's requirement
+that synthesis return only named instructions does not imply this restriction.
+Relational loop discovery and physical body realization could instead be
+separated, with subsequent execution and verification deciding acceptance.
+Removing the shape restriction alone would not establish a reusable body or
+resolve the independently observed invalid extracted loop exits.
+
 **CFG granularity:** a perfect straight-line oracle does not by itself force
 loop recovery. If it supplies the entire unrolled solution at the initial node,
 synthesis can finish without refinement. Quotient compares repeated CFG
