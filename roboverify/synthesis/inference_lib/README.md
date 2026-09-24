@@ -244,6 +244,23 @@ Bend measures distance from the original phase line at control-step boundaries;
 it excludes intentional waypoint turns and does not bound substep or held-block
 motion. Opening/closing and the initial settling period are not motion phases.
 
+For a four-block paired measurement, generate annotated side-by-side videos using
+its `artifacts/phases.json` (replace the example run path with your own):
+
+```bash
+uv run python -m synthesis.experiment.render_stack_paths \
+  --measurements runs/controller-paths/latest/artifacts/phases.json
+uv run python -m synthesis.experiment.report --run runs/controller-videos/latest
+```
+
+This reproduces the first seed and the measured largest-bend seed, validates both
+controller executions, and checks that their paths match the measurements before
+rendering saved snapshots. Complete videos share simulation time at half speed;
+the detail clip aligns phase starts at one-tenth speed. Both include measured XY
+paths and 3D line-deviation readouts. MP4 frame counts and full decoding are checked.
+The saved rollout archive is marked diagnostic, including the uniform-scaling
+trials, rather than published as pipeline demonstrations.
+
 ## Run either pipeline mode
 
 These commands show the two interfaces. For the checked supplied Stack result,
