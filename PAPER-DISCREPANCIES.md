@@ -550,9 +550,22 @@ extracted demonstration exit precedes the task goal. Such a fold must be rejecte
 Neither whole-demo success nor a fitted guard establishes valid segment boundaries
 or inductiveness.
 
+**CFG granularity:** a perfect straight-line oracle does not by itself force
+loop recovery. If it supplies the entire unrolled solution at the initial node,
+synthesis can finish without refinement. Quotient compares repeated CFG
+fragments; it does not split repetitions inside a single physical block. An
+oracle supplying fragments compatible with the recorded relational cuts can
+instead finish with unequal instruction shapes, which the current quotient
+also cannot merge. These are synthesis-structure limits independent of finding
+good continuous motion parameters. A proposed guard may differ from the source
+program while fitting all recorded heads and exits; replay success alone does
+not establish its symbolic correctness.
+
 **Remaining action:** recover physically compatible repeated fragments and valid
-loop exits through search, then verify the returned candidate. Do not move a cut
-or accept a rejected fold solely because the complete demonstration later succeeds.
+loop exits through search, then verify the returned candidate. Account for
+repetition inside an already successful straight-line candidate or explicitly
+constrain the fragment search policy. Do not move a cut or accept a rejected fold
+solely because the complete demonstration later succeeds.
 
 ## 23. Numeric and named Release use different physical stopping tolerances
 
