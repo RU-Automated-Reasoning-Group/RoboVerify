@@ -1,7 +1,7 @@
 """Replay Release from saved states, inspecting physics substeps and interventions.
 
-Contact/velocity interventions are diagnostic only. They are never enabled in
-production controllers or treated as verified motion models.
+Explicitly reconstructs the earlier head-contact, 10 mm Pick, Z-only Release
+baseline. Interventions isolate causes; these results are not a motion proof.
 """
 
 import argparse
@@ -18,14 +18,18 @@ from synthesis.cfg.collection import record_execution, validate_trace
 from synthesis.cfg.program_source import load_program
 from synthesis.cfg.recordings import save_traces
 from synthesis.cfg.reset import inner_env, restore
+from synthesis.experiment.controller_baseline import (
+    previous_release,
+    previous_release_control,
+    stack_env_with_head_contacts,
+)
 from synthesis.experiment.run_logger import RunLogger
-from synthesis.mcmc.synthesis import make_roboverify_stack_env
 from synthesis.util.actions import bound_delta_action
 from synthesis.verification_lib.highlevel_verification_lib import HighLevelContext
 
 
 def replay(trace, start, end, variant):
-    env = make_roboverify_stack_env(num_blocks=trace.num_blocks)
+    env = stack_env_with_head_contacts(num_blocks=trace.num_blocks)
     inner = inner_env(env)
     sim, samples, phases, commands = inner.sim, [], [], []
     phase = None
@@ -149,7 +153,7 @@ def replay(trace, start, end, variant):
         with patch.object(PrimitiveController, "_until", until), patch.object(
             PrimitiveController, "move", move
         ):
-            success = controller.release(box_id, 0.15)
+            success = previous_release(controller, box_id, 0.15)
         if variant == "baseline":
             np.testing.assert_allclose(
                 commands, trace.actions[0][start:end], rtol=0, atol=1e-8
@@ -226,9 +230,16 @@ def main(argv=None):
             definition = load_program(
                 "synthesis.examples.stack:build_program", HighLevelContext(), 4
             )
-            trace = record_execution(
-                definition, seed=seed, num_blocks=4, max_loop_iterations=3
-            )
+            pick = definition.program.instructions[1].body[0]
+            pick.control = replace(pick.control, position_tolerance=0.01)
+            with previous_release_control():
+                trace = record_execution(
+                    definition,
+                    seed=seed,
+                    num_blocks=4,
+                    max_loop_iterations=3,
+                    env_factory=stack_env_with_head_contacts,
+                )
             assert validate_trace(trace), trace.metadata
             starts = [
                 e["index"]

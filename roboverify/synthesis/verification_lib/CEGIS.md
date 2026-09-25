@@ -5,6 +5,14 @@ program. The [integrated CFG workflow](../cfg/VERIFICATION.md)
 connects synthesis, verification, demonstration requests and structural repair;
 its capabilities are broader than the standalone offset-repair API below.
 
+Physical executions use the current shared controller: uniform XYZ scaling,
+2 mm Pick/Move/Release tolerances and fixed-XY Release feedback. Head contacts
+are disabled in the active CEE-US Fetch model. These are simulator choices,
+separate from the geometric proof semantics; see the
+[controller measurements](../experiment/CONTROLLER-PATHS.md).
+Local demonstration archives were deleted. The collection commands below are
+future workflow instructions, not archives regenerated during this update.
+
 For Section 6.2's experiment starting from **no demonstrations and False**, use
 [`synthesis.entry.learn_invariant`](../experiment/invariant_learning/README.md).
 It generates valid initial environments and executes the supplied physical
@@ -115,10 +123,12 @@ bounded summaries. Exit code 0 means both verification stages passed with result
 `verified_model`; 2 means an explicit unsuccessful result. Budget exhaustion never
 means verification succeeded.
 
-Supplied Stack verification passes with the intended learner, the shared
+Archived supplied Stack verification passed with the intended learner, the shared
 equal-height entry premise, the full default vocabulary, the 1 mm Higher
 tolerance and the documented supported-tower motion model. The six-clause
-bootstrap invariant passes both proof stages without counterexample refinement.
+bootstrap invariant passed both proof stages without counterexample refinement.
+The latest archived pipeline run predates the combined controller update; current
+full-program controller validation is reported separately without regenerating demos.
 Full synthesis acceptance remains open; collection and replay checks alone do not
 establish a verified program. See
 [the integrated workflow](../cfg/VERIFICATION.md) for scope and

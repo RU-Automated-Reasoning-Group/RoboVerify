@@ -9,7 +9,9 @@ First collect a supplied primitive DSL program using
 `synthesis.entry.collect_demos`. The [collection guide](../inference_lib/README.md)
 describes seeds, full-state archives, and optional 20 FPS videos. Demonstrations
 belong under `demos/`; experiment results belong under `runs/`. Generated
-archives are not bundled. The commands below first create a collection; if its
+archives are not bundled. The four local archives were deleted by request and
+were not regenerated for the combined controller update. These examples are
+instructions for a future archive-consuming workflow. They first create a collection; if its
 output directory gets a numbered suffix, use the printed archive path.
 
 Stack collection holds the reset gripper position for 50 control steps, then
@@ -55,7 +57,7 @@ share this setting; see the [height comparison guide](../inference_lib/README.md
 
 ## Provided Stack verification
 
-The unchanged supplied program has a symbolic body
+The supplied program has an unchanged symbolic body
 `Put(b_prime, b); Assign(b, b_prime)`. Its physical placement uses b0 for XY and b
 for Z. Use the following explicit configuration with the settled archive:
 
@@ -90,18 +92,24 @@ partition-based algorithm. Candidate execution supplies continuing loop heads an
 normal exits; preservation feedback uses the same algorithm. There is no
 `--learner` option and no automatic fallback to a different learner.
 
-**Both verification stages pass with the intended learner:** the result is
+**Both verification stages passed in the archived runs with the intended learner:** the result was
 `verified_model` in the noiseless, supported-tower model. The shared equal-height
 precondition establishes the initial height facts. With the 1 mm Higher tolerance,
 the bootstrap invariant passes all three symbolic obligations at sizes 2–4 and
 in the unbounded context, followed by all 63 motion obligations. No counterexample
 refinement, program change or motion repair is needed for this configuration.
 
-Rechecked after uniform XYZ scaling with five fresh four-block demonstrations:
+Historical recheck after uniform XYZ scaling with five four-block demonstrations:
 `runs/cfg/20260925-023502-3dc4cf3-stack-uniform-verification-60s/` returned
 `verified_model`. An earlier run with a 10-second symbolic-query budget returned
 `unknown` (unbounded exit check canceled); the command above gives that solver
 60 seconds. An unknown result remains inconclusive, not successful verification.
+This run used the earlier 10 mm Pick, head contacts and Z-only Release. The
+current code uses 2 mm Pick, disabled head contacts and fixed-XY/full-3D Release;
+the supplied symbolic program and geometric motion encoding are unchanged.
+The current validation compares complete physical programs and runs regression
+tests. No replacement demonstration archive or fresh archive-driven pipeline
+run is included; the original archive referenced by the historical run was deleted.
 
 Write `O(x,y)` for ON*, `H(x,y)` for Higher, and `S(x,y)` for Scattered. The learned
 invariant has these six universally quantified clauses:
@@ -133,7 +141,8 @@ open independently of supplied-program verification.
 
 ### Three-block demonstrations
 
-Five three-block demonstrations also suffice for this supplied-program workflow.
+In the earlier checked configuration, five three-block demonstrations also
+sufficed for this supplied-program workflow.
 Candidate execution supplies 10 continuing heads and 5 normal exits; the intended
 learner recovers an invariant logically equivalent to the six clauses above.
 It passes the same 2–4-block and unbounded symbolic checks and all 63 noiseless

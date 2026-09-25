@@ -3,7 +3,10 @@
 Use full-state NPZ archives for collection, synthesis, and inference. The pipeline
 requires archives matching the current task specification; observation-only and
 loop-head JSON demonstration inputs are unsupported. Generated archives are not
-bundled in the repository.
+bundled in the repository. The four local demonstration archives were deleted
+at the user's request. The commands below describe future collection and use;
+the controller update does not regenerate those archives. Preserved reports
+and videos describe their original controller configurations.
 
 ## Collect Stack demonstrations
 
@@ -233,14 +236,26 @@ program fingerprints identify the executable used by each archive.
 
 ### Measuring physical path straightness
 
-The current backend clips each Cartesian action coordinate separately. With
-gain 20, errors above 50 mm on an axis saturate and can change the requested
-direction. Endpoint convergence does not guarantee a straight path between
-waypoints. The measured Stack discrepancy and scope are recorded in
+The backend uniformly scales XYZ, preserving the requested direction. The
+previous component-clipping backend could change direction above 50 mm axis
+error at gain 20. Endpoint convergence still does not guarantee a straight
+physical path. The historical Stack discrepancy and scope are recorded in
 [entry 36](../../../PAPER-DISCREPANCIES.md#36-component-wise-saturation-bends-the-physical-gripper-path).
 
-Run a diagnostic of the supplied Stack program, optionally comparing uniform XYZ
-scaling from identical saved initial states. Configure the simulator environment
+Compare the previous uniform-scaling controller (10 mm Pick, head contacts,
+Z-only Release) with the combined production changes (2 mm Pick, no head contacts,
+fixed-XY Release) using complete programs from identical full settled starts:
+
+```bash
+uv run python -m synthesis.experiment.compare_stack_control --num-seeds 200
+uv run python -m synthesis.experiment.report --run runs/stack-control/latest
+```
+
+This writes path/payload metrics and a standalone HTML report, without saving
+demonstration archives. See [measurement definitions](../experiment/CONTROLLER-PATHS.md).
+
+To isolate component clipping versus uniform XYZ scaling under the **current**
+Pick/Release/collision defaults, configure the simulator environment
 as above, then run from `roboverify/`:
 
 ```bash
@@ -250,16 +265,20 @@ uv run python -m synthesis.experiment.report --run runs/controller-paths/latest
 ```
 
 This serial diagnostic observes each fixed-target motion phase and temporarily
-patches action scaling only inside the optional trial. It does not change the
+patches raw action generation and clipping/scaling inside the diagnostic. It does not change the
 production controller. Both variants are checked against the current task's
 pre/postconditions; failed seeds remain in the results. Artifacts include a
 phase table, raw commands and gripper paths, execution outcomes and `paths.png`.
 Bend measures distance from the original phase line at control-step boundaries;
 it excludes intentional waypoint turns and does not bound substep or held-block
 motion. Opening/closing and the initial settling period are not motion phases.
+These commands now use 2 mm Pick and fixed-XY Release with head contacts disabled;
+their results should not be labeled as the older entry-36 controller cohort.
 
-For a four-block paired measurement, generate annotated side-by-side videos using
-its `artifacts/phases.json` (replace the example run path with your own):
+For a newly generated four-block paired measurement, generate annotated
+side-by-side videos using its `artifacts/phases.json` (replace the example run path
+with your own). Earlier measurements must be rendered with their original code
+revision; the renderer checks replay equality and refuses mismatched paths:
 
 ```bash
 uv run python -m synthesis.experiment.render_stack_paths \

@@ -25,7 +25,7 @@ from synthesis.verification_lib.highlevel_verification_lib import HighLevelConte
 
 MODES = ("component_clip", "uniform_scale")
 COLORS = ("#bf4935", "#176ea1")
-TITLES = ("CURRENT  |  Per-axis clipping", "TRIAL  |  Uniform XYZ scaling")
+TITLES = ("CLIPPING COMPARISON", "UNIFORM XYZ SCALING")
 WIDTH, HEIGHT, FPS = 1280, 900, 25
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 PHASE_LABELS = {

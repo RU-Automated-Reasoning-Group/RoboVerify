@@ -72,6 +72,14 @@ object. Empty-gripper sweeps use a point; carried payloads use a cube. Primitive
 Release proves support and treats unsupported positions as arbitrary falls.
 These semantics differ from the legacy BMC Release formula described below.
 
+The physical controller now uses uniform XYZ scaling and 2 mm stopping tolerances
+for Pick/Move/Release. Release holds the XY reference captured before opening and
+checks full 3D endpoint error. Head geometry is non-colliding in the active
+CEE-US Fetch simulator; its appearance and mass remain. These changes improve
+measured agreement with the waypoint model but do not change the motion proof's
+formulas or supply certified tracking/attachment bounds. See the
+[combined controller measurements](../experiment/CONTROLLER-PATHS.md).
+
 ## Running the shared workflow
 
 The Stack command `synthesis.entry.synthesize_cfg --mode verify --program
@@ -82,6 +90,10 @@ symbolic verification before motion verification. A symbolic failure can stop th
 pipeline before motion is attempted. Physical repairs require new runtime traces,
 renewed inference, and both checks again. The expert archive remains the imitation
 target; candidate traces cannot silently replace it.
+
+Local demonstration archives have been deleted by request. The combined
+controller update does not regenerate them or rerun this archive-consuming
+pipeline; its full-program measurements keep temporary traces in memory.
 
 Collect full-state demonstrations with `synthesis.entry.collect_demos`. Stack
 collection performs 50 holding steps before recording; the resulting full state

@@ -269,7 +269,7 @@ def main(argv=None):
         lines = [
             "# Pick tolerance comparison",
             "",
-            "Uniform XYZ scaling; unchanged 50-step Pick budget and vertical-only Release. Each seed uses identical full settled starts across tolerances. Failed seeds are retained. Endpoint and payload measurements are at control-step boundaries.",
+            "Uniform XYZ scaling; 50-step Pick budget, fixed-XY Release and head contacts disabled. Each seed uses identical full settled starts across tolerances. Failed seeds are retained. Endpoint and payload measurements are at control-step boundaries.",
             "",
             "| Pick tolerance (mm) | Valid runs | Pick steps mean / max | Approach error P95 / max (mm) | Descent error P95 / max (mm) | Lifted payload XY P95 / max (mm) | Final tower XY P95 / max (mm) |",
             "| --- | --- | --- | --- | --- | --- | --- |",

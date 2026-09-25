@@ -11,6 +11,14 @@ use `b0=0` as its only fixed entry alias, and preserve block geometry before the
 loop. The existing Stack example meets these requirements. The executable
 fingerprint and entry bindings must remain identical at every block count.
 
+Physical witness executions use the shared 2 mm Pick/Move/Release defaults,
+uniform XYZ scaling and fixed-XY/full-3D Release feedback. The active CEE-US
+Fetch model disables head contacts while retaining head appearance and mass.
+See the [controller measurements](../CONTROLLER-PATHS.md) for empirical validation;
+those measurements do not certify the physical refinement of symbolic witnesses.
+Deletion of the local demonstration archives does not affect this workflow,
+which starts from no demonstrations.
+
 ## Running the experiment
 
 From `roboverify/`, configure the simulator environment as in

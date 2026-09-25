@@ -72,6 +72,9 @@ Supplied Stack verification passes with `ON_star Higher Scattered equality`,
 the 1 mm Higher tolerance and the documented supported-tower motion model;
 the supplied-program bootstrap currently passes without invariant refinement.
 This supplied-program result does not establish search or loop recovery.
+The latest archived pipeline proof predates the combined controller update;
+its current validation is full-program paired simulation and regression tests,
+without replacement demonstration archives or a fresh demonstration-driven run.
 The standalone [Section 6.2 experiment](roboverify/synthesis/experiment/invariant_learning/README.md)
 starts from no demos and False, directly minimizes reachable VC failures with
 bounded unordered execution queries, and learns only from complete validated

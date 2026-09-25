@@ -5,7 +5,7 @@ against the implementation. It covers §§2–5, Algorithms 1–6, Appendix A/Ta
 and the associated appendix algorithms/proofs; experimental numbers are not
 correctness targets. Neither paper nor code automatically wins a disagreement.
 
-Entry numbers 1–36 are stable, including resolved findings. Each entry records
+Entry numbers 1–37 are stable, including resolved findings. Each entry records
 its status, decision/reasoning and remaining action. Add new findings with the
 next unused ID. Detailed implementation history and completed audit checklists
 remain in Git history; use [README.md](README.md#project-status) for project status
@@ -1074,15 +1074,17 @@ future simplification must retain named-obstacle and alias regression coverage.
 **Status:** uniform XYZ scaling adopted in primitive action generation and the
 active CEE-US Fetch backend. Motion premises and the physical-refinement scope
 of entry 4 are unchanged. The backend still bounds the independent finger action.
-Executable fingerprints include `uniform-xyz-v1`; recollect older demonstrations.
+Executable fingerprints include `uniform-xyz-v1`. The older local demonstrations
+have since been deleted; the combined controller update adds no new versioning.
 
 **Historical mechanism:** `api/control.py::get_move_action` sent `20 * position_error`.
 The active CEE-US Fetch backend clipped each action coordinate to [-1, 1], then
-multiplies XYZ by 0.05 m before updating the mocap target. An axis saturates above
+multiplied XYZ by 0.05 m before updating the mocap target. An axis saturated above
 50 mm error. Unequal multi-axis errors can therefore change direction; pure
 single-axis saturation need not. Feedback follows the current-to-target vector
-and has no explicit correction to the original segment. Release retreat sends
-zero X/Y commands, so horizontal drift is not corrected there.
+and has no explicit correction to the original segment. The former Release
+retreat sent zero X/Y commands, leaving horizontal drift uncorrected; entry 37
+replaces that behavior with fixed-XY feedback.
 
 **Experiment (2026-09-24):** `synthesis.experiment.compare_stack_paths` executed
 the supplied four-block Stack program at seeds 0–99 with the current precondition,
@@ -1150,12 +1152,14 @@ report are in
 
 **Implementation:** a shared action helper scales XYZ by
 `max(1, max(abs(XYZ)))`, independently of the finger command. Applying it again
-in the backend is idempotent. Vertical-only Release removes unused XY errors
-before normalization. The diagnostic comparison explicitly reconstructs the
-historical clipped baseline; it is not a production mode.
+in the backend is idempotent. The optional vertical-only helper removes unused
+XY errors before normalization; production Release now uses full XYZ feedback.
+The scaling diagnostic explicitly reconstructs component clipping while using
+the current remaining defaults; it is not a production mode. The table above
+records the earlier 10 mm Pick/head-contact/Z-only Release configuration.
 
-**Remaining action:** separately address Release horizontal drift if physical
-path fidelity is required; uniform scaling is now the production behavior.
+**Remaining action:** entry 37 implements the approved Release/Pick changes;
+physical path refinement still requires justified tracking/attachment bounds.
 These results concern the supplied four-block Stack program, not arbitrary
 synthesized programs or a certified bound on deviation from the motion model.
 
@@ -1198,6 +1202,17 @@ The four local `demonstrations.npz` archives were deleted at the user's request;
 reports/videos are preserved. No additional versioning or replacement
 demonstration collection is included. Full-program comparisons record metrics
 and paths under `runs/`, keeping simulation traces in memory.
+
+**Combined validation:** 200 paired starts (seeds 0–199), 400 complete four-block
+programs, all valid with converged primitives. The updated maximum primitive
+budget use is 24/50. Maximum sampled Release XY deviation falls from 11.816 to
+1.463 mm; maximum final XY error falls to 0.305 mm. Maximum gripper path deviation
+over all phases is 2.500 mm. Mean program actions change from 116.70 to 123.08.
+The new reference uses pre-opening Release XY, unlike the earlier retreat-start
+reference; sampling remains at 40 ms boundaries. Final tower XY alignment does
+not materially improve (P95 6.440 to 6.696 mm), and payload attachment still moves.
+All 350 regression tests pass. Details and the new HTML are linked from the
+measurement report above. No fresh demonstration-consuming proof run was performed.
 
 **Remaining action:** establish physical tracking/attachment bounds if a
 refinement proof is required; finite observed maxima do not provide those bounds.

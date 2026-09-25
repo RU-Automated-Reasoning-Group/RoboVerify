@@ -2,20 +2,75 @@
 
 Production primitive actions and the active CEE-US Fetch backend now use uniform
 XYZ scaling: `a[:3] /= max(1, max(abs(a[:3])))`. Finger control is independent.
-This removes clipping-induced direction changes but does not certify physical
-refinement of the motion model. The executable fingerprint includes this behavior;
-recollect older demonstrations.
+Pick, Move and Release default to 2 mm 3D stopping tolerance. Release freezes
+XY before opening, then corrects XYZ toward that target during retreat. The
+head geometries in the active CEE-US Fetch XML have both collision masks zero;
+appearance and explicit inertial properties remain. Gain 20 and 50-step budgets
+are unchanged. These choices improve agreement but do not certify physical
+refinement of the motion model.
 
-These experiments use four-block Stack, gain 20, a 50-step budget per instruction,
-and 50 settling steps before recording. Release and the default 10 mm Pick
-tolerance are unchanged in production. Comparisons restore identical full
-simulator snapshots. No failed trials are dropped. See review entries
+The four local demonstration archives were deleted by request; reports and videos
+remain. No additional versioning or replacement collection is included. The
+combined validation below keeps full execution traces in memory and writes only
+diagnostic paths, metrics and plots under `runs/`. See review entries
 [36](../../../PAPER-DISCREPANCIES.md#36-component-wise-saturation-bends-the-physical-gripper-path)
 and [37](../../../PAPER-DISCREPANCIES.md#37-release-drift-and-pick-stopping-tolerance-after-uniform-scaling).
 
-## Why Release drifts
+## Current combined validation
 
-Release opens the fingers, then requests `(0, 0, dz)` until its Z error is at most
+Seeds 0–199 were executed in pairs: previous uniform-scaling behavior (10 mm Pick,
+head contacts enabled, Z-only Release) versus the updated production behavior.
+Each updated program restored its counterpart's exact full settled initial state;
+all snapshot arrays and bindings were checked for equality. No seed was dropped
+or replaced. Both modes validated **200/200 complete four-block Stack programs**,
+with 600 Releases per mode. All primitives converged; the updated maximum was
+24 of 50 steps. Mean program actions changed from 116.70 to 123.08.
+
+| Measurement (mm) | Previous median / P95 / max | Updated median / P95 / max |
+| --- | ---: | ---: |
+| Release maximum XY deviation | 2.104 / 2.859 / 11.816 | 1.046 / 1.336 / 1.463 |
+| Release final XY error | 2.079 / 2.859 / 11.816 | 0.177 / 0.270 / 0.305 |
+| Maximum gripper path deviation per program | 2.483 / 4.628 / 11.816 | 1.594 / 2.235 / 2.500 |
+| Pick approach endpoint error | 4.274 / 9.325 / 9.939 | 0.936 / 1.787 / 1.995 |
+| Pick descent endpoint error | 2.801 / 4.775 / 5.356 | 0.424 / 1.130 / 1.327 |
+| Final tower XY alignment error | 4.873 / 6.440 / 7.243 | 4.895 / 6.696 / 7.633 |
+
+These are 40 ms control-boundary measurements. Path deviation uses the finite
+start-to-target segment; Release uses the vertical line through its pre-opening
+XY. This differs slightly from the older retreat-start reference below, explaining
+11.82 mm versus the earlier 11.78 mm peak. Initial settling and separate gripper
+opening/closing phases are excluded from path statistics. Release corrections
+still reference the position before opening.
+
+The updated gripper's largest sampled path deviation is 2.50 mm (approach), while
+its largest Release deviation is 1.46 mm. Payload tracking is a separate issue:
+the largest carried-block path deviation was 3.97 mm, measured relative to the
+segment translated by its initial block–gripper offset. The relative attachment
+vector changed by up to 4.34 mm during transfer; absolute block–gripper XY offset
+reached 6.77 mm during lowering. Final tower alignment did not materially improve.
+The HTML includes all phase metrics and all ten earlier >3 mm Release seeds.
+
+The full **350-test regression suite passed**, including new tests for Release
+correction after opening, rejection of residual XY error, retained head mass and
+arm contacts, numeric/named defaults, and diagnostic execution parity. Tests also
+cover collection/replay, inference, symbolic/motion verification and MCMC parity.
+No fresh archive-driven verification run was performed; the geometric model is
+unchanged and the previously recorded proof remains a model-level result.
+
+Artifacts:
+[current standalone HTML](../../runs/stack-control/20260925-031704-7bdffaa-combined-200/artifacts/report.html),
+`summary.json`, `executions.json`, and embedded/exportable plots in the same
+directory. The run's source metadata records the pre-commit SHA with dirty changes;
+production behavior was subsequently committed as `69a440a`.
+
+```bash
+uv run python -m synthesis.experiment.compare_stack_control --num-seeds 200
+uv run python -m synthesis.experiment.report --run runs/stack-control/latest
+```
+
+## Historical diagnosis of Release drift
+
+The former Release opened the fingers, then requested `(0, 0, dz)` until its Z error was at most
 2 mm. The Gym mocap update resets its target to the gripper body's **current**
 pose before adding each delta. Zero XY therefore means no corrective XY
 displacement: sideways error becomes the next step's starting XY. Move, including
@@ -53,16 +108,17 @@ baseline replay matched saved actions and final observations within 1e-8.
 *XY feedback exhausted the 50-step instruction budget on seed 98, with about
 4.42 mm final lateral displacement. Lowering gain to 5 also did not solve the
 collision: seed 9's maximum increased to 13.81 mm. Disabling head contacts is a
-causal diagnostic, not a production fix. Head/arm self-collision remains outside
-the experiment's evaluation scope, but causes this simulator outlier. A physical
-fix should address retreat height/posture or collision geometry before relying
-on XY feedback.
+causal diagnostic in this earlier experiment. The user subsequently chose to
+disable head contacts in production alongside XY feedback. Head-contact behavior
+is intentionally outside the resulting simulator model; this does not establish
+head/arm collision clearance for a physical robot.
 
-## Pick stopping tolerance
+## Historical Pick tolerance sweep
 
-Recommendation: **2 mm** for tighter waypoint stopping with modest execution
+Adopted choice: **2 mm** for tighter waypoint stopping with modest execution
 cost. This is an empirical operating choice, not a bound on path deviation or
-held-block position. The default remains 10 mm pending adoption.
+held-block position. The sweep below used the former Z-only Release and enabled
+head contacts; the combined production results are reported above.
 
 Six tolerances were compared at seeds 0–99: 600 executions, all valid, with 300
 Picks per tolerance. Endpoint error is the 3D distance to the phase's controller
@@ -96,9 +152,12 @@ must not be equated with the stopping tolerance. All 1,800 default-tolerance
 phase position sequences exactly matched the earlier uniform experiment,
 checking that the instrumentation did not alter those executions.
 
-## Reproduction and artifacts
+## Historical diagnostic commands and artifacts
 
-From `roboverify/`, with the simulator environment in AGENTS.md:
+From `roboverify/`, with the simulator environment in AGENTS.md. The tolerance
+tool now uses the current Release/collision defaults; reproducing the historical
+tolerance sweep exactly requires its original revision (`7bdffaa`). The Release
+diagnosis tool explicitly reconstructs the old 10 mm/head-contact/Z-only baseline:
 
 ```bash
 uv run python -m synthesis.experiment.tune_pick_tolerance --num-seeds 100
@@ -114,10 +173,10 @@ JSON and Markdown in each run's `artifacts/`:
 - Sweep: `runs/pick-tolerance/20260925-022037-067bf9a-paired-grid/`.
 - Held-out check: `runs/pick-tolerance/20260925-023004-067bf9a-holdout-2mm/`.
 - Release replay: `runs/release-drift/20260925-022743-067bf9a-substeps/`.
-- Standalone HTML with embedded plots:
+- Historical standalone HTML with embedded plots:
   [report.html](../../runs/controller-investigation/20260925-024148-3dc4cf3-uniform-release-pick/artifacts/report.html).
 
-Validation: 81 focused controller, collection/replay, MCMC parity, reset and
+Historical validation before the combined update: 81 controller, collection/replay, MCMC parity, reset and
 motion-verification tests passed. Five fresh default-controller demonstrations
 validated, and the supplied Stack pipeline returned `verified_model` in
 `runs/cfg/20260925-023502-3dc4cf3-stack-uniform-verification-60s/`. A preceding
