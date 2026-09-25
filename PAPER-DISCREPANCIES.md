@@ -1127,6 +1127,22 @@ All 16 focused diagnostic/controller tests passed, including simulator tests.
 An instrumented baseline replay of the existing current-task seed-0 archive
 matched all 124 recorded actions exactly and observations within 1e-8.
 
+**Distribution reanalysis of the same 100 pairs:** maximum drift per complete
+execution has median/P95/max 42.38/59.32/69.37 mm with component clipping and
+2.54/4.62/11.78 mm with uniform scaling. Excluding Release retreat, uniform
+scaling gives 1.67/2.26/2.52 mm. All ten uniform Release retreats above 3 mm
+(including five above 5 mm) follow the third placement. Uniform Pick approach
+endpoint error still reaches 9.84 mm, consistent with its 10 mm stopping
+tolerance; uniform Move-transfer endpoint error reaches 1.99 mm. These endpoint
+errors are separate from perpendicular path deviation. Recomputed distances to
+the finite phase segments match the original line-distance maxima within
+1e-6 mm on all 3,600 phases. Sampling is every 40 ms; the reference starts at
+each actual phase start, so these figures omit cumulative symbolic-state error,
+gripper opening/closing intervals and held-block geometry. Detailed percentiles,
+threshold counts, per-placement Release distributions, CSV and a standalone HTML
+report are in
+`roboverify/runs/controller-drift/20260925-020832-a570d99-distribution/artifacts/`.
+
 **Remaining action:** consider adopting uniform XYZ scaling and separately
 correcting Release horizontal drift if physical path fidelity is required.
 These results concern the supplied four-block Stack program, not arbitrary
