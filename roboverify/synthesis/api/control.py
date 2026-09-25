@@ -10,6 +10,8 @@ from math import isfinite
 
 import numpy as np
 
+from synthesis.util.actions import bound_delta_action
+
 
 @dataclass(frozen=True)
 class ControlConfig:
@@ -43,9 +45,9 @@ class ControlResult:
 def get_move_action(
     observation, target_position, *, gain=DEFAULT_CONTROL.gain, close_gripper=False
 ):
-    """Proportional Cartesian command; the caller owns the stopping condition."""
+    """Direction-preserving bounded XYZ command, with independent gripper control."""
     action = gain * (np.asarray(target_position) - np.asarray(observation)[:3])
-    return np.r_[action, -0.2 if close_gripper else 0.0]
+    return bound_delta_action(np.r_[action, -0.2 if close_gripper else 0.0])
 
 
 class PrimitiveController:
@@ -100,15 +102,16 @@ class PrimitiveController:
             return abs(delta[2]) if vertical_only else np.linalg.norm(delta)
 
         def action():
-            command = get_move_action(
+            command_target = target.copy()
+            if vertical_only:
+                # Ignore unused axes before scaling, so their error cannot slow Z.
+                command_target[:2] = self.observation[:2]
+            return get_move_action(
                 self.observation,
-                target,
+                command_target,
                 gain=self.control.gain,
                 close_gripper=close_gripper,
             )
-            if vertical_only:
-                command[:2] = 0.0
-            return command
 
         return self._until(
             phase, lambda: error() <= self.control.position_tolerance, action, error

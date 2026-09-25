@@ -433,7 +433,7 @@ def main(argv=None):
         logger.write_artifact(
             "README.md",
             "# Stack controller videos\n\n"
-            "Left: current component clipping. Right: experimental uniform XYZ scaling; gripper command unchanged.\n\n"
+            "Left: historical component clipping. Right: current uniform XYZ scaling; gripper command unchanged.\n\n"
             f"Both four-block programs use identical full settled initial snapshots. Seeds {seeds} reproduce the prior measured paths within 1e-8 m. "
             f"Seed {worst['seed']} is deliberately the largest-bend example from the supplied sample, not a typical-case estimate.\n\n"
             "Complete videos share simulation time and run at half speed. The detailed approach/transfer clip synchronizes each phase's start and runs at one-tenth speed; "
@@ -441,7 +441,7 @@ def main(argv=None):
             "Opening title and final-frame holds are pauses. Shorter executions/phases hold their last frame.\n\n"
             "The lower diagrams show actual recorded gripper XY paths and intended straight lines; displayed deviation is measured in 3D from each phase's own start-to-target line. "
             "They are sampled at control boundaries (0.04 s), with no motion interpolation. Both variants passed task validation and primitive convergence. "
-            "The production controller is unchanged. diagnostic_rollouts.npz is marked diagnostic to prevent treating uniform-scaling trials as ordinary validated demonstrations.\n\n"
+            "Uniform scaling is now the production behavior. diagnostic_rollouts.npz is marked diagnostic because this report includes historical controller replays.\n\n"
             + "\n".join(
                 f"- [{v['path']}]({v['path']}): {float(v['duration']):.2f} s, {WIDTH}x{HEIGHT}, {FPS} FPS."
                 for v in videos

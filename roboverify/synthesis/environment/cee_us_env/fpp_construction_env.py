@@ -13,6 +13,7 @@ from synthesis.environment.cee_us_env.abstract_environments import MaskedGoalSpa
 from synthesis.environment.cee_us_env.fpp_construction.construction import FetchBlockConstructionEnv
 from synthesis.environment.cee_us_env.robotics import GymRoboticsGroundTruthSupportEnv
 from synthesis.environment.stack_reset import sample_stack_xy
+from synthesis.util.actions import bound_delta_action
 from synthesis.util.on import BLOCK_LENGTH, on as on_relation
 
 ROBOVERIFY_PYRAMID_NUM_BLOCKS = 6
@@ -236,7 +237,7 @@ class FetchPickAndPlaceConstruction(
         return np.concatenate((obs["observation"], obs["desired_goal"]))
 
     def step(self, action):
-        action = np.clip(action, self.action_space.low, self.action_space.high)
+        action = bound_delta_action(action)
         self._set_action(action)
         try:
             self.sim.step()

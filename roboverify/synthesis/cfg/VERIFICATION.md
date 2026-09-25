@@ -80,7 +80,10 @@ are the nominal settled reset pose in this environment; they are explicit formal
 entry conditions, not automatic extraction of the complete simulator state into Z3.
 Only candidate execution restores full simulator snapshots. Archives collected
 before the equal-height premise was added record the earlier task specification;
-recollect them before running this pipeline. The archive format is unchanged.
+recollect them before running this pipeline. Also recollect archives from before
+uniform XYZ action scaling: action semantics now participate in the executable
+fingerprint, so these older demonstrations intentionally fail source matching.
+The archive format is unchanged.
 
 Both modes use `InvInference` → `inference.loop_inference`, the intended
 partition-based algorithm. Candidate execution supplies continuing loop heads and

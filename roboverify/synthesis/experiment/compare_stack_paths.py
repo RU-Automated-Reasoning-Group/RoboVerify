@@ -1,4 +1,4 @@
-"""Measure Stack gripper paths and optionally trial uniform Cartesian scaling.
+"""Compare historical clipped Stack gripper paths with current uniform scaling.
 
 The trial patches only this serial diagnostic process, never the controller source.
 Each variant uses a fresh environment; paired trials restore the baseline's settled
@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 import numpy as np
 
+from synthesis.api import control as control_module
 from synthesis.api.control import PrimitiveController
 from synthesis.experiment.run_logger import RunLogger
 
@@ -58,9 +59,17 @@ def phase_metrics(row):
 
 @contextmanager
 def capture_phases(rows, *, uniform=False):
-    """Observe exact targets and steps without changing baseline commands."""
+    """Compare historical component clipping with current uniform scaling.
+
+    Raw command generation is patched only for this serial diagnostic so the
+    historical baseline stays reproducible after uniform scaling becomes default.
+    """
     original_move, original_step = PrimitiveController.move, PrimitiveController._step
     active = None
+
+    def raw_action(observation, target_position, *, gain=20.0, close_gripper=False):
+        command = gain * (np.asarray(target_position) - np.asarray(observation)[:3])
+        return np.r_[command, -0.2 if close_gripper else 0.0]
 
     def move(controller, target, **kwargs):
         nonlocal active
@@ -95,15 +104,18 @@ def capture_phases(rows, *, uniform=False):
             active["raw_actions"].append(command.tolist())
             if uniform:
                 command[:3] /= max(1.0, float(np.max(np.abs(command[:3]))))
+            else:
+                # Explicitly reproduce the historical backend, now removed.
+                command[:3] = np.clip(command[:3], -1, 1)
             active["sent_actions"].append(command.tolist())
         result = original_step(controller, command)
         if active is not None:
             active["positions"].append(controller.observation[:3].tolist())
         return result
 
-    with patch.object(PrimitiveController, "move", move), patch.object(
-        PrimitiveController, "_step", step
-    ):
+    with patch.object(control_module, "get_move_action", raw_action), patch.object(
+        PrimitiveController, "move", move
+    ), patch.object(PrimitiveController, "_step", step):
         yield
 
 
@@ -178,7 +190,7 @@ def plot_paths(rows, destination):
 
     modes = list(dict.fromkeys(r["mode"] for r in rows))
     colors = ("#bd432f", "#176ea1")
-    labels = ("Current: component clipping", "Trial: uniform scaling")
+    labels = ("Historical: component clipping", "Current: uniform scaling")
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.8), layout="constrained")
     example = next(r for r in rows if r["phase"] == "approach")
     origin = np.array(example["positions"][0])

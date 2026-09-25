@@ -8,6 +8,7 @@ from gym.envs.robotics import fetch_env, rotations, utils
 from mujoco_py.generated import const
 
 from .colors import get_colors
+from synthesis.util.actions import bound_delta_action
 from synthesis.util.on import BLOCK_LENGTH
 
 BASIC_COLORS = ["0 1 0", "1 1 0", "0.2 0.8 0.8", "0.8 0.2 0.8", "1.0 0.0 0.0", "0 0 0"]
@@ -744,7 +745,7 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
         utils.mocap_set_action(self.sim, action)
 
     def step(self, action):
-        action = np.clip(action, self.action_space.low, self.action_space.high)
+        action = bound_delta_action(action)
         self._set_action(action)
         try:
             self.sim.step()

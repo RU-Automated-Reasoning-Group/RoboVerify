@@ -186,11 +186,20 @@ move = MoveByName(
 )
 ```
 
-The action helper `get_move_action` computes the proportional command and has
-no tolerance argument. The controller applies the configured tolerance to its
-stopping test. Controller settings are preserved during ID-to-name conversion
-and included in program descriptions/fingerprints; they are fixed settings,
-separate from the waypoint offsets optimized by CEM.
+The action helper `get_move_action` computes the proportional XYZ command and
+divides all three coordinates by `max(1, max(abs(XYZ)))`. This preserves direction
+when bounding the command to [-1, 1]. The active CEE-US Fetch backend uses the
+same operation for direct actions; it no longer clips Cartesian axes separately.
+The independent gripper command is bounded separately. The helper has no
+tolerance argument: the controller applies the configured tolerance to its
+stopping test. Release still requests zero XY displacement and checks only Z.
+
+Controller settings and the action-scaling version are preserved during
+ID-to-name conversion and included in program descriptions/fingerprints. Archives
+from the earlier component-clipping controller must be recollected for matching
+supplied-program verification. These are fixed settings, separate from the
+waypoint offsets optimized by CEM. Scaling improves direction fidelity; it does
+not establish physical refinement of the motion proof (review entry 36).
 
 Each instruction retains `last_control_result` (convergence, steps, final phase,
 and position error when applicable), also saved in its `instruction_end` event.

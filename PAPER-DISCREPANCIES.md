@@ -38,7 +38,7 @@ model assumptions and APIs.
 | 33 | Scattered mismatch diagnosed; further work deferred by user decision because of its low observed frequency. |
 | 34 | Section 6.2 fixed-program experiment implemented for Stack; initial-state witness generation and iteration counts made explicit. |
 | 35 | Named collision and Move-support checks duplicate an unrestricted arbitrary-object check; simplification deferred by user decision. |
-| 36 | Component-wise action clipping bends measured Stack paths; diagnostic uniform scaling sharply reduces it. Production controller unchanged. |
+| 36 | Uniform XYZ scaling adopted after measured Stack path comparison; Release drift and physical refinement remain separate. |
 
 ## 1. Theorem 5.2 contradicts the paper's own Table 7 (`R_Higher`)
 
@@ -1068,11 +1068,13 @@ future simplification must retain named-obstacle and alias regression coverage.
 
 ## 36. Component-wise saturation bends the physical gripper path
 
-**Status:** measured controller/model discrepancy; investigation only. No change
-to production control, motion premises, or the physical-refinement scope of entry 4.
+**Status:** uniform XYZ scaling adopted in primitive action generation and the
+active CEE-US Fetch backend. Motion premises and the physical-refinement scope
+of entry 4 are unchanged. The backend still bounds the independent finger action.
+Executable fingerprints include `uniform-xyz-v1`; recollect older demonstrations.
 
-**Mechanism:** `api/control.py::get_move_action` sends `20 * position_error`.
-The active CEE-US Fetch backend clips each action coordinate to [-1, 1], then
+**Historical mechanism:** `api/control.py::get_move_action` sent `20 * position_error`.
+The active CEE-US Fetch backend clipped each action coordinate to [-1, 1], then
 multiplies XYZ by 0.05 m before updating the mocap target. An axis saturates above
 50 mm error. Unequal multi-axis errors can therefore change direction; pure
 single-axis saturation need not. Feedback follows the current-to-target vector
@@ -1143,7 +1145,13 @@ threshold counts, per-placement Release distributions, CSV and a standalone HTML
 report are in
 `roboverify/runs/controller-drift/20260925-020832-a570d99-distribution/artifacts/`.
 
-**Remaining action:** consider adopting uniform XYZ scaling and separately
-correcting Release horizontal drift if physical path fidelity is required.
+**Implementation:** a shared action helper scales XYZ by
+`max(1, max(abs(XYZ)))`, independently of the finger command. Applying it again
+in the backend is idempotent. Vertical-only Release removes unused XY errors
+before normalization. The diagnostic comparison explicitly reconstructs the
+historical clipped baseline; it is not a production mode.
+
+**Remaining action:** separately address Release horizontal drift if physical
+path fidelity is required; uniform scaling is now the production behavior.
 These results concern the supplied four-block Stack program, not arbitrary
 synthesized programs or a certified bound on deviation from the motion model.

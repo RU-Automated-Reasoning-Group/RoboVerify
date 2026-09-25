@@ -1,8 +1,11 @@
 """Controller convergence, bounded execution, and numeric/named parity."""
 
+import hashlib
+import json
 import unittest
 from copy import deepcopy
 from dataclasses import replace
+from unittest.mock import patch
 
 import numpy as np
 
@@ -17,6 +20,7 @@ from synthesis.cfg.program_source import (
     describe_program,
     program_fingerprint,
 )
+from synthesis.util.actions import bound_delta_action
 
 
 class ServoEnvironment:
@@ -69,6 +73,34 @@ class ControlTests(unittest.TestCase):
         )
         with self.assertRaises(TypeError):
             get_move_action([0, 0, 0], [0, 0, 0], atol=0.1)
+
+    def test_large_commands_keep_direction_and_gripper_strength(self):
+        for error in ([0.2, 0.05, 0], [-0.2, 0.05, -0.1], [0, 0, 0.2]):
+            raw = 20 * np.asarray(error)
+            for closed in (False, True):
+                action = get_move_action([0, 0, 0], error, close_gripper=closed)
+                self.assertLessEqual(np.max(np.abs(action[:3])), 1)
+                np.testing.assert_allclose(np.cross(raw, action[:3]), 0, atol=1e-15)
+                np.testing.assert_allclose(action[:3], raw / np.max(np.abs(raw)))
+                self.assertEqual(action[3], -0.2 if closed else 0)
+
+    def test_vertical_only_ignores_xy_before_scaling(self):
+        env = ServoEnvironment()
+        target = env.obs[:3] + [10, 10, 0.1]
+        controller = PrimitiveController(env, [])
+        self.assertTrue(controller.move(target, vertical_only=True))
+        self.assertEqual(controller.steps, 2)
+        np.testing.assert_allclose(np.array(env.actions)[:, :3], [[0, 0, 1], [0, 0, 1]])
+
+    def test_action_bounds_are_idempotent_and_do_not_mutate_input(self):
+        raw = np.array([4, 1, -2, -3])
+        bounded = bound_delta_action(raw)
+        np.testing.assert_array_equal(raw, [4, 1, -2, -3])
+        np.testing.assert_array_equal(bounded, [1, 0.25, -0.5, -1])
+        np.testing.assert_array_equal(bound_delta_action(bounded), bounded)
+        for invalid in ([1, 2, 3], [1, 2, 3, np.nan], [np.inf, 0, 0, 0]):
+            with self.assertRaises(ValueError):
+                bound_delta_action(invalid)
 
     def test_position_tolerance_controls_termination(self):
         counts = []
@@ -178,6 +210,16 @@ class ControlTests(unittest.TestCase):
         self.assertEqual(
             describe_program(changed)[0]["control"]["position_tolerance"], 0.004
         )
+        self.assertEqual(
+            describe_program(changed)[0]["action_scaling"], "uniform-xyz-v1"
+        )
+        # The old descriptor omitted action semantics and must have a different ID.
+        old_description = deepcopy(describe_program(changed))
+        old_description[0].pop("action_scaling")
+        old_fingerprint = hashlib.sha256(
+            json.dumps(old_description, sort_keys=True, allow_nan=False).encode()
+        ).hexdigest()
+        self.assertNotEqual(program_fingerprint(changed), old_fingerprint)
         # Runtime diagnostics must not change executable identity.
         before = program_fingerprint(changed)
         changed.instructions[0].eval(ServoEnvironment(), [])
@@ -200,6 +242,20 @@ class ControlTests(unittest.TestCase):
 
 
 class SimulatorControlTests(unittest.TestCase):
+    def test_backend_uniformly_scales_direct_actions(self):
+        from synthesis.cfg.reset import inner_env
+        from synthesis.mcmc.synthesis import make_roboverify_stack_env
+
+        env = make_roboverify_stack_env(num_blocks=3)
+        try:
+            env.reset(seed=0)
+            inner = inner_env(env)
+            with patch.object(inner, "_set_action", wraps=inner._set_action) as apply:
+                env.step(np.array([4, 1, 0, -0.2]))
+            np.testing.assert_array_equal(apply.call_args.args[0], [1, 0.25, 0, -0.2])
+        finally:
+            env.close()
+
     def test_stack_example_finishes_in_one_iteration_per_nonbase_block(self):
         from synthesis.cfg.program_source import load_program
         from synthesis.verification_lib.highlevel_verification_lib import (

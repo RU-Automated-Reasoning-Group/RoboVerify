@@ -39,7 +39,7 @@ class StackPathTests(unittest.TestCase):
             env, rows = ServoEnvironment(), []
             with capture_phases(rows, uniform=uniform):
                 PrimitiveController(env, []).move(target, phase="approach")
-            if not uniform:
+            if uniform:
                 np.testing.assert_array_equal(env.actions, reference.actions)
             self.assertTrue(rows[0]["converged"])
             results.append(rows[0])

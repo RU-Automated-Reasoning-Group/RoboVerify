@@ -179,10 +179,12 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
 - **`synthesis/api/`** — the program representation.
   - `control.py`: shared bounded controllers for explicit Pick/Move/Release.
     ID/ByName pairs share execution after operand lookup. Immutable `ControlConfig`
-    uses 10 mm Pick and 2 mm Move/Release tolerances, gain 20, and the unchanged
+    uses 10 mm Pick and 2 mm Move/Release tolerances, gain 20, uniform XYZ scaling,
+    and the unchanged
     50-step instruction budget. `last_control_result` and runtime events report
     convergence/step exhaustion; collection rejects unconverged primitives.
-    Control settings survive naming and enter executable fingerprints. Legacy
+    Control settings and action-scaling semantics enter executable fingerprints;
+    recollect archives from before uniform scaling. Legacy
     PickPlace macros retain separate controllers and are not collection inputs.
   - `instructions.py`: `Instruction` subclasses. Physical instructions (`Pick`, `Move`,
     `Release`, `PickPlace`, and their `...ByName` variants that resolve symbolic box names via

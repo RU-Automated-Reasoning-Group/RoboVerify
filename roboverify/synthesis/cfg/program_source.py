@@ -24,6 +24,7 @@ from synthesis.api.instructions import (
 from synthesis.api.program import Program
 from synthesis.cfg.physical import name_operands
 from synthesis.predicates.term import free_names, from_z3
+from synthesis.util.actions import CARTESIAN_ACTION_MODE
 from synthesis.util.symbols import fresh_name
 
 
@@ -52,7 +53,10 @@ def describe_program(program):
             result["steps"] = i.skip_steps
         elif type(i) in (Pick, PickByName, Move, MoveByName, Release, ReleaseByName):
             result.update(
-                operands=i.get_operand(), limit=i.limit, control=asdict(i.control)
+                operands=i.get_operand(),
+                limit=i.limit,
+                control=asdict(i.control),
+                action_scaling=CARTESIAN_ACTION_MODE,
             )
             if hasattr(i, "target_offset"):
                 result["offsets"] = [p.numeric_val() for p in i.target_offset]
