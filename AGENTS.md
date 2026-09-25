@@ -39,8 +39,11 @@ uv run python -m unittest synthesis.experiment.test_run_logger -v     # fast, no
 uv run python -m unittest synthesis.experiment.test_mcmc_parity -v    # drives MuJoCo
 ```
 
-Tests are `unittest`, not pytest. No linter is configured. Generated demos are
-not bundled; collect them before running the pipeline examples. If collection
+Tests are `unittest`, not pytest. No linter is configured. The four local
+`demonstrations.npz` archives were deleted at the user's request; reports and
+videos remain. No replacement collections or additional execution versioning
+are part of the controller update. Pipeline examples require a new collection
+when that workflow is explicitly requested. If collection
 prints a numbered output directory, use that archive path in subsequent commands.
 The commands above illustrate the interfaces. For the supplied Stack proof, use
 the [complete verification configuration](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification),
@@ -103,8 +106,10 @@ and paper corrections are recorded in the numbered review entries.
 | 6 | ON_star_zero is frozen entry geometry. Tasks using it equate it with current ON* in the precondition, never through a global link axiom (entry 5). |
 | 7 | Optimize all three Move coordinates. Reassess CEM budgets when dimensionality changes; a single smoke run does not justify new defaults. |
 
-The experiment assumes reliable primitive skills; head/arm self-collision is
-outside its evaluation scope. Simulator skill failures must still be diagnosed,
+The experiment assumes reliable primitive skills. In the active CEE-US Fetch
+model, head geometry has both collision masks disabled; appearance and mass are
+retained. This intentionally excludes head contacts from the simulated task.
+Simulator skill failures must still be diagnosed,
 and accepted demonstrations must actually satisfy their pre/postconditions.
 
 ## Conventions
@@ -179,12 +184,13 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
 - **`synthesis/api/`** — the program representation.
   - `control.py`: shared bounded controllers for explicit Pick/Move/Release.
     ID/ByName pairs share execution after operand lookup. Immutable `ControlConfig`
-    uses 10 mm Pick and 2 mm Move/Release tolerances, gain 20, uniform XYZ scaling,
-    and the unchanged
-    50-step instruction budget. `last_control_result` and runtime events report
+    uses 2 mm Pick/Move/Release tolerances, gain 20, uniform XYZ scaling,
+    and the unchanged 50-step instruction budget. Release freezes XY before
+    opening, corrects all three axes during retreat, and stops on 3D position
+    error. `last_control_result` and runtime events report
     convergence/step exhaustion; collection rejects unconverged primitives.
     Control settings and action-scaling semantics enter executable fingerprints;
-    recollect archives from before uniform scaling. Legacy
+    the existing fingerprint mechanism is unchanged by the combined update. Legacy
     PickPlace macros retain separate controllers and are not collection inputs.
   - `instructions.py`: `Instruction` subclasses. Physical instructions (`Pick`, `Move`,
     `Release`, `PickPlace`, and their `...ByName` variants that resolve symbolic box names via

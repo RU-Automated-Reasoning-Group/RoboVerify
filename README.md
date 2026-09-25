@@ -31,9 +31,15 @@ precondition also requires one initial block-height level, expressed as
 Primitive ID/ByName instructions share configurable controllers and retain their
 50-step budgets.
 See [controller settings](roboverify/synthesis/inference_lib/README.md#primitive-controller-settings).
-Cartesian delta commands now use uniform XYZ scaling in both the primitive
-controller and active Fetch backend. Recollect demonstrations from before this
-change; the action semantics are included in executable fingerprints.
+Cartesian delta commands use uniform XYZ scaling in both the primitive
+controller and active Fetch backend. Pick, Move and Release default to 2 mm
+position tolerance. Release freezes XY before opening and corrects XYZ during
+retreat, stopping on full 3D error. Head collision geometry is disabled in the
+active CEE-US Fetch model; its appearance and mass are retained.
+The four local demonstration archives were deleted at the user's request;
+reports and videos remain. No replacement demonstrations or additional
+versioning are included in this update. The CLI examples below require a
+collection when that workflow is next requested.
 The [Stack controller measurements](roboverify/synthesis/experiment/CONTROLLER-PATHS.md)
 diagnose Release drift and compare Pick stopping tolerances.
 

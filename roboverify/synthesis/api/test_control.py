@@ -166,6 +166,49 @@ class ControlTests(unittest.TestCase):
             all(a[3] == 0 and np.all(a[:2] == 0) for a in env.actions[split:])
         )
 
+    def test_release_corrects_opening_and_motion_drift_to_original_xy(self):
+        class DriftingServo(ServoEnvironment):
+            def step(self, action):
+                super().step(action)
+                self.obs[:2] += [0.003, -0.002] if action[3] > 0 else [0.0005, -0.0003]
+
+        env = DriftingServo()
+        env.obs[3:5] = 0.02
+        target = np.r_[env.obs[:2].copy(), env.obs[12] + 0.3]
+        instruction = Release(0, target_z=0.3)
+        instruction.eval(env, [])
+        self.assertTrue(instruction.last_control_result.converged)
+        self.assertLessEqual(np.linalg.norm(env.obs[:3] - target), 0.002)
+        first_retreat = next(a for a in env.actions if a[2] != 0)
+        self.assertLess(first_retreat[0], 0)
+        self.assertGreater(first_retreat[1], 0)
+        self.assertAlmostEqual(
+            instruction.last_control_result.position_error,
+            np.linalg.norm(env.obs[:3] - target),
+        )
+
+    def test_release_rejects_xy_error_even_when_z_has_converged(self):
+        class StalledXYServo(ServoEnvironment):
+            def step(self, action):
+                xy = self.obs[:2].copy()
+                super().step(action)
+                self.obs[:2] = xy + ([0.003, 0] if action[3] > 0 else [0, 0])
+
+        env = StalledXYServo()
+        env.obs[3:5] = 0.02
+        instruction = Release(0, target_z=env.obs[2] - env.obs[12], limit=5)
+        instruction.eval(env, [])
+        self.assertFalse(instruction.last_control_result.converged)
+        self.assertEqual(instruction.last_control_result.steps, 5)
+        self.assertEqual(instruction.last_control_result.phase, "retreat")
+        self.assertGreater(instruction.last_control_result.position_error, 0.002)
+
+    def test_default_pick_tolerance_is_shared_by_numeric_and_named_forms(self):
+        numeric = Pick(1)
+        named = name_operands(numeric, {1: "other"})
+        self.assertEqual(numeric.control.position_tolerance, 0.002)
+        self.assertEqual(named.control, numeric.control)
+
     def test_named_conversion_preserves_controls_actions_observations_and_frames(self):
         config = ControlConfig(position_tolerance=0.003, gain=8)
         numeric_env, named_env = ServoEnvironment(), ServoEnvironment()
@@ -242,6 +285,24 @@ class ControlTests(unittest.TestCase):
 
 
 class SimulatorControlTests(unittest.TestCase):
+    def test_head_contacts_are_disabled_without_removing_mass_or_arm_contacts(self):
+        from synthesis.cfg.reset import inner_env
+        from synthesis.mcmc.synthesis import make_roboverify_stack_env
+
+        env = make_roboverify_stack_env(num_blocks=4)
+        self.addCleanup(env.close)
+        model = inner_env(env).sim.model
+        for name in ("robot0:head_pan_link", "robot0:head_tilt_link"):
+            geom = model.geom_name2id(name)
+            self.assertEqual(model.geom_contype[geom], 0)
+            self.assertEqual(model.geom_conaffinity[geom], 0)
+            self.assertGreater(model.geom_rgba[geom, 3], 0)
+            self.assertGreater(model.body_mass[model.body_name2id(name)], 0)
+        for name in ("robot0:upperarm_roll_link", "robot0:l_gripper_finger_link"):
+            geom = model.geom_name2id(name)
+            self.assertEqual(model.geom_contype[geom], 1)
+            self.assertEqual(model.geom_conaffinity[geom], 1)
+
     def test_backend_uniformly_scales_direct_actions(self):
         from synthesis.cfg.reset import inner_env
         from synthesis.mcmc.synthesis import make_roboverify_stack_env

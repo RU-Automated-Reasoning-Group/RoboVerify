@@ -29,7 +29,7 @@ class ControlConfig:
 
 
 DEFAULT_CONTROL = ControlConfig()
-DEFAULT_PICK_CONTROL = ControlConfig(position_tolerance=0.01)
+DEFAULT_PICK_CONTROL = ControlConfig(position_tolerance=0.002)
 
 
 @dataclass(frozen=True)
@@ -150,10 +150,9 @@ class PrimitiveController:
         return self.move(target)
 
     def release(self, box_id, offset):
+        # Freeze XY before opening; retreat feedback corrects opening/tracking drift.
         target = self.observation[:3].copy()
         target[2] = self.box_position(box_id)[2] + offset
         if not self.gripper(opened=True):
             return False
-        return self.move(
-            target, close_gripper=False, vertical_only=True, phase="retreat"
-        )
+        return self.move(target, close_gripper=False, phase="retreat")

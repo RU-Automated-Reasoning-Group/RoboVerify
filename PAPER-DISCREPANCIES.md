@@ -39,7 +39,7 @@ model assumptions and APIs.
 | 34 | Section 6.2 fixed-program experiment implemented for Stack; initial-state witness generation and iteration counts made explicit. |
 | 35 | Named collision and Move-support checks duplicate an unrestricted arbitrary-object check; simplification deferred by user decision. |
 | 36 | Uniform XYZ scaling adopted after measured Stack path comparison; Release drift and physical refinement remain separate. |
-| 37 | Release outliers traced to head/arm contact plus absent XY feedback; 2 mm Pick tolerance recommended empirically, default unchanged. |
+| 37 | Head contacts disabled, fixed-XY/full-3D Release and 2 mm Pick adopted; combined Stack validation replaces the earlier recommendation. |
 
 ## 1. Theorem 5.2 contradicts the paper's own Table 7 (`R_Higher`)
 
@@ -615,7 +615,8 @@ criteria. Changing operand representation must preserve the physical rollout.
 ID and ByName variants differ only in operand lookup. Immutable `ControlConfig`
 settings specify position tolerance, gain and gripper-state thresholds. The
 action helper computes proportional commands; the controller owns convergence.
-Defaults are 10 mm for Pick, 2 mm for Move and Release, and gain 20. Each
+Defaults are now 2 mm for Pick, Move and Release, and gain 20 (entry 37
+tightened the former 10 mm Pick default). Each
 instruction retains its 50-step total budget. Exhaustion is recorded explicitly,
 and collection rejects any unconverged primitive. Settings survive ID-to-name
 conversion and participate in executable fingerprints.
@@ -625,8 +626,9 @@ The Stack example transfers at 0.10 m above the current top, then lowers to
 [-0.20, 0.20] m, and horizontal radius at most 0.70 m. It preserves pairwise
 Scattered separation and initial gripper clearance of 0.10 m, uses seeded NumPy
 sampling, and fails explicitly after bounded retries. The experiment assumes
-reliable primitive skills; head/arm self-collision is outside its evaluation
-scope. Demonstrations must still complete and satisfy the task conditions.
+reliable primitive skills. Entry 37 disables head contacts in the active CEE-US
+Fetch model while retaining the head's appearance and mass. Demonstrations must
+still complete and satisfy the task conditions.
 
 **Checks:** Generated tests cover numeric/named execution parity, per-instruction
 budgets, controller metadata, archive rejection of unconverged traces, sampler
@@ -1159,20 +1161,26 @@ synthesized programs or a certified bound on deviation from the motion model.
 
 ## 37. Release drift and Pick stopping tolerance after uniform scaling
 
-**Status:** measured simulator/model limitations; Release and Pick defaults are
-unchanged. The user requested uniform scaling (entry 36), diagnosis of Release
-drift and a suitable Pick stopping threshold.
+**Status:** the user-approved controller changes are implemented. The active
+CEE-US Fetch XML disables both head-geometry collision masks, retaining visible
+geometry and explicit inertial properties. Release freezes its initial XY before
+opening and uses full XYZ feedback and 3D stopping error during retreat. Pick's
+default tolerance is 2 mm in both numeric and named forms. Gain 20, uniform XYZ
+scaling and 50-step budgets remain. This is an intentional simulator-model
+choice, not a proof of physical head/arm collision clearance.
 
-**Findings:** Release supplies zero XY delta and stops on Z only. The mocap target
+**Historical diagnosis:** the former Release supplied zero XY delta and stopped
+on Z only. The mocap target
 is reanchored to the current gripper-body pose each step, so lateral tracking
 errors accumulate. Large high-retreat outliers also involve upper-arm/head
 contacts. Replaying all five >5 mm outliers from the earlier 100-seed sample,
 plus two comparison seeds, with only head contacts disabled reduces the largest
 drift from 11.78 to 2.50 mm in the same saved Release state. XY feedback alone
 can exhaust the 50-step budget against the contact (seed 98); slower Z control
-alone does not remove that cause. Contact removal is diagnostic only.
+alone did not remove that cause. Those interventions were diagnostic at the
+time; the approved combined behavior is now used in production.
 
-**Pick recommendation:** 2 mm gives tighter approach/descent stopping for about
+**Evidence for the adopted Pick tolerance:** 2 mm gives tighter approach/descent stopping for about
 2.14 extra steps per Pick. All six tolerances (10, 5, 3, 2, 1, 0.5 mm) validated
 100/100 paired four-block executions. The 2 mm choice also passed 100 held-out
 seeds, using at most 24 steps per Pick across both samples. Tighter tolerances
@@ -1186,5 +1194,10 @@ samples each 2 ms physics step and checks baseline action/observation parity.
 All 1,800 default-tolerance phase position sequences match the earlier uniform
 experiment exactly.
 
-**Remaining action:** decide whether to adopt 2 mm Pick stopping; address
-high-retreat head/arm interference before relying on Release XY feedback.
+The four local `demonstrations.npz` archives were deleted at the user's request;
+reports/videos are preserved. No additional versioning or replacement
+demonstration collection is included. Full-program comparisons record metrics
+and paths under `runs/`, keeping simulation traces in memory.
+
+**Remaining action:** establish physical tracking/attachment bounds if a
+refinement proof is required; finite observed maxima do not provide those bounds.

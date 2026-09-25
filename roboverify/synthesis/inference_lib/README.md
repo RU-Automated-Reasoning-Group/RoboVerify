@@ -162,12 +162,13 @@ Pick shares it across approach, opening, descent, and closing.
 
 | Setting | Pick / PickByName | Move / MoveByName | Release / ReleaseByName |
 | --- | --- | --- | --- |
-| Position tolerance | 0.010 m | 0.002 m | 0.002 m |
+| Position tolerance | 0.002 m | 0.002 m | 0.002 m |
 | Proportional gain | 20 | 20 | 20 |
 | Step limit | 50 | 50 | 50 |
 
-Pick and Move use 3D gripper-position error; Release uses vertical error after
-opening. These are controller tolerances, not bounds on final block placement.
+All three primitives use 3D gripper-position error. Release freezes X/Y before
+opening, then corrects sideways drift while retreating to the target Z.
+These are controller tolerances, not bounds on final block placement.
 Gripper opening uses the summed finger positions with threshold 0.052 m and
 margin 0.001 m. Open/closed tests are complementary.
 
@@ -192,12 +193,16 @@ when bounding the command to [-1, 1]. The active CEE-US Fetch backend uses the
 same operation for direct actions; it no longer clips Cartesian axes separately.
 The independent gripper command is bounded separately. The helper has no
 tolerance argument: the controller applies the configured tolerance to its
-stopping test. Release still requests zero XY displacement and checks only Z.
+stopping test. Release's fixed XY target survives every retreat step; it is not
+reanchored to the drifting gripper position. The active CEE-US Fetch model disables
+both collision masks on the head geometries, retaining their appearance and mass.
 
 Controller settings and the action-scaling version are preserved during
 ID-to-name conversion and included in program descriptions/fingerprints. Archives
 from the earlier component-clipping controller must be recollected for matching
-supplied-program verification. These are fixed settings, separate from the
+supplied-program verification. The later head-contact/Release update adds no new
+version mechanism. Existing local demonstration archives have been deleted;
+no replacement collection was requested. These are fixed settings, separate from the
 waypoint offsets optimized by CEM. Scaling improves direction fidelity; it does
 not establish physical refinement of the motion proof (review entry 36).
 
