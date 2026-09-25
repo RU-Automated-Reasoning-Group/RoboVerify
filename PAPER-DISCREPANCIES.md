@@ -39,6 +39,7 @@ model assumptions and APIs.
 | 34 | Section 6.2 fixed-program experiment implemented for Stack; initial-state witness generation and iteration counts made explicit. |
 | 35 | Named collision and Move-support checks duplicate an unrestricted arbitrary-object check; simplification deferred by user decision. |
 | 36 | Uniform XYZ scaling adopted after measured Stack path comparison; Release drift and physical refinement remain separate. |
+| 37 | Release outliers traced to head/arm contact plus absent XY feedback; 2 mm Pick tolerance recommended empirically, default unchanged. |
 
 ## 1. Theorem 5.2 contradicts the paper's own Table 7 (`R_Higher`)
 
@@ -1155,3 +1156,35 @@ historical clipped baseline; it is not a production mode.
 path fidelity is required; uniform scaling is now the production behavior.
 These results concern the supplied four-block Stack program, not arbitrary
 synthesized programs or a certified bound on deviation from the motion model.
+
+## 37. Release drift and Pick stopping tolerance after uniform scaling
+
+**Status:** measured simulator/model limitations; Release and Pick defaults are
+unchanged. The user requested uniform scaling (entry 36), diagnosis of Release
+drift and a suitable Pick stopping threshold.
+
+**Findings:** Release supplies zero XY delta and stops on Z only. The mocap target
+is reanchored to the current gripper-body pose each step, so lateral tracking
+errors accumulate. Large high-retreat outliers also involve upper-arm/head
+contacts. Replaying all five >5 mm outliers from the earlier 100-seed sample,
+plus two comparison seeds, with only head contacts disabled reduces the largest
+drift from 11.78 to 2.50 mm in the same saved Release state. XY feedback alone
+can exhaust the 50-step budget against the contact (seed 98); slower Z control
+alone does not remove that cause. Contact removal is diagnostic only.
+
+**Pick recommendation:** 2 mm gives tighter approach/descent stopping for about
+2.14 extra steps per Pick. All six tolerances (10, 5, 3, 2, 1, 0.5 mm) validated
+100/100 paired four-block executions. The 2 mm choice also passed 100 held-out
+seeds, using at most 24 steps per Pick across both samples. Tighter tolerances
+did not materially improve final block alignment, which also depends on
+grasp/contact dynamics. Observed maxima are not certified error bounds.
+
+**Evidence:** the [controller measurement report](roboverify/synthesis/experiment/CONTROLLER-PATHS.md)
+defines phases and metrics, lists all tolerance results and selected-seed
+interventions, and gives reproduction commands and artifact paths. Release
+samples each 2 ms physics step and checks baseline action/observation parity.
+All 1,800 default-tolerance phase position sequences match the earlier uniform
+experiment exactly.
+
+**Remaining action:** decide whether to adopt 2 mm Pick stopping; address
+high-retreat head/arm interference before relying on Release XY feedback.

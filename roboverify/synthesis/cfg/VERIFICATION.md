@@ -68,7 +68,7 @@ uv run python -m synthesis.entry.synthesize_cfg \
   --invariant-relations ON_star Higher Scattered equality \
   --supported-towers --table-surface-height 0.4 \
   --initial-arm 1.3446426 0.74911606 0.5314612 \
-  --motion-timeout-ms 10000 --verification-timeout-ms 10000 \
+  --motion-timeout-ms 10000 --verification-timeout-ms 60000 \
   --higher-tolerance 0.001 --run-name stack-verification
 ```
 
@@ -96,6 +96,12 @@ precondition establishes the initial height facts. With the 1 mm Higher toleranc
 the bootstrap invariant passes all three symbolic obligations at sizes 2–4 and
 in the unbounded context, followed by all 63 motion obligations. No counterexample
 refinement, program change or motion repair is needed for this configuration.
+
+Rechecked after uniform XYZ scaling with five fresh four-block demonstrations:
+`runs/cfg/20260925-023502-3dc4cf3-stack-uniform-verification-60s/` returned
+`verified_model`. An earlier run with a 10-second symbolic-query budget returned
+`unknown` (unbounded exit check canceled); the command above gives that solver
+60 seconds. An unknown result remains inconclusive, not successful verification.
 
 Write `O(x,y)` for ON*, `H(x,y)` for Higher, and `S(x,y)` for Scattered. The learned
 invariant has these six universally quantified clauses:

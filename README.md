@@ -34,6 +34,8 @@ See [controller settings](roboverify/synthesis/inference_lib/README.md#primitive
 Cartesian delta commands now use uniform XYZ scaling in both the primitive
 controller and active Fetch backend. Recollect demonstrations from before this
 change; the action semantics are included in executable fingerprints.
+The [Stack controller measurements](roboverify/synthesis/experiment/CONTROLLER-PATHS.md)
+diagnose Release drift and compare Pick stopping tolerances.
 
 **Symbolic invariant inference uses the partition-based algorithm in
 `inference.py`, through `InvInference`.** It is the intended algorithm for both
