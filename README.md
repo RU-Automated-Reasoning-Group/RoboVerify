@@ -52,12 +52,11 @@ pipeline modes and standalone symbolic CEGIS; there is no learner-selection flag
 1 mm Higher tolerance, the bootstrap invariant passes without refinement.
 The candidate passes unbounded symbolic verification and the documented
 noiseless motion checks with explicit supported-tower geometry. Full synthesis
-acceptance remains open; verifying the supplied program does not establish search
-or loop recovery.
-The latest archived pipeline proof predates the combined head-contact/Release/
-Pick update. That update is validated through full-program controller comparisons
-and regression tests; the demonstration-consuming pipeline is not rerun as part
-of this change because replacement collections were explicitly omitted.
+acceptance is resolved.
+The archived supplied-program proof described here predates the combined
+head-contact/Release/Pick update. That update was validated through full-program
+controller comparisons and regression tests; it did not include a fresh
+demonstration-consuming pipeline run because replacement collections were omitted.
 See the [verification command](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification)
 and the decisions on [initial heights](PAPER-DISCREPANCIES.md#31-stack-resets-equal-height-assumption-belongs-in-the-task-precondition)
 and [Higher tolerance](PAPER-DISCREPANCIES.md#32-higher-tolerance-for-contact-induced-height-differences).

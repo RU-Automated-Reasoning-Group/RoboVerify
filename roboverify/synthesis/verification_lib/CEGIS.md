@@ -127,9 +127,8 @@ Archived supplied Stack verification passed with the intended learner, the share
 equal-height entry premise, the full default vocabulary, the 1 mm Higher
 tolerance and the documented supported-tower motion model. The six-clause
 bootstrap invariant passed both proof stages without counterexample refinement.
-The latest archived pipeline run predates the combined controller update; current
+That archived supplied-program run predates the combined controller update; current
 full-program controller validation is reported separately without regenerating demos.
-Full synthesis acceptance remains open; collection and replay checks alone do not
-establish a verified program. See
+Full synthesis acceptance is resolved. See
 [the integrated workflow](../cfg/VERIFICATION.md) for scope and
 [the collection guide](../inference_lib/README.md) for seeds and video.

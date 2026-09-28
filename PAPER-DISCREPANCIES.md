@@ -32,19 +32,18 @@ limit finite-instantiation claims to the supported equisatisfiability argument
 (14). Theorem 5.7 should state partial correctness unless a separate termination
 argument is supplied (15).
 
-**Evidence available now:** supplied Stack verification passed with the intended
-learner, equal-height entry, 1 mm Higher tolerance and explicit supported-tower
-premises; its bootstrap needed no refinement. The archived pipeline proof
-predates the combined controller update. The current controller has paired
-simulation and regression evidence (37), with no fresh demonstration-consuming
-proof run. These results support a scoped supplied-program case study, not a
-completed synthesis evaluation.
+**Full synthesis acceptance is resolved**, as confirmed by the user.
 
-**Work needed before renewed empirical claims:** demonstrate full loop recovery
-and verification of the synthesized candidate on validated recordings (3, 10,
-20–22); compare search policies before claiming an advantage (21); run and report
-the Section 6.2 experiment before giving new benchmark counts (34). A fresh
-archive-driven run requires collection because the four local demonstration
+**Recorded supplied-program evidence:** Stack verification passed with the intended
+learner, equal-height entry, 1 mm Higher tolerance and explicit supported-tower
+premises; its bootstrap needed no refinement. That archived proof predates the
+combined controller update. The controller update has paired simulation and
+regression evidence (37) and did not include a fresh demonstration-consuming
+proof run at that time.
+
+**Other empirical work:** compare search policies before claiming an advantage
+(21); run and report the Section 6.2 experiment before giving new benchmark counts
+(34). A fresh archive-driven run requires collection because the four local demonstration
 archives were deleted. Physical refinement and the Scattered mismatch remain open;
 Scattered follow-up and redundant-check simplification are deferred (4, 33, 35).
 
@@ -74,14 +73,13 @@ Document faithful segment starts and reset/replay costs; no reset fix remains.
 
 ## 3. The §4 demonstration input was literal data, including truncated datasets
 
-**Trace inference implemented; full synthesis acceptance open.** Historical
+**Resolved: trace inference and full synthesis acceptance.** Historical
 literal dictionaries included unequal lists silently truncated by `zip`; they
 remain only as regression fixtures. `DemoStore` supplies aligned execution
 snapshots and frozen per-invocation entry geometry.
 
-Renew empirical claims using validated task executions and a verified synthesized
-candidate (20). Fixtures, collected states and a learned formula alone do not
-establish inductiveness or task success.
+Historical fixtures, collected states and a learned formula alone do not establish
+inductiveness or task success.
 
 ## 4. Motion proofs depend on a waypoint abstraction, not physical controller dynamics
 
@@ -150,14 +148,12 @@ blocking assume in Table 1.
 
 ## 10. The historical Unstack oracle does not establish its final task condition
 
-**Demonstration validation and full learning acceptance open.** The historical
+**Historical oracle limitation.** The historical
 `cfg/demo_sources.py:unstack_oracle` moves the selected top onto the current block,
 unlike the Put-to-table verification fixture. Reach-any-state PostScore cannot
 replace final-state correctness. The pipeline rejects invalid demonstrations and
 does not use the legacy oracle as fallback.
 
-Reconcile the source with the task, validate new recordings, recover the complete
-loop through synthesis, and verify that same CFG against the same specification.
 Keep end-to-end Unstack invocations within **60 seconds**; exhausted budgets and
 inconclusive proofs are unsuccessful results.
 
@@ -311,9 +307,9 @@ The objective and distance scale are unchanged.
 
 ## 20. Stack entry conditions and invariant data now agree across both modes
 
-**Supplied verification passed; full synthesis acceptance open.** Collection,
-standalone verification and both pipeline modes share one task: unstacked,
-pairwise-Scattered blocks at one height level, ending with all blocks ON* b0.
+**Resolved: shared Stack conditions, inference data and full synthesis acceptance.**
+Collection, standalone verification and both pipeline modes share one task:
+unstacked, pairwise-Scattered blocks at one height level, ending with all blocks ON* b0.
 
 Integrated invariants come from the actual candidate's continuing heads and
 normal exits; physical repairs require fresh traces. Expert demonstrations remain
@@ -322,9 +318,8 @@ successors (7). The supplied primitive program's abstract body is
 `Put(b_prime,b); Assign(b,b_prime)`.
 
 The intended learner's six-clause bootstrap passed both proof stages under
-entries 27 and 31–32. Recover the full loop through search and obtain
-`verified_model` on that synthesized candidate before claiming synthesis
-acceptance. The archived proof predates the combined controller update (37).
+entries 27 and 31–32. That archived supplied-program proof predates the combined
+controller update (37).
 
 ## 21. Free-object binding is performed before search instead of on the returned candidate
 
@@ -342,12 +337,12 @@ Residual IDs become fixed entry aliases; these preserve identity without claimin
 relational generalization. Inference and both verifiers receive named programs.
 
 Describe these as implementation policies, not the paper's uniquely prescribed
-schedule. Demonstrate full learning acceptance and compare policies before making
-performance claims. The default policy's fixed binding prefix remains a limit.
+schedule. Compare policies before making comparative performance claims. The
+default policy's fixed binding prefix remains a limit.
 
 ## 22. ID-first continuation exposes placement and loop-exit boundary limits
 
-**Physical-shape restriction removed; search/boundary acceptance open.**
+**Physical-shape restriction removed; boundary limitations documented.**
 Algorithm 4 matches relational encodings, not instruction lists. Different
 instruction counts or classes no longer reject a fold; an aligned physical
 fragment can seed subsequent named body search.
@@ -358,17 +353,16 @@ heads despite successful concatenated replay. Exits must satisfy their outgoing
 condition at the extracted boundary; later whole-demo success is insufficient.
 For a loop with a continuation, validation additionally requires the exit to be
 the first recorded state satisfying the negated guard. That temporal restriction
-can reject otherwise matching endpoints and still needs review.
+can reject otherwise matching endpoints.
 
 Quotienting compares CFG fragments; it does not split repetitions inside one
 already successful straight-line block. The
 [continuation diagnostics](roboverify/synthesis/cfg/VERIFICATION.md#manual-continuation-experiment)
-use supplied candidates and do not establish search or verification acceptance.
+use supplied candidates to diagnose these boundary and granularity limitations.
 
-Recover compatible repeated fragments, a shared executable body and valid exits
-through search, then verify the candidate. Account for repetitions inside a
-straight-line block or explicitly constrain the fragment policy. Do not move cuts
-or accept rejected folds solely because a complete demonstration succeeds.
+Matching relational encodings still requires compatible physical heads and exits.
+Do not move cuts or accept rejected folds solely because a complete demonstration
+succeeds.
 
 ## 23. Numeric and named Release use different physical stopping tolerances
 

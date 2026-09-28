@@ -136,8 +136,8 @@ permit another tower and expose the attachment/replay mismatch described in entr
 
 Finite symbolic checks are followed by an unbounded proof; motion checks also
 quantify over unnamed objects. The demonstration count supplies inference data,
-not a bound on the proof's block count. Full MCMC/CFG synthesis acceptance remains
-open independently of supplied-program verification.
+not a bound on the proof's block count. Full MCMC/CFG synthesis acceptance is
+resolved; it is separate from this supplied-program proof.
 
 ### Three-block demonstrations
 

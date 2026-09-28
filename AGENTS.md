@@ -54,8 +54,8 @@ including its motion premises.
 Read [README.md](README.md#project-status) for current project status and
 [PAPER-DISCREPANCIES.md](PAPER-DISCREPANCIES.md) for numbered findings, settled
 reasoning and remaining actions. Collection and supplied-program verification
-are implemented; full synthesis acceptance remains open. Stack reset bounds
-initial blocks to 0.70 m XY from the robot base.
+are implemented; full synthesis acceptance is resolved. Stack reset bounds initial
+blocks to 0.70 m XY from the robot base.
 Stack collection holds the initial gripper position for 50 steps before
 recording; the settled full snapshot becomes state zero. Synthesis, candidate
 verification, and standalone MCMC restore archived states without repeating
@@ -72,8 +72,8 @@ Supplied Stack verification passes with `ON_star Higher Scattered equality`,
 the 1 mm Higher tolerance and the documented supported-tower motion model;
 the supplied-program bootstrap currently passes without invariant refinement.
 This supplied-program result does not establish search or loop recovery.
-The latest archived pipeline proof predates the combined controller update;
-its current validation is full-program paired simulation and regression tests,
+The archived supplied-program proof described here predates the combined controller
+update; its current validation is full-program paired simulation and regression tests,
 without replacement demonstration archives or a fresh demonstration-driven run.
 The standalone [Section 6.2 experiment](roboverify/synthesis/experiment/invariant_learning/README.md)
 starts from no demos and False, directly minimizes reachable VC failures with
@@ -412,7 +412,7 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   process alarm. Success is `verified_model` in the documented scope.
   Supplied Stack verification passes with the intended learner, the equal-height
   task precondition and `ON_star Higher Scattered equality`; full synthesis
-  acceptance remains open. `--supported-towers` adds explicit height
+  acceptance is resolved. `--supported-towers` adds explicit height
   premises and checks arm-clearance, column-alignment and height loop invariants.
   Finite SAT witnesses accelerate consistency only; motion safety stays unbounded.
   `cfg/artifacts.py` records CFG structure and segment indices without expanding
