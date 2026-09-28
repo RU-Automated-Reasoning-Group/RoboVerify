@@ -22,7 +22,6 @@ Implementation fixes listed below are already complete unless marked open.
 | §4 / Algorithm 6 | Specify execution-derived heads and normal exits, the intended partition learner, successor-based preservation feedback, and checked enlargement. Explain why entry and exit failures require different treatment and why countermodels may be unrealizable. | 3, 7, 8, 20, 29 |
 | Table 7 / Appendix A | Replace Higher rules 2/6 with the formulas in entry 16 and state their supported-grid assumptions. Restrict Scattered arguments to physical blocks and keep frozen entry ON* separate from current ON*. | 5, 13, 16 |
 | §5.5 / motion claims | State waypoint geometry, intentional Pick/Release contact, Release support, input alignment, and checked geometric loop invariants. Bound the claim to that model; controller refinement is unproved. | 4, 12, 18, 26, 27 |
-| Stack setup / experimental method | Document equal-height entry, 1 mm Higher tolerance and its domain restriction, 50-step settling with snapshot replay, current controller settings, and disabled head contacts. | 23, 24, 31, 32, 36, 37 |
 | §6.2 | Explain bounded initial-state witness search, replay of solver guard choices, physical reproduction of the selected VC failure, normal-exit sampling, and separate counts for verification attempts, executions and learner updates. | 34 |
 
 **Formal claims need correction or additional proof.** Theorem 5.2's
