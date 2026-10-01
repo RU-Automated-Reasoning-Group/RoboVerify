@@ -36,10 +36,10 @@ controller and active Fetch backend. Pick, Move and Release default to 2 mm
 position tolerance. Release freezes XY before opening and corrects XYZ during
 retreat, stopping on full 3D error. Head collision geometry is disabled in the
 active CEE-US Fetch model; its appearance and mass are retained.
-The four local demonstration archives were deleted at the user's request;
-reports and videos remain. No replacement demonstrations or additional
-versioning are included in this update. The CLI examples below require a
-collection when that workflow is next requested.
+The four historical demonstration archives were deleted at the user's request;
+reports and videos remain. The PyEDA verification recheck collected a fresh
+five-trajectory, four-block archive with the current controllers; its path is in
+the [verification command](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification).
 The [Stack controller measurements](roboverify/synthesis/experiment/CONTROLLER-PATHS.md)
 diagnose Release drift and compare Pick stopping tolerances.
 
@@ -56,16 +56,17 @@ semantics; see [minimizer settings](roboverify/synthesis/inference_lib/README.md
 The candidate passes unbounded symbolic verification and the documented
 noiseless motion checks with explicit supported-tower geometry. Full synthesis
 acceptance is resolved.
-The archived supplied-program proof described here predates the combined
-head-contact/Release/Pick update. That update was validated through full-program
-controller comparisons and regression tests; it did not include a fresh
-demonstration-consuming pipeline run because replacement collections were omitted.
+The **2026-10-01 PyEDA recheck passed on fresh demonstrations with the current
+controllers**: all 12 symbolic checks (sizes 2–4 and unbounded) and all 63 noiseless
+motion checks were valid, without invariant refinement or program repair.
+The run returned `verified_model`; the earlier SymPy proof predates the combined
+head-contact/Release/Pick update.
 See the [verification command](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification)
 and the decisions on [initial heights](PAPER-DISCREPANCIES.md#31-stack-resets-equal-height-assumption-belongs-in-the-task-precondition)
 and [Higher tolerance](PAPER-DISCREPANCIES.md#32-higher-tolerance-for-contact-induced-height-differences).
 Archives must contain full simulator states and match the current task specification;
 collections from before the equal-height precondition require recollection for
-pipeline use. Collect demonstrations before running the examples.
+pipeline use. Collect demonstrations when an example's archive is absent.
 
 For paper Section 6.2, `synthesis.entry.learn_invariant` starts with an empty
 dataset and invariant False, searches increasing block counts directly for valid

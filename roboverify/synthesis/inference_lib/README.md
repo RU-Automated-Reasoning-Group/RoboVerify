@@ -4,9 +4,10 @@ Use full-state NPZ archives for collection, synthesis, and inference. The pipeli
 requires archives matching the current task specification; observation-only and
 loop-head JSON demonstration inputs are unsupported. Generated archives are not
 bundled in the repository. The four local demonstration archives were deleted
-at the user's request. The commands below describe future collection and use;
-the controller update does not regenerate those archives. Preserved reports
-and videos describe their original controller configurations.
+at the user's request. A separate fresh four-block archive was collected for the
+[2026-10-01 PyEDA verification recheck](../cfg/VERIFICATION.md#provided-stack-verification).
+The commands below describe collection when the requested archive is absent.
+Preserved historical reports and videos describe their original controller configurations.
 
 ## Collect Stack demonstrations
 

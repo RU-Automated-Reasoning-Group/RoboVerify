@@ -41,9 +41,9 @@ uv run python -m unittest synthesis.experiment.test_mcmc_parity -v    # drives M
 
 Tests are `unittest`, not pytest. No linter is configured. The four local
 `demonstrations.npz` archives were deleted at the user's request; reports and
-videos remain. No replacement collections or additional execution versioning
-are part of the controller update. Pipeline examples require a new collection
-when that workflow is explicitly requested. If collection
+videos remain. A fresh five-trajectory, four-block archive was collected for the
+2026-10-01 PyEDA proof; use the path in the verification configuration below.
+Other pipeline examples require collection when their archive is absent. If collection
 prints a numbered output directory, use that archive path in subsequent commands.
 The commands above illustrate the interfaces. For the supplied Stack proof, use
 the [complete verification configuration](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification),
@@ -76,9 +76,10 @@ Supplied Stack verification passes with `ON_star Higher Scattered equality`,
 the 1 mm Higher tolerance and the documented supported-tower motion model;
 the supplied-program bootstrap currently passes without invariant refinement.
 This supplied-program result does not establish search or loop recovery.
-The archived supplied-program proof described here predates the combined controller
-update; its current validation is full-program paired simulation and regression tests,
-without replacement demonstration archives or a fresh demonstration-driven run.
+The 2026-10-01 PyEDA recheck used five fresh four-block demonstrations with the
+current controllers and passed all 12 symbolic checks (sizes 2–4 and unbounded)
+and 63 noiseless motion checks. The bootstrap needed no refinement or repair;
+the earlier SymPy proof predates the combined controller update.
 The standalone [Section 6.2 experiment](roboverify/synthesis/experiment/invariant_learning/README.md)
 starts from no demos and False, directly minimizes reachable VC failures with
 bounded unordered execution queries, and learns only from complete validated

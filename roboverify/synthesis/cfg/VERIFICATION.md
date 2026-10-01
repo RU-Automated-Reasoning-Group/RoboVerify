@@ -10,8 +10,9 @@ First collect a supplied primitive DSL program using
 describes seeds, full-state archives, and optional 20 FPS videos. Demonstrations
 belong under `demos/`; experiment results belong under `runs/`. Generated
 archives are not bundled. The four local archives were deleted by request and
-were not regenerated for the combined controller update. These examples are
-instructions for a future archive-consuming workflow. They first create a collection; if its
+were not regenerated for the combined controller update. A fresh four-block
+archive was subsequently collected for the [PyEDA recheck](#provided-stack-verification).
+The general examples below first create a collection; if its
 output directory gets a numbered suffix, use the printed archive path.
 
 Stack collection holds the reset gripper position for 50 control steps, then
@@ -65,18 +66,20 @@ for Z. Use the following explicit configuration with the settled archive:
 uv run python -m synthesis.entry.synthesize_cfg \
   --mode verify --task stack --num-blocks 4 \
   --program synthesis.examples.stack:build_program \
-  --demos demos/stack/4-blocks-5-trajectories-equal-height/demonstrations.npz \
+  --demos demos/stack/4-blocks-5-trajectories-pyeda-verification/demonstrations.npz \
   --max-loop-iterations 3 --motion-iterations 0 \
   --invariant-relations ON_star Higher Scattered equality \
+  --invariant-minimizer pyeda \
   --supported-towers --table-surface-height 0.4 \
   --initial-arm 1.3446426 0.74911606 0.5314612 \
   --motion-timeout-ms 10000 --verification-timeout-ms 60000 \
-  --higher-tolerance 0.001 --run-name stack-verification
+  --higher-tolerance 0.001 --run-name stack-pyeda-verification
 ```
 
 If the archive is absent, collect it with `collect_demos --num-blocks 4
 --num-trajectories 5 --program synthesis.examples.stack:build_program
---output-dir demos/stack/4-blocks-5-trajectories-equal-height` first.
+--seed-start 0 --max-loop-iterations 3 --higher-tolerance 0.001
+--output-dir demos/stack/4-blocks-5-trajectories-pyeda-verification` first.
 Use the collector's printed archive path. The initial-arm values above
 are the nominal settled reset pose in this environment; they are explicit formal
 entry conditions, not automatic extraction of the complete simulator state into Z3.
@@ -96,12 +99,20 @@ to select Boolean minimization within that algorithm. Both preserve the same
 truth-table values. See [minimizer settings](../inference_lib/README.md#truth-table-minimization)
 for Espresso's CNF conversion, Python APIs and runtime tradeoffs.
 
-**Both verification stages passed in the archived runs with the intended learner:** the result was
+**Both verification stages passed with PyEDA on 2026-10-01:** the result was
 `verified_model` in the noiseless, supported-tower model. The shared equal-height
 precondition establishes the initial height facts. With the 1 mm Higher tolerance,
-the bootstrap invariant passes all three symbolic obligations at sizes 2–4 and
-in the unbounded context, followed by all 63 motion obligations. No counterexample
+the bootstrap invariant passes all 12 symbolic checks (three obligations at sizes
+2–4 and in the unbounded context), followed by all 63 motion obligations. No counterexample
 refinement, program change or motion repair is needed for this configuration.
+
+Run: `runs/cfg/20261001-174348-f563869-stack-pyeda-verification/`, about 89 seconds
+excluding collection. All five fresh four-block demonstrations (seeds 0–4) passed
+pre/post validation with the current controllers. Candidate executions supplied
+15 continuing heads and five normal exits. The run retains the learned invariant,
+candidate archives, and per-obligation verdicts under `artifacts/`; read its
+bounded report with `uv run python -m synthesis.experiment.report --run
+runs/cfg/20261001-174348-f563869-stack-pyeda-verification`.
 
 Historical recheck after uniform XYZ scaling with five four-block demonstrations:
 `runs/cfg/20260925-023502-3dc4cf3-stack-uniform-verification-60s/` returned
@@ -111,9 +122,9 @@ Historical recheck after uniform XYZ scaling with five four-block demonstrations
 This run used the earlier 10 mm Pick, head contacts and Z-only Release. The
 current code uses 2 mm Pick, disabled head contacts and fixed-XY/full-3D Release;
 the supplied symbolic program and geometric motion encoding are unchanged.
-The current validation compares complete physical programs and runs regression
-tests. No replacement demonstration archive or fresh archive-driven pipeline
-run is included; the original archive referenced by the historical run was deleted.
+The controller update itself used complete-program comparisons and regression
+tests without recollection. The original archive referenced by that historical
+run remains deleted; the PyEDA recheck above uses a separate fresh archive.
 
 Write `O(x,y)` for ON*, `H(x,y)` for Higher, and `S(x,y)` for Scattered. The learned
 invariant has these six universally quantified clauses:

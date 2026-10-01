@@ -92,8 +92,10 @@ renewed inference, and both checks again. The expert archive remains the imitati
 target; candidate traces cannot silently replace it.
 
 Local demonstration archives have been deleted by request. The combined
-controller update does not regenerate them or rerun this archive-consuming
-pipeline; its full-program measurements keep temporary traces in memory.
+controller update did not regenerate them or rerun this archive-consuming
+pipeline. The subsequent [PyEDA recheck](../cfg/VERIFICATION.md#provided-stack-verification)
+collected five fresh four-block demonstrations with the current controllers and
+passed both symbolic verification and all 63 noiseless motion checks.
 
 Collect full-state demonstrations with `synthesis.entry.collect_demos`. Stack
 collection performs 50 holding steps before recording; the resulting full state

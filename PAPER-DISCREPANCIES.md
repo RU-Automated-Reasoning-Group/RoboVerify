@@ -34,17 +34,18 @@ argument is supplied (15).
 
 **Full synthesis acceptance is resolved**, as confirmed by the user.
 
-**Recorded supplied-program evidence:** Stack verification passed with the intended
-learner, equal-height entry, 1 mm Higher tolerance and explicit supported-tower
-premises; its bootstrap needed no refinement. That archived proof predates the
-combined controller update. The controller update has paired simulation and
-regression evidence (37) and did not include a fresh demonstration-consuming
-proof run at that time.
+**Recorded supplied-program evidence:** the 2026-10-01 PyEDA recheck passed with
+five fresh four-block demonstrations and current controllers. All 12 symbolic
+checks (sizes 2–4 and unbounded) and all 63 noiseless motion checks were valid,
+with equal-height entry, 1 mm Higher tolerance and explicit supported-tower
+premises. The bootstrap needed no refinement or repair (29). The earlier SymPy
+proof predates the combined controller update, whose paired simulation evidence
+is recorded in entry 37.
 
 **Other empirical work:** compare search policies before claiming an advantage
 (21); run and report the Section 6.2 experiment before giving new benchmark counts
-(34). A fresh archive-driven run requires collection because the four local demonstration
-archives were deleted. Physical refinement and the Scattered mismatch remain open;
+(34). The four historical demonstration archives remain deleted; the fresh PyEDA
+collection is documented in the verification guide. Physical refinement and the Scattered mismatch remain open;
 Scattered follow-up and redundant-check simplification are deferred (4, 33, 35).
 
 ## 1. Theorem 5.2 contradicts the paper's own Table 7 (`R_Higher`)
@@ -451,6 +452,11 @@ The optional `--invariant-minimizer pyeda` uses Espresso instead of SymPy for
 Boolean minimization within this same algorithm. Both preserve all truth-table
 values, including the existing completion policy for unobserved rows; this is
 not an alternate learner. SymPy remains the default.
+
+The 2026-10-01 recheck used PyEDA with five fresh four-block Stack demonstrations,
+learned from 20 candidate runtime states, and returned `verified_model`: all 12
+symbolic and 63 noiseless motion checks passed without refinement or repair.
+See the [reproducible configuration and run](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification).
 
 Earlier success with an alternate learner did not validate intended inference.
 The current supplied-program result does (31–32); structural geometric test
