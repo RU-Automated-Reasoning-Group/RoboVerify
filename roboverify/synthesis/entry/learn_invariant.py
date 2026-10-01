@@ -7,6 +7,7 @@ from dataclasses import asdict
 from synthesis.cfg.collection import VideoRecorder
 from synthesis.entry.inference_options import add_inference_options
 from synthesis.entry.predicate_options import add_predicate_options
+from synthesis.entry.verification_options import add_verification_options
 from synthesis.experiment.invariant_learning.runner import (
     ExperimentConfig,
     run_experiment,
@@ -14,6 +15,7 @@ from synthesis.experiment.invariant_learning.runner import (
 from synthesis.experiment.invariant_learning.tasks import TASKS
 from synthesis.experiment.run_logger import RunLogger
 from synthesis.util.on import using_higher_tolerance
+from synthesis.verification_lib.solver_options import using_unsat_core_minimization
 
 
 def build_parser():
@@ -45,6 +47,7 @@ def build_parser():
         help="Maximum total loop bodies, including a failing body; Stack defaults to num_blocks-1",
     )
     parser.add_argument("--verification-timeout-ms", type=int, default=10000)
+    add_verification_options(parser)
     parser.add_argument("--trajectory-timeout-seconds", type=float, default=60)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
@@ -91,7 +94,9 @@ def main(argv=None):
             )
         if args.save_video:
             VideoRecorder.check_available()
-        with using_higher_tolerance(args.higher_tolerance):
+        with using_higher_tolerance(
+            args.higher_tolerance
+        ), using_unsat_core_minimization(args.minimize_unsat_core):
             task = TASKS[args.task](
                 args.program,
                 relations=args.invariant_relations,
@@ -115,7 +120,9 @@ def main(argv=None):
         args.output_dir, "invariant-learning", vars(args), slug=args.run_name
     )
     try:
-        with using_higher_tolerance(args.higher_tolerance):
+        with using_higher_tolerance(
+            args.higher_tolerance
+        ), using_unsat_core_minimization(args.minimize_unsat_core):
             result = run_experiment(
                 task, config, motion_options=motion_options, logger=logger
             )

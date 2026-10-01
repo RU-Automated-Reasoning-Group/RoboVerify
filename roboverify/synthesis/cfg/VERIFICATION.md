@@ -426,6 +426,74 @@ Both used `--case baseline --without-extra-motion-premises
 --symbolic-timeout-ms 300000`. The timeout change applies to these experiments;
 default query budgets are unchanged.
 
+### Unsat-core minimization
+
+Unsat-core minimization is **off by default**. Use `--minimize-unsat-core` to
+enable it or `--no-minimize-unsat-core` to explicitly disable it. The option is
+available in `synthesize_cfg` (including its Stack forwarding entry points),
+`learn_invariant`, and `ablate_higher`; each records the resolved value in
+`config.json`. This is separate from the Boolean invariant minimizer.
+
+Python callers can scope the option across verification and refinement:
+
+```python
+from synthesis.verification_lib.solver_options import using_unsat_core_minimization
+
+with using_unsat_core_minimization(True):
+    solver = context.new_solver()  # Applies to new finite/unbounded solvers too.
+```
+
+Core production, validity queries, premise-consistency checks, and all four
+verdicts remain intact. A core omitting the negated conclusion can establish
+vacuity without being minimal. Otherwise, the verifier still checks the premises
+separately; a nonminimal core cannot be used to claim they are consistent.
+
+A saved-exit-VC profile showed the UNSAT validity query taking 4–8 ms while
+core minimization consumed the entire 1 s or 5 s query budget. Disabling that
+optional step made core retrieval take less than 0.1 ms, and premise consistency
+still returned SAT. Whole-VC timings include core processing, not just proof
+search; this explains how a larger budget can increase elapsed time after UNSAT.
+
+**Ten fresh-process experiments run in parallel with minimization off all passed
+the 12 symbolic VCs**: 120 valid VCs, each with counterexample UNSAT and premises
+SAT, and no unknown results. Higher was retained, the learned invariant was
+byte-identical to the earlier runs, and the symbolic query limit remained
+300000 ms. All ten lifetimes overlapped. Native thread pools were capped at one
+thread per process (`OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, `MKL_NUM_THREADS`).
+
+| Repetition | Unbounded exit VC elapsed time |
+| --- | --- |
+| 1 | 0.032 s |
+| 2 | 1.583 s |
+| 3 | 0.017 s |
+| 4 | 0.721 s |
+| 5 | 0.017 s |
+| 6 | 0.027 s |
+| 7 | 0.013 s |
+| 8 | 0.018 s |
+| 9 | 0.094 s |
+| 10 | 0.013 s |
+
+Median exit-VC time was 0.022 s; the total for all 12 symbolic VCs ranged from
+0.330 to 1.899 s. These are observations from ten runs, not a guarantee that
+quantified checks can never return unknown. The runs used translated motion
+premises only: their known motion result remained 28 valid and 8 refuted.
+
+The manifest is `runs/symbolic-core-off-parallel/repetitions.json`. Each
+`rep-01` through `rep-10` contains
+`higher-ablation/20261001-212503-90f9523-baseline-translated-only/` with the
+configuration, invariant, symbolic timings and motion artifacts. Read all ten
+bounded reports with:
+
+```bash
+uv run python -m synthesis.experiment.report \
+  --glob 'runs/symbolic-core-off-parallel/rep-*/higher-ablation/2026*' --table
+```
+
+Each process ran the usual ablation command with `--case baseline
+--without-extra-motion-premises --symbolic-timeout-ms 300000
+--no-minimize-unsat-core`, using its own output directory.
+
 ## Counterexample learning without initial demonstrations
 
 The separate [Section 6.2 experiment](../experiment/invariant_learning/README.md)

@@ -8,6 +8,13 @@ to bindings at block entry, before loop-carried `Assign` updates. The
 [integrated CFG verifier](../cfg/VERIFICATION.md) supplies block contexts and
 threads motion state across supported blocks and loop boundaries.
 
+Symbolic unsat-core minimization defaults off. `--minimize-unsat-core` and
+`--no-minimize-unsat-core` select the optional core-shrinking step in the CFG,
+invariant-learning and ablation CLIs; validity and premise-consistency checks
+remain required. Python callers can use `using_unsat_core_minimization` from
+`verification_lib.solver_options`. See the
+[option and parallel recheck](../cfg/VERIFICATION.md#unsat-core-minimization).
+
 ```python
 from synthesis.verification_lib.bmc_lib import NoiseSpec
 from synthesis.verification_lib.motion_verification import MotionContract

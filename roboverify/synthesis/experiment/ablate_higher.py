@@ -26,6 +26,7 @@ from synthesis.cfg.verification import (
     verify_cfg_motion,
 )
 from synthesis.cfg.verified_synthesis import loop_regions
+from synthesis.entry.verification_options import add_verification_options
 from synthesis.experiment.motion_premise_ablation import (
     AUXILIARY_GEOMETRY_CHECKS,
     quantifier_count,
@@ -41,6 +42,7 @@ from synthesis.verification_lib.cegis import _project
 from synthesis.verification_lib.counterexamples import state_holds
 from synthesis.verification_lib.highlevel_verification_lib import HighLevelContext
 from synthesis.verification_lib.motion_verification import MotionProblem
+from synthesis.verification_lib.solver_options import using_unsat_core_minimization
 from synthesis.verification_lib.symbolic_verify import discharge_vc
 
 
@@ -166,6 +168,9 @@ def run(args, logger):
         return result
 
     with ExitStack() as scope:
+        scope.enter_context(
+            using_unsat_core_minimization(getattr(args, "minimize_unsat_core", None))
+        )
         scope.enter_context(using_higher_tolerance(0.001))
         if remove_all:
             scope.enter_context(
@@ -340,6 +345,7 @@ def main(argv=None):
         ),
     )
     parser.add_argument("--symbolic-timeout-ms", type=int, default=60000)
+    add_verification_options(parser)
     parser.add_argument("--motion-timeout-ms", type=int, default=10000)
     parser.add_argument("--output-dir", default="runs")
     args = parser.parse_args(argv)

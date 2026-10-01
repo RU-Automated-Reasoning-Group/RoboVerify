@@ -37,6 +37,7 @@ from synthesis.cfg.verified_synthesis import verified_synthesis
 from synthesis.entry.inference_options import add_inference_options
 from synthesis.entry.motion_options import add_motion_options, motion_noise_from_args
 from synthesis.entry.predicate_options import add_predicate_options
+from synthesis.entry.verification_options import add_verification_options
 from synthesis.experiment.run_logger import RunLogger
 from synthesis.inference_lib.minimization import using_invariant_minimizer
 from synthesis.mcmc.synthesis import (
@@ -48,6 +49,7 @@ from synthesis.predicates.language import Language
 from synthesis.util.on import DEFAULT_HIGHER_TOLERANCE, using_higher_tolerance
 from synthesis.verification_lib.bmc_lib import NoiseSpec
 from synthesis.verification_lib.highlevel_verification_lib import HighLevelContext
+from synthesis.verification_lib.solver_options import using_unsat_core_minimization
 
 
 def run(args, logger):
@@ -55,6 +57,8 @@ def run(args, logger):
         getattr(args, "invariant_minimizer", None)
     ), using_higher_tolerance(
         getattr(args, "higher_tolerance", DEFAULT_HIGHER_TOLERANCE)
+    ), using_unsat_core_minimization(
+        getattr(args, "minimize_unsat_core", None)
     ):
         return _run(args, logger)
 
@@ -406,6 +410,7 @@ def main(argv=None):
     )
     parser.add_argument("--invariant-variables", type=int, default=2)
     add_inference_options(parser)
+    add_verification_options(parser)
     add_motion_options(parser)
     add_predicate_options(parser)
     parser.add_argument(

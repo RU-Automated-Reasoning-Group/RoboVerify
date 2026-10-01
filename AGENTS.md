@@ -84,6 +84,11 @@ After [redundant obstacle VCs were consolidated](roboverify/synthesis/cfg/VERIFI
 the supported-model recheck passes 12 symbolic and 36 motion checks. Unrestricted
 collision/Move-support checks use only `sym`; fixed-scene calls combine named
 alternatives in one query when explicit inputs pin that witness.
+Unsat-core minimization defaults off; `--minimize-unsat-core` /
+`--no-minimize-unsat-core` controls the optional core-shrinking step. Validity and
+premise-consistency checks remain required. Ten parallel Higher-retained rechecks
+passed all 120 symbolic VCs with minimization off; see the
+[timings and scope](roboverify/synthesis/cfg/VERIFICATION.md#unsat-core-minimization).
 The [Higher-removal ablation](roboverify/synthesis/cfg/VERIFICATION.md#higher-removal-ablation)
 shows that ON*/Scattered/equality learning alone loses necessary structure, but a
 diagnostic four-clause Higher-free invariant passes both proof levels with the

@@ -63,6 +63,10 @@ The run returned `verified_model`; the earlier SymPy proof predates the combined
 head-contact/Release/Pick update.
 After [redundant obstacle VCs were consolidated](roboverify/synthesis/cfg/VERIFICATION.md#consolidating-redundant-obstacle-checks),
 the same supported-model proof passes 12 symbolic and 36 motion checks.
+[Unsat-core minimization](roboverify/synthesis/cfg/VERIFICATION.md#unsat-core-minimization)
+now defaults off, preserving validity and premise-consistency checks. Ten parallel
+Higher-retained rechecks passed all 120 symbolic VCs; unbounded exit VCs took
+0.013–1.583 seconds instead of the earlier approximately 300-second totals.
 See the [verification command](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification)
 and the decisions on [initial heights](PAPER-DISCREPANCIES.md#31-stack-resets-equal-height-assumption-belongs-in-the-task-precondition)
 and [Higher tolerance](PAPER-DISCREPANCIES.md#32-higher-tolerance-for-contact-induced-height-differences).

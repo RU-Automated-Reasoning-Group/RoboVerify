@@ -5,7 +5,7 @@ Algorithms 1–6, Appendix A/Table 7, associated proofs, and the Section 6.2
 experiment. Neither paper nor code automatically wins a disagreement, and paper
 experiment numbers are not correctness targets.
 
-Entry IDs **1–37 and their headings are stable**. Retain decisions, proof
+Entry IDs **1–38 and their headings are stable**. Retain decisions, proof
 arguments and unresolved limits here; implementation history belongs in Git.
 See [project status](README.md#project-status) and the
 [verification guide](roboverify/synthesis/cfg/VERIFICATION.md) for current workflows.
@@ -671,3 +671,25 @@ for metric definitions, full results, commands and artifacts. The four local
 demonstration archives were deleted; reports/videos remain. No replacement
 collection or fresh demonstration-consuming proof run accompanied this update.
 Physical refinement still requires justified tracking and attachment bounds.
+
+## 38. Unsat-core minimization can consume the budget after proving a VC
+
+**Performance defect addressed; proof obligations preserved.** Symbolic solvers
+previously enabled `smt.core.minimize` unconditionally. A saved Stack exit VC
+returned UNSAT in 4–8 ms, but retrieving a minimized core consumed the entire
+1 s or 5 s budget in a stage-timing diagnostic. Without minimization, retrieval
+took less than 0.1 ms; premise consistency still returned SAT. Whole-VC times of
+approximately 300 s therefore do not establish that proof search needed 300 s.
+
+Minimization now defaults off, with explicit CLI on/off switches and a scoped
+Python option. Core extraction still supports the vacuity shortcut, and a core
+containing the negated conclusion still requires a separate premise check.
+Valid, invalid, vacuous and unknown remain distinct; no assumption was removed.
+
+Ten concurrent fresh-process Higher-retained experiments, each with a 300-second
+symbolic query limit, passed all 12 symbolic VCs: 120 valid results and no
+unknowns. The invariant was byte-identical across runs. Unbounded exit VCs took
+0.013–1.583 s (median 0.022 s). The translated-only motion failures remain.
+This is evidence of improved runtime and repeatability, not a guarantee of
+deciding every quantified VC or an isolation of every earlier unknown's cause.
+See [configuration and evidence](roboverify/synthesis/cfg/VERIFICATION.md#unsat-core-minimization).

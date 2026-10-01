@@ -22,6 +22,7 @@ from z3 import (
 )
 
 from synthesis.util.symbols import fresh_const
+from synthesis.verification_lib.solver_options import get_minimize_unsat_core
 
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -660,7 +661,7 @@ class HighLevelContext:
             raise ValueError("Solver timeout must be positive")
         solver = Solver()
         solver.set(timeout=timeout_ms, unsat_core=True)
-        solver.set("smt.core.minimize", True)
+        solver.set("smt.core.minimize", get_minimize_unsat_core())
         if self.verification_mode == "goals":
             self.add_axiom_goal_nested(solver)
         else:
