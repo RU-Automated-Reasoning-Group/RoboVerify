@@ -68,6 +68,12 @@ Archives must contain full simulator states and match the current task specifica
 collections from before the equal-height precondition require recollection for
 pipeline use. Collect demonstrations when an example's archive is absent.
 
+A [Higher-removal ablation](roboverify/synthesis/cfg/VERIFICATION.md#higher-removal-ablation)
+found that simply dropping Higher breaks the learned Stack proof. An explicitly
+supplied invariant using only ON*, Scattered and equality passes both levels
+under the existing supported-height model. Higher is not indispensable for this
+task; recovering the replacement automatically is separate work.
+
 For paper Section 6.2, `synthesis.entry.learn_invariant` starts with an empty
 dataset and invariant False, searches increasing block counts directly for valid
 initial environments reaching a failed VC, and runs the fixed program in MuJoCo.

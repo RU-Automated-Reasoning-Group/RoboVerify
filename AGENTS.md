@@ -80,6 +80,11 @@ The 2026-10-01 PyEDA recheck used five fresh four-block demonstrations with the
 current controllers and passed all 12 symbolic checks (sizes 2–4 and unbounded)
 and 63 noiseless motion checks. The bootstrap needed no refinement or repair;
 the earlier SymPy proof predates the combined controller update.
+The [Higher-removal ablation](roboverify/synthesis/cfg/VERIFICATION.md#higher-removal-ablation)
+shows that ON*/Scattered/equality learning alone loses necessary structure, but a
+diagnostic four-clause Higher-free invariant passes both proof levels with the
+supported-height premises retained. It is not a production learner or fallback;
+defaults and the attachment/replay model limit remain unchanged.
 The standalone [Section 6.2 experiment](roboverify/synthesis/experiment/invariant_learning/README.md)
 starts from no demos and False, directly minimizes reachable VC failures with
 bounded unordered execution queries, and learns only from complete validated

@@ -172,6 +172,100 @@ Higher tolerance, supported-tower premises, initial arm, table height and solver
 budgets unchanged. The three-block demonstration size does not restrict the proof
 to three blocks; no four-block learning states are required for this result.
 
+### Higher removal ablation
+
+**Higher is sufficient but not indispensable for the supplied Stack proof.**
+On 2026-10-01, controlled ablations reused the five current four-block
+demonstrations above (20 loop heads/exits), the unchanged physical program,
+PyEDA, and the same solver budgets. No learning states were added and no
+refinement or repair was attempted. Production inference and verification
+defaults remain unchanged.
+
+| Configuration | Symbolic result | Motion result |
+| --- | --- | --- |
+| Learn ON*/Scattered/equality; retain Higher in verification | Preservation invalid at 3 blocks | 6 refuted checks; root selection unsupported |
+| Remove Higher from learning and verification | Preservation invalid at 3 blocks | 5 refuted checks; root selection unsupported |
+| Learn ON*/equality only; remove Higher from verification | All 12 valid, including unbounded | 3 carried-block lift collision checks refuted |
+| Explicit Higher-free structural invariant; supported-height premises retained | All 12 valid, including unbounded | All 62 remaining checks valid |
+| Same structural invariant; also remove supported-height premises | All 12 valid, including unbounded | 3 checks refuted: arm clearance at entry/preservation and transport collision |
+
+Removing Higher from verification means removing its domain axioms (including
+ON*/Higher links), its equal-height entry clause, and the `effect_Higher`
+refinement obligation. The latter is recorded as omitted, never passed. All
+other collision, support, frame, alignment and effect checks remain. The last
+control additionally removes the numeric supported-height assumption and its
+two entry/preservation obligations, while retaining arm-clearance and column
+checks. Numeric XYZ geometry is still needed to state collision safety.
+Motion checks after a symbolic failure are diagnostic, not a whole-program
+certificate. None of these failures is a newly observed MuJoCo execution failure.
+
+The ON*/Scattered/equality learner produced exactly these three facts:
+
+```text
+forall x.   O(x,b) => x = b
+forall x.   O(b,x) => O(x,b0)
+forall x,y. O(x,y) or O(y,x) or S(x,y)
+```
+
+They describe a clear current top, its root, and separated columns, but permit
+additional towers. The three-block countermodel has `b=b0=a`, a separate tower
+`c` on `d`, and selected source `b_prime=c`. Its guard is enabled. The abstract
+`Put(c,a)` retains `O(c,d)` while adding `O(c,a)`; after `b:=c`, the root clause
+requires the false `O(d,a)`. Physical detachment instead removes `O(c,d)`. This
+exposes the existing attachment/replay model limit in
+[entry 30](../../../PAPER-DISCREPANCIES.md#30-stack-invariant-vocabulary-and-attachment-semantics),
+on a scene admitted by the weak invariant but unreachable from the Stack entry.
+
+The successful diagnostic control adds one structural clause to those three:
+
+```text
+forall x,y. O(x,y) => (x = y or O(y,b0))
+```
+
+This forces every nontrivial support relation into the tower rooted at b0;
+remaining blocks are singletons. With the existing supported-height geometry,
+singletons rest at the common table height and b is the tallest tower member.
+The motion proof can therefore establish clearance at transport height
+`z(b) + 0.10 m` without the abstract Higher predicate. This four-clause invariant
+was explicitly supplied for diagnosis and proved inductive; the partition learner
+did **not** discover it in the ON*/Scattered/equality run. Its candidate vocabulary
+and minimum separating-feature objective can omit useful structural facts; adding
+Scattered to an ON*-only vocabulary need not strengthen the learned invariant.
+
+Higher provides direct height comparisons across different columns, particularly
+`forall x. Higher(b,x)`. Its learned clauses also exclude the unwanted extra
+towers and connect height order to separation. ON* alone compares members of one
+column, and Scattered constrains XY only. Without the numeric support premises,
+raising an isolated block leaves all ON*/Scattered/equality facts unchanged:
+the structural control then fails transport collision and arm-clearance proofs.
+Thus removing the predicate can work for Stack with replacement structural
+information and a suitable geometric domain; removing all height information
+does not establish motion safety. This result does not prove Higher unnecessary
+for arbitrary tasks. Some standalone tower specifications explicitly use Higher
+to require a common final level; deleting those clauses changes their goals.
+
+Reproduce from `roboverify/` with the simulator environment configured:
+
+```bash
+uv run python -m synthesis.experiment.ablate_higher \
+  --demos demos/stack/4-blocks-5-trajectories-pyeda-verification/demonstrations.npz \
+  --case no-higher
+```
+
+Other cases are `inference-only`, `on-only`, and `structural`; add
+`--without-height-premises` to the structural control for the final row.
+The command reports experiment completion separately from the proof verdicts.
+Each run saves `invariant.smt2`, `symbolic.json`, `motion.json` (with geometric
+counterexamples), and `summary.json` under `artifacts/`. Read runs using
+`uv run python -m synthesis.experiment.report --glob 'runs/higher-ablation/*' --table`.
+The recorded runs under `runs/higher-ablation/` are:
+
+- `20261001-185009-b099bdf-inference-only`
+- `20261001-185007-b099bdf-no-higher`
+- `20261001-185008-b099bdf-on-only`
+- `20261001-185008-b099bdf-structural`
+- `20261001-185505-b099bdf-structural-no-height-premises`
+
 ## Counterexample learning without initial demonstrations
 
 The separate [Section 6.2 experiment](../experiment/invariant_learning/README.md)

@@ -476,6 +476,21 @@ from d instead, so it cannot provide that failing successor for enlargement.
 The resulting no-progress diagnosis is not successful refinement. This mismatch
 outside source-singleton states remains unresolved.
 
+**Higher-removal ablation, 2026-10-01.** On the five current four-block
+demonstrations, ON*/Scattered/equality learned the clear-top, root and
+column-separation clauses but omitted the single-tower restriction. Removing
+Higher from both inference and verification reproduced a three-block preservation
+counterexample and five refuted motion checks; ON*/equality alone passed symbolic
+checks but lacked XY separation for three lift-collision checks. A diagnostic
+invariant adding `forall x,y. ON*(x,y) => x=y or ON*(y,b0)` to the three learned
+clauses passed all 12 symbolic and all 62 remaining motion checks without any
+Higher axioms, entry clause or effect obligation. The common-table supported-height
+premises remained; removing those too refuted transport collision and arm-clearance
+checks. Higher is therefore not indispensable for this Stack proof, but the current
+learner did not recover the necessary replacement in that vocabulary. The structural
+control is explicitly supplied, not a new learner or production fallback; the
+attachment rule remains unchanged. See the [ablation results and reproduction](roboverify/synthesis/cfg/VERIFICATION.md#higher-removal-ablation).
+
 ON*/equality alone can learn a one-tower invariant and pass symbolic verification,
 but lacks motion separation facts. Under exact height comparison, the full
 vocabulary can instead learn a clause reliant on slight downward displacement
