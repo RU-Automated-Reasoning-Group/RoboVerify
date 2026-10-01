@@ -15,7 +15,6 @@ from time import perf_counter
 from unittest.mock import patch
 
 import z3
-
 from synthesis.cfg.program_adapter import program_to_cfg
 from synthesis.cfg.program_source import load_program
 from synthesis.cfg.recordings import load_traces, loop_store
@@ -26,6 +25,11 @@ from synthesis.cfg.verification import (
     verify_cfg_motion,
 )
 from synthesis.cfg.verified_synthesis import loop_regions
+from synthesis.experiment.motion_premise_ablation import (
+    AUXILIARY_GEOMETRY_CHECKS,
+    quantifier_count,
+    without_extra_motion_premises,
+)
 from synthesis.experiment.run_logger import RunLogger
 from synthesis.inference_lib.demo_store import InferenceVocabulary, InvInference
 from synthesis.predicates.term import to_z3
@@ -104,8 +108,9 @@ def symbolic_checks(cfg, context, timeout_ms):
 
 
 def run(args, logger):
-    remove_all = args.case != "inference-only"
+    remove_all = args.case not in ("baseline", "inference-only")
     skipped = []
+    query_audit = []
     original_check = MotionProblem.check
 
     def remaining_check(problem, obligation, violation=None):
@@ -117,7 +122,25 @@ def run(args, logger):
             # column-alignment and remaining relation checks are retained.
             skipped.append(f"{problem.block_v}/{obligation}")
             return None
-        return original_check(problem, obligation, violation)
+        premises = tuple(problem.solver.assertions())
+        result = original_check(problem, obligation, violation)
+        record = dict(
+            obligation=f"{problem.block_v}/{obligation}",
+            kind="consistency" if violation is None else "violation",
+            premise_quantifiers=quantifier_count(premises),
+            violation_quantifiers=(
+                0 if violation is None else quantifier_count((violation,))
+            ),
+            status=result.status,
+        )
+        if result.status == "refuted":
+            query = z3.Solver()
+            query.add(*premises, violation)
+            path = "queries/" + record["obligation"].replace("/", "-") + ".smt2"
+            logger.write_artifact(path, query.to_smt2())
+            record["query_artifact"] = path
+        query_audit.append(record)
+        return result
 
     with ExitStack() as scope:
         scope.enter_context(using_higher_tolerance(0.001))
@@ -127,8 +150,7 @@ def run(args, logger):
                     HighLevelContext, "add_axiom_higher", lambda self, solver: None
                 )
             )
-        if remove_all or args.without_height_premises:
-            scope.enter_context(patch.object(MotionProblem, "check", remaining_check))
+        scope.enter_context(patch.object(MotionProblem, "check", remaining_check))
         if args.without_height_premises:
             # Keep the checked arm-clearance and column-alignment invariants;
             # remove only supported-height assumptions and their two VCs.
@@ -159,11 +181,10 @@ def run(args, logger):
         cfg = program_to_cfg(definition, [], pre, post)
         propose_summaries(cfg, context)
         store = loop_store(traces, loop_id="1", names=("b", "b0"))
-        vocabulary = (
-            ("ON_star", "equality")
-            if args.case == "on-only"
-            else ("ON_star", "Scattered", "equality")
-        )
+        vocabulary = {
+            "baseline": ("ON_star", "Higher", "Scattered", "equality"),
+            "on-only": ("ON_star", "equality"),
+        }.get(args.case, ("ON_star", "Scattered", "equality"))
         started = perf_counter()
         invariant = (
             structural_invariant(context)
@@ -177,7 +198,7 @@ def run(args, logger):
             )[0]
         )
         learning_seconds = perf_counter() - started
-        assert not uses_higher(invariant)
+        assert uses_higher(invariant) == (args.case == "baseline")
         coverage = all(
             state_holds(invariant, _project(row, False)) for row in store.for_loop("1")
         )
@@ -195,13 +216,20 @@ def run(args, logger):
         symbolic = symbolic_checks(cfg, context, args.symbolic_timeout_ms)
         logger.write_artifact("symbolic.json", json.dumps(symbolic, indent=2))
         logger.log_event("symbolic", str(symbolic["ok"]), force=True)
+        omissions = {}
+        if args.without_extra_motion_premises:
+            omissions = scope.enter_context(without_extra_motion_premises())
         motion = verify_cfg_motion(
             cfg,
             context,
             timeout_ms=args.motion_timeout_ms,
             supported_tower_model=True,
             table_surface_height=0.4,
-            initial_arm=(1.3446426, 0.74911606, 0.5314612),
+            initial_arm=(
+                None
+                if args.without_extra_motion_premises
+                else (1.3446426, 0.74911606, 0.5314612)
+            ),
         )
         motion_data = dict(
             ok=bool(motion),
@@ -210,6 +238,15 @@ def run(args, logger):
             checks=[asdict(check) for check in motion.checks],
         )
         logger.write_artifact("motion.json", json.dumps(motion_data, indent=2))
+        logger.write_artifact(
+            "motion-query-audit.json", json.dumps(query_audit, indent=2)
+        )
+        core = [
+            c
+            for c in motion.checks
+            if c.obligation.rsplit("/", 1)[-1] not in AUXILIARY_GEOMETRY_CHECKS
+        ]
+        auxiliary = [c for c in motion.checks if c not in core]
         summary = dict(
             case=args.case,
             states=len(store),
@@ -220,7 +257,12 @@ def run(args, logger):
                 else "partition learner / PyEDA"
             ),
             higher_removed_from_verification=remove_all,
-            supported_height_premises=not args.without_height_premises,
+            supported_height_premises=not (
+                args.without_height_premises or args.without_extra_motion_premises
+            ),
+            extra_motion_premises=not args.without_extra_motion_premises,
+            initial_arm_supplied=not args.without_extra_motion_premises,
+            omitted_premise_calls=dict(omissions),
             learning_seconds=learning_seconds,
             symbolic_ok=symbolic["ok"],
             motion_ok=bool(motion),
@@ -231,6 +273,17 @@ def run(args, logger):
                 if r["status"] != "valid"
             ],
             motion_statuses=dict(Counter(c.status for c in motion.checks)),
+            core_motion_statuses=dict(Counter(c.status for c in core)),
+            auxiliary_geometry_statuses=dict(Counter(c.status for c in auxiliary)),
+            motion_query_counts=dict(
+                total=len(query_audit),
+                quantified_premises=sum(
+                    bool(r["premise_quantifiers"]) for r in query_audit
+                ),
+                quantified_violation=sum(
+                    bool(r["violation_quantifiers"]) for r in query_audit
+                ),
+            ),
             motion_failures=[
                 dict(obligation=c.obligation, status=c.status, reason=c.reason)
                 for c in motion.checks
@@ -248,10 +301,19 @@ def main(argv=None):
     parser.add_argument("--demos", required=True)
     parser.add_argument(
         "--case",
-        choices=("inference-only", "no-higher", "on-only", "structural"),
+        choices=("baseline", "inference-only", "no-higher", "on-only", "structural"),
         required=True,
     )
-    parser.add_argument("--without-height-premises", action="store_true")
+    premises = parser.add_mutually_exclusive_group()
+    premises.add_argument("--without-height-premises", action="store_true")
+    premises.add_argument(
+        "--without-extra-motion-premises",
+        action="store_true",
+        help=(
+            "Omit height/alignment/clearance assumptions, initial arm pose, and "
+            "exact premise reassertions; retain all motion/auxiliary obligations"
+        ),
+    )
     parser.add_argument("--symbolic-timeout-ms", type=int, default=60000)
     parser.add_argument("--motion-timeout-ms", type=int, default=10000)
     parser.add_argument("--output-dir", default="runs")
@@ -263,7 +325,8 @@ def main(argv=None):
         "higher-ablation",
         vars(args),
         slug=args.case
-        + ("-no-height-premises" if args.without_height_premises else ""),
+        + ("-no-height-premises" if args.without_height_premises else "")
+        + ("-translated-only" if args.without_extra_motion_premises else ""),
     ) as logger:
         logger.progress_line(f"Higher ablation: {logger.run_dir}")
         try:

@@ -73,6 +73,11 @@ found that simply dropping Higher breaks the learned Stack proof. An explicitly
 supplied invariant using only ON*, Scattered and equality passes both levels
 under the existing supported-height model. Higher is not indispensable for this
 task; recovering the replacement automatically is separate work.
+Removing [all extra motion premises](roboverify/synthesis/cfg/VERIFICATION.md#removing-all-extra-motion-premises)
+also breaks the Higher baseline's motion proof: the learned invariant does not
+establish empty-gripper clearance or tight input alignment. Its symbolic proof
+and carried-block collision checks still pass. The supported-tower result above
+uses separate geometric assumptions and is not a quantifier-free motion proof.
 
 For paper Section 6.2, `synthesis.entry.learn_invariant` starts with an empty
 dataset and invariant False, searches increasing block counts directly for valid

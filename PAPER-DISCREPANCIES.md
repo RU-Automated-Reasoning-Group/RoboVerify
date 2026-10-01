@@ -428,6 +428,26 @@ entry establishes exact columns trivially; ideal root-aligned placement preserve
 them. Noise/offset placements can fail preservation. These are checked geometric
 templates, separate from the intended relational learner.
 
+**Translated-premises-only ablation, 2026-10-01.** Removing all extra motion
+premises, tight input alignment, the initial arm pose, and exact quantified
+premise reassertions leaves the learned Higher invariant unchanged and all 12
+symbolic checks valid. Motion then refutes three empty-gripper approach checks
+and the input-alignment check; all carried-block collision and predicate-effect
+checks pass. Six auxiliary geometric conclusions also fail as diagnostics.
+Validated finite scenes satisfy the complete learned invariant and guard while
+exhibiting an unsafe gripper approach or an excessive tower offset. A Higher-free
+structural control additionally loses horizontal carried-block collision safety.
+These are model-query failures, not new simulator failures. The other vocabulary
+controls also fail motion; one ON*-only query is unknown at its time budget.
+See the [full premise ablation](roboverify/synthesis/cfg/VERIFICATION.md#removing-all-extra-motion-premises).
+
+The ordinary supported-tower proof is not quantifier-free: it supplies quantified
+geometric facts and exact relational premises. Removing those premises makes
+every captured motion premise quantifier-free, but the exact Higher-effect and
+auxiliary geometric conclusions still contain quantifiers, as do separate
+abstract root-selection proofs. A fully quantifier-free motion pipeline remains
+unestablished; this diagnostic does not change production verification.
+
 A finite-domain SAT witness can establish consistency of quantified premises.
 Finite UNSAT/UNKNOWN instead falls back to the unbounded solver; safety queries
 remain unbounded. This optimization cannot turn vacuous premises or bounded

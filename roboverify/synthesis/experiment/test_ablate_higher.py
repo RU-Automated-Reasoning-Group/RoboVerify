@@ -1,16 +1,23 @@
 """Concrete diagnostic witnesses for the Higher ablation, without saved demos."""
 
 import unittest
+from unittest.mock import patch
 
 import z3
-
 from synthesis.api.instructions import Assign, Put
 from synthesis.api.program import to_seq, wp
 from synthesis.experiment.ablate_higher import structural_invariant, uses_higher
+from synthesis.experiment.motion_premise_ablation import (
+    quantifier_count,
+    without_extra_motion_premises,
+)
 from synthesis.inference_lib.demo_store import LoopHeadState
 from synthesis.util.on import using_higher_tolerance
 from synthesis.verification_lib.counterexamples import stacks_to_positions, state_holds
 from synthesis.verification_lib.highlevel_verification_lib import HighLevelContext
+from synthesis.verification_lib.lowlevel_verification_lib import LowLevelContext
+from synthesis.verification_lib.motion_verification import MotionContract
+from synthesis.verification_lib.primitive_motion import PrimitiveMotionProblem
 
 
 class HigherAblationTests(unittest.TestCase):
@@ -90,6 +97,74 @@ class HigherAblationTests(unittest.TestCase):
         with using_higher_tolerance(0.001):
             self.assertTrue(state_holds(higher, before))
             self.assertFalse(state_holds(higher, after))
+
+    def test_removed_premises_admit_bad_geometry_but_checks_still_refute_it(self):
+        from synthesis.cfg import verification
+        from synthesis.verification_lib import tower_geometry
+
+        original_height = tower_geometry.assume_tower_geometry
+        original_clearance = tower_geometry.arm_clearance
+        problem = PrimitiveMotionProblem(
+            LowLevelContext(default_L=0.05),
+            [],
+            ["a", "b"],
+            MotionContract("a", "b"),
+            None,
+            "test",
+            3000,
+            initial_positions={"a": (0, 0, 0.3), "b": (0.02, 0, 0.5)},
+            initial_arm=(0, 0, 0.1),
+        )
+        with without_extra_motion_premises():
+            tower_geometry.assume_tower_geometry(problem, 0.4)
+            problem.solver.add(
+                tower_geometry.arm_clearance(problem),
+                tower_geometry.column_alignment(problem),
+            )
+            verification.assume_input_alignment(problem, ["a"])
+            self.assertEqual(quantifier_count(problem.solver.assertions()), 0)
+            self.assertEqual(problem.check("consistency").status, "valid")
+            # The low arm, below-table block and offset column remain failures
+            # of the actual geometric conclusions, never trivial True checks.
+            for name in ("tower_height_invariant", "arm_clearance", "column_alignment"):
+                violation = z3.Not(
+                    getattr(tower_geometry, name)(problem, fields=problem.fields)
+                )
+                self.assertEqual(problem.check(name, violation).status, "refuted")
+        self.assertIs(tower_geometry.assume_tower_geometry, original_height)
+        self.assertIs(tower_geometry.arm_clearance, original_clearance)
+
+    def test_effect_goals_remain_exact_without_quantified_premise_copies(self):
+        from synthesis.cfg import verification
+
+        x = z3.Const("effect_test_x", self.context.BoxSort)
+        b = self.context.get_consts("b")
+        condition = z3.ForAll([x], self.context.Higher(b, x))
+        problem = PrimitiveMotionProblem(
+            LowLevelContext(default_L=0.05),
+            [condition],
+            ["a", "b"],
+            MotionContract("a", "b"),
+            None,
+            "test",
+            3000,
+        )
+        original_conditions = problem.initial_condition
+        goals = {}
+
+        def inspect_query(obligation, violation=None):
+            self.assertEqual(quantifier_count(problem.solver.assertions()), 0)
+            goals[obligation] = violation
+
+        with without_extra_motion_premises(), patch.object(
+            problem, "check", inspect_query
+        ):
+            verification.check_abstract_effects(problem)
+        self.assertIs(problem.initial_condition, original_conditions)
+        self.assertEqual(
+            set(goals), {"effect_ON_star", "effect_Higher", "effect_Scattered"}
+        )
+        self.assertGreater(quantifier_count([goals["effect_Higher"]]), 0)
 
 
 if __name__ == "__main__":

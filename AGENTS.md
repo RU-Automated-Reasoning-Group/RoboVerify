@@ -85,6 +85,13 @@ shows that ON*/Scattered/equality learning alone loses necessary structure, but 
 diagnostic four-clause Higher-free invariant passes both proof levels with the
 supported-height premises retained. It is not a production learner or fallback;
 defaults and the attachment/replay model limit remain unchanged.
+The diagnostic `--without-extra-motion-premises` also removes arm/column/input
+alignment assumptions, the initial arm pose, and exact premise reassertions.
+Even the learned Higher baseline then fails motion (gripper approach and input
+alignment), while all 12 symbolic checks and carried-block collision checks pass.
+See the [full premise ablation](roboverify/synthesis/cfg/VERIFICATION.md#removing-all-extra-motion-premises).
+The supported-tower motion proof contains quantifiers; this diagnostic removes
+them from premises but retains exact quantified conclusions where required.
 The standalone [Section 6.2 experiment](roboverify/synthesis/experiment/invariant_learning/README.md)
 starts from no demos and False, directly minimizes reachable VC failures with
 bounded unordered execution queries, and learns only from complete validated

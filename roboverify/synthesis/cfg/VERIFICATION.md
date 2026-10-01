@@ -266,6 +266,92 @@ The recorded runs under `runs/higher-ablation/` are:
 - `20261001-185008-b099bdf-structural`
 - `20261001-185505-b099bdf-structural-no-height-premises`
 
+### Removing all extra motion premises
+
+**The translated invariant alone does not establish the complete motion proof,
+even with Higher retained.** A second controlled experiment on 2026-10-01 used
+the same five four-block demonstrations, 20 learning states, PyEDA, unchanged
+program and solver budgets. The learned Higher baseline is byte-for-byte
+identical to the earlier successful invariant. This is a diagnostic ablation;
+production verification defaults are unchanged.
+
+`--without-extra-motion-premises` removes the supported-height input conditions,
+assumed arm-clearance and exact-column loop facts, tight input-tower alignment,
+the fixed initial gripper pose, and exact quantified reassertions of the input
+conditions/invariant. Ordinary finite assumption translation, the task
+precondition, witnessed guard, primitive transition semantics, cube size
+(0.05 m), Higher tolerance (0.001 m), and table height as a release-contract
+constant remain. No demonstrated block positions are imposed on the proof.
+Root selection and effect conclusions retain their existing semantics.
+
+All safety/effect/alignment obligations remain. The six auxiliary entry and
+preservation checks for arm clearance, exact columns, and tower heights are
+also retained as diagnostics, although their facts are no longer assumed.
+The following **core motion** counts exclude only those six auxiliary checks:
+
+| Invariant / Higher configuration | Symbolic checks | Core motion checks |
+| --- | --- | --- |
+| Learned ON*/Higher/Scattered/equality; Higher retained | 12 valid | 53 valid, 4 refuted |
+| Learned ON*/Scattered/equality; Higher retained only in verification | 5 valid, preservation invalid at 3 blocks | 45 valid, 9 refuted, root selection unsupported |
+| Learned ON*/Scattered/equality; Higher removed from both | 5 valid, preservation invalid at 3 blocks | 45 valid, 8 refuted, root selection unsupported |
+| Learned ON*/equality; Higher removed | 12 valid | 46 valid, 9 refuted, 1 unknown (10-second timeout) |
+| Explicit four-clause structural invariant; Higher removed | 12 valid | 51 valid, 5 refuted |
+
+All six auxiliary diagnostic checks are refuted in every row. A quantified
+auxiliary conclusion can introduce objects outside the finite premise instances;
+such a failure is not automatically a concrete failure of the full invariant.
+Root-selection failure prevents generation of the two root-specific alignment
+checks, so total counts differ across cases. Higher's effect obligation is omitted
+only in the cases that remove Higher from verification. No omitted or unknown
+check is counted as passing; motion checks after symbolic failure are diagnostic.
+
+The Higher baseline's four core failures are `alignment_entry` and
+`collision_1_approach_b`, `collision_1_approach_b0`, and
+`collision_1_approach_sym`. Every carried-block collision, support, release,
+frame and predicate-effect check passes in this run. The two validated finite
+witnesses in its `artifacts/readable-witnesses.json` make the missing information
+concrete (coordinates in metres, Y=0):
+
+- **Gripper approach:** b0=(0,0,0.425), b=(0,0,0.475), source=(0.2,0,0.425),
+  empty gripper=(-0.2,0,0.475). The complete learned invariant and guard hold,
+  but the horizontal approach to the source intersects b. The invariant
+  compares block heights and supplies no bound on the empty gripper.
+- **Input alignment:** b0=(0,0,0.425), b=(0.02,0,0.475), source=(0.2,0,0.425).
+  The complete learned invariant and guard hold. The 0.02 m offset satisfies
+  ON*'s strict 0.025 m XY bound but violates the input-alignment requirement
+  of a strict 0.0125 m root radius. Both examples satisfy the corresponding
+  saved failing motion query; neither is a new MuJoCo execution.
+
+The structural Higher-free control additionally fails `collision_3_sym`, the
+carried-block horizontal transport check. Thus Higher still supplies a useful
+relative block-height bound after all extra motion premises are removed; it
+does not supply gripper state or tight tower alignment.
+
+The query audit confirms **zero quantified premise nodes in every captured
+MotionProblem query** in all five runs. The baseline retains quantified
+conclusions in the six auxiliary checks and `effect_Higher`. All its collision
+queries are quantifier-free. Abstract root-selection proofs also remain
+quantified; removing premises is not a complete quantifier-elimination change.
+
+Reproduce with the simulator environment configured:
+
+```bash
+uv run python -m synthesis.experiment.ablate_higher \
+  --demos demos/stack/4-blocks-5-trajectories-pyeda-verification/demonstrations.npz \
+  --case baseline --without-extra-motion-premises
+```
+
+Use `inference-only`, `no-higher`, `on-only`, or `structural` for the other rows.
+This flag is mutually exclusive with `--without-height-premises`, which removes
+only heights. Runs additionally save `motion-query-audit.json` and reproducible
+SMT2 queries for refuted checks. Recorded directories under `runs/higher-ablation/`:
+
+- `20261001-195745-0a7a393-baseline-translated-only`
+- `20261001-200052-0a7a393-inference-only-translated-only`
+- `20261001-200003-0a7a393-no-higher-translated-only`
+- `20261001-200026-0a7a393-on-only-translated-only`
+- `20261001-200019-0a7a393-structural-translated-only`
+
 ## Counterexample learning without initial demonstrations
 
 The separate [Section 6.2 experiment](../experiment/invariant_learning/README.md)
