@@ -15,6 +15,7 @@ from time import perf_counter
 from unittest.mock import patch
 
 import z3
+
 from synthesis.cfg.program_adapter import program_to_cfg
 from synthesis.cfg.program_source import load_program
 from synthesis.cfg.recordings import load_traces, loop_store
@@ -64,19 +65,31 @@ def uses_higher(expr):
     )
 
 
-def symbolic_checks(cfg, context, timeout_ms):
+def symbolic_checks(cfg, context, timeout_ms, *, logger=None):
     """Use the usual VCs without Higher-dependent countermodel realization."""
     records = []
     for size in (2, 3, 4, None):
         program, pre, post, active = symbolic_problem(cfg, context, size)
         for vc in program.VC_gen(pre, post, active):
+            label = f"{size if size is not None else 'unbounded'}/{vc.kind}"
+            if logger is not None:
+                logger.set_status(phase="symbolic", current_vc=label)
+            started = perf_counter()
             result = discharge_vc(vc, active, timeout_ms)
+            seconds = perf_counter() - started
             model = result.model
             rows = dict(
                 blocks=size,
                 kind=vc.kind,
                 status=result.status,
                 reason=result.reason,
+                queries=result.queries,
+                seconds=seconds,
+                inconclusive_query=(
+                    ("validity" if result.queries == 1 else "premise_consistency")
+                    if result.status == "unknown"
+                    else None
+                ),
                 formula=vc.expr.sexpr(),
                 model=str(model) if model is not None else None,
             )
@@ -102,6 +115,16 @@ def symbolic_checks(cfg, context, timeout_ms):
                     for n in ("b", "b0", "b_prime")
                 }
             records.append(rows)
+            if logger is not None:
+                logger.log_event(
+                    "symbolic_vc",
+                    f"{label}: {result.status}",
+                    force=True,
+                    seconds=seconds,
+                    queries=result.queries,
+                    inconclusive_query=rows["inconclusive_query"],
+                    reason=result.reason,
+                )
         if any(r["status"] != "valid" for r in records):
             break
     return dict(ok=all(r["status"] == "valid" for r in records), checks=records)
@@ -213,7 +236,9 @@ def run(args, logger):
             states=len(store),
             learning_seconds=learning_seconds,
         )
-        symbolic = symbolic_checks(cfg, context, args.symbolic_timeout_ms)
+        symbolic = symbolic_checks(
+            cfg, context, args.symbolic_timeout_ms, logger=logger
+        )
         logger.write_artifact("symbolic.json", json.dumps(symbolic, indent=2))
         logger.log_event("symbolic", str(symbolic["ok"]), force=True)
         omissions = {}

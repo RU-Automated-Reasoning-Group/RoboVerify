@@ -399,6 +399,33 @@ The historical ablation tables above retain their original counts. Reproduce
 with `--case baseline`; add `--without-extra-motion-premises` for the
 translated-only run.
 
+### Symbolic timeout repetitions
+
+Two fresh-process repetitions with Higher retained and the same demonstrations
+increased `--symbolic-timeout-ms` from 60000 to 300000. Both passed all 12
+symbolic checks. The learned invariant remained byte-identical. The user stopped
+the experiment during repetition 3; that incomplete run is excluded.
+
+| Repetition | Unbounded exit status | Whole-VC elapsed time | Queries |
+| --- | --- | --- | --- |
+| 1 | valid | 300.15 s | counterexample UNSAT; premises SAT |
+| 2 | valid | 300.10 s | counterexample UNSAT; premises SAT |
+
+Neither completed run returned unknown. These two successes do not establish
+that the earlier variability is eliminated. Timings include both solver queries
+and unsat-core handling; they do not isolate the time spent in each stage.
+The diagnostic now records elapsed seconds, query count, and which query was
+inconclusive when a VC returns unknown. These are reporting changes only.
+
+Results are under `runs/symbolic-stability-300s/higher-ablation/`:
+
+- `20261001-204711-d166602-baseline-translated-only`
+- `20261001-205234-d166602-baseline-translated-only`
+
+Both used `--case baseline --without-extra-motion-premises
+--symbolic-timeout-ms 300000`. The timeout change applies to these experiments;
+default query budgets are unchanged.
+
 ## Counterexample learning without initial demonstrations
 
 The separate [Section 6.2 experiment](../experiment/invariant_learning/README.md)
