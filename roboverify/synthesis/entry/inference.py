@@ -49,6 +49,7 @@ def generate_truth_table(expression, var_names):
 if __name__ == "__main__":
     import argparse
 
+    from synthesis.entry.inference_options import add_inference_options
     from synthesis.inference_lib.demo_store import (
         DemoStore,
         InvInference,
@@ -60,6 +61,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--demos", required=True)
     parser.add_argument("--loop-id", default="1")
+    add_inference_options(parser)
     parser.add_argument(
         "--task", choices=["stack", "unstack", "reverse", "partial"], default="stack"
     )
@@ -74,4 +76,5 @@ if __name__ == "__main__":
         args.loop_id,
         tower_vocabulary(args.task),
         context,
+        minimizer=args.invariant_minimizer,
     )

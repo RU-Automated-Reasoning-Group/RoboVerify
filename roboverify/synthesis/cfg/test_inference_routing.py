@@ -7,7 +7,6 @@ from copy import deepcopy
 from unittest.mock import patch
 
 import z3
-
 from synthesis.api.instructions import Skip, While
 from synthesis.api.program import Program
 from synthesis.cfg.candidate_traces import prepare_candidate
@@ -20,11 +19,36 @@ from synthesis.cfg.test_collection import example_trace
 from synthesis.cfg.verification import propose_summaries
 from synthesis.cfg.verified_synthesis import verified_synthesis
 from synthesis.entry.synthesize_cfg import main
+from synthesis.inference_lib.minimization import get_invariant_minimizer
 from synthesis.verification_lib.cegis import run_symbolic_cegis
 from synthesis.verification_lib.highlevel_verification_lib import HighLevelContext
 
 
 class SymbolicInferenceRoutingTests(unittest.TestCase):
+    def test_cli_scopes_and_records_minimizer(self):
+        for backend in ("sympy", "pyeda"):
+            with self.subTest(backend=backend), patch(
+                "synthesis.entry.synthesize_cfg.RunLogger"
+            ) as logger, patch(
+                "synthesis.entry.synthesize_cfg._run"
+            ) as run, contextlib.redirect_stdout(
+                io.StringIO()
+            ):
+
+                def check_backend(args, logger):
+                    self.assertEqual(get_invariant_minimizer(), backend)
+                    return 0
+
+                run.side_effect = check_backend
+                self.assertEqual(
+                    main(["--demos", "unused.npz", "--invariant-minimizer", backend]), 0
+                )
+                run.assert_called_once()
+                self.assertEqual(
+                    logger.call_args.args[2]["invariant_minimizer"], backend
+                )
+                self.assertEqual(get_invariant_minimizer(), "sympy")
+
     def test_cli_rejects_removed_learner_options(self):
         for learner in ("legacy", "monotone"):
             with self.subTest(learner=learner), contextlib.redirect_stderr(

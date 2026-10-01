@@ -447,6 +447,10 @@ Equal-valued observations remain valid samples; deduplication would be incorrect
 `InvInference → inference.loop_inference`; learner-selection flags/APIs and
 fallbacks are removed. The independent observed-pattern utility is not selected
 by verification workflows. Coverage, enlargement and nonvacuity checks remain.
+The optional `--invariant-minimizer pyeda` uses Espresso instead of SymPy for
+Boolean minimization within this same algorithm. Both preserve all truth-table
+values, including the existing completion policy for unobserved rows; this is
+not an alternate learner. SymPy remains the default.
 
 Earlier success with an alternate learner did not validate intended inference.
 The current supplied-program result does (31–32); structural geometric test

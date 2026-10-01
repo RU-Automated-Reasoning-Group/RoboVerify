@@ -68,6 +68,10 @@ All symbolic inference uses the
 intended partition-based algorithm, `InvInference` → `inference.loop_inference`;
 there is no alternate learner flag or callback. See the
 [verification command](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification).
+`--invariant-minimizer sympy|pyeda` selects only Boolean minimization inside this
+algorithm (default SymPy); PyEDA uses Espresso with the same fully specified
+truth tables. Python callers can use `InvInference(..., minimizer="pyeda")` or
+`using_invariant_minimizer` for an entire verification/refinement scope.
 Supplied Stack verification passes with `ON_star Higher Scattered equality`,
 the 1 mm Higher tolerance and the documented supported-tower motion model;
 the supplied-program bootstrap currently passes without invariant refinement.

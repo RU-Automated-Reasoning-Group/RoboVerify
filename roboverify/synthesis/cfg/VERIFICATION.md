@@ -91,6 +91,10 @@ Both modes use `InvInference` → `inference.loop_inference`, the intended
 partition-based algorithm. Candidate execution supplies continuing loop heads and
 normal exits; preservation feedback uses the same algorithm. There is no
 `--learner` option and no automatic fallback to a different learner.
+Use `--invariant-minimizer sympy` (default) or `--invariant-minimizer pyeda`
+to select Boolean minimization within that algorithm. Both preserve the same
+truth-table values. See [minimizer settings](../inference_lib/README.md#truth-table-minimization)
+for Espresso's CNF conversion, Python APIs and runtime tradeoffs.
 
 **Both verification stages passed in the archived runs with the intended learner:** the result was
 `verified_model` in the noiseless, supported-tower model. The shared equal-height

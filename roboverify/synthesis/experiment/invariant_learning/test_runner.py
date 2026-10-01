@@ -5,7 +5,6 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import z3
-
 from synthesis.api.instructions import Assign, While
 from synthesis.api.program import Program
 from synthesis.experiment.invariant_learning.runner import (
@@ -140,6 +139,32 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(result.counterexample_executions, 1)
         learner.assert_called_once()
         task.verify_motion.assert_not_called()
+
+    def test_pyeda_selection_reaches_learner(self):
+        task = BindingTask()
+        with patch(
+            "synthesis.experiment.invariant_learning.runner.InvInference",
+            wraps=InvInference,
+        ) as learner:
+            result = run_experiment(task, ExperimentConfig(invariant_minimizer="pyeda"))
+        self.assertEqual(result.status, "verified_symbolic", result.reason)
+        self.assertEqual(learner.call_args.kwargs["minimizer"], "pyeda")
+
+    def test_minimizer_cli_and_config_validation(self):
+        from synthesis.entry.learn_invariant import build_parser
+
+        parser = build_parser()
+        self.assertEqual(
+            parser.parse_args(["--program", "unused"]).invariant_minimizer, "sympy"
+        )
+        self.assertEqual(
+            parser.parse_args(
+                ["--program", "unused", "--invariant-minimizer", "pyeda"]
+            ).invariant_minimizer,
+            "pyeda",
+        )
+        with self.assertRaisesRegex(ValueError, "invariant_minimizer"):
+            ExperimentConfig(invariant_minimizer="unknown")
 
     def test_motion_runs_after_symbolic_success(self):
         task = BindingTask()

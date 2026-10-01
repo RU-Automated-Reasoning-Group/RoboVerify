@@ -20,6 +20,8 @@ from synthesis.verification_lib.highlevel_verification_lib import HighLevelConte
 
 
 class StackInferenceTests(unittest.TestCase):
+    minimizer = "sympy"
+
     def test_partition_learner_proves_stack_with_on_and_equality(self):
         context = HighLevelContext()
         blocks = [f"x{i}" for i in range(4)]
@@ -43,6 +45,7 @@ class StackInferenceTests(unittest.TestCase):
                 "1",
                 InferenceVocabulary(2, ("ON_star", "equality"), ("b", "b0")),
                 context,
+                minimizer=self.minimizer,
             )
         self.assertTrue(all(state_holds(invariant, row) for row in store.for_loop("1")))
         definition = load_program("synthesis.examples.stack:build_program", context, 4)
@@ -57,6 +60,10 @@ class StackInferenceTests(unittest.TestCase):
             {check.vc.kind for check in result.checks},
             {"establish", "preserve", "exit"},
         )
+
+
+class PyEDAStackInferenceTests(StackInferenceTests):
+    minimizer = "pyeda"
 
 
 if __name__ == "__main__":

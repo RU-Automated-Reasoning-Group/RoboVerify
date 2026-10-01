@@ -331,6 +331,63 @@ This standalone inference CLI uses the default 1 mm Higher tolerance and has no
 `--higher-tolerance` option. For another threshold, call the Python inference API
 inside `using_higher_tolerance(...)` as shown above.
 
+## Truth-table minimization
+
+Choose `--invariant-minimizer sympy` (default) or `--invariant-minimizer pyeda`
+in `synthesize_cfg` (full or verify), `learn_invariant`, the standalone
+`inference` CLI, or the tower verification CLIs. Instrumented runs record
+`invariant_minimizer` in their resolved configuration. PyEDA 0.29.0 is included
+in the project dependencies; `uv sync` installs it. Building its C extension
+requires a C compiler and Python development headers if no wheel is available.
+
+For example, append `--invariant-minimizer pyeda` to the
+[complete Stack verification command](../cfg/VERIFICATION.md#provided-stack-verification),
+or run inference alone on your current archive:
+
+```bash
+uv run python -m synthesis.entry.inference \
+  --demos demos/stack/3-blocks-5-trajectories/demonstrations.npz \
+  --task stack --loop-id 1 --invariant-minimizer pyeda
+```
+
+The intended partition learner, selected predicates, and truth-table completion
+policies stay the same. Phi accepts every row outside U; phi-prime accepts only
+S. Unobserved rows are **not don't-cares**. PyEDA's
+[Espresso minimizer](https://pyeda.readthedocs.io/en/latest/2llm.html) uses a
+heuristic search for a smaller equivalent Boolean expression; a globally minimum
+formula is not guaranteed. It can reduce minimization time, but truth-table
+enumeration, predicate selection and Z3 verification still contribute to runtime.
+End-to-end speedups require measuring the workload.
+
+SymPy retains its existing POS policy: above five selected predicates, it builds
+unminimized CNF to avoid expensive minimization. PyEDA minimizes at those sizes
+too. For CNF it minimizes the DNF of rejected rows and complements the result
+using De Morgan's laws, preserving the clause form required by inference.
+Expressions are converted to SymPy Boolean nodes for the existing Z3 translator,
+without invoking SymPy minimization on the PyEDA path. Equivalent expressions
+can have different clause layouts and redundancy-check costs; coverage and formal
+verification remain required.
+
+For a single Python call:
+
+```python
+invariant, clauses = InvInference(store, loop_id, vocabulary, context, minimizer="pyeda")
+```
+
+To select a backend for nested inference calls throughout CFG verification,
+standalone CEGIS, or direct `inference.loop_inference` calls:
+
+```python
+from synthesis.inference_lib.minimization import using_invariant_minimizer
+
+with using_invariant_minimizer("pyeda"):
+    invariant, clauses = InvInference(store, loop_id, vocabulary, context)
+```
+
+The scoped setting is restored on exit, including exceptions. An explicit
+`InvInference` option overrides the enclosing scope for that call. The standalone
+experiment's Python API accepts `ExperimentConfig(invariant_minimizer="pyeda")`.
+
 ## Recording and invariant data
 
 Archives retain full simulator snapshots, controls, mocap and solver arrays,

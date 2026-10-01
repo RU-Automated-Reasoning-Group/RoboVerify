@@ -5,11 +5,14 @@ from dataclasses import asdict, dataclass, field
 from time import perf_counter
 
 import z3
-
 from synthesis.cfg.recordings import save_traces
 from synthesis.experiment.invariant_learning.tasks import ExperimentFailure
 from synthesis.experiment.invariant_learning.witness import find_witness
 from synthesis.inference_lib.demo_store import DemoStore, InvInference
+from synthesis.inference_lib.minimization import (
+    DEFAULT_INVARIANT_MINIMIZER,
+    INVARIANT_MINIMIZERS,
+)
 from synthesis.verification_lib.cegis import _project
 from synthesis.verification_lib.counterexamples import state_holds
 
@@ -23,12 +26,15 @@ class ExperimentConfig:
     trajectory_timeout_seconds: float = 60
     seed: int = 0
     save_video: bool = False
+    invariant_minimizer: str = DEFAULT_INVARIANT_MINIMIZER
 
     def __post_init__(self):
         import math
 
         if self.verification_level not in ("symbolic", "both"):
             raise ValueError("verification_level must be symbolic or both")
+        if self.invariant_minimizer not in INVARIANT_MINIMIZERS:
+            raise ValueError("invariant_minimizer must be sympy or pyeda")
         if (
             min(
                 self.max_counterexample_blocks,
@@ -310,7 +316,11 @@ def run_experiment(task, config, *, motion_options=None, logger=None):
                 store.save_diagnostic(logger.artifact_dir() / "learning-states.json")
             started = perf_counter()
             candidate, _ = InvInference(
-                store, task.loop_id, task.vocabulary, task.context
+                store,
+                task.loop_id,
+                task.vocabulary,
+                task.context,
+                minimizer=config.invariant_minimizer,
             )
             row["learning_seconds"] = perf_counter() - started
             artifact(f"invariants/{revision+1}.smt2", candidate.sexpr() + "\n")

@@ -7,6 +7,7 @@ import numpy as np
 import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
 from synthesis.api.instructions import PickPlaceByName
 from synthesis.api.program import Assign, Program, Put, While
+from synthesis.entry.inference_options import add_inference_options
 from synthesis.entry.motion_options import add_motion_options, motion_noise_from_args
 from synthesis.entry.run_rollouts import run_program_rollouts
 from synthesis.inference_lib.demo_store import DemoStore, InvInference, tower_vocabulary
@@ -92,6 +93,7 @@ def verify_unstack_program_with_learned_invariant(
     noise=None,
     motion_timeout_ms: int = 5000,
     table_surface_height: float = None,
+    invariant_minimizer=None,
 ):
     """Infer from recorded loop-head demonstrations and verify the unstack program."""
     # Inference is always done in the infinite-block (DeclareSort) setting.
@@ -108,14 +110,22 @@ def verify_unstack_program_with_learned_invariant(
             visualization_prefix=visualization_prefix,
         )
         learned_invariant, learned_invariant_lists = InvInference(
-            demo_store, loop_id, tower_vocabulary("unstack"), inference_context
+            demo_store,
+            loop_id,
+            tower_vocabulary("unstack"),
+            inference_context,
+            minimizer=invariant_minimizer,
         )
     else:
         inference_context = highlevel_verification_lib.HighLevelContext(
             mode="declare", use_tbl=True, exists_top=True
         )
         learned_invariant, learned_invariant_lists = InvInference(
-            demo_store, loop_id, tower_vocabulary("unstack"), inference_context
+            demo_store,
+            loop_id,
+            tower_vocabulary("unstack"),
+            inference_context,
+            minimizer=invariant_minimizer,
         )
 
     if verification_mode == "finite":
@@ -187,6 +197,7 @@ def verify_unstack_program_with_learned_invariant(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    add_inference_options(parser)
     add_motion_options(parser)
     parser.add_argument(
         "--table-surface-height",
@@ -231,6 +242,7 @@ if __name__ == "__main__":
     noise = motion_noise_from_args(parser, args)
 
     verify_unstack_program_with_learned_invariant(
+        invariant_minimizer=args.invariant_minimizer,
         noise=noise,
         motion_timeout_ms=args.motion_timeout_ms,
         table_surface_height=args.table_surface_height,

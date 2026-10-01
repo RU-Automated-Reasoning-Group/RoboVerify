@@ -34,9 +34,11 @@ from synthesis.cfg.straightline import (
 )
 from synthesis.cfg.tasks import task_identity, task_spec
 from synthesis.cfg.verified_synthesis import verified_synthesis
+from synthesis.entry.inference_options import add_inference_options
 from synthesis.entry.motion_options import add_motion_options, motion_noise_from_args
 from synthesis.entry.predicate_options import add_predicate_options
 from synthesis.experiment.run_logger import RunLogger
+from synthesis.inference_lib.minimization import using_invariant_minimizer
 from synthesis.mcmc.synthesis import (
     make_roboverify_env,
     preserved_global_rng,
@@ -49,7 +51,9 @@ from synthesis.verification_lib.highlevel_verification_lib import HighLevelConte
 
 
 def run(args, logger):
-    with using_higher_tolerance(
+    with using_invariant_minimizer(
+        getattr(args, "invariant_minimizer", None)
+    ), using_higher_tolerance(
         getattr(args, "higher_tolerance", DEFAULT_HIGHER_TOLERANCE)
     ):
         return _run(args, logger)
@@ -401,6 +405,7 @@ def main(argv=None):
         choices=("ON_star", "ON_star_zero", "Higher", "Scattered", "equality"),
     )
     parser.add_argument("--invariant-variables", type=int, default=2)
+    add_inference_options(parser)
     add_motion_options(parser)
     add_predicate_options(parser)
     parser.add_argument(

@@ -4,10 +4,10 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import sympy
-import z3
-
 import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
+import z3
 from synthesis.inference_lib import quant_enum_merge
+from synthesis.inference_lib.minimization import espresso_form, get_invariant_minimizer
 from synthesis.util import on
 from synthesis.util.symbols import fresh_const
 
@@ -679,6 +679,8 @@ def construct_truth_table_and_extract_expression_for_phi(
         raise ValueError("Not all assignment from current_S are accepted")
 
     var_symbols = sympy.symbols(f"term0:{num_selected}")
+    if get_invariant_minimizer() == "pyeda":
+        return espresso_form(var_symbols, accepted_values), var_symbols
     return sympy.SOPform(var_symbols, accepted_values), var_symbols
 
 
@@ -708,7 +710,9 @@ def construct_truth_table_and_extract_expression_for_phi_prime(
         raise ValueError("Not all assignment from current_U are rejected")
 
     var_symbols = sympy.symbols(f"term0:{num_selected}")
-    if num_selected > _POSFORM_VAR_THRESHOLD:
+    if get_invariant_minimizer() == "pyeda":
+        pos_expr = espresso_form(var_symbols, rejected_values, complement=True)
+    elif num_selected > _POSFORM_VAR_THRESHOLD:
         pos_expr = _sympy_pos_unminimized_from_rejected(
             var_symbols, rejected_values, num_selected
         )

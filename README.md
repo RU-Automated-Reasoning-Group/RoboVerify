@@ -46,6 +46,9 @@ diagnose Release drift and compare Pick stopping tolerances.
 **Symbolic invariant inference uses the partition-based algorithm in
 `inference.py`, through `InvInference`.** It is the intended algorithm for both
 pipeline modes and standalone symbolic CEGIS; there is no learner-selection flag.
+The truth-table minimizer is selectable with `--invariant-minimizer sympy|pyeda`
+(SymPy by default). This preserves the partition algorithm and truth-table
+semantics; see [minimizer settings](roboverify/synthesis/inference_lib/README.md#truth-table-minimization).
 
 **Supplied Stack verification has passed with the intended learner and the vocabulary
 `ON_star Higher Scattered equality`.** With the equal-height entry premise and

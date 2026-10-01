@@ -5,6 +5,7 @@ import json
 from dataclasses import asdict
 
 from synthesis.cfg.collection import VideoRecorder
+from synthesis.entry.inference_options import add_inference_options
 from synthesis.entry.predicate_options import add_predicate_options
 from synthesis.experiment.invariant_learning.runner import (
     ExperimentConfig,
@@ -53,6 +54,7 @@ def build_parser():
         default=["ON_star", "Higher", "Scattered", "equality"],
     )
     parser.add_argument("--invariant-variables", type=int, default=2)
+    add_inference_options(parser)
     parser.add_argument(
         "--save-video",
         action="store_true",

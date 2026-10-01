@@ -199,13 +199,21 @@ def to_inference_inputs(store, loop_id, vocab, context):
     return states_zero, states, mappings
 
 
-def InvInference(D_V, loop_id, vocab, context):
+def InvInference(D_V, loop_id, vocab, context, *, minimizer=None):
     """Learn with the existing algorithm; validation remains the verifier's job."""
     from synthesis.inference_lib.inference import loop_inference
+    from synthesis.inference_lib.minimization import using_invariant_minimizer
 
     states_zero, states, mappings = to_inference_inputs(D_V, loop_id, vocab, context)
     relations = [r if r == "equality" else getattr(context, r) for r in vocab.relations]
     constants = [context.get_consts(name) for name in vocab.constants]
-    return loop_inference(
-        states_zero, states, vocab.k, relations, constants, mappings, context=context
-    )
+    with using_invariant_minimizer(minimizer):
+        return loop_inference(
+            states_zero,
+            states,
+            vocab.k,
+            relations,
+            constants,
+            mappings,
+            context=context,
+        )

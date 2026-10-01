@@ -4,8 +4,6 @@ import time
 from copy import deepcopy
 
 import numpy as np
-from z3 import And, Consts, ForAll, Not, Or
-
 import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
 from synthesis.api.instructions import PickPlaceByName
 from synthesis.api.program import Assign, Program, Put, While
@@ -19,6 +17,7 @@ from synthesis.inference_lib.inference import (
 )
 from synthesis.predicates.term import to_z3
 from synthesis.verification_lib.motion_verification import MotionContract
+from z3 import And, Consts, ForAll, Not, Or
 
 
 def build_stack_programs(
@@ -95,12 +94,17 @@ def verify_stack_program_with_learned_invariant(
     visualization_prefix: str = "verify_stack",
     noise=None,
     motion_timeout_ms: int = 5000,
+    invariant_minimizer=None,
 ):
     """Infer from recorded loop-head demonstrations and verify the stack program."""
     # Inference is always done in the infinite-block (DeclareSort) setting.
     inference_context = highlevel_verification_lib.HighLevelContext(mode="declare")
     learned_invariant, learned_invariant_lists = InvInference(
-        demo_store, loop_id, tower_vocabulary("stack"), inference_context
+        demo_store,
+        loop_id,
+        tower_vocabulary("stack"),
+        inference_context,
+        minimizer=invariant_minimizer,
     )
 
     if verification_mode == "finite":

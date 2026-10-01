@@ -63,6 +63,7 @@ training data.
 | `--trajectory-timeout-seconds` | 60 for generated-scene preparation and execution together. |
 | `--invariant-relations` | `ON_star Higher Scattered equality`. |
 | `--invariant-variables` | 2 quantified learner variables. |
+| `--invariant-minimizer` | `sympy` (default) or `pyeda` (Espresso); selects Boolean minimization within the same partition learner. |
 | `--higher-tolerance` | 0.001 metres, shared by simulation predicates, inference, and geometric checking. |
 | `--seed` | 0; execution seeds increase by update number. Seeds do not replace solver-generated layouts. |
 | `--motion-timeout-ms` | 10000 per motion query. |
