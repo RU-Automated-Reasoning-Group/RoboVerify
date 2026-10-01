@@ -26,8 +26,21 @@ for counterexample in result.counterexamples:
 `verify_motion_block` (also exported as `MotionVerify`) is the corresponding
 basic-block API. It accepts high-level entry conditions and either a lowered
 `PickPlaceByName` chain or named Pick/Move/Release primitives. `initial_positions` can additionally bind a concrete scene
-for testing; the optional `sym` entry is the arbitrary other block. `sym` is
+for testing and counterexample replay; the optional `sym` entry fixes the
+otherwise arbitrary other block. `sym` is
 reserved and must not appear in the program's constants list.
+
+Collision sweeps and Move-support checks each use one arbitrary obstacle `sym`,
+which may alias a named block or represent an unnamed block. Separate per-name
+VCs are redundant. Coordinates and aliases still update for every named object,
+and payload/contact exclusions apply by object equality. These checks have a
+`_sym` label. If `initial_positions`, `entry_positions`, or `initial_bindings`
+restrict `sym`, it cannot range over every obstacle. Such calls use a single
+`_scene` query containing the disjunction of violations for all represented
+obstacles. This preserves named-obstacle coverage in fixed-scene tests and in
+the saved motion-counterexample penalties used by CEGIS and CFG repair.
+That replay is a Z3 check of saved geometry; it is not a MuJoCo execution or
+an unrestricted proof of the repaired program.
 
 The checks cover consistency, collision sweeps, release/support, direct placement,
 frame preservation, complete ON*/Higher/Scattered effects and root alignment.
@@ -96,6 +109,8 @@ controller update did not regenerate them or rerun this archive-consuming
 pipeline. The subsequent [PyEDA recheck](../cfg/VERIFICATION.md#provided-stack-verification)
 collected five fresh four-block demonstrations with the current controllers and
 passed both symbolic verification and all 63 noiseless motion checks.
+The [obstacle-VC consolidation recheck](../cfg/VERIFICATION.md#consolidating-redundant-obstacle-checks)
+passes the same supported-model proof with 12 symbolic and 36 motion checks.
 
 Collect full-state demonstrations with `synthesis.entry.collect_demos`. Stack
 collection performs 50 holding steps before recording; the resulting full state

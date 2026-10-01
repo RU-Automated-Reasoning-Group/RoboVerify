@@ -352,6 +352,53 @@ SMT2 queries for refuted checks. Recorded directories under `runs/higher-ablatio
 - `20261001-200026-0a7a393-on-only-translated-only`
 - `20261001-200019-0a7a393-structural-translated-only`
 
+### Consolidating redundant obstacle checks
+
+Collision and Move-support VCs now use one arbitrary obstacle `sym`, which may
+alias any named block. Stack has six collision sweeps and three Move-support
+checks: each previously checked four names separately and now issues one query.
+This removes 27 duplicate VCs, reducing the complete motion report from 63 to 36
+checks. Named coordinates, alias updates, intentional contact exclusions,
+placement/effect checks and geometric premises are preserved.
+
+The concrete-scene API can pin `sym` through current/frozen coordinates or alias
+bindings. In that case, a single `_scene` VC combines the obstacle alternatives;
+checking only the pinned `sym` could miss a different named obstacle. Ordinary
+unrestricted proofs use `_sym` labels. Fixed-scene replay is used in tests and
+motion-repair penalties; it checks saved geometry in Z3, not in MuJoCo.
+
+Higher-retained rechecks on the same five archived executions:
+
+| Motion premises | Symbolic checks | Core motion | Auxiliary geometry |
+| --- | --- | --- | --- |
+| Supported-tower model | 12 valid | 30 valid | 6 valid |
+| Translated premises only | 11 valid, unbounded exit unknown | 28 valid, 2 refuted | 6 refuted |
+
+The two remaining core failures are `alignment_entry` and
+`collision_1_approach_sym`; the earlier named approach failures were duplicates.
+All carried-block collision, Move-support, release, frame and predicate-effect
+checks still pass. The translated-only audit records 35 MotionProblem queries,
+zero quantified premises, and seven quantified conclusions; the separate root
+selection result accounts for the other check in the 36-check report.
+
+The learned invariant is byte-identical in both runs and in the earlier ablation
+(SHA256 starts `f69f7e7686c84fb1`). The translated-only run's exit result is Z3
+`unknown` with reason `(incomplete quantifiers)`, not a counterexample or a pass.
+The supported run independently proves all 12 symbolic checks; the symbolic
+backend and its premises are unaffected by this motion-only change. An
+intermediate collision-only recheck also encountered the same symbolic unknown.
+This solver variability is retained in the evidence rather than counted as
+successful verification.
+
+Final implementation runs under `runs/higher-ablation/`:
+
+- `20261001-203723-9871bc5-baseline` — supported model, 36 motion checks valid.
+- `20261001-203540-9871bc5-baseline-translated-only` — 28 valid, 8 refuted.
+
+The historical ablation tables above retain their original counts. Reproduce
+with `--case baseline`; add `--without-extra-motion-premises` for the
+translated-only run.
+
 ## Counterexample learning without initial demonstrations
 
 The separate [Section 6.2 experiment](../experiment/invariant_learning/README.md)

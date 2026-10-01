@@ -91,15 +91,14 @@ class PrimitiveMotionProblem(MotionProblem):
         )
 
     def sweep(self, start, end, *, payload=None, contact=None, phase=None):
-        for name, position in self.current.items():
-            exclude = [
-                z3.Not(self.same(name, n)) for n in (payload, contact) if n is not None
-            ]
-            # An empty gripper is modeled as a point against cubes of half-size L/2.
-            # A carried cube uses the existing L Minkowski radius.
-            if payload is None:
-                t = fresh_const(z3.RealSort(), "arm_t")
-                collision = z3.And(
+        # An empty gripper is a point against cubes of half-size L/2. A carried
+        # cube uses the existing L Minkowski radius. One free t suffices for
+        # the disjunction of obstacle alternatives in concrete-scene replays.
+        if payload is None:
+            t = fresh_const(z3.RealSort(), "arm_t")
+
+            def collision_at(position):
+                return z3.And(
                     t >= 0,
                     t <= 1,
                     *(
@@ -108,27 +107,32 @@ class PrimitiveMotionProblem(MotionProblem):
                         for i in range(3)
                     ),
                 )
-            else:
-                collision = self.context.encode_collision_at(position, start, end)
-            label = f"collision_{self.step}"
-            if phase is not None:
-                label += "_" + phase
-            self.check(
-                f"{label}_{name}",
-                z3.And(self.physical(name), *exclude, collision),
-            )
+
+        else:
+
+            def collision_at(position):
+                return self.context.encode_collision_at(position, start, end)
+
+        label = f"collision_{self.step}"
+        if phase is not None:
+            label += "_" + phase
+        self.check_obstacles(
+            label,
+            collision_at,
+            exclude=tuple(n for n in (payload, contact) if n is not None),
+        )
 
     def transport(self, name, endpoint):
         before = dict(self.current)
         start = before[name]
+        self.check_obstacles(
+            f"support_{self.step}",
+            lambda position: z3.And(
+                _on_star(position, start, self.context.L), position[2] > start[2]
+            ),
+            exclude=(name,),
+        )
         for other, position in before.items():
-            supported = z3.And(
-                self.physical(other),
-                z3.Not(self.same(other, name)),
-                _on_star(position, start, self.context.L),
-                position[2] > start[2],
-            )
-            self.check(f"support_{self.step}_{other}", supported)
             self.current[other] = tuple(
                 z3.If(self.same(other, name), end, old)
                 for end, old in zip(endpoint, position)

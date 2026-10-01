@@ -46,7 +46,8 @@ is recorded in entry 37.
 (21); run and report the Section 6.2 experiment before giving new benchmark counts
 (34). The four historical demonstration archives remain deleted; the fresh PyEDA
 collection is documented in the verification guide. Physical refinement and the Scattered mismatch remain open;
-Scattered follow-up and redundant-check simplification are deferred (4, 33, 35).
+Scattered follow-up is deferred (4, 33); redundant motion checks are consolidated
+with fixed-scene coverage preserved (35).
 
 ## 1. Theorem 5.2 contradicts the paper's own Table 7 (`R_Higher`)
 
@@ -607,14 +608,25 @@ See the [experiment guide](roboverify/synthesis/experiment/invariant_learning/RE
 
 ## 35. Named motion checks overlap the arbitrary-object witness
 
-**Optional simplification deferred by user decision.** An unrestricted arbitrary
+**Redundant VCs consolidated at user request.** An unrestricted arbitrary
 block `sym` may alias any named block, so its collision/Move-support obligation
 covers separate named cases. But the concrete-scene API can fix sym's position;
 then it is not an unrestricted witness and removing named checks loses coverage.
 
-Keep existing checks/reporting. Any later consolidation must preserve operand
-coordinates, aliases, contact exclusions, placement/effect obligations and
-named-obstacle coverage.
+Ordinary proofs now generate one `_sym` VC per collision sweep or Move-support
+check. When explicit current/frozen positions or alias bindings restrict `sym`,
+one `_scene` query combines violations for all represented obstacles. Operand
+coordinates, alias updates, contact exclusions, disturbance semantics and
+placement/effect obligations are retained. This covers fixed-scene tests and
+motion-counterexample penalties during CEGIS/CFG repair; those penalties do not
+replace unrestricted verification or execute the simulator.
+
+The Higher-retained supported Stack recheck passes 12 symbolic and 36 motion
+checks (formerly 63). With extra motion premises removed, 28 motion checks pass,
+the input-alignment and single gripper-approach check fail, and six auxiliary
+geometry diagnostics fail. That run's symbolic exit check is unknown; the
+supported run proves the same byte-identical invariant. See the
+[recheck evidence](roboverify/synthesis/cfg/VERIFICATION.md#consolidating-redundant-obstacle-checks).
 
 ## 36. Component-wise saturation bends the physical gripper path
 

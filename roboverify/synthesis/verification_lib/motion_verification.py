@@ -151,6 +151,15 @@ class MotionProblem:
         self.released = False
         self.grasp_error = (0, 0, 0)
         self.held = False
+        # In ordinary proofs sym may alias any named or unnamed block. Scene
+        # replay can pin that witness, so named obstacles must then remain in
+        # each obstacle query as alternatives to the fixed witness.
+        self.fixed_obstacle_witness = (
+            "sym" in (initial_positions or {})
+            or "sym" in (entry_positions or {})
+            or "sym" in (initial_bindings or {})
+            or "sym" in (initial_bindings or {}).values()
+        )
         for name, xyz in (initial_positions or {}).items():
             if name not in self.initial or len(xyz) != 3:
                 raise ValueError(f"Unknown or nonphysical scene object: {name!r}")
@@ -182,6 +191,25 @@ class MotionProblem:
 
     def physical(self, name):
         return z3.Not(self.context._is_table(self.constants[name]))
+
+    def check_obstacles(self, obligation, violation_at, *, exclude=()):
+        """One VC per obstacle property; sym also covers named blocks.
+
+        Use current geometry and equality-based payload/contact exclusions. If
+        a replay pins sym, combine the concrete alternatives in one disjunction
+        instead of treating the fixed witness as an arbitrary obstacle.
+        """
+        names = tuple(self.current) if self.fixed_obstacle_witness else ("sym",)
+        violations = [
+            z3.And(
+                self.physical(name),
+                *(z3.Not(self.same(name, other)) for other in exclude),
+                violation_at(self.current[name]),
+            )
+            for name in names
+        ]
+        suffix = "scene" if self.fixed_obstacle_witness else "sym"
+        return self.check(f"{obligation}_{suffix}", z3.Or(*violations))
 
     def error(self, epsilon, prefix):
         terms, bounds = bounded_noise(epsilon, prefix)
@@ -374,17 +402,20 @@ class MotionProblem:
                 endpoint = tuple(
                     p + e - g for p, e, g in zip(endpoint, error, self.grasp_error)
                 )
-            # Check the same swept-cube formula against the arbitrary other block
-            # and every named block, using the current (not stale entry) geometry.
-            for name, position in self.current.items():
-                self.check(
-                    f"collision_{index}_{name}",
-                    z3.And(
-                        self.physical(name),
-                        z3.Not(self.same(name, grab)),
-                        self.context.encode_collision_at(position, start, endpoint),
-                    ),
-                )
+            self.check_obstacles(
+                f"collision_{index}",
+                lambda position: self.context.encode_collision_at(
+                    position, start, endpoint
+                ),
+                exclude=(grab,),
+            )
+            self.check_obstacles(
+                f"support_{index}",
+                lambda position: z3.And(
+                    _on_star(position, start, self.context.L), position[2] > start[2]
+                ),
+                exclude=(grab,),
+            )
             before = dict(self.current)
             for name, position in before.items():
                 supported = z3.And(
@@ -403,7 +434,6 @@ class MotionProblem:
                     z3.If(self.same(name, grab), end, z3.If(supported, unknown, old))
                     for end, unknown, old in zip(endpoint, disturbed, position)
                 )
-                self.check(f"support_{index}_{name}", supported)
             names = list(self.current)
             for i, name in enumerate(names):
                 for other in names[i + 1 :]:
@@ -418,17 +448,14 @@ class MotionProblem:
                     self.noise.eps_release, f"motion_release_{index}"
                 )
                 release_end = tuple(p + e for p, e in zip(endpoint, release_error))
+                self.check_obstacles(
+                    f"release_collision_{index}",
+                    lambda position: self.context.encode_collision_at(
+                        position, endpoint, release_end
+                    ),
+                    exclude=(grab,),
+                )
                 for name, position in self.current.items():
-                    self.check(
-                        f"release_collision_{index}_{name}",
-                        z3.And(
-                            self.physical(name),
-                            z3.Not(self.same(name, grab)),
-                            self.context.encode_collision_at(
-                                position, endpoint, release_end
-                            ),
-                        ),
-                    )
                     self.current[name] = tuple(
                         z3.If(self.same(name, grab), end, old)
                         for end, old in zip(release_end, position)

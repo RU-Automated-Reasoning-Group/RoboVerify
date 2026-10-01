@@ -64,13 +64,13 @@ class PrimitiveMotionTests(unittest.TestCase):
                 approach = next(
                     c
                     for c in problem.checks
-                    if c.obligation == "collision_1_approach_obstacle"
+                    if c.obligation == "collision_1_approach_scene"
                 )
                 self.assertEqual(approach.status, expected)
                 descent = next(
                     c
                     for c in problem.checks
-                    if c.obligation == "collision_1_descend_obstacle"
+                    if c.obligation == "collision_1_descend_scene"
                 )
                 self.assertEqual(descent.status, "valid")
 
@@ -111,7 +111,82 @@ class PrimitiveMotionTests(unittest.TestCase):
         self.assertFalse(result)
         self.assertTrue(
             any(
-                c.obligation == "collision_1_b" and c.status == "refuted"
+                c.obligation == "collision_1_scene" and c.status == "refuted"
                 for c in result.checks
             )
         )
+
+    def test_one_arbitrary_obstacle_covers_named_and_unnamed_blocks(self):
+        for obstacle in ("b", "b0", "unnamed"):
+            with self.subTest(obstacle=obstacle):
+                p = PrimitiveMotionProblem(
+                    LowLevelContext(default_L=0.05),
+                    [],
+                    ["a", "b", "b0"],
+                    MotionContract("a", "b"),
+                    None,
+                    "sweep",
+                    3000,
+                    initial_positions={
+                        "a": [0.5, 0, 0],
+                        "b": [0, 0, 0],
+                        "b0": [0, 0, 0],
+                    },
+                )
+                if obstacle == "unnamed":
+                    p.solver.add(
+                        *(v == n for v, n in zip(p.initial["sym"], [0.2, 0, 0]))
+                    )
+                else:
+                    # Select a possible alias of the originally free witness.
+                    p.solver.add(p.same("sym", obstacle))
+                p.sweep([-0.1, 0, 0], [0.3, 0, 0])
+                self.assertEqual(len(p.checks), 1)
+                self.assertEqual(p.checks[0].obligation, "collision_0_sym")
+                self.assertEqual(p.checks[0].status, "refuted")
+                if obstacle != "unnamed":
+                    self.assertEqual(p.checks[0].counterexample.bindings["sym"], "b")
+
+    def test_collision_witness_uses_updated_alias_geometry_and_contact_exclusions(self):
+        p = PrimitiveMotionProblem(
+            LowLevelContext(default_L=0.05),
+            [],
+            ["a", "b"],
+            MotionContract("a", "b"),
+            None,
+            "sweep",
+            3000,
+            initial_positions={"a": [0, 0, 0], "b": [1, 1, 0]},
+        )
+        p.solver.add(p.same("sym", "a"))
+        p.transport("a", [0.2, 0, 0])
+        p.sweep([0.1, 0, 0], [0.3, 0, 0])
+        self.assertEqual(p.checks[-1].status, "refuted")
+        p.sweep([0.1, 0, 0], [0.3, 0, 0], contact="a")
+        self.assertEqual(p.checks[-1].status, "valid")
+        p.sweep([0.1, 0, 0], [0.3, 0, 0], payload="a")
+        self.assertEqual(p.checks[-1].status, "valid")
+
+    def test_one_support_check_covers_free_and_fixed_obstacle_witnesses(self):
+        for fixed in (False, True):
+            with self.subTest(fixed=fixed):
+                positions = {"a": [0, 0, 0], "b": [0, 0, 0.05]}
+                if fixed:
+                    positions["sym"] = [2, 2, 0]
+                p = PrimitiveMotionProblem(
+                    LowLevelContext(default_L=0.05),
+                    [],
+                    ["a", "b"],
+                    MotionContract("a", "b"),
+                    None,
+                    "support",
+                    3000,
+                    initial_positions=positions,
+                )
+                if not fixed:
+                    p.solver.add(p.same("sym", "b"))
+                p.transport("a", [0.3, 0, 0])
+                self.assertEqual(len(p.checks), 1)
+                suffix = "scene" if fixed else "sym"
+                self.assertEqual(p.checks[0].obligation, f"support_0_{suffix}")
+                self.assertEqual(p.checks[0].status, "refuted")

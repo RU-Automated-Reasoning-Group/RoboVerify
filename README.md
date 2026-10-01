@@ -61,6 +61,8 @@ controllers**: all 12 symbolic checks (sizes 2–4 and unbounded) and all 63 noi
 motion checks were valid, without invariant refinement or program repair.
 The run returned `verified_model`; the earlier SymPy proof predates the combined
 head-contact/Release/Pick update.
+After [redundant obstacle VCs were consolidated](roboverify/synthesis/cfg/VERIFICATION.md#consolidating-redundant-obstacle-checks),
+the same supported-model proof passes 12 symbolic and 36 motion checks.
 See the [verification command](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification)
 and the decisions on [initial heights](PAPER-DISCREPANCIES.md#31-stack-resets-equal-height-assumption-belongs-in-the-task-precondition)
 and [Higher tolerance](PAPER-DISCREPANCIES.md#32-higher-tolerance-for-contact-induced-height-differences).

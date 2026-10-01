@@ -16,6 +16,7 @@ from synthesis.verification_lib.highlevel_verification_lib import HighLevelConte
 from synthesis.verification_lib.lowlevel_verification_lib import LowLevelContext
 from synthesis.verification_lib.motion_verification import (
     MotionContract,
+    MotionProblem,
     verify_motion_block,
 )
 
@@ -78,7 +79,7 @@ class MotionVerification(unittest.TestCase):
                 self.contract,
                 block_v="1",
                 initial_positions=self.scene,
-                **kwargs
+                **kwargs,
             )
 
     def test_contract_and_frame_hold_in_clear_scene(self):
@@ -245,7 +246,56 @@ class MotionVerification(unittest.TestCase):
         result = self.verify()
         self.assertFalse(result)
         self.assertTrue(
-            any(c.obligation == "collision_1_sym" for c in result.counterexamples)
+            any(c.obligation == "collision_1_scene" for c in result.counterexamples)
+        )
+
+    def test_one_support_check_retains_named_obstacles_and_disturbance(self):
+        for fixed in (False, True):
+            with self.subTest(fixed=fixed):
+                positions = {"a": [0, 0, 0], "b": [0, 0, 0.05]}
+                if fixed:
+                    positions["sym"] = [2, 2, 0]
+                p = MotionProblem(
+                    LowLevelContext(default_L=0.05),
+                    [],
+                    ["a", "b"],
+                    MotionContract("a", "b"),
+                    None,
+                    "support",
+                    3000,
+                    initial_positions=positions,
+                )
+                if not fixed:
+                    p.solver.add(p.same("sym", "b"))
+                p.execute([waypoint("a", "a", "a", "a", [0.3, 0, 0], release=False)])
+                checks = [c for c in p.checks if c.obligation.startswith("support_")]
+                self.assertEqual(len(checks), 1)
+                suffix = "scene" if fixed else "sym"
+                self.assertEqual(checks[0].obligation, f"support_0_{suffix}")
+                self.assertEqual(checks[0].status, "refuted")
+                p.check("disturbance", p.current["b"][0] != p.initial["b"][0])
+                self.assertEqual(p.checks[-1].status, "refuted")
+
+    def test_fixed_replay_witness_does_not_hide_named_release_collision(self):
+        p = MotionProblem(
+            LowLevelContext(default_L=0.05),
+            [],
+            ["a", "b"],
+            MotionContract("a", "b"),
+            NoiseSpec(0, 0, 0.04),
+            "release",
+            3000,
+            initial_positions={
+                "a": [0, 0, 0.2],
+                "b": [0.08, 0, 0.2],
+                "sym": [2, 2, 0],
+            },
+        )
+        p.execute([waypoint("a", "a", "a", "a", [0, 0, 0], release=True)])
+        collision = [c for c in p.checks if "collision_" in c.obligation]
+        self.assertEqual(
+            [(c.obligation, c.status) for c in collision],
+            [("collision_0_scene", "valid"), ("release_collision_0_scene", "refuted")],
         )
 
     def test_no_release_cannot_realize_placement_contract(self):

@@ -80,6 +80,10 @@ The 2026-10-01 PyEDA recheck used five fresh four-block demonstrations with the
 current controllers and passed all 12 symbolic checks (sizes 2–4 and unbounded)
 and 63 noiseless motion checks. The bootstrap needed no refinement or repair;
 the earlier SymPy proof predates the combined controller update.
+After [redundant obstacle VCs were consolidated](roboverify/synthesis/cfg/VERIFICATION.md#consolidating-redundant-obstacle-checks),
+the supported-model recheck passes 12 symbolic and 36 motion checks. Unrestricted
+collision/Move-support checks use only `sym`; fixed-scene calls combine named
+alternatives in one query when explicit inputs pin that witness.
 The [Higher-removal ablation](roboverify/synthesis/cfg/VERIFICATION.md#higher-removal-ablation)
 shows that ON*/Scattered/equality learning alone loses necessary structure, but a
 diagnostic four-clause Higher-free invariant passes both proof levels with the
