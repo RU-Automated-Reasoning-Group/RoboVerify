@@ -1,5 +1,9 @@
 # Motion verification and bounded errors
 
+A [draft proof of WP soundness](WP-SOUNDNESS-DRAFT.md) gives the relational
+semantics, primitive side conditions, and argument for the tower rewrites.
+It is a mathematical draft for review, separate from the motion checks below.
+
 `Program.lowlevel_verification` requires an explicit `MotionContract` for each
 loop. The contract identifies the manipulated source and placement target.
 `frame_base` is a compatibility hint; root discovery must prove the reference.
