@@ -2,7 +2,9 @@
 
 A [draft proof of WP soundness](WP-SOUNDNESS-DRAFT.md) gives the relational
 semantics, primitive side conditions, and argument for the tower rewrites.
-It is a mathematical draft for review, separate from the motion checks below.
+Its [Lean companion](../../proofs/wp_soundness/README.md) checks the relational
+rewrites and conditional program soundness under explicit model assumptions.
+Python correspondence and the motion checks below remain separate.
 
 `Program.lowlevel_verification` requires an explicit `MotionContract` for each
 loop. The contract identifies the manipulated source and placement target.

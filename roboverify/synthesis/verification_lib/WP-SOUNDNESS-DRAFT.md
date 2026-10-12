@@ -2,9 +2,12 @@
 
 This is an initial mathematical proof for review. It establishes exact atomic
 rewrites in a deliberately restricted relational model, then gives a conditional
-partial correctness theorem for programs. The proof has not been checked in a
-proof assistant. It does not establish that every call accepted by the current
-implementation meets the theorem's hypotheses.
+partial correctness theorem for programs. A [Lean mechanization](../../proofs/wp_soundness/README.md)
+now checks model preservation, the relation rewrites, formula induction, guarded
+primitive WPs and the program theorem for the language specified there. The
+solver-axiom inclusion and geometric interpretation below remain prose arguments.
+Neither establishes that every call accepted by the current implementation
+meets the theorem's hypotheses.
 
 The main distinction is between attaching a singleton block and relocating a
 top block that may already have a support. The current block-placement rewrite
@@ -351,21 +354,23 @@ Define a proposed general relocation operation by
 Relocate(a,b)\equiv Separate(a);Attach(a,b). \tag{10}
 \]
 
-Its precondition requires \(Clear(a)\), \(b\in B\), \(a\ne b\), and that \(b\)
-be clear in the state after Separate. Checking the target afterward also allows
-putting a block back onto its original direct support.
+The agreed public Put contract requires \(a,b\in B\), \(a\ne b\), and
+\(Clear(a)\land Clear(b)\) **before** execution. Separating a preserves
+b's clear status. A target occupied initially by a, including its original
+direct support, is excluded by this contract even if separation would clear it.
 
 **Corollary 1 (relocation).** Under this precondition, (10) has the same final
 support state as replacing \(p(a)\) directly by \(b\). Its assertion transformer
 is
 
 \[
-W_{\rm relocate}(Q)=W_{\rm separate}
+W_{\rm relocate}(Q)=Clear(b)\land W_{\rm separate}
                          \bigl(W_{\rm attach}(Q)\bigr). \tag{11}
 \]
 
 **Proof.** Separate changes only \(p(a)\) to \(\bot\), making \(a\) a singleton.
-Attach is then legal by the stated condition and changes only \(p(a)\) to \(b\).
+The pre-state target guard remains true, so Attach is legal and changes only
+\(p(a)\) to \(b\).
 All other support values, bindings, and frozen state agree with direct
 replacement. Since the relations are independently defined from those data,
 all final predicates agree. Apply Theorem 1 to the two steps in execution order,
@@ -523,6 +528,13 @@ remain separate obligations.
 
 ## Validation of this draft
 
+The [Lean project](../../proofs/wp_soundness/README.md) checks the relational
+proof without a block-count bound. Its build includes an axiom audit rejecting
+unproved lemmas and additional custom axioms. The correspondence guide identifies
+the checked declarations and the remaining Python, binding and geometric
+boundaries. It also includes checked counterexamples to attachment-only general
+relocation and to the Higher identity without complete levels.
+
 A bounded review check enumerated all 591 labeled chain forests on one through
 five physical blocks. It loaded the six existing predicate rewrite helper
 bodies from program.py and evaluated their generated formulas over each finite
@@ -553,15 +565,16 @@ matters; it is not an SMT proof of all the lemmas.
 | Equations (1) and (2) | ON_star rewrites in [program.py](../api/program.py) | Exact under the respective primitive side conditions |
 | Lemmas 4 and 5 | Higher rewrites in [program.py](../api/program.py) | Exact on complete support chains with integer levels |
 | Lemma 6 | Scattered rewrites in [program.py](../api/program.py) | Exact for separated columns represented by distinct chains |
-| Formula induction | Rewriters in [program.py](../api/program.py) and hygiene helpers in [symbols.py](../util/symbols.py) | Mathematical proof; Python implementation is not mechanically verified |
-| Get and loop obligations | WP and VC generation in [program.py](../api/program.py) | Requires the stated binding scope and additional legality obligations |
+| Formula induction | Rewriters in [program.py](../api/program.py) and hygiene helpers in [symbols.py](../util/symbols.py) | Lean checks its structural rewriter; correspondence to Python is unproved |
+| Get and loop obligations | WP and VC generation in [program.py](../api/program.py) | Lean checks single-name Get, annotated loops and an explicit witness-loop lowering; runtime binding correspondence and legality obligations remain |
 | Relocation | Current attachment rewrite versus (11) | Proposed derived semantics; general relocation is not implemented by the current attachment rewrite |
 | Geometry | [Motion verification guide](README.md) | Separate refinement task; model-level proof only |
 
-The first review should settle these points:
+The public Put decision is top-to-top general relocation. Review now concerns
+its implementation correspondence and the remaining domain boundaries:
 
-1. Is attaching a singleton the intended primitive, or should block-target Put
-   denote general relocation? The latter requires the composed symbolic update.
+1. Where should the current attachment-only dispatcher be replaced by the
+   guarded general-relocation transformer?
 2. Is the complete, separated-chain model an acceptable initial theorem domain?
    If a broader domain is intended, the height and separation lemmas must be
    revisited.
@@ -569,9 +582,8 @@ The first review should settle these points:
    current attachment guard alone does not establish them.
 4. Are the witness-scope restrictions satisfied by the programs to which
    Theorem 2 will be applied?
-5. Should the next formalization establish the remaining unbounded SMT lemmas,
-   stronger implementation correspondence, or the formula induction in a proof
-   assistant?
+5. Which remaining correspondence should be mechanized next: Python formula
+   rewriting, runtime witness scope, solver-axiom inclusion, or geometry?
 
 Existing findings remain open where recorded:
 [Higher assumptions](../../../PAPER-DISCREPANCIES.md#16-the-higher-rewrite-can-disagree-with-geometric-placement),

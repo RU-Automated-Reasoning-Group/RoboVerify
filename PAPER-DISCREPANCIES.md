@@ -273,6 +273,11 @@ at least L, with preservation checked at loop boundaries. These permit gaps
 and suffice for the checked Stack body (27); they are not a full encoding or
 general proof of all Higher rules. Failed/unknown checks remain unsuccessful.
 
+The [Lean formalization](roboverify/proofs/wp_soundness/README.md) now proves
+these Higher identities under an explicit complete-chain model and includes a
+checked missing-level counterexample. It does not derive completeness from the
+weaker motion premises or verify the Python-to-Lean translation.
+
 ## 17. Temporal validation acceptance and the incorrect rejection sentence
 
 **Code complete; paper edits only.** For refinement
@@ -496,6 +501,13 @@ After b:=c, `ON*(b,x) => ON*(x,b0)` fails for d. Geometric replay detaches c
 from d instead, so it cannot provide that failing successor for enlargement.
 The resulting no-progress diagnosis is not successful refinement. This mismatch
 outside source-singleton states remains unresolved.
+
+The agreed public Put contract requires both operands to be distinct, clear
+physical blocks before execution. The [Lean formalization](roboverify/proofs/wp_soundness/README.md)
+proves the guarded general-relocation WP and its deletion/attachment
+decomposition under that contract, and checks a counterexample to using the
+additive rule on a supported source. The production dispatcher is unchanged;
+implementing and establishing correspondence to the proved rule remains open.
 
 **Higher-removal ablation, 2026-10-01.** On the five current four-block
 demonstrations, ON*/Scattered/equality learned the clear-top, root and

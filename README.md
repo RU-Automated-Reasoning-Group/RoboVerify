@@ -95,6 +95,12 @@ verification. Stack is
 implemented with an adapter interface for future environments. See the
 [counterexample-learning experiment](roboverify/synthesis/experiment/invariant_learning/README.md).
 
+A [Lean mechanization of WP soundness](roboverify/proofs/wp_soundness/README.md)
+checks the complete, separated-chain model, including guarded top-to-top
+relocation, quantified assertions and conditional program partial correctness.
+The Python attachment-only dispatcher and physical refinement remain separate
+correspondence obligations; this does not change the verification status above.
+
 The supported scope is structured chains and flat loops for the tower tasks;
 the integrated synthesis CLI exposes Stack and Unstack. A successful
 `verified_model` result establishes partial correctness in the documented
@@ -109,6 +115,7 @@ geometric model, not total termination or physical-controller refinement.
 | [CFG verification](roboverify/synthesis/cfg/VERIFICATION.md) | Integrated synthesis/verification workflow and model assumptions. |
 | [Motion API](roboverify/synthesis/verification_lib/README.md) | Motion contracts, collision/support checks, bounded noise and BMC distinctions. |
 | [Draft WP soundness proof](roboverify/synthesis/verification_lib/WP-SOUNDNESS-DRAFT.md) | Relational model, atomic rewrite proofs, and explicit assumptions for review. |
+| [Mechanized WP proof](roboverify/proofs/wp_soundness/README.md) | Lean build, checked theorem statements, paper correspondence and review boundaries. |
 | [Standalone CEGIS](roboverify/synthesis/verification_lib/CEGIS.md) | APIs and commands for refining existing programs. |
 | [Counterexample learning](roboverify/synthesis/experiment/invariant_learning/README.md) | Section 6.2 experiment from a fixed program and no demonstrations; symbolic or both proof stages. |
 | [Trace inference](roboverify/synthesis/inference_lib/README.md) | Collecting loop-head states and learning invariants with DemoStore. |
