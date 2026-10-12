@@ -154,6 +154,57 @@ quantify over unnamed objects. The demonstration count supplies inference data,
 not a bound on the proof's block count. Full MCMC/CFG synthesis acceptance is
 resolved; it is separate from this supplied-program proof.
 
+### Removing the common-support comparability axiom (`on4`)
+
+**Both proof levels still pass with `on4` disabled (2026-10-12).** The omitted
+current-state ON* axiom is:
+
+```text
+forall x,y,c. O(x,c) and O(y,c) => O(x,y) or O(y,x)
+```
+
+The supplied Stack configuration above returned `verified_model` in about
+32 seconds: all 12 symbolic checks (establishment, preservation and exit at
+sizes 2–4 and unbounded) and all 36 noiseless motion checks were valid. Five
+candidate executions supplied 20 learning states; no invariant refinement or
+program repair was needed. The partition learner retained seven clauses,
+including `forall x. O(x,b0) => O(b,x)` in addition to the six documented above.
+
+A separate control reused the **unchanged six-clause invariant** saved by the
+2026-10-01 proof, with no relearning. It also passed all 12 symbolic and all 36
+motion checks without `on4`. Thus success does not depend on the extra clause
+retained during the new inference run.
+
+Only the tracked `on4` assertion was omitted, using a scoped in-memory wrapper
+around `HighLevelContext.add_axiom`. This covers finite/unbounded symbolic
+contexts and the abstract root-selection queries used by motion verification.
+The wrapper audited every omission and checked that `on1`, `on2`, `on3` and `on5`
+remained. Higher, Scattered, the separate frozen-geometry `on_zero_4` axiom,
+1 mm Higher tolerance, and all supported-height/alignment/arm premises remained.
+No obligation or premise-consistency check was skipped. This establishes that
+explicit `on4` is unnecessary for this supplied Stack proof under the remaining
+assumptions; it does not remove those geometric assumptions or change defaults.
+
+Recorded runs:
+
+- Full candidate-execution/inference pipeline:
+  `runs/cfg/20261012-183046-1f55b1b-stack-without-on4/`.
+- Fixed six-clause invariant control:
+  `runs/on4-ablation/20261012-183222-1f55b1b-fixed-baseline-invariant/`.
+
+Read either using `uv run python -m synthesis.experiment.report --run <path>`.
+The full run saves per-check verdicts under `artifacts/verification/`, the learned
+invariant under `artifacts/candidates/0/`, and the wrapper and omission audit as
+`artifacts/stack_without_on4.py` and `artifacts/on4-ablation-audit.json`.
+To reproduce, add that artifact directory to `PYTHONPATH`, use
+`uv run python -m stack_without_on4` in place of
+`uv run python -m synthesis.entry.synthesize_cfg` in the supplied command above,
+and set `--run-name stack-without-on4`. The fixed-invariant run also saves its
+control module as `artifacts/stack_on4_fixed_invariant.py`; add its artifact
+directory to `PYTHONPATH` and run `uv run python -m stack_on4_fixed_invariant`.
+Both commands require the usual simulator environment and execution from
+`roboverify/`. Production source files were not modified for either run.
+
 ### Three-block demonstrations
 
 In the earlier checked configuration, five three-block demonstrations also
