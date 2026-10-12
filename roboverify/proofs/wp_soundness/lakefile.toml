@@ -1,0 +1,9 @@
+name = "roboverify_wp"
+version = "0.1.0"
+defaultTargets = ["RoboVerify"]
+
+[leanOptions]
+warningAsError = true
+
+[[lean_lib]]
+name = "RoboVerify"
