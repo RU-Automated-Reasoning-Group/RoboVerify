@@ -1,8 +1,9 @@
 # Google CaP and the Proposed RoboVerify Integration
 
 This document compares Google's original Code as Policies (CaP) tabletop
-implementation with the proposed Stack integration. It specifies high-level
-pseudocode and the concrete RoboVerify environment interfaces involved.
+implementation with a proposed constrained baseline for RoboVerify's six tasks.
+It also gives an optional Stack compiler prototype and the concrete RoboVerify
+environment interfaces involved.
 **The proposed generator, validator, compiler, and evaluator are not implemented
 by this document.** The shared DSL is described in [DSL.md](DSL.md).
 
@@ -89,67 +90,166 @@ flowchart TD
     A -->|"State queries"| E
 ```
 
-## 2. Changes for RoboVerify
+## 2. Constrained CaP
 
-**CHANGED** and **ADDED** comments identify modifications in the proposed
-pseudocode. The diff below highlights the principal substitutions.
+### 2.1 Benchmark objective
+
+Evaluate whether RoboVerify's synthesis/verification approach produces better
+policies than CaP on **Stack, Unstack, Reverse, ReStack, Grid, and Pyramid** when
+both methods have the same physical primitives and task-relevant predicates.
+The immediate experiment measures constrained CaP's physical task success on
+these six benchmarks. Better RoboVerify performance is a hypothesis to test,
+not an assumed outcome or a consequence of having a proof.
+
+Constrained CaP retains instruction-to-code generation, recursive helper
+generation, and callable auxiliary LMPs. The required change is the interface
+available to generated policies and queries. Compiling everything before a
+rollout, removing runtime LMP calls, or requiring flat loops would be additional
+method changes; they do not follow from restricting primitives and predicates.
+
+### 2.2 Shared primitive and predicate boundary
+
+| Interface | Constraint |
+| --- | --- |
+| Physical actions | Use only RoboVerify's `Pick`, `Move`, and `Release`, with the same operand meaning, shared controllers, tolerances, action scaling, and primitive step budgets. |
+| Tower predicates | Expose `ON`, `ON_star`, `Higher`, `Scattered`, and object identity `eq`, according to the shared DSL vocabulary. Use the relational definition of `ON`. |
+| Historical relation | Permit `ON_star_zero` where the task uses it, particularly Reverse; preserve its declared historical scope through all stages. |
+| Goal interface | Grid/Pyramid require shared typed Goal handles, goal traversal/relations, and occupancy conditions. Finalize their semantics and execution adapters for both methods; do not invent CaP-only predicates. |
+| Object access | Supply input handles such as `b0` and `h0`. Select other objects through allowed relational queries and bindings. Keep raw physical IDs and coordinates inside the host. |
+| Logic and code structure | Retain sequencing, identity assignment, predicate-based conditionals/loops, quantified queries, and generated helpers. Every condition and selection must be expressible through the allowed DSL. |
+| Numeric parameters | Permit explicit finite action offsets and computations that only parameterize allowed actions. They must not introduce new geometric tests or learned predicate thresholds. |
+
+Do not expose `get_obj_pos`, raw observations, `desired_goal`, images, distances,
+reward/success flags, controller feedback, or arbitrary environment/simulator
+access. Numeric comparisons, filtering, sorting, and helper return values must
+not bypass the predicate boundary. A bool-returning function is permitted only
+when its result is derived from allowed conditions. A host may enumerate objects
+to interpret quantifiers and relational queries; this does not expose ID-based
+ordering or count-based policy conditions.
+
+Do not supply composite physical skills such as `put_first_on_second`,
+`stack_objects_in_order`, `PickPlace`, or an executable `Put`. CaP may generate a
+placement helper itself, but its body must use only the shared primitives.
+Release remains a gripper-opening/retreat primitive, not a complete placement
+skill. Task-specific table/Goal references require a shared trusted adapter,
+not additional raw-coordinate access.
+
+### 2.3 Preserve CaP while enforcing the constraint
+
+The following changes define the constrained baseline. **C1-C7** identify the
+changes; implementation choices in Section 3 are only one possible prototype.
 
 ```diff
-- Expose coordinates, numerical libraries, and tabletop composite actions.
-+ [C1] Expose typed block handles, shared predicates, and Pick/Move/Release.
-- Resolve helpers by binding generated Python functions for execution.
-+ [C2] Resolve helper source, validate all bodies, and compile supported code.
-- Query LMPs may return scene-dependent values during physical execution.
-+ [C3] Generate condition ASTs before execution; evaluate them on current state.
-- Preserve an interactive Python session when configured.
-+ [C4] Freeze one generated policy and clear session state between trials.
-- Execute generated Python against the original tabletop environment wrapper.
-+ [C5] Execute Program through RoboVerify's existing controllers and recorder.
-+ [C6] Evaluate terminal environment success separately from DSL trace validity.
-+ [C7] Record generation/execution budgets, failures, and optional proof results.
+- Give generated programs the original tabletop perception/composite-action API.
++ [C1] Give them only the shared task-specific primitive/predicate interface.
+- Bind generated helpers after the original basic Python filtering.
++ [C2] Validate every generated body and its complete call graph before execution.
+- Let auxiliary LMPs use raw geometry to answer queries or select objects.
++ [C3] Let them generate allowed relational queries evaluated on current state.
+- Reuse an interactive session without a benchmark trial boundary.
++ [C4] Preserve within-trial CaP behavior; isolate state between independent trials.
+- Execute against Google's tabletop environment wrapper.
++ [C5] Execute against RoboVerify environments through the shared controllers.
++ [C6] Judge terminal task success independently, with the same task specification.
++ [C7] Report all trials, failures, and generation/execution costs per task.
 ```
 
-| Change | Target behavior |
-| --- | --- |
-| **C1: Shared capabilities** | Stack actions are `Pick/Move/Release`; conditions use `ON/ON_star/Higher/Scattered/eq`, Boolean logic, and quantifiers over physical blocks. Action numbers must be explicit and finite. |
-| **C2: Complete source validation** | Check the policy and every generated helper. Track types, bindings, condition provenance, and calls. Inline supported helpers with fresh names; reject unresolved calls and recursive helper cycles. Do not execute generated source while compiling. |
-| **C3: Queries become formulas** | Auxiliary generation produces reusable typed conditions. It does not select concrete blocks from coordinates. Existing Get/While evaluation selects and binds current witnesses on each invocation/iteration. |
-| **C4: Frozen trials** | Generate one policy per declared task/prompt configuration and test it on the fixed snapshot suite. Do not transfer bindings or generated session state from one scene to another. |
-| **C5: Existing execution** | Lower to named instructions in `Program`, then reuse `prepare_program` and `record_execution`. Retain observation packing, action scaling, controller settings, and witness selection. |
-| **C6: Independent evaluation** | Record completed execution, controller convergence, DSL pre/post validation, and the environment's terminal Stack success separately. |
-| **C7: Explicit budgets and variants** | Bound model calls, tokens, helper expansion, control steps, loop iterations, and wall time. Verification-guided repairs, CEM, and repeated attempts are separate configurations. |
+Runtime auxiliary LMP calls remain allowed within declared budgets. Each newly
+generated helper or query must pass the same checks before it can run. Queries
+may return predicate truth or handles bound by allowed conditions, but cannot
+return selections made from hidden coordinate calculations. Their truth is
+evaluated against the current environment state, not frozen at generation time.
+Preserve the shared witness-selection semantics and allow multiple legal
+witnesses. Generated code must not inspect the host's internal selection order.
 
-The first compiler target supports sequences, object-identity assignment, Get,
-and flat While. Current `Program`/CFG has no If instruction and standard
-`prepare_program` rejects nested loops. Reject these constructs explicitly until
-support is added; do not silently rewrite their behavior. Query-helper expansion
-must preserve variable scopes and the distinction between a loop witness and an
-ordinary existential inside its condition.
+A validated interpreter for constrained Python is a possible runtime. Lowering
+supported code to existing `Program` instructions is another implementation
+option. Neither option may silently remove legal CaP behavior. Current
+`Program`/CFG lacks If support and `prepare_program` rejects nested loops; these
+are adapter limitations to address or explicitly scope as a prototype, rather
+than grounds to claim that a flat-While implementation evaluates all six tasks.
 
-The shared Stack environment factory currently fixes `b0` to physical ID 0.
-Keep it as the supplied input handle. Runtime witness selection uses ascending
-physical IDs internally; generated code must not inspect or sort those IDs.
-Multiple legal witnesses remain permitted.
+The baseline does not use RoboVerify invariant inference, solver counterexamples,
+verification-guided code repair, or CEM to improve CaP policies. Static checking
+enforces the shared interface and is not a task-correctness proof. Any additional
+repair/optimization experiment must be named and reported separately.
 
 ```mermaid
 flowchart TD
-    I["Instruction, DSL examples, input handles"] --> G["Hierarchical source generation"]
-    G --> V["C1-C3: Validate all helpers and condition ASTs"]
-    V --> P["C2: Compile to named Program"]
-    P --> X["C4-C5: Execute from fixed snapshot"]
-    X --> C["Shared primitive controllers"]
-    X --> Q["Shared guard and predicate evaluator"]
-    C --> E["Fetch / MuJoCo environment"]
-    E --> Q
-    X --> R["Existing actions, snapshots, and event recording"]
-    R --> A["C6-C7: Terminal evaluation and run report"]
-    P -.-> B["Optional symbolic and motion verification"]
-    R -.-> B
+    I["Instruction, allowed examples, input handles"] --> G["CaP hierarchical generation"]
+    G --> V["C1-C3: Validate policy, helpers, and queries"]
+    V --> X["Constrained policy execution"]
+    X -->|"Auxiliary LMP request"| G
+    X --> A["C5: Shared primitive and predicate APIs"]
+    A --> E["RoboVerify task environment"]
+    E -->|"Current predicate evaluation"| A
+    A --> X
+    S["C4: Fixed initial snapshot and isolated trial"] --> X
+    X --> R["C6-C7: Independent terminal evaluation and report"]
     classDef changed fill:#fff0c2,stroke:#b36b00,stroke-width:2px;
-    class V,P,X,A changed;
+    class V,A,S,R changed;
 ```
 
-## 3. Proposed High-Level Pseudocode
+### 2.4 Six-task scope and adapter readiness
+
+| Task | Environment factory | Required benchmark semantics and remaining adapter work |
+| --- | --- | --- |
+| Stack | `make_roboverify_stack_env` | Stack all blocks on input `b0`; existing primitive execution and shared task conditions provide the first integration case. |
+| Unstack | `make_roboverify_unstack_env` | Dismantle the tower onto the physical table; use a shared table-placement reference and final all-on-table check. |
+| Reverse | `make_roboverify_reverse_env` | Reverse the complete original tower order; retain task-entry history. The standalone dismantling verifier is not a Reverse policy or evaluator. |
+| ReStack | `make_roboverify_partial_stack_env` | Start with multiple towers and possibly an internal `b0`; finish with every block in a tower rooted at `b0`. The Partial standalone verifier is not this task's implementation. |
+| Grid | `make_roboverify_grid_env` | Place blocks at specified grid goals; add shared Goal references, query semantics, and execution bindings. Declare the block-to-goal correspondence rule. |
+| Pyramid | `make_roboverify_pyramid_env` | Place blocks at specified pyramid goals; needs the same Goal adaptation. The current environment has six blocks in a `3+2+1` layout. |
+
+All six factories exist, but this is not yet an implemented six-task constrained
+CaP benchmark. The shared `cfg/tasks.py` currently specifies only Stack/Unstack,
+and Goal runtime support is incomplete. See [DSL.md](DSL.md) for the detailed
+interface gaps. Finalize each task's shared input domain, vocabulary, action
+references, preparation procedure, and terminal evaluator before reporting its
+comparison. Infrastructure that cannot execute a task must be reported as an
+adapter gap, not as a CaP policy failure or successful evaluation.
+
+### 2.5 Evaluation protocol and outcomes
+
+Use identical full initial snapshots, task inputs/targets, object counts,
+controller settings, and execution limits for both methods. Preserve the current
+Stack preparation/replay rule: settle once when constructing a fresh suite,
+then restore saved starts without resetting from seeds or settling again.
+Define the other tasks' preparation explicitly. Unstack end-to-end trials must
+remain within 60 seconds, including runtime LMP requests.
+
+Declare the model, prompts/examples, generation seeds, sampling settings, model
+call/token budgets, and retry policy. State whether initial policy generation
+is shared across scenes or repeated per trial; this is an experimental choice,
+not a required capability restriction. Retain within-trial helper/session behavior
+and clear scene-specific state between trials. Disclose each method's training
+or demonstration inputs, keep test scenes held out, and do not provide complete
+benchmark solutions or RoboVerify-generated policies as CaP prompt examples.
+
+The primary metric is **physical task successes / all scheduled policy trials**,
+reported separately for each of the six tasks. A success requires completed
+execution within budget and the agreed final task condition, under the shared
+primitive-convergence rule. Do not filter the denominator to legal, converged,
+or completed CaP runs, and do not replace failed scenes. A generation failure
+counts against its scheduled trials under the declared generation protocol.
+
+Also report generation failure, invalid primitive/predicate use, runtime
+exceptions, primitive nonconvergence, timeout/loop exhaustion, and final-goal
+failure; include model calls/tokens, generation time, execution time, and action
+counts. Record environment success and available DSL pre/post validation
+separately. Transient success, controller convergence alone, or an abstract
+Goal-marking result cannot establish physical task completion. Repeated policy
+samples should retain their per-task outcomes and uncertainty; any aggregate
+score must state how tasks are weighted. No new experimental results or claim
+of RoboVerify superiority follows from this design document.
+
+## 3. Optional Stack Compiler Prototype
+
+This section retains the earlier offline-generation design as a prototype, not
+the definition of the six-task constrained CaP baseline. Its frozen policy,
+compile-time query generation, and flat-loop support are additional choices.
+Evaluating this variant must disclose those choices; supporting the baseline in
+Section 2 requires preserving or implementing the remaining legal CaP behavior.
 
 Functions marked **NEW** describe interfaces to implement. Unmarked repository
 calls below exist today. `suite` contains settled, task-compatible full snapshots
@@ -351,8 +451,10 @@ itself; use the existing seed-management path in collection.
 
 ## 5. Verification Is an Explicit Additional Configuration
 
-The baseline above measures generated-policy execution on fixed scenes. Optional
-verification must use executions of that same candidate for invariant inference,
+The Section 2 baseline measures constrained CaP's physical performance without
+RoboVerify verification feedback. A future verification-assisted variant is a
+separate experiment. For that variant, verification must use executions of the
+same candidate for invariant inference,
 including loop heads and normal exits. Reuse `InvInference` and the existing
 symbolic/motion stages only for supported program shapes and premises. Arbitrary
 DSL-compliant primitive sequences do not automatically have a supported placement
