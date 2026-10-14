@@ -5,6 +5,9 @@ and the interface boundaries needed to reconnect CaP.
 **It is a basis for interface discussion; it does not mean that a CaP adapter or
 six-task evaluation has been implemented.**
 
+See [CAP-INTEGRATION.md](CAP-INTEGRATION.md) for the original Google CaP and
+proposed RoboVerify pseudocode, highlighted changes, and environment interfaces.
+
 Review date: 2026-10-14. Code baseline: upstream `main` at
 `1f55b1b188bde1045b1d1771ed2ba7988d4e2e73`; current working branch: `feature/cap`.
 The paper is the repository's [POPL2027.pdf](../../../POPL2027.pdf); all page
