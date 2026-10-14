@@ -178,8 +178,11 @@ than grounds to claim that a flat-While implementation evaluates all six tasks.
 
 The baseline does not use RoboVerify invariant inference, solver counterexamples,
 verification-guided code repair, or CEM to improve CaP policies. Static checking
-enforces the shared interface and is not a task-correctness proof. Any additional
-repair/optimization experiment must be named and reported separately.
+enforces the shared interface and is not a task-correctness proof. Plan 1 in
+Section 2.6 proposes bounded repair using only interface-violation feedback;
+declare this extension and its budget when reporting constrained CaP. Repair
+using rollout outcomes, task verification, or optimization feedback is a separate
+assisted configuration.
 
 ```mermaid
 flowchart TD
@@ -249,6 +252,109 @@ Goal-marking result cannot establish physical task completion. Repeated policy
 samples should retain their per-task outcomes and uncertainty; any aggregate
 score must state how tasks are weighted. No new experimental results or claim
 of RoboVerify superiority follows from this design document.
+
+### 2.6 Plan 1: Recursive helper generation with constraint repair
+
+**Status: proposed, not implemented.** Extend the recursive helper generation in
+Section 1 with a bounded generate/check/repair loop for each helper. Original
+CaP supplies missing function definitions recursively; the role checks and
+constraint-driven repair below are our additions.
+
+A helper's required role depends on how its result is used, including indirect
+uses through assignments, arguments, returns, and other helpers:
+
+| Required role | Allowed implementation |
+| --- | --- |
+| Condition | A side-effect-free expression of the shared DSL predicates, identity, logical composition, and permitted quantification/binding. All dependencies must obey the same restrictions. |
+| Body | Composition of shared control APIs, allowed predicates, and permitted local computation. Conditions and object selections inside the body still obey the condition restrictions. |
+
+The body role permits actions; it does not require every helper to perform an
+action. Numeric action parameters remain subject to Section 2.2. A helper used
+in both roles must satisfy the stricter condition requirements. Role analysis
+must follow value dependencies: `ready = check_ready(b); if ready: ...` requires
+`check_ready` to satisfy the condition restrictions even though its call appears
+in an assignment. Existing helpers and API calls must also be checked at each
+use; membership in the namespace does not make `Pick` legal in a condition.
+
+The following makes the recursion explicit. `budget` is shared by the entire
+generation attempt, including parent repairs, child generation, and runtime LMP
+requests; budget exhaustion propagates as a terminal failure. Definitions are
+kept as source until the complete bundle has passed validation.
+
+```python
+# CHANGED: each missing helper has a required role and bounded repair.
+def resolve_missing_helpers(source, namespace, required_role, budget):
+    helpers = {}
+    for call in unresolved_calls(source, namespace):
+        role = infer_required_role(source, call, required_role)
+        resolved = resolve_helper(call, namespace | helpers, role, budget)
+        helpers.update(resolved)
+    return helpers
+
+
+def resolve_helper(call, namespace, required_role, budget):
+    feedback = None
+
+    for attempt in range(MAX_ATTEMPTS):
+        budget.consume_model_call()
+        definition = generate_function(call.signature, required_role, feedback)
+
+        try:
+            # Reject forbidden access before synthesizing dependencies.
+            validate_local_constraints(definition, required_role)
+
+            # RECURSION: resolve and validate the helper's children.
+            children = resolve_missing_helpers(
+                function_body(definition), namespace, required_role, budget
+            )
+
+            # Check transitive calls, value dependencies, and existing APIs.
+            validate_resolved_helper(
+                definition, namespace | children, required_role
+            )
+        except ConstraintFailure as error:
+            feedback = str(error)
+            continue
+
+        return children | {call.name: definition}
+
+    raise ConstraintFailure("Helper repair budget exhausted")
+```
+
+`infer_required_role` propagates condition restrictions through descendants; for
+a body helper, it distinguishes action uses from internal condition uses.
+`validate_local_constraints` rejects forbidden perception such as `get_obj_pos`
+before the resolver can mistake it for a missing helper to synthesize. Detection
+must use resolved bindings and allowed operations, not merely a blacklist of
+function names. Parsing an AST provides structure; value-flow and call-graph
+checks establish the transitive restrictions within the supported Python subset.
+Unsupported dynamic constructs fail explicitly. The implementation must also
+bound recursion depth and detect dependency cycles; these details are abstracted
+out of the pseudocode.
+
+The caller validates the top-level policy as well as every helper. A violation
+in the top-level code triggers a bounded rewrite of that code before retrying
+resolution. After resolution, validate the complete policy and helper bundle
+again, combining requirements from all call sites, before binding or execution.
+If a forbidden call occurs directly in a condition, rewrite its enclosing
+condition rather than inventing an implementation of the forbidden API. Runtime
+auxiliary LMP outputs pass the same process before execution.
+
+Feedback contains the violating source location, the applicable interface rule,
+and the allowed API signatures. It must not include task-success signals,
+solver counterexamples, hidden geometry, or a reference policy. Rewriting a
+condition can change its meaning: an arbitrary coordinate threshold need not
+have an equivalent formula in the DSL, and strict height comparison is not
+interchangeable with tolerant `Higher`. Reject exhausted attempts rather than
+claiming guaranteed convergence or equivalence.
+
+Recursive descent expands dependencies; the local retry loop repairs the current
+definition. A child repair failure can trigger a parent rewrite while global
+budget remains. Failed candidates do not enter the executable namespace. If a
+whole-policy retry follows partial execution, restore the original trial
+snapshot and reset its session state before rerunning, accounting for all model
+calls and execution attempts. A legal policy still requires independent rollout
+evaluation: passing these checks establishes interface compliance only.
 
 ## 3. Optional Stack Compiler Prototype
 
