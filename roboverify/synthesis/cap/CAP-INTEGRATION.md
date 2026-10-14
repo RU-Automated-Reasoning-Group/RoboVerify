@@ -26,103 +26,61 @@ can inspect geometry and use numerical libraries. See the original
 [position](https://code-as-policies.github.io/prompts/parse_position.txt), and
 [question](https://code-as-policies.github.io/prompts/parse_question.txt) prompts.
 
-The following preserves the actual object/call relationships in the official
-[Interactive Demo](https://github.com/google-research/google-research/blob/8c116f61a61b4339cbbae92be89ff83d9897d4b5/code_as_policies/Interactive_Demo.ipynb)
-while abstracting configuration, prompt construction, model requests, and Python
-execution. Constructor arguments are simplified. `generate_code`,
-`execute_code`, and namespace operations below are conceptual operations, not
-claims about identically named notebook functions.
+The following abstracts `LMP`, `LMPFGen`, and `setup_LMP` in the official
+[Interactive Demo](https://github.com/google-research/google-research/blob/8c116f61a61b4339cbbae92be89ff83d9897d4b5/code_as_policies/Interactive_Demo.ipynb).
+It omits API transport retries, debug printing, and optional edit calls.
 
 ```python
-# ORIGINAL: high-level structure with the notebook's actual callable objects.
-class LMP:
-    def __init__(self, config, function_generator, shared_apis):
-        self.config = config
-        self.function_generator = function_generator
-        self.shared_apis = shared_apis
-        self.history = []
+# ORIGINAL: policy generation and execution share a callable namespace.
+def invoke_lmp(module, instruction, context, arguments):
+    prompt = assemble_prompt(module.examples, module.api_names,
+                             module.optional_history, context, instruction)
+    source = generate_code(prompt)
+    helpers = resolve_missing_helpers(source, module.namespace)
+    module.namespace.update(helpers)
 
-    def __call__(self, instruction, context="", **arguments):
-        prompt = build_prompt(self.config, self.history, context, instruction)
-        source = generate_code(prompt)
-        helpers = self.function_generator.create_new_fs_from_code(source)
-        self.shared_apis.update(helpers)
-
-        # Local variables include input arguments and execution intermediates.
-        local_variables = arguments
-        execute_code(source, context, self.shared_apis,
-                     local_variables, self.config)
-        self.history.append(executed_source(source, context, self.config))
-        preserve_locals_if_enabled(self.config, self.shared_apis, local_variables)
-
-        # The designated output is not automatically a state or trajectory.
-        if return_value_enabled(self.config):
-            return designated_output(self.config, local_variables)
+    # result: designated module output; locals: execution variables.
+    result, locals = execute_python(source, context,
+                                    module.namespace, arguments)
+    module.remember_source(source)
+    if module.maintain_session:
+        module.namespace.update(locals)
+    return result
 
 
-class LMPFGen:
-    def __init__(self, config, shared_apis):
-        self.config = config
-        self.shared_apis = shared_apis
-
-    def create_new_fs_from_code(self, source, available_helpers=None):
-        generated = {}
-        known = combine(self.shared_apis, available_helpers)
-        for call in find_function_calls(source):
-            if function_is_known(call, combine(known, generated)):
-                continue
-            definition = generate_function(self.config, call)
-            children = self.create_new_fs_from_code(
-                function_body(definition), combine(known, generated),
-            )
-            generated.update(children)
-            generated[call.name] = bind_function(
-                definition, combine(known, generated),
-            )
-        return generated
+def resolve_missing_helpers(source, namespace):
+    helpers = {}
+    for call in unresolved_calls(source, namespace):
+        definition = generate_function(call.signature)
+        children = resolve_missing_helpers(function_body(definition),
+                                           namespace | helpers)
+        helpers.update(children)
+        helpers[call.name] = bind_function(definition, namespace | helpers)
+    return helpers
 
 
-def setup_LMP(env, config):
-    shared_apis = build_library_and_environment_namespace(env)
-    function_generator = LMPFGen(config["fgen"], shared_apis)
+def setup_tabletop(env):
+    namespace = numeric_libraries_and_environment_apis(env)
     for name in ["parse_obj_name", "parse_position", "parse_question",
                  "transform_shape_pts"]:
-        shared_apis[name] = LMP(config[name], function_generator, shared_apis)
-    return LMP(config["tabletop_ui"], function_generator, shared_apis)
+        namespace[name] = callable_lmp(name, namespace)
+    return callable_lmp("tabletop_ui", namespace)
 
 
-policy = setup_LMP(env, config)
-policy(instruction, object_context)  # Calls LMP.__call__.
+policy = setup_tabletop(env)
+policy(instruction, object_context)
 ```
 
-The earlier `invoke_lmp` abstraction is now the body of `LMP.__call__`;
-`callable_lmp` is replaced by construction of actual `LMP` objects. Thus the
-entry path is explicit:
+`callable_lmp` represents a configured callable whose invocation runs
+`invoke_lmp`. In the notebook, this is an `LMP` object and its `__call__`
+method. `execute_python` abstracts execution plus extraction of the configured
+output, usually `ret_val`; neither that output nor `locals` automatically
+contains a terminal state or trajectory.
 
-```text
-setup_LMP -> LMP object
-policy(instruction, context) -> LMP.__call__
-    -> generate policy source
-    -> LMPFGen.create_new_fs_from_code
-    -> execute policy source
-        -> environment API calls
-        -> auxiliary LMP.__call__ when requested
-```
-
-The shared namespace abstracts the notebook's fixed library bindings and mutable
-API/helper bindings. Auxiliary modules share those bindings, but each has its own
-prompt configuration and execution history. Helper binding abstracts the
-notebook's initial parent definition and optional rebinding after child helpers
-have been generated. Context inclusion, debug execution, session persistence,
-and return-value selection remain configuration-controlled.
-
-`execute_code` populates `local_variables`; it does not return a
-`(result, locals)` tuple. The module returns the configured local output, usually
-`ret_val`, only when enabled; otherwise the call returns `None`. Policy execution
-can produce a robot rollout through action APIs, while auxiliary query execution
-may only compute a value. Neither the return value nor the local-variable
-dictionary automatically records terminal state or trajectory. The original
-`exec_safe` provides basic filtering, not RoboVerify DSL validation.
+Auxiliary LMP calls can generate code during policy execution. The original
+`exec_safe` performs basic filtering before Python execution; it does not enforce
+RoboVerify DSL semantics. Helper dependency binding above summarizes the recursive
+behavior rather than reproducing the notebook's intermediate function rebinding.
 
 ```mermaid
 flowchart TD
