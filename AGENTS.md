@@ -143,6 +143,8 @@ and accepted demonstrations must actually satisfy their pre/postconditions.
 
 ## Conventions
 
+- Write all repository content in English, including code, comments, documentation,
+  and Markdown files. Chinese is reserved for conversation with the user.
 - All real work lives under `roboverify/`; the repository root holds project
   guidance, the paper and review decisions.
 - Commit in meaningful increments, one coherent change per commit, rather than one large
