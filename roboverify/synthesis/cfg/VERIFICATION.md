@@ -545,6 +545,106 @@ Each process ran the usual ablation command with `--case baseline
 --without-extra-motion-premises --symbolic-timeout-ms 300000
 --no-minimize-unsat-core`, using its own output directory.
 
+## User-supplied Unstack groundtruth diagnostic
+
+**The supplied program is not yet an acceptable demonstration source in the
+current simulator (2026-10-15).** This experiment ignored its supplied invariant;
+it checked complete executions, the shared Unstack pre/postconditions, and
+primitive convergence. It did not run symbolic or motion verification.
+
+The tested guard is the following, with `n != tbl` inside the antecedent:
+
+```text
+exists b_prime. forall n.
+  (n != tbl and (O(b0,b_prime) or O(n,b0))) => O(b_prime,n)
+```
+
+The six-instruction body was executed unchanged:
+
+```text
+Move(b_prime, b_prime, b_prime, (0, 0, 0.15))
+Pick(b_prime)
+Move(b_prime, b_prime, b_prime, (0, 0, 0.15))
+Move(X_m, b_prime, b_prime, (0.15, 0, 0.15))
+Move(X_m, b_prime, b0, (0, 0, 0))
+Release(Z_m, 0.15)
+```
+
+`X_m` and `Z_m` are recomputed before each instruction over all physical blocks,
+including the carried block. Release opens the gripper at its current XY and
+retreats to the current maximum block-center Z plus 0.15 m. A diagnostic wrapper
+resolves these extrema to object aliases and invokes the existing primitive
+controllers; it does not add extrema operands to the production DSL or verifier.
+Caching `X_m` at loop entry would describe a different program: the descent
+would target the old maximum X instead of the carried block's new maximum X.
+
+Each row below uses seeds 0–4 with ordinary Unstack resets, the unchanged
+50-step primitive budgets and 2 mm convergence tolerance. All 15 initial states
+satisfy the task precondition. Unlike Stack collection, the existing Unstack
+recording path performs no extra settling before state zero.
+
+| Blocks | Final logical postcondition holds | Accepted by demonstration validation |
+| --- | --- | --- |
+| 2 | 5/5 | 1/5 (seed 1) |
+| 3 | 4/5 | 0/5 |
+| 4 | 4/5 | 0/5 |
+
+Every rejected trial contains at least one unconverged primitive. A final
+unstacked configuration alone does not make those trials valid demonstrations.
+For four blocks, seed 4 exits with two blocks still stacked. Seed 3 exits after
+one iteration with all four blocks displaced onto the table, rather than the
+intended three successful top-removal iterations.
+
+The frequent failure is instruction 4, horizontal transport. Its Z reference
+is the **current** carried block after instruction 3, so it requests another
+0.15 m rise, approximately 0.30 m above the original top. Together with increasing
+maximum X, these targets are difficult for the current controller to reach.
+For four-block seed 0, the first transport target is
+`(1.475709, 0.866801, 0.878251)` m and the 50-step residual is **58.65 mm**.
+Restoring that exact saved state and increasing only the budget to 500 steps
+still leaves **39.01 mm** error. Equivalent probes of the first failed move for
+seeds 1, 3 and 4 also fail at 500 steps. These are measured controller failures;
+no inverse-kinematics impossibility proof was performed.
+
+A separate ideal-placement diagnostic evaluated the same guard on towers of
+sizes 2–10, moving each selected top to `(max(X)+0.15, Y(source), Z(b0))`.
+Every case selected the remaining tower top and terminated after N−1 iterations
+with the postcondition true. The one-block edge case does not terminate: it
+continues selecting b0 even though the postcondition already holds. Collection
+currently requires at least two blocks. These finite ideal checks do not certify
+physical safety or provide an unbounded proof.
+
+All invocations had an external 55-second timeout and finished within it.
+The completed runs under `runs/unstack-groundtruth/` are:
+
+- `20261015-170915-520d5f8-2-blocks`
+- `20261015-170918-520d5f8-3-blocks`
+- `20261015-170821-520d5f8-4-blocks`
+- `20261015-171118-520d5f8-failed-move-budget-probe`
+
+Read them with `uv run python -m synthesis.experiment.report --run <path>`.
+Each execution run saves the exact diagnostic module as
+`artifacts/check_unstack.py`, per-instruction targets and controller results,
+`artifacts/summary.json`, and full-state diagnostic NPZ traces. To reproduce,
+add an execution run's artifact directory to `PYTHONPATH` and run, from
+`roboverify/` with the usual MuJoCo environment:
+
+```bash
+timeout --signal=TERM --kill-after=2s 55s uv run python -m check_unstack \
+  --num-blocks 4 --seeds 0 1 2 3 4
+```
+
+The probe run saves `artifacts/probe_unstack.py` and `artifacts/summary.json`,
+including exact-state replay checks and the ideal guard results. An earlier
+probe attempt (`20261015-171019-520d5f8-failed-move-budget-probe`) failed because
+its harness omitted a guard binding at state zero; it is not verification
+evidence. The completed probe restores the recorded instruction bindings and
+checks that the restored observation and target exactly match the original.
+Production programs, controllers, resets and collection support are unchanged.
+The candidate needs reachable placement/transport targets and validated physical
+executions before adoption as groundtruth; this experiment does not establish
+which waypoint changes suffice.
+
 ## Counterexample learning without initial demonstrations
 
 The separate [Section 6.2 experiment](../experiment/invariant_learning/README.md)

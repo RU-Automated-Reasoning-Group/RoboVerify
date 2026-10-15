@@ -156,6 +156,18 @@ unlike the Put-to-table verification fixture. Reach-any-state PostScore cannot
 replace final-state correctness. The pipeline rejects invalid demonstrations and
 does not use the legacy oracle as fallback.
 
+A separate user-supplied candidate was tested on 2026-10-15 with dynamically
+recomputed maximum-X placement and maximum-Z retreat, ignoring its supplied
+invariant. On five seeds each, only 1/5 two-block, 0/5 three-block and 0/5
+four-block executions passed demonstration validation. Logical final-state
+success was 5/5, 4/5 and 4/5 respectively, but every rejected trial had an
+unconverged primitive. The transport instruction adds another 0.15 m above the
+already lifted block; exact-state replays of four failed moves still failed
+with 500-step budgets. Ideal top-removal tests terminate for sizes 2–10, while
+the one-block guard loops forever. This is a distinct candidate and empirical
+controller diagnosis, not a correction to the historical oracle or a new formal
+verification result. See the [program, semantics, counts and saved traces](roboverify/synthesis/cfg/VERIFICATION.md#user-supplied-unstack-groundtruth-diagnostic).
+
 Keep end-to-end Unstack invocations within **60 seconds**; exhausted budgets and
 inconclusive proofs are unsuccessful results.
 
