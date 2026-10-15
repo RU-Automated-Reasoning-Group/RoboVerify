@@ -2,8 +2,9 @@
 
 This document describes the paper's language, the current upstream implementation,
 and the interface boundaries needed to reconnect CaP.
-**It is a basis for interface discussion; it does not mean that a CaP adapter or
-six-task evaluation has been implemented.**
+The [CaP implementation](README.md) now connects the tower block-reference
+interface to the original Google baseline and constrained method 1. Goal adapters
+and six-task physical evaluation remain incomplete; the limits below still apply.
 
 See [CAP-INTEGRATION.md](CAP-INTEGRATION.md) for the original Google CaP and
 proposed RoboVerify pseudocode, highlighted changes, and environment interfaces.

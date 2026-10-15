@@ -4,8 +4,13 @@ This document compares Google's original Code as Policies (CaP) tabletop
 implementation with a proposed constrained baseline for RoboVerify's six tasks.
 It also gives an optional Stack compiler prototype and the concrete RoboVerify
 environment interfaces involved.
-**The proposed generator, validator, compiler, and evaluator are not implemented
-by this document.** The shared DSL is described in [DSL.md](DSL.md).
+**Implementation update (2026-10-14):** `cap_google_baseline` and `cap_method_1`
+now have code, shared text-model transport, logging/checkpoints, and a tower-task
+adapter/runner. See [README.md](README.md) for commands, the exact Python subset,
+and validation limits. Plan 2, the optional Program compiler prototype, Goal
+adapters, and optional runtime query-LMP configuration remain unimplemented.
+The shared DSL is described in [DSL.md](DSL.md). The high-level design below also
+describes those extension points; it is not a claim of six-task physical success.
 
 Source review: 2026-10-14. The Google code reviewed is pinned to
 `8c116f61a61b4339cbbae92be89ff83d9897d4b5`. Pseudocode abstracts the implementation;
@@ -99,7 +104,7 @@ flowchart TD
 
 ### 1.1 Google CaP baseline adapted to RoboVerify
 
-**Status: proposed, not implemented or vendored by this document.** Add
+**Status: implemented for the configuration documented in [README.md](README.md).** Use
 `cap_google_baseline` alongside the two constrained methods. It uses Google's
 original LMP generation, recursive missing-helper generation, and Python
 execution flow, connected to RoboVerify with minimal necessary changes. It does
@@ -130,7 +135,8 @@ synthesis/cap/
   runner.py                  # Shared trial preparation and evaluation
 ```
 
-These are proposed paths, not existing implementation files. Retrieve the
+The baseline integration, shared modules, and pinned vendor source now occupy
+these paths. The source-reuse rule is to retrieve the
 official `code_as_policies` subtree/notebooks at the commit pinned in Section 1
 rather than copying an unversioned third-party port or importing the entire
 Google Research repository. Preserve upstream license/attribution, record the
@@ -364,7 +370,8 @@ of RoboVerify superiority follows from this design document.
 
 ### 2.6 Plan 1: Recursive helper generation with constraint repair
 
-**Status: proposed, not implemented.** Extend the recursive helper generation in
+**Status: core implementation available; optional query-LMP/session extensions
+remain as documented in [README.md](README.md).** Extend the recursive helper generation in
 Section 1 with a bounded generate/check/repair loop for each helper. Original
 CaP supplies missing function definitions recursively; the role checks and
 constraint-driven repair below are our additions.
@@ -692,7 +699,8 @@ attempts; neither convergence nor task success is guaranteed.
 
 ### 2.8 Plan 1 logging, checkpoints, and video
 
-**Status: proposed, not implemented.** Build a CaP-specific logging layer on
+**Status: shared logger/checkpoints and rollout recording implemented; physical
+MuJoCo validation remains pending.** Build a CaP-specific logging layer on
 RoboVerify's existing `RunLogger`. Reuse its run-directory contract, configuration
 and provenance capture, status/heartbeat, metrics, artifact paths, exception
 handling, and stdout/stderr capture. Add CaP event schemas, immutable source
@@ -838,7 +846,41 @@ execution progress, trial outcome, and artifact links. Normal monitoring uses
 that report rather than reading full stdout or metrics files. Validate that
 console lines are retained, repeated failures are not throttled, checkpoints
 reconstruct the executed bundle, and failing rollouts retain correlated traces
-and video metadata. This section is a design, not an implemented logger.
+and video metadata. The current implementation and commands are documented in
+[README.md](README.md); optional module configurations remain extension points.
+
+### 2.9 Text model transport and provider configuration
+
+Both implemented methods use text-only generation. The model receives task
+instructions, DSL/API descriptions, symbolic input names, and source code;
+method 1 additionally receives static compliance diagnostics. It does not receive
+raw images or an automatically enumerated symbolic state. Predicate queries run
+inside the host against current state. Videos and full observations remain log
+artifacts. A VLM is not required for this interface.
+
+The shared [llm.py](llm.py) supports configurable OpenAI-compatible Chat
+Completions and a separate Responses text adapter. Initial configuration is
+OpenRouter with the user-selected `deepseek/deepseek-v4.1-flash`; no live model
+availability or performance claim follows from offline tests. Both methods use
+the same transport and actual model settings, with the historical Google API
+call redirected through a compatibility shim.
+
+| Configuration | Purpose |
+| --- | --- |
+| Provider, model ID, base URL, API style | Switch OpenRouter, OpenAI, or a locally served vLLM model independently of the method implementation. |
+| Credential environment-variable name | Read credentials at request time; do not store credential values in prompts, config, or request artifacts. |
+| Output-token field/limit, optional temperature and seed | Map explicit generation settings to the selected API; unsupported settings fail instead of being silently discarded. |
+| Provider-specific request options | Explicit routing/reasoning options, retained in the logged request; no implicit model substitution. |
+| Request timeout and transport retries | Stay within the shared trial budget; count every attempted request. Transport errors do not trigger baseline semantic repair. |
+| Scripted backend | Test generation, repair, and logging without paid requests or a simulator; generation diagnostics are not benchmark successes. |
+
+The compatibility interfaces are documented by
+[OpenRouter](https://openrouter.ai/docs/api/api-reference/chat/create-a-chat-completion),
+[OpenAI](https://developers.openai.com/api/reference/chat-completions/overview), and
+[vLLM](https://docs.vllm.ai/en/latest/serving/online_serving/openai_compatible_server/).
+Keep normalized response text, raw provider output, finish reason, latency, and
+available usage together. Missing usage remains unknown; known-token totals and
+unknown-usage call counts are separate. Match and record settings across methods.
 
 ## 3. Optional Stack Compiler Prototype
 
@@ -1048,7 +1090,8 @@ itself; use the existing seed-management path in collection.
 
 ### 4.4 Environment adapter implementation plan
 
-**Status: proposed, not implemented.** Reuse RoboVerify's environment directly
+**Status: tower block-reference adapter implemented; Goal adapters and physical
+MuJoCo validation remain pending.** Reuse RoboVerify's environment directly
 inside the trusted host, and expose a thin DSL adapter to generated CaP code.
 The same adapter serves both constraint-repair plans; their generation and repair
 flows do not change action or predicate semantics. `build_dsl_namespace` in

@@ -1,0 +1,4 @@
+[
+  "touch_input(b0)",
+  "def touch_input(b):\n    Pick(b)\n"
+]

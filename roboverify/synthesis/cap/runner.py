@@ -1,0 +1,304 @@
+"""Shared single-trial runner; all outcomes and artifacts use RunLogger."""
+
+import hashlib
+import signal
+import time
+import traceback
+import uuid
+from contextlib import contextmanager, nullcontext
+from dataclasses import asdict
+from pathlib import Path
+
+from .adapter import GenerationOnlyAdapter, RoboVerifyAdapter
+from .budget import Budget
+from .checkpoints import Checkpoints
+from .contracts import (
+    AdapterGap,
+    BudgetExceeded,
+    ConstraintFailure,
+    EnvironmentUnavailable,
+    PrimitiveFailure,
+)
+from .llm import HTTPModel, LoggedModel, ModelError
+from .logger import CapLogger
+from .tasks import (
+    TASK_INSTRUCTIONS,
+    check_task,
+    evaluate_terminal,
+    prepare_environment,
+    validate_start,
+)
+
+
+@contextmanager
+def deadline(budget):
+    """POSIX wall-clock deadline also interrupts original Python infinite loops."""
+    previous = signal.getsignal(signal.SIGALRM)
+    timer = signal.getitimer(signal.ITIMER_REAL)
+    started = time.monotonic()
+
+    def expired(signum, frame):
+        raise BudgetExceeded("Wall-clock trial deadline exhausted")
+
+    remaining = budget.remaining()
+    signal.signal(signal.SIGALRM, expired)
+    signal.setitimer(
+        signal.ITIMER_REAL, min(remaining, timer[0]) if timer[0] else remaining
+    )
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
+        if timer[0]:
+            signal.setitimer(
+                signal.ITIMER_REAL,
+                max(0.000001, timer[0] - (time.monotonic() - started)),
+                timer[1],
+            )
+
+
+def make_method(name, model, adapter, logger, checkpoints, budget, attempts):
+    if name == "cap_method_1":
+        from .cap_method_1 import Method1
+
+        return Method1(model, adapter, logger, checkpoints, budget, attempts)
+    if name == "cap_google_baseline":
+        from .cap_google_baseline import GoogleBaseline
+
+        return GoogleBaseline(model, adapter, logger, checkpoints, budget)
+    raise ValueError(f"Unknown method: {name}")
+
+
+def failure_status(error):
+    for kind, status in (
+        (AdapterGap, "adapter_gap"),
+        (EnvironmentUnavailable, "environment_unavailable"),
+        (BudgetExceeded, "budget_exhausted"),
+        (ConstraintFailure, "constraint_failed"),
+        (PrimitiveFailure, "primitive_failed"),
+        (ModelError, "generation_failed"),
+    ):
+        if isinstance(error, kind):
+            return status
+    return "failed"
+
+
+def run(
+    config,
+    model_config,
+    *,
+    instruction=None,
+    backend=None,
+    initial_state=None,
+    trace_index=0,
+    generate_only=False,
+    environment_factory=None,
+    capture_stdout=True,
+):
+    from synthesis.experiment.run_logger import RunLogger
+
+    if config.method not in {"cap_method_1", "cap_google_baseline"}:
+        raise ValueError("Unknown CaP method")
+    if config.timeout <= 0 or config.max_attempts < 1:
+        raise ValueError("Invalid trial budget")
+    timeout = min(config.timeout, 60) if config.task == "unstack" else config.timeout
+    budget = Budget(
+        timeout,
+        config.max_model_calls,
+        config.max_steps,
+        config.max_depth,
+        config.max_tokens,
+    )
+    instruction = instruction or TASK_INSTRUCTIONS.get(config.task)
+    resolved = asdict(config) | {
+        "timeout": timeout,
+        "model": asdict(model_config),
+        "generate_only": generate_only,
+        "instruction": instruction,
+        "initial_state": str(initial_state) if initial_state else None,
+        "trace_index": trace_index,
+        "validation_enabled": config.method == "cap_method_1",
+        "refinement_enabled": config.method == "cap_method_1",
+        "auxiliary_lmp_modules": [],
+        "model_backend": type(backend).__name__ if backend else "HTTPModel",
+    }
+    run_log = RunLogger(
+        config.output_root,
+        "cap",
+        resolved,
+        slug=f"{config.method}-{config.task}-{uuid.uuid4().hex[:8]}",
+        capture_stdout=capture_stdout,
+    )
+    logger = CapLogger(run_log.run_dir, run=run_log)
+    checkpoints = Checkpoints(logger, method=config.method)
+    model = LoggedModel(
+        backend or HTTPModel(model_config),
+        logger,
+        budget,
+        model_config.transport_retries,
+    )
+    env, recorder, entry = None, None, None
+    outcome = {"success": False, "environment_success": None, "dsl_postcondition": None}
+    status, reason = "failed", ""
+    try:
+        with deadline(budget):
+            check_task(config.task)
+            instruction = instruction or TASK_INSTRUCTIONS[config.task]
+            if generate_only:
+                adapter = GenerationOnlyAdapter(config.task)
+                method = make_method(
+                    config.method,
+                    model,
+                    adapter,
+                    logger,
+                    checkpoints,
+                    budget,
+                    config.max_attempts,
+                )
+                if config.method == "cap_method_1":
+                    method.generator.generate(instruction)
+                else:
+                    method.policy._cfg["debug_mode"] = True
+                    method(instruction)
+                status = "generated"
+                outcome["success"] = None
+            else:
+                from synthesis.cfg.recordings import load_traces
+                from synthesis.cfg.reset import inner_env
+                from synthesis.util.on import using_higher_tolerance
+
+                from .recording import Recorder
+
+                snapshot = None
+                if initial_state:
+                    traces = load_traces(initial_state)
+                    if not 0 <= trace_index < len(traces):
+                        raise ValueError("Initial-state trace index is out of range")
+                    trace = traces[trace_index]
+                    aliases = {"restack": "partial_stack"}
+                    if trace.num_blocks != config.num_blocks or aliases.get(
+                        trace.task, trace.task
+                    ) != aliases.get(config.task, config.task):
+                        raise ValueError("Initial-state task/object count mismatch")
+                    snapshot = trace.snapshots[0]
+                    logger.emit(
+                        "snapshot_input",
+                        path=str(Path(initial_state).resolve()),
+                        sha256=hashlib.sha256(
+                            Path(initial_state).read_bytes()
+                        ).hexdigest(),
+                        trace_index=trace_index,
+                    )
+                with using_higher_tolerance(config.higher_tolerance):
+                    env = (
+                        environment_factory(config, snapshot)
+                        if environment_factory
+                        else prepare_environment(config, snapshot)
+                    )
+                    adapter = RoboVerifyAdapter(env, logger, budget, task=config.task)
+                    entry = adapter.entry_observation
+                    from synthesis.api.control import (
+                        DEFAULT_CONTROL,
+                        DEFAULT_PICK_CONTROL,
+                    )
+
+                    logger.artifact(
+                        "adapter_config.json",
+                        {
+                            "controller": asdict(DEFAULT_CONTROL),
+                            "pick_controller": asdict(DEFAULT_PICK_CONTROL),
+                            "primitive_step_limit": 50,
+                            "higher_tolerance": config.higher_tolerance,
+                            "predicate_domain": "physical_blocks",
+                            "entry_geometry": "frozen_trial_start",
+                            "api_names": sorted(adapter.api_names),
+                            "object_handles": {
+                                handle.token: physical_id
+                                for handle, physical_id in adapter.ids.items()
+                            },
+                            "initialization": "snapshot" if snapshot else "fresh_scene",
+                            "settling_steps": (
+                                0 if snapshot or config.task != "stack" else 50
+                            ),
+                        },
+                    )
+                    validate_start(env, config.task, entry)
+                    recorder = Recorder(
+                        env,
+                        logger,
+                        budget,
+                        video=config.save_video,
+                        seed=config.seed,
+                        task=config.task,
+                    )
+                    method = make_method(
+                        config.method,
+                        model,
+                        adapter,
+                        logger,
+                        checkpoints,
+                        budget,
+                        config.max_attempts,
+                    )
+                    with recorder:
+                        method(instruction)
+                    outcome.update(evaluate_terminal(env, config.task, entry))
+                    # Physical success is the primary metric; DSL agreement is
+                    # retained independently rather than silently changing it.
+                    outcome["success"] = outcome["environment_success"]
+                    status = "completed" if outcome["success"] else "goal_failed"
+    except Exception as exc:
+        status = failure_status(exc)
+        if isinstance(exc, ImportError) and env is None and not generate_only:
+            status = "environment_unavailable"
+        if generate_only and status == "failed":
+            status = "generation_failed"
+        reason = f"{type(exc).__name__}: {exc}"
+        logger.artifact("execution/traceback.txt", traceback.format_exc())
+        logger.emit("trial_failure", status=status, reason=reason)
+        if env is not None and entry is not None:
+            try:
+                with using_higher_tolerance(config.higher_tolerance):
+                    outcome.update(evaluate_terminal(env, config.task, entry))
+            except Exception as evaluation_error:
+                logger.emit("evaluation_failure", error=str(evaluation_error))
+        outcome["success"] = (
+            None
+            if generate_only or status in {"adapter_gap", "environment_unavailable"}
+            else False
+        )
+    finally:
+        if env is not None:
+            try:
+                env.close()
+            except Exception as exc:
+                logger.emit("close_failure", error=str(exc))
+        outcome.update(
+            method=config.method,
+            task=config.task,
+            model_calls=budget.calls,
+            known_tokens=budget.tokens,
+            unknown_usage_calls=budget.unknown_usage_calls,
+            execution_ticks=budget.steps,
+            checkpoint_id=checkpoints.previous,
+            active_checkpoint_id=checkpoints.active,
+            artifacts_path=logger.relative(logger.root),
+        )
+        outcome["video"] = (
+            recorder.video_metadata if recorder else {"status": "not_started"}
+        )
+        logger.emit("trial_result", status=status, **outcome)
+        logger.close()
+        run_log.log_metrics(
+            0,
+            phase="cap",
+            success_rate=(
+                int(outcome["success"]) if outcome["success"] is not None else None
+            ),
+            model_calls=budget.calls,
+            known_tokens=budget.tokens,
+            status=status,
+        )
+        run_log.finish(status, exit_reason=reason, **outcome)
+    return {"status": status, "run_dir": str(run_log.run_dir), **outcome}

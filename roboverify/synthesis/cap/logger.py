@@ -65,12 +65,14 @@ class CapLogger:
         self.timeline.write(line + "\n")
         self.text(line)
         if self.run:
+            details = {
+                key: event[key] for key in ("checkpoint_id", "helper") if key in event
+            }
             self.run.set_status(
                 phase=kind,
                 trial_id=self.trial_id,
-                checkpoint_id=event.get("checkpoint_id"),
-                helper=event.get("helper"),
                 last_cap_event=self.sequence,
+                **details,
             )
         return self.sequence
 

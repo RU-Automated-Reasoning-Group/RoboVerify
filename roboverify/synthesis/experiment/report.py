@@ -408,6 +408,37 @@ class RunSummary:
     def render(
         self, max_lines: int = DEFAULT_MAX_LINES, force_tail: bool = False
     ) -> str:
+        if self.config.get("name") == "cap":
+            lines = [f"CaP run: {self.run_id}", f"status: {self.overall_status}"]
+            config = self.config.get("config", {})
+            for key in (
+                "method",
+                "task",
+                "model_backend",
+                "generate_only",
+                "validation_enabled",
+                "refinement_enabled",
+            ):
+                lines.append(f"{key}: {config.get(key)}")
+            model = config.get("model", {})
+            lines.append(f"model: {model.get('provider')} / {model.get('model')}")
+            for key in ("phase", "helper", "checkpoint_id", "heartbeat"):
+                lines.append(f"{key}: {self.status.get(key)}")
+            for key in (
+                "success",
+                "environment_success",
+                "dsl_postcondition",
+                "model_calls",
+                "known_tokens",
+                "unknown_usage_calls",
+                "execution_ticks",
+                "video",
+                "exit_reason",
+                "artifacts_path",
+            ):
+                lines.append(f"{key}: {self.result.get(key)}")
+            lines.append(f"artifacts: {self.dir / 'artifacts'}")
+            return "\n".join(lines[:max_lines])
         fixed = self.header_lines() + self.status_lines() + self.diagnostics_lines()
         failure = self.failure_lines() if (self.looks_unhealthy or force_tail) else []
         # Curve and events share whatever budget the fixed sections leave, so the

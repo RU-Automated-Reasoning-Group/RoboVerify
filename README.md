@@ -108,6 +108,12 @@ geometric model, not total termination or physical-controller refinement.
 
 ## Documentation
 
+The [CaP comparison implementation](roboverify/synthesis/cap/README.md) provides
+the pinned Google baseline and constrained method 1 with shared text-model
+transport, tower-task adapters, checkpoints, and rollout logging. Offline tests
+cover the methods and shared interfaces; MuJoCo physical validation and
+Grid/Pyramid Goal adapters remain pending.
+
 | Document | Purpose |
 | --- | --- |
 | [AGENTS.md](AGENTS.md) | Development rules, environment, commands, architecture and experiment reporting. |
@@ -119,6 +125,7 @@ geometric model, not total termination or physical-controller refinement.
 | [Standalone CEGIS](roboverify/synthesis/verification_lib/CEGIS.md) | APIs and commands for refining existing programs. |
 | [Counterexample learning](roboverify/synthesis/experiment/invariant_learning/README.md) | Section 6.2 experiment from a fixed program and no demonstrations; symbolic or both proof stages. |
 | [Trace inference](roboverify/synthesis/inference_lib/README.md) | Collecting loop-head states and learning invariants with DemoStore. |
+| [CaP methods](roboverify/synthesis/cap/README.md) | Google baseline and constrained method 1: model providers, CLI, logging/checkpoints, supported interface, and validation scope. |
 
 Implementation lives in `roboverify/`. Configure MuJoCo through AGENTS.md and run
 entry points as modules from that directory. Tests use `unittest`. The reviewed
