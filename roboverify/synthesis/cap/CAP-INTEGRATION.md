@@ -344,7 +344,9 @@ requests; global exhaustion propagates without entering a local repair loop.
 # REFINE setup_LMP: retain callable modules; replace their exposed capabilities.
 def setup_constrained_cap(env, task_spec, budget):
     namespace = build_dsl_namespace(env, task_spec)             # NEW
-    for name in task_spec.relational_query_modules:
+    # OPTIONAL: proposed configuration, not an existing repository field.
+    # Default: no auxiliary query LMPs; recursive helper generation still works.
+    for name in getattr(task_spec, "relational_query_modules", ()):
         namespace[name] = callable_lmp(
             name, namespace, role="condition", budget=budget
         )                                                     # REFINE
@@ -443,8 +445,18 @@ finally:
     env.close()
 ```
 
+`task_spec.relational_query_modules` is an **optional proposed configuration**,
+not an existing repository field or a finalized module list. It defaults to an
+empty sequence in this pseudocode. It names auxiliary LMPs that generate query
+code, not DSL predicates; predicates are already installed by
+`build_dsl_namespace`. Plan 1's recursive helper generation works without these
+modules. Generated ordinary helpers execute their checked code without a new
+model request on each call. Declare the auxiliary LMP configuration in benchmark
+results; leaving this list empty is a configuration choice, not a requirement to
+remove runtime LMP capability from constrained CaP.
+
 `callable_lmp` has the same meaning as in Section 1: calling it dispatches to
-`invoke_lmp`. Relational query modules return predicate-derived values or allowed
+`invoke_lmp`. When configured, relational query modules return predicate-derived values or allowed
 object bindings; their metadata includes output types as well as the no-action
 role. The old coordinate-returning parsing prompts must be replaced. Queries
 generated during execution use the same preparation routine before they run.
@@ -483,7 +495,7 @@ The mappings below refer to the pinned
 | Component | Classification | Google CaP starting point and required work |
 | --- | --- | --- |
 | Prompt assembly, instruction/context formatting, optional history, configured return extraction | REUSE mechanism | `LMP.build_prompt` and the corresponding parts of `LMP.__call__`. Supply DSL examples and API metadata; validate any executable context. |
-| Callable policy and auxiliary modules | REFINE | Preserve `LMP` objects and `setup_LMP` wiring. Attach roles, output contracts, shared budgets, and the checked invocation path; replace geometry-oriented query prompts. |
+| Callable policy and optional auxiliary modules | REFINE | Preserve `LMP` objects and `setup_LMP` wiring. Attach roles, output contracts, shared budgets, and the checked invocation path; replace geometry-oriented query prompts when auxiliary modules are configured. `relational_query_modules` is proposed and defaults to empty. |
 | Model generation of a helper from its signature | REFINE | Use the generation part of `LMPFGen.create_f_from_sig`. Add role/API instructions and bounded model transport. Return source without executing the definition before validation. |
 | Recursive discovery and generation of missing helpers | REFINE | Start from `LMPFGen.create_new_fs_from_code` and `FunctionParser`. Add lexical binding analysis, role propagation, dependency limits, and checked preparation for each child. The original parser is not the complete validator. |
 | DSL namespace and environment adapter | NEW integration | Replace `LMP_wrapper` and the numerical/perception namespace with typed DSL APIs and opaque object references. Reuse RoboVerify controllers and predicate semantics behind the adapter. |
