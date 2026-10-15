@@ -645,6 +645,25 @@ The candidate needs reachable placement/transport targets and validated physical
 executions before adoption as groundtruth; this experiment does not establish
 which waypoint changes suffice.
 
+### Videos of the saved Unstack executions
+
+All 15 trials above have annotated MP4s under
+`runs/unstack-groundtruth/videos-20261015/`, named
+`unstack_<blocks>_blocks_seed_<seed>.mp4`. Each has oblique and side camera views,
+the active instruction, measured gripper-target error, controller-failure count,
+and final task verdict. Playback follows the 25 Hz simulator clock, with a
+one-second opening hold, a brief pause at failed primitives, and a two-second
+final hold. Rendering restores the original full-state snapshots without
+advancing physics; every restored observation is checked against its recording.
+
+Useful examples are two-block seed 1 (accepted demonstration), four-block seed 0
+(transport failures), four-block seed 3 (tower displacement in one iteration),
+and four-block seed 4 (final postcondition fails). The full set is also packaged
+as `unstack_all_15_videos.zip` in that directory. `videos.json` records source
+archives, verdicts, frame counts and durations; `render_unstack.py` is the exact
+renderer used. All clips are 1280×680 H.264 MP4 at 25 fps and were checked for
+complete decoding. Each rendering invocation retained the 55-second process cap.
+
 ## Counterexample learning without initial demonstrations
 
 The separate [Section 6.2 experiment](../experiment/invariant_learning/README.md)
