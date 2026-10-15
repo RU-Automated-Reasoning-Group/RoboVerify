@@ -547,10 +547,12 @@ Each process ran the usual ablation command with `--case baseline
 
 ## User-supplied Unstack groundtruth diagnostic
 
-**The supplied program is not yet an acceptable demonstration source in the
-current simulator (2026-10-15).** This experiment ignored its supplied invariant;
-it checked complete executions, the shared Unstack pre/postconditions, and
-primitive convergence. It did not run symbolic or motion verification.
+**The original +X program is not an acceptable demonstration source in the
+current simulator (2026-10-15).** This original experiment ignored its supplied
+invariant; it checked complete executions, the shared Unstack pre/postconditions,
+and primitive convergence. It did not run symbolic or motion verification.
+The later [right-to-left revision](#right-to-left-unstack-revision) passes the
+bounded execution tests documented separately below.
 
 The tested guard is the following, with `n != tbl` inside the antecedent:
 
@@ -663,6 +665,76 @@ as `unstack_all_15_videos.zip` in that directory. `videos.json` records source
 archives, verdicts, frame counts and durations; `render_unstack.py` is the exact
 renderer used. All clips are 1280×680 H.264 MP4 at 25 fps and were checked for
 complete decoding. Each rendering invocation retained the 55-second process cap.
+
+### Right-to-left Unstack revision
+
+**The revised layout/program passes all 15 execution validations (2026-10-15):**
+seeds 0–4 for each of 2, 3 and 4 blocks. All initial/final task predicates hold,
+every primitive converges within its unchanged 50-step budget and 2 mm tolerance,
+and each execution exits after N−1 iterations. Every final block is within 2 mm
+of the resting table height. This is empirical groundtruth validation in the
+specified workspace, not symbolic or motion verification.
+
+The environment's existing Grid/Pyramid convention calls higher Y the right side
+and lower Y the left side; X controls forward distance from the robot base.
+The experiment starts the tower at:
+
+```text
+X = base_X + Uniform(0.54, 0.58) m
+Y = base_Y + 0.075*(N-1) + Uniform(-0.01, 0.01) m
+```
+
+This places the tower to the right and centers the intended final 15 cm-spaced
+row across the base's Y coordinate. It retains the current tower ordering and
+initial heights. The reset override applies only to the experiment's environment
+instance; ordinary Unstack/Reverse resets and archived states are unchanged.
+
+The guard and first three instructions are unchanged. The revised last three
+instructions are:
+
+```text
+Move(b0, Y_min, b_prime, (0, -0.15, 0.15))
+Move(b0, Y_min, b0,      (0,  0,    0))
+Release(Z_m, 0.15)
+```
+
+`Y_min` is the current minimum Y among all blocks, including the carried block;
+`Z_m` remains the current maximum Z. Commanded X stays anchored to b0. The
+transport's additional 15 cm rise is retained, so reducing that offset was not
+necessary for these bounded lateral scenes. This experiment changes both the
+starting workspace and placement direction; it does not isolate their individual
+effects. Actual placed block X can differ slightly from the commanded gripper X.
+
+The runnable implementation is
+[`synthesis.experiment.unstack_lateral`](../experiment/unstack_lateral.py).
+It resolves the extrema in a scoped execution wrapper and saves per-instruction
+targets, validation summaries, and full-state traces. Dynamic extrema are still
+outside the production symbolic/motion DSL, and the Stack-only collector CLI
+is unchanged. Run with the usual MuJoCo environment from `roboverify/`:
+
+```bash
+timeout --signal=TERM --kill-after=2s 55s \
+  uv run python -m synthesis.experiment.unstack_lateral \
+  --num-blocks 4 --seeds 0 1 2 3 4
+```
+
+The tested scope is 2–4 blocks; the runner enforces it. The supplied invariant
+is ignored. No primitive tolerances or budgets were relaxed, and no extra
+initial settling was added. Each batch completed inside its 55-second cap.
+
+The five-seed runs under `runs/unstack-lateral/` are:
+
+- `20261015-172456-efd81a5-2-blocks`
+- `20261015-172456-efd81a5-3-blocks`
+- `20261015-172409-efd81a5-4-blocks`
+
+The packaged module also reproduces the four-block seed-0 success in
+`20261015-172610-efd81a5-4-blocks`. Read runs with the bounded report tool.
+Annotated videos for all 15 trials are under
+`runs/unstack-lateral/videos-right-to-left-20261015/`; the front and overhead
+views show decreasing Y as screen-right to screen-left. They restore the exact
+recorded snapshots, use 25 fps, and include an initial/final hold. The directory
+also contains `videos.json`, the renderer, and `unstack_lateral_all_15_videos.zip`.
 
 ## Counterexample learning without initial demonstrations
 

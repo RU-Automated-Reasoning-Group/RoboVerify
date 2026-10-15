@@ -168,6 +168,17 @@ the one-block guard loops forever. This is a distinct candidate and empirical
 controller diagnosis, not a correction to the historical oracle or a new formal
 verification result. See the [program, semantics, counts and saved traces](roboverify/synthesis/cfg/VERIFICATION.md#user-supplied-unstack-groundtruth-diagnostic).
 
+**Right-to-left revision, 2026-10-15.** Initializing the tower on the higher-Y
+side of the base in a bounded forward workspace and placing blocks at successive
+`min(Y)-0.15 m` targets passes all 15 trials (five seeds each at 2–4 blocks).
+All task pre/postconditions hold, every primitive converges, and each execution
+takes N−1 iterations. The extra 0.15 m transport rise remains: it was not necessary
+to remove it in this new workspace. Both the layout and direction changed, so
+their effects are not separated. The diagnostic runner and videos are recorded
+[in the verification guide](roboverify/synthesis/cfg/VERIFICATION.md#right-to-left-unstack-revision).
+This establishes empirical validity for the tested scenes, not a formal proof;
+production extrema support and Unstack collector integration remain separate work.
+
 Keep end-to-end Unstack invocations within **60 seconds**; exhausted budgets and
 inconclusive proofs are unsuccessful results.
 
