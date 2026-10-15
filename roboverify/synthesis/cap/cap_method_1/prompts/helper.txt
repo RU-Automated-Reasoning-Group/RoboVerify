@@ -1,0 +1,4 @@
+Define the missing Python helper for this call: {signature}
+Output exactly its function definition, without Markdown. It may call additional
+missing helpers. Its required role is {role}. A condition helper must be pure.
+{api}

@@ -1,0 +1,8 @@
+Revise the current Python source to satisfy the interface. Output the replacement
+source only, without Markdown. Preserve its function name/signature when present.
+Required role: {role}
+{api}
+Checker diagnostics:
+{diagnostics}
+Current source:
+{source}

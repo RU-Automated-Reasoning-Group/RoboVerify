@@ -1,0 +1,6 @@
+Generate Python robot policy code. Output code only.
+{api}
+
+{context}
+
+# Instruction: {instruction}
