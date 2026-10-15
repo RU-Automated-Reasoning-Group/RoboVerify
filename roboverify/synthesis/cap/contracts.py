@@ -67,7 +67,7 @@ QUERIES = frozenset({"exists", "forall", "get"})
 API_NAMES = PREDICATES | ACTIONS | QUERIES
 API_DESCRIPTION = """Available APIs (all object operands are opaque block handles):
 Pick(b) -> None
-Move(x_ref, y_ref, z_ref, [dx, dy, dz]) -> None
+Move(x_ref, y_ref, z_ref, [dx, dy, dz]) -> None # note that Move has 4 arguments.
 Release(b, height_offset) -> None
 ON(a, b), ON_star(a, b), Higher(a, b), Scattered(a, b), eq(a, b) -> bool
 ON_star_zero(a, b) -> bool (frozen task-entry geometry)
