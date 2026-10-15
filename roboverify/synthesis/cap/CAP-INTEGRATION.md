@@ -97,6 +97,115 @@ flowchart TD
     A -->|"State queries"| E
 ```
 
+### 1.1 Google CaP baseline adapted to RoboVerify
+
+**Status: proposed, not implemented or vendored by this document.** Add
+`cap_google_baseline` alongside the two constrained methods. It uses Google's
+original LMP generation, recursive missing-helper generation, and Python
+execution flow, connected to RoboVerify with minimal necessary changes. It does
+not use Plan 1/2's DSL validator, role inference, checked interpreter, or
+violation-guided repair. Whether it produces more invalid or unsuccessful
+programs is an experimental hypothesis, not an assumed result.
+
+Place its integration under `roboverify/synthesis/cap/cap_google_baseline/`.
+Keep environment adaptation, model transport, logging/checkpoints, recording,
+and the trial harness shared with `cap_method_1` and the future method 2. The
+baseline must not call method 1's source-preparation or repair routines.
+
+```text
+synthesis/cap/
+  cap_google_baseline/
+    __init__.py
+    method.py                 # Baseline setup and original invocation path
+    compatibility.py          # Necessary model/environment integration shims
+  cap_method_1/
+    ...                       # Recursive DSL validation and local repair
+  vendor/google_cap/
+    ...                       # Pinned upstream source and provenance/license
+  adapter.py                  # Shared RoboVerify primitive/predicate interface
+  llm.py                      # Shared model transport and usage accounting
+  logger.py                   # Shared CaP event/text logging
+  checkpoints.py              # Shared source versions and artifact manifests
+  recording.py               # Shared trajectories and video correlation
+  runner.py                  # Shared trial preparation and evaluation
+```
+
+These are proposed paths, not existing implementation files. Retrieve the
+official `code_as_policies` subtree/notebooks at the commit pinned in Section 1
+rather than copying an unversioned third-party port or importing the entire
+Google Research repository. Preserve upstream license/attribution, record the
+exact source and extracted notebook cells, and keep extraction separate from
+integration changes. The reviewed core lives in a notebook; it is not an
+already packaged drop-in Python library. Keep a reviewable diff for any required
+changes to extracted core code.
+
+#### Interface and comparison scope
+
+The default comparison uses the **same advertised RoboVerify DSL API** as Plan 1
+and Plan 2, but has **no added static DSL enforcement or compliance-repair loop**.
+Expose the same primitive controllers, predicates, input handles, action-offset
+semantics, and task adapters. Do not silently add raw `get_obj_pos`, observation,
+simulator access, or hand-written composite skills to this variant. The absence
+of the checker does not itself grant new environment capabilities.
+
+Generated code can still attempt unsupported calls or construct conditions
+outside the declared DSL. Let the original helper generator and execution path
+handle them; record generation/runtime failures without invoking a new repair
+mechanism. Adapter argument validation and common primitive-failure rules still
+apply. A rollout that completes is scored by the same terminal task evaluator;
+absence of a DSL check must not be reported as proof of DSL compliance. Any
+post-hoc compliance analysis must be labeled separately and must not gate or
+repair this baseline's execution.
+
+A variant that restores Google's raw-perception/composite-action API would
+change both capabilities and enforcement. It would be a separate experiment,
+not the default `cap_google_baseline` described here. This baseline is an
+adaptation to RoboVerify, not an exact reproduction of Google's tabletop setup.
+
+#### Minimal changes from Google CaP
+
+| Component | Treatment | Reason and boundary |
+| --- | --- | --- |
+| `LMP.build_prompt`, callable modules, history, configured return extraction | Preserve the original mechanism | Keep the original module invocation behavior. Declare the auxiliary modules used; do not change their configuration silently between methods. |
+| `LMPFGen.create_new_fs_from_code` and helper generation | Preserve the original recursive algorithm | Do not add condition/body role inference or checker-driven local retries. Log generated definitions and dependency relationships. |
+| `exec_safe` and helper binding | Preserve the original execution path and basic filtering | Do not replace it with the constrained interpreter or defer execution based on the new DSL validator. Instrument existing execution/binding boundaries. |
+| `setup_LMP` / environment wrapper | Replace the tabletop bindings with the shared adapter | The original simulator and action dictionary do not match RoboVerify. Reuse its existing controllers and predicate semantics. |
+| Prompt API descriptions, examples, and task context | Adapt to the actual available interface | Remove unavailable tabletop API assumptions; provide interface-correct examples without benchmark solutions. Use matched task instructions/API guidance across compared methods where applicable. Log every prompt difference. |
+| Historical model API calls | Use the shared model-client compatibility layer | Preserve prompt content and intended generation settings; use the same selected model across variants and record the actual request. Transport retries do not become semantic code repair. |
+| Optional upstream `fix_bugs` | Keep disabled in the default experiment | The original helper-generator default is false. Enabling its edit call is an explicit extra configuration, not Plan 1/2's repair loop. |
+| Trial lifecycle and budgets | Connect the shared host runner | Use identical initial snapshots, task evaluators, controllers, and declared generation/execution limits. Bound original retry/generation behavior; record exhaustion rather than hanging indefinitely. |
+| Logging, source checkpoints, and video | Add shared observational hooks | Save what the original method generated and executed, including failures; logging must not rewrite code, add task feedback, or run the robot twice. |
+
+Use the same model and starting generation configuration when isolating the
+effect of DSL enforcement/refinement. Log total calls/tokens and wall time,
+including additional repair calls in Plans 1/2. Keep initial-state suites and
+success denominators identical; report failures without removing difficult
+trials. Declare whether generation is shared across scenes or repeated per
+trial for every method.
+
+#### Shared logger with baseline-specific events
+
+Use the logging/checkpoint/video layer in Section 2.8 for all methods, with
+`method="cap_google_baseline"` in the run configuration. Reuse the run-directory
+contract and include the method in the slug/report. Add hooks around prompt/model
+calls, helper generation/binding, Python execution, adapter calls, and trial
+evaluation; a separate storage/logger implementation is unnecessary.
+
+Store initial code, every generated helper, the assembled source versions, and
+runtime-generated LMP code even if the original method executes definitions
+before all dependencies exist. Record the actual execution order and namespace
+versions rather than imposing Plan 1's validate-before-binding order. Checkpoint
+validation status is `not_run`, with `validation_enabled=false` and
+`refinement_enabled=false`; do not manufacture passing validation or repair
+events. Ordinary helper generation is not a refinement attempt.
+
+Use observational Python tracing if statement/helper/branch events are needed
+on the original execution path, and record its overhead. Adapter/`env.step`
+hooks provide shared primitive outcomes, environment traces, and videos. These
+hooks must not route the baseline through the constrained interpreter. Retain
+all printed output and artifact paths, and use the same host-only treatment of
+environment information as the constrained methods.
+
 ## 2. Constrained CaP
 
 ### 2.1 Benchmark objective
@@ -591,6 +700,8 @@ checkpoints, and execution/video correlation. Google's notebook print sites are
 useful instrumentation points, but its generated-code prints and execution
 history do not provide this experiment record. Plan 2 can reuse this logging
 layer with whole-candidate revisions instead of local helper revisions.
+The Google baseline in Section 1.1 also shares this layer, with validation and
+refinement explicitly disabled and execution hooks on its original Python path.
 
 #### Event identity and required records
 
