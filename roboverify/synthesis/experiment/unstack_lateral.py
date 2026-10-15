@@ -1,8 +1,9 @@
 """Test the supplied Unstack program with a right-side tower and leftward placement.
 
 Higher Y is right and lower Y is left in the existing Grid/Pyramid convention.
-This isolated experiment resolves current minimum-Y and maximum-Z operands at
-execution time; these operands are not implemented in the symbolic/motion DSL.
+This isolated experiment resolves current minimum-Y, maximum-Z and gripper-Z
+operands at execution time; these are not implemented in the symbolic/motion DSL.
+The sideways transfer freezes the gripper height reached by the preceding lift.
 The supplied invariant is ignored. Controllers and production resets are unchanged.
 Run from roboverify with the MuJoCo environment and an external 55-second timeout.
 """
@@ -18,7 +19,13 @@ from unittest.mock import patch
 import numpy as np
 import z3
 
-from synthesis.api.instructions import MoveByName, PickByName, ReleaseByName, While
+from synthesis.api.instructions import (
+    MoveByName,
+    PickByName,
+    ReleaseByName,
+    While,
+    _eval_primitive,
+)
 from synthesis.api.program import Program
 from synthesis.cfg.collection import record_execution, validate_trace
 from synthesis.cfg.program_source import prepare_program
@@ -48,14 +55,15 @@ def build_program(context, count):
         MoveByName("b_prime", "b_prime", "b_prime", target_offset=[0, 0, 0.15]),
         PickByName("b_prime"),
         MoveByName("b_prime", "b_prime", "b_prime", target_offset=[0, 0, 0.15]),
-        MoveByName("b0", "Y_min", "b_prime", target_offset=[0, -0.15, 0.15]),
+        # The scoped execution wrapper resolves gripper Z once at Move entry.
+        MoveByName("b0", "Y_min", "gripper", target_offset=[0, -0.15, 0]),
         MoveByName("b0", "Y_min", "b0", target_offset=[0, 0, 0]),
         ReleaseByName("Z_m", target_z=0.15),
     ]
     definition = prepare_program(
         Program(1, [While(guard, [selected], body, invariant=None)]),
         count,
-        source="user-supplied-unstack/right-to-left-current-extrema",
+        source="user-supplied-unstack/right-to-left-horizontal-transfer",
     )
     definition.initial_bindings["tbl"] = "tbl"
     return definition
@@ -66,7 +74,8 @@ def positions(obs, count):
 
 
 @contextmanager
-def dynamic_extrema(count, audit):
+def dynamic_targets(count, audit):
+    """Resolve experiment-only references; keep each motion target fixed."""
     originals = {cls: cls.eval for cls in (MoveByName, PickByName, ReleaseByName)}
 
     def wrap(cls):
@@ -76,6 +85,9 @@ def dynamic_extrema(count, audit):
             aliases = env.symbolic_name_to_box_id
             aliases["Y_min"] = int(np.argmin(xyz[:, 1]))
             aliases["Z_m"] = int(np.argmax(xyz[:, 2]))
+            hold_gripper_height = (
+                cls is MoveByName and instruction.target_box_name_z == "gripper"
+            )
             if cls is MoveByName:
                 names = (
                     instruction.target_box_name_x,
@@ -84,7 +96,11 @@ def dynamic_extrema(count, audit):
                 )
                 target = [
                     float(
-                        xyz[aliases[name], axis]
+                        (
+                            observation[2]
+                            if axis == 2 and hold_gripper_height
+                            else xyz[aliases[name], axis]
+                        )
                         + instruction.target_offset[axis].numeric_val()
                     )
                     for axis, name in enumerate(names)
@@ -103,11 +119,19 @@ def dynamic_extrema(count, audit):
                 instruction=cls.__name__,
                 bindings=dict(aliases),
                 target=target,
+                holds_gripper_height=hold_gripper_height,
                 before=xyz.tolist(),
                 gripper_before=observation[:3].tolist(),
                 index_before=len(traj) - 1,
             )
-            result = originals[cls](instruction, env, traj, return_image)
+            if hold_gripper_height:
+                # Use the same bounded controller with an absolute waypoint.
+                # A zero block-relative offset would still change gripper Z.
+                result = _eval_primitive(
+                    instruction, env, traj, return_image, "move", target
+                )
+            else:
+                result = originals[cls](instruction, env, traj, return_image)
             row.update(
                 control=asdict(instruction.last_control_result),
                 after=positions(traj[-1], count).tolist(),
@@ -159,7 +183,7 @@ def run(args, logger):
         audit = []
         definition = build_program(context, args.num_blocks)
         logger.set_status(phase="execution", seed=seed)
-        with dynamic_extrema(args.num_blocks, audit):
+        with dynamic_targets(args.num_blocks, audit):
             trace = record_execution(
                 definition,
                 seed=seed,
@@ -172,6 +196,9 @@ def run(args, logger):
         trace.metadata["task_spec"] = task_identity("unstack")
         trace.metadata["extrema_semantics"] = (
             "minimum Y and maximum Z among all physical blocks, recomputed before each instruction"
+        )
+        trace.metadata["transport_height_semantics"] = (
+            "gripper Z captured once at transfer entry and held throughout the move"
         )
         valid = validate_trace(trace)
         pre, post = task_spec("unstack")
@@ -270,7 +297,8 @@ def main():
         dict(
             vars(args),
             layout="right-to-left; X in base+[.54,.58]; initial Y=base+.075*(N-1)+/- .01; spacing .15",
-            transport_z_offset=0.15,
+            transport_height="hold gripper Z at transfer entry",
+            transport_z_offset=0.0,
         ),
         slug=f"{args.num_blocks}-blocks",
     ) as logger:

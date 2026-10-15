@@ -172,9 +172,13 @@ verification result. See the [program, semantics, counts and saved traces](robov
 side of the base in a bounded forward workspace and placing blocks at successive
 `min(Y)-0.15 m` targets passes all 15 trials (five seeds each at 2–4 blocks).
 All task pre/postconditions hold, every primitive converges, and each execution
-takes N−1 iterations. The extra 0.15 m transport rise remains: it was not necessary
-to remove it in this new workspace. Both the layout and direction changed, so
-their effects are not separated. The diagnostic runner and videos are recorded
+takes N−1 iterations. The current revision holds the gripper Z reached by the lift
+throughout the sideways transfer. Repeating all 15 trials from exactly the same
+initial scenes still passes, with at most 1.221 mm gripper height deviation across
+30 transfers (2.481 mm for the carried block). The preceding lateral version also
+passed but retained an unwanted extra 0.15 m rise. Its initial workspace and
+direction changed together, so those effects were not separated. The diagnostic
+runner and videos are recorded
 [in the verification guide](roboverify/synthesis/cfg/VERIFICATION.md#right-to-left-unstack-revision).
 This establishes empirical validity for the tested scenes, not a formal proof;
 production extrema support and Unstack collector integration remain separate work.

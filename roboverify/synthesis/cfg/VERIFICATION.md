@@ -693,24 +693,26 @@ The guard and first three instructions are unchanged. The revised last three
 instructions are:
 
 ```text
-Move(b0, Y_min, b_prime, (0, -0.15, 0.15))
+Move(b0, Y_min, gripper, (0, -0.15, 0))
 Move(b0, Y_min, b0,      (0,  0,    0))
 Release(Z_m, 0.15)
 ```
 
 `Y_min` is the current minimum Y among all blocks, including the carried block;
 `Z_m` remains the current maximum Z. Commanded X stays anchored to b0. The
-transport's additional 15 cm rise is retained, so reducing that offset was not
-necessary for these bounded lateral scenes. This experiment changes both the
-starting workspace and placement direction; it does not isolate their individual
-effects. Actual placed block X can differ slightly from the commanded gripper X.
+transport captures the gripper Z at instruction entry, after the preceding lift,
+and holds that absolute target throughout the move. The experiment-only `gripper`
+Z operand avoids another 15 cm rise and also avoids the small block-center/gripper
+height difference that a zero block-relative Z offset would introduce. The shared
+controller continues correcting all three coordinates toward the fixed target.
+Actual placed block X can differ slightly from the commanded gripper X.
 
 The runnable implementation is
 [`synthesis.experiment.unstack_lateral`](../experiment/unstack_lateral.py).
-It resolves the extrema in a scoped execution wrapper and saves per-instruction
-targets, validation summaries, and full-state traces. Dynamic extrema are still
-outside the production symbolic/motion DSL, and the Stack-only collector CLI
-is unchanged. Run with the usual MuJoCo environment from `roboverify/`:
+It resolves extrema and gripper Z in a scoped execution wrapper and saves
+per-instruction targets, validation summaries, and full-state traces. These
+references remain outside the production symbolic/motion DSL, and the Stack-only
+collector CLI is unchanged. Run with the usual MuJoCo environment from `roboverify/`:
 
 ```bash
 timeout --signal=TERM --kill-after=2s 55s \
@@ -722,19 +724,35 @@ The tested scope is 2–4 blocks; the runner enforces it. The supplied invariant
 is ignored. No primitive tolerances or budgets were relaxed, and no extra
 initial settling was added. Each batch completed inside its 55-second cap.
 
-The five-seed runs under `runs/unstack-lateral/` are:
+The five-seed horizontal-transfer runs under `runs/unstack-lateral/` are:
 
-- `20261015-172456-efd81a5-2-blocks`
-- `20261015-172456-efd81a5-3-blocks`
-- `20261015-172409-efd81a5-4-blocks`
+- `20261015-173904-86c448d-2-blocks`
+- `20261015-173905-86c448d-3-blocks`
+- `20261015-173905-86c448d-4-blocks`
 
-The packaged module also reproduces the four-block seed-0 success in
-`20261015-172610-efd81a5-4-blocks`. Read runs with the bounded report tool.
-Annotated videos for all 15 trials are under
-`runs/unstack-lateral/videos-right-to-left-20261015/`; the front and overhead
-views show decreasing Y as screen-right to screen-left. They restore the exact
-recorded snapshots, use 25 fps, and include an initial/final hold. The directory
-also contains `videos.json`, the renderer, and `unstack_lateral_all_15_videos.zip`.
+All 30 transfer targets exactly retain their entry gripper Z. Across every saved
+transfer step, maximum absolute gripper height deviation is **1.221 mm**, and
+maximum carried-block height excursion from its transfer-entry position is
+**2.481 mm**. The latter includes grasp dynamics. All 15 initial observations
+exactly match the earlier lateral trials, isolating the transport-target change.
+All task, termination and controller checks above still pass. All 36 existing
+controller and collection regression tests also pass.
+
+Read runs with the bounded report tool. Updated annotated videos for all 15 trials
+are under `runs/unstack-lateral/videos-horizontal-20261015/`; front and overhead
+views show decreasing Y as screen-right to screen-left, and the transfer annotation
+reports the fixed gripper height and its current tracking error. They restore the
+exact recorded snapshots, use 25 fps, and include an initial/final hold. The
+directory also contains `videos.json`, the renderer,
+`horizontal-transfer-validation.json`, and `unstack_horizontal_all_15_videos.zip`.
+
+The preceding lateral version retained `Move(b0, Y_min, b_prime, (0, -0.15, 0.15))`
+and therefore rose diagonally during transport. Its passing runs remain under
+`20261015-172456-efd81a5-2-blocks`, `20261015-172456-efd81a5-3-blocks`, and
+`20261015-172409-efd81a5-4-blocks`; the packaged-module seed-0 replay is
+`20261015-172610-efd81a5-4-blocks`. Its earlier videos remain under
+`runs/unstack-lateral/videos-right-to-left-20261015/`. That version changed both
+the original workspace and placement direction, so those effects were not isolated.
 
 ## Counterexample learning without initial demonstrations
 
