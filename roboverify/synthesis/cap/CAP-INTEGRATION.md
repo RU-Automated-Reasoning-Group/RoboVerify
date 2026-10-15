@@ -745,6 +745,96 @@ hold once before saving state zero. For replay, never reset from the seed or
 repeat settling. `GymToGymnasium.reset` does not implement seed handling by
 itself; use the existing seed-management path in collection.
 
+### 4.4 Environment adapter implementation plan
+
+**Status: proposed, not implemented.** Reuse RoboVerify's environment directly
+inside the trusted host, and expose a thin DSL adapter to generated CaP code.
+The same adapter serves both constraint-repair plans; their generation and repair
+flows do not change action or predicate semantics. `build_dsl_namespace` in
+Section 2.6 is the proposed entry point for constructing this interface.
+
+```mermaid
+flowchart TD
+    P["Validated CaP policy and helpers"] --> A["DSL adapter: typed handles, primitives, predicates"]
+    A --> C["Existing ByName instructions and shared controllers"]
+    A --> Q["Existing Term / Scene predicate evaluation"]
+    C --> E["Existing RoboVerify environment"]
+    E -->|"Current state, visible only to trusted code"| Q
+    Q -->|"Predicate truth or permitted bindings"| A
+    H["Host: snapshots, recording, budgets, terminal evaluation"] --> E
+```
+
+The adapter bridges function calls such as `Pick(b)` to existing instruction
+execution. It does not replace the simulator, reimplement primitive controllers,
+or define alternative geometric predicates. Environment-native `step(action)`
+accepts a four-dimensional command; policy-level `Pick` can require many such
+steps. Queries read the current state without advancing physics.
+
+| Work item | Reuse directly | New adapter responsibility |
+| --- | --- | --- |
+| Environment lifecycle | Task factories, `inner_env`, `capture`, `restore`, `env.close` | Keep lifecycle operations in the host; construct one adapter per trial after restoring the start. |
+| Object identity | `symbolic_name_to_box_id`, named operand resolution, `Assign` semantics | Expose opaque object handles and identity operations; keep physical IDs, coordinates, simulator objects, and alias tables internal. Reject invalid or cross-trial handles. |
+| Physical primitives | `PickByName`, `MoveByName`, `ReleaseByName`, their existing execution path and `PrimitiveController` | Validate operand types and finite offsets, resolve handles to internal aliases, invoke existing primitives with the same configuration, and retain controller results for the host recorder. |
+| Current predicates | `Term`, `scene_from_obs`, `evaluate`, shared `util/on.py` semantics | Convert checked query expressions and handles into existing terms/bindings; build a current Scene and return predicate truth. Do not return raw Scene objects or coordinates. |
+| Object selection | `Get`/`While` and `find_and_bind` semantics | Preserve the common witness-selection rule and bind returned handles. Report no-witness outcomes according to the shared query contract, without adding a geometric fallback. |
+| Historical predicates | `Scene.entry_positions`, `scene_from_obs(..., entry_obs=...)`, existing frozen geometry support | Capture the declared entry geometry once; pass it explicitly to later queries. Preserve task-entry history through Reverse stages rather than freezing a new history on each query. |
+| API metadata | Existing DSL definitions and operand meanings | Register parameter/return types and action effects for the deterministic checker; protect API bindings and specify which outputs are legal in conditions. |
+| Trace and failure integration | Existing action capture, snapshots, primitive results, and runtime events | Connect the chosen CaP executor to recording and deadlines. Keep raw observations, convergence details, reward, and success flags host-side. |
+
+Primitive wrappers must preserve the signatures in Section 4.1: Move uses three
+reference objects plus XYZ offsets; Release's height argument is an offset from
+its reference block, not an absolute world height or a placement command. The
+adapter must use the shared controller settings and step budgets. A primitive
+failure terminates or fails the rollout under the common benchmark rule; it must
+not become a new bool-returning perception API for generated conditions.
+
+Predicate wrappers must use relational `ON`, the configured Higher tolerance,
+and the same object domain as RoboVerify. Object equality compares identity,
+not coordinates. A current observation may be reused while no state changes,
+but must be refreshed after physical actions. Frozen entry geometry remains
+separate. Do not omit `entry_obs` when evaluating a historical relation: the
+Scene constructor otherwise defaults entry geometry to the current positions.
+
+The host owns reset/replay, initial handles, trajectory recording, time limits,
+and independent terminal scoring. It may call the existing env interfaces
+directly through the helpers in Section 4.3. It must not place `env`, a bound
+adapter object with inspectable internals, or the evaluator in the generated
+program's namespace. The checked executor mediates allowed calls; an API wrapper
+alone does not enforce the restricted-Python contract.
+
+Implementation order:
+
+1. **Define the shared interface contract.** Specify handle types, primitive
+   signatures, predicate and query outputs, witness behavior, and failure rules.
+   Distinguish current-state queries from frozen-history queries. Reuse this
+   metadata in both the adapter and validator.
+2. **Connect Stack first.** Restore an existing full snapshot, initialize its
+   aliases and entry geometry, wrap the three physical primitives, and connect
+   predicate evaluation to the existing Scene interpreter. Retain every physical
+   step through the wrapper so the recorder observes it.
+3. **Connect the checked executor and recorder.** Support validated conditionals,
+   loops, helpers, and any configured auxiliary LMP calls. Existing
+   `record_execution`/`collect_recording` execute `Program` objects, not arbitrary
+   generated Python; reuse their machinery where compatible and add the required
+   execution bridge. Current flat-loop/If limitations remain explicit.
+4. **Extend task adapters.** Unstack needs the shared physical table-placement
+   contract; relational `tbl` has no coordinates and cannot simply be passed to
+   `MoveByName`. Reverse needs persistent task-entry history; ReStack needs its
+   own input/preparation and terminal task contract. Grid/Pyramid need shared
+   typed Goal references, traversal/occupancy semantics, and physical goal-action
+   bindings. These are shared DSL/runtime gaps, not CaP-only extra capabilities.
+5. **Validate interface parity before benchmarking.** Compare adapter queries
+   against the existing predicate evaluator on the same current and entry
+   states. Compare matched primitive executions from identical snapshots with
+   identical operands/configuration. Check handle identity, no-witness behavior,
+   convergence failures, exact replay, and recording. Test that generated code
+   cannot access raw observations or use action results as conditions.
+
+Adapter parity checks establish that both methods use the same interfaces and
+execution semantics; they do not establish policy task success. Report remaining
+task-adapter gaps separately from generated-policy failures. This plan adds no
+new benchmark results or simulator validation claim.
+
 ## 5. Verification Is an Explicit Additional Configuration
 
 The Section 2 baseline measures constrained CaP's physical performance without
