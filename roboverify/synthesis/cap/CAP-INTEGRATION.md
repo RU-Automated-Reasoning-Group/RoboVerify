@@ -581,6 +581,154 @@ followed by independent task evaluation. Any configured runtime LMP output must
 pass the same checks before it runs. Record all model calls and exhausted
 attempts; neither convergence nor task success is guaranteed.
 
+### 2.8 Plan 1 logging, checkpoints, and video
+
+**Status: proposed, not implemented.** Build a CaP-specific logging layer on
+RoboVerify's existing `RunLogger`. Reuse its run-directory contract, configuration
+and provenance capture, status/heartbeat, metrics, artifact paths, exception
+handling, and stdout/stderr capture. Add CaP event schemas, immutable source
+checkpoints, and execution/video correlation. Google's notebook print sites are
+useful instrumentation points, but its generated-code prints and execution
+history do not provide this experiment record. Plan 2 can reuse this logging
+layer with whole-candidate revisions instead of local helper revisions.
+
+#### Event identity and required records
+
+Give each event a monotonic sequence ID, UTC timestamp, elapsed time, run/trial
+ID, phase, and outcome. Where applicable, include parent event/invocation ID,
+module/helper name, required role, recursion depth, model-call ID, source
+checkpoint ID, source file/span, and execution-step/state indices. Keep helper
+invocation identity separate from helper name so recursion and repeated calls
+remain distinguishable. Log start and completion/failure events so interrupted
+operations remain visible.
+
+| Stage | Required records |
+| --- | --- |
+| Run/trial setup | Task and inputs, exact initial snapshot reference/hash, seed, model and generation settings, prompt/API/checker versions, shared budgets, controller settings, Higher tolerance, code revision and dirty flag, output directory. |
+| LMP generation | Full actual prompt/request content, raw returned text, extracted source, module role, latency, token usage when available, transport failures/retries, and remaining budget. Unavailable usage is unknown, not zero. |
+| Local validation | Checked source checkpoint, pass/fail/unsupported outcome, unresolved helper obligations, rule IDs, exact source locations, offending expressions, and diagnostic artifact paths. Missing helpers are pending obligations rather than forbidden API calls. |
+| Helper resolution | Signature, parent invocation, inferred role, recursive dependencies, reuse of an existing definition, generated definition version, and dependency/cycle/depth failures. |
+| Refinement | Original checkpoint, exact checker feedback sent to the LLM, repair prompt/response, revised checkpoint, diff, attempt count, and shared budget usage. Save failed revisions as well as accepted ones. |
+| Complete validation | Exact policy/helper bundle, roles across call sites, dependency/value-flow diagnostics, final validity, and execution eligibility. |
+| Policy execution | Source locations and active checkpoint; statement results/assignments, helper entry/return, predicate arguments/results, selected witnesses, branches, loop iterations/exits, and primitive start/end. Record typed values or artifact references rather than arbitrary object representations. |
+| Simulator steps | Every `env.step` action and outcome, parent primitive invocation, state/snapshot indices, current environment state, reward/termination information, elapsed time, and video-frame references. |
+| Trial completion/failure | Completion status, primitive convergence, terminal task outcome, exceptions/tracebacks, totals for generation and execution, remaining unresolved work, and artifact/video completion or failure. |
+
+Primitive convergence, normal Python completion, and terminal task success are
+separate fields. Environment observations, positions, controller diagnostics,
+reward, success flags, and snapshots belong to host-side records; logging them
+must not expose them to policy code or feed them into interface-only refinement.
+
+#### Text output and execution detail
+
+Print each generation/check/refinement transition and each policy execution
+event. Print a compact result for every simulator step, including its action,
+state index, and primitive invocation. Preserve full generated text and checker
+feedback in text artifacts and emit their paths. All terminal output must also
+be saved as text; retain Python and native stdout/stderr through existing capture.
+Keep console and saved records in English.
+
+Add one CaP `emit` operation that writes an unthrottled structured timeline event
+and a corresponding human-readable line to both console and `stdout.log`.
+Current `RunLogger.progress_line` bypasses `stdout.log`, so add explicit mirroring
+for CaP output rather than assuming capture already saves progress lines. Do not
+route frequent CaP events through the existing rate-limited `log_event` path:
+retain the top-level `events.jsonl` for rare run events and put complete trial
+timelines/step streams under `artifacts/`. Keep top-level metrics flat and small.
+
+Store full observations, object/gripper state, actions, and full simulator
+snapshots in trajectory artifacts, indexed by step; textual records point to
+the exact entries. Statement events that do not advance physics can reference
+the same state. Adapt the recorder to capture this detail for the CaP executor;
+the existing Program recorder is not already a general Python execution tracer.
+
+#### Immutable source checkpoints
+
+Save the initial policy, every newly generated helper, every refinement, each
+assembled dependency bundle, and the final validated executable version. Apply
+the same rule to runtime-generated LMP code. Preserve raw invalid output even
+when Python parsing fails. Every checkpoint must identify the complete policy
+and helper versions available at that point, including unresolved dependencies.
+
+A checkpoint contains `policy.py`, helper sources, `manifest.json`, validation
+results when available, and a diff from its parent when applicable. The manifest
+records parent checkpoint, reason for creation, model-call ID, source hashes,
+dependency versions, checker version, and execution eligibility. Complete source
+copies or immutable references are acceptable if the entire bundle can be
+reconstructed. Never overwrite prior attempts; unchanged execution steps simply
+reference the active checkpoint. Checkpoints of code and simulator snapshots
+are distinct: resuming mid-execution would additionally require interpreter and
+session state and is not promised by this logging plan.
+
+#### File layout and video correlation
+
+Use the existing `runs/cap/<run_id>/` convention. The proposed layout is:
+
+```text
+runs/cap/<run_id>/
+  config.json
+  status.json
+  metrics.jsonl
+  events.jsonl
+  stdout.log
+  result.json
+  artifacts/
+    trial_001/
+      manifest.json
+      initial_state.npz
+      timeline.jsonl
+      lmp/
+        call_005/
+          request.json
+          prompt.txt
+          response.txt
+          source.py
+      checkpoints/
+        cp_000/
+          policy.py
+          helpers/
+          manifest.json
+          validation.json
+          diff.patch
+        cp_001/
+      execution/
+        rollout_001/
+          trajectory.npz
+          steps.jsonl
+          video.mp4
+          frame_index.jsonl
+          traceback.txt
+```
+
+Use unique rollout directories for reruns; retain partial failed executions.
+List artifacts in the trial manifest and log each published path, using paths
+relative to the run directory plus the absolute run directory printed at startup.
+Record missing, partial, completed, and failed artifacts explicitly. Publish
+checkpoint manifests only after their referenced files are saved; flush event
+records promptly and record incomplete operations after interruptions where
+possible. A logging/storage failure must be visible rather than reported as a
+complete reproducible record.
+
+Reuse `VideoRecorder` in `cfg/collection.py` and the existing render hooks. Record
+the actual rollout, starting at the restored initial state and continuing after
+physical steps, without additional actions or a second execution for filming.
+Save a frame index linking frame number to simulator step, state, primitive,
+source checkpoint, and source location. Record FPS, frame count, encoder errors,
+encoder-log path when retained, and final video availability. Fixed-FPS playback
+does not represent wall-clock LMP waiting time; timestamps retain that timing.
+Finalize partial videos on ordinary failures, and respect the overall deadline,
+including Unstack's 60-second limit, during recording and cleanup.
+
+Implementation should first add the CaP event/checkpoint layer, then instrument
+`invoke_lmp`, source preparation, and helper resolution; next connect the checked
+executor, adapter, recorder, and video index. Extend the bounded report reader to
+show the active helper/checkpoint, latest failure, generation/repair counts,
+execution progress, trial outcome, and artifact links. Normal monitoring uses
+that report rather than reading full stdout or metrics files. Validate that
+console lines are retained, repeated failures are not throttled, checkpoints
+reconstruct the executed bundle, and failing rollouts retain correlated traces
+and video metadata. This section is a design, not an implemented logger.
+
 ## 3. Optional Stack Compiler Prototype
 
 This section retains the earlier offline-generation design as a prototype, not
@@ -916,4 +1064,5 @@ nor a model proof alone establishes physical task completion.
 | [cfg/reset.py](../cfg/reset.py) | `inner_env`, `capture`, `restore`, and `collect_recording` |
 | [cfg/collection.py](../cfg/collection.py) | `record_execution`, settling, deadlines, and `validate_trace` |
 | [cfg/tasks.py](../cfg/tasks.py) | Shared Stack pre/postconditions |
+| [experiment/run_logger.py](../experiment/run_logger.py), [experiment/report.py](../experiment/report.py) | Run-directory contract, stdout capture, progress output, event throttling, artifact helpers, and bounded reporting |
 | [cfg/VERIFICATION.md](../cfg/VERIFICATION.md), [inference guide](../inference_lib/README.md) | Existing proof scope, archive contracts, and collection/replay workflow |
