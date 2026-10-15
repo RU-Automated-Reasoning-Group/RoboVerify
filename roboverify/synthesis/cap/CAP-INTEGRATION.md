@@ -276,6 +276,56 @@ must follow value dependencies: `ready = check_ready(b); if ready: ...` requires
 in an assignment. Existing helpers and API calls must also be checked at each
 use; membership in the namespace does not make `Pick` legal in a condition.
 
+The diagram shows the policy-level flow and expands one helper-resolution call.
+Yellow nodes mark the constraint checks and repair added to original CaP.
+Every generation or repair consumes the shared budget; global budget exhaustion
+terminates the attempt from either flow.
+
+```mermaid
+flowchart TD
+    subgraph Policy["Policy generation and execution"]
+        I["Instruction, allowed DSL APIs, and input handles"] --> G["Generate policy source"]
+        G --> T{"Top-level source obeys DSL constraints?"}
+        T -->|"Yes"| R[["Resolve missing helpers with required roles"]]
+        T -->|"No: report violations"| P{"Policy repair budget remains?"}
+        P -->|"Yes"| W["LLM rewrites affected policy code"]
+        W --> T
+        P -->|"No"| F["Record constraint failure"]
+        R -->|"All helpers resolved"| V{"Complete policy and call graph valid?"}
+        R -->|"Helper resolution failed"| P
+        V -->|"No: report violations"| P
+        V -->|"Yes"| E["Bind validated code and execute through DSL APIs"]
+        E -->|"Completed rollout"| O["Independent terminal task evaluation"]
+        E -->|"Runtime LMP request"| N["Generate query code; apply the same checks before it runs"]
+    end
+
+    subgraph Helper["Expanded procedure: resolve_helper"]
+        H["Infer required role from call sites and value dependencies"] --> B{"Helper attempt budget remains?"}
+        B -->|"Yes"| D["Generate or revise helper definition"]
+        B -->|"No"| U["Return failure to caller; parent may be revised"]
+        D --> L{"Local source obeys role and API constraints?"}
+        L -->|"No"| Q["Return constraint feedback to this helper's generator"]
+        Q --> B
+        L -->|"Yes"| C[["Recursively resolve missing child helpers using this same procedure"]]
+        C -->|"Child resolution failed"| Q
+        C -->|"Children resolved, or none required"| A{"Helper and all dependencies obey required role?"}
+        A -->|"No"| Q
+        A -->|"Yes"| S["Return validated helper source and child definitions"]
+    end
+
+    R -.->|"For each missing helper; procedure expanded below"| H
+    classDef changed fill:#fff0c2,stroke:#b36b00,stroke-width:2px;
+    class T,P,W,V,H,B,L,Q,A changed;
+```
+
+For a **condition** helper, the role check requires side-effect-free DSL
+predicate expressions throughout its dependencies. For a **body** helper, it
+allows DSL control APIs while imposing the condition role on internal guards
+and selections. The recursive child call returns to its current parent; the
+parent is accepted only after its dependencies pass. Returned definitions remain
+source until the policy-level validation succeeds. A runtime LMP query resumes
+its waiting caller only after its generated code passes the same validation.
+
 The following makes the recursion explicit. `budget` is shared by the entire
 generation attempt, including parent repairs, child generation, and runtime LMP
 requests; budget exhaustion propagates as a terminal failure. Definitions are
