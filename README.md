@@ -111,8 +111,10 @@ geometric model, not total termination or physical-controller refinement.
 The [CaP comparison implementation](roboverify/synthesis/cap/README.md) provides
 the pinned Google baseline and constrained method 1 with shared text-model
 transport, tower-task adapters, checkpoints, and rollout logging. Offline tests
-cover the methods and shared interfaces; MuJoCo physical validation and
-Grid/Pyramid Goal adapters remain pending.
+cover the methods and shared interfaces. Both methods have also executed an
+identical scripted Pick in the existing MuJoCo runtime, with matching actions and
+recorded video. Full task-policy evaluation and Grid/Pyramid Goal adapters remain
+pending. Reuse the existing runtime as described in AGENTS.md.
 
 | Document | Purpose |
 | --- | --- |

@@ -3,6 +3,10 @@
 __pycache__/
 myenv/*
 
+# Local Python/native runtimes, including links to an existing installation.
+roboverify/.venv
+roboverify/.runtime
+
 # Tooling state
 .claude/worktrees/
 tmux-*.log

@@ -85,7 +85,12 @@ as documented in the root `AGENTS.md`:
 
 ```bash
 unset LD_PRELOAD
-export LD_LIBRARY_PATH="$HOME/.mujoco/mujoco210/bin:/usr/lib/nvidia"
+if [ -d "$PWD/.runtime/mujoco210" ]; then
+    export MUJOCO_PY_MUJOCO_PATH="$PWD/.runtime/mujoco210"
+else
+    export MUJOCO_PY_MUJOCO_PATH="$HOME/.mujoco/mujoco210"
+fi
+export LD_LIBRARY_PATH="$MUJOCO_PY_MUJOCO_PATH/bin:/usr/lib/nvidia"
 uv run python -m synthesis.entry.run_cap --method cap_method_1 --task stack --num-blocks 3 --provider openrouter --model deepseek/deepseek-v4.1-flash
 ```
 
@@ -187,6 +192,17 @@ by a regression test; that earlier accepted diagnostic is not validation evidenc
 The post-fix bounded method-1 diagnostic exhausted its two local attempts on an
 invalid condition, and the original baseline stopped on a generated helper-name
 mismatch. These outcomes are generation diagnostics, not physical task results.
-The physical smoke attempt was classified `environment_unavailable` before any
-model calls or robot actions because the current execution environment lacks the
-complete simulator dependencies and MuJoCo 2.1 installation.
+The earlier `environment_unavailable` diagnostic used an interpreter without
+the project's dependencies. The existing RoboVerify runtime was subsequently
+located in a preserved workspace backup and reconnected through local `.venv`
+and `.runtime/mujoco210` links. No dependency reinstall was needed; see AGENTS.md
+for selecting this runtime instead of the system Python.
+
+The original Stack factory passed reset, step, and offscreen rendering with a
+58-dimensional observation, a four-dimensional action, and a 500x500 RGB frame.
+Both CaP methods then ran the same scripted Pick in real MuJoCo, starting from
+the same saved snapshot: each controller converged in 14 steps, the action
+sequences matched exactly, and each video contained 15 frames. These were
+integration diagnostics using fixed responses, not model-generated Stack
+solutions. Their `goal_failed` results are expected because a single Pick does
+not complete the Stack task. Full task-policy performance remains unmeasured.

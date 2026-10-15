@@ -4,7 +4,7 @@ This document compares Google's original Code as Policies (CaP) tabletop
 implementation with a proposed constrained baseline for RoboVerify's six tasks.
 It also gives an optional Stack compiler prototype and the concrete RoboVerify
 environment interfaces involved.
-**Implementation update (2026-10-14):** `cap_google_baseline` and `cap_method_1`
+**Implementation update (2026-10-15):** `cap_google_baseline` and `cap_method_1`
 now have code, shared text-model transport, logging/checkpoints, and a tower-task
 adapter/runner. See [README.md](README.md) for commands, the exact Python subset,
 and validation limits. Plan 2, the optional Program compiler prototype, Goal
@@ -699,8 +699,9 @@ attempts; neither convergence nor task success is guaranteed.
 
 ### 2.8 Plan 1 logging, checkpoints, and video
 
-**Status: shared logger/checkpoints and rollout recording implemented; physical
-MuJoCo validation remains pending.** Build a CaP-specific logging layer on
+**Status: shared logger/checkpoints and rollout recording implemented; scripted
+real-MuJoCo primitive/video smoke checks passed. Full task-policy evaluation
+remains pending.** Build a CaP-specific logging layer on
 RoboVerify's existing `RunLogger`. Reuse its run-directory contract, configuration
 and provenance capture, status/heartbeat, metrics, artifact paths, exception
 handling, and stdout/stderr capture. Add CaP event schemas, immutable source
@@ -1090,8 +1091,9 @@ itself; use the existing seed-management path in collection.
 
 ### 4.4 Environment adapter implementation plan
 
-**Status: tower block-reference adapter implemented; Goal adapters and physical
-MuJoCo validation remain pending.** Reuse RoboVerify's environment directly
+**Status: tower block-reference adapter implemented and exercised in the existing
+MuJoCo runtime. Goal adapters and full task-policy evaluation remain pending.**
+Reuse RoboVerify's environment directly
 inside the trusted host, and expose a thin DSL adapter to generated CaP code.
 The same adapter serves both constraint-repair plans; their generation and repair
 flows do not change action or predicate semantics. `build_dsl_namespace` in

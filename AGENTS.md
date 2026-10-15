@@ -15,17 +15,34 @@ use the architecture and workflow sections for the affected subsystem.
 
 ## Environment
 
-Configure the working directory and both environment variables before importing
+Configure the working directory and environment variables before importing
 or running simulator code:
 
 ```bash
 cd roboverify
 unset LD_PRELOAD
-export LD_LIBRARY_PATH="$HOME/.mujoco/mujoco210/bin:/usr/lib/nvidia"
+if [ -d "$PWD/.runtime/mujoco210" ]; then
+    export MUJOCO_PY_MUJOCO_PATH="$PWD/.runtime/mujoco210"
+else
+    export MUJOCO_PY_MUJOCO_PATH="$HOME/.mujoco/mujoco210"
+fi
+export LD_LIBRARY_PATH="$MUJOCO_PY_MUJOCO_PATH/bin:/usr/lib/nvidia"
 ```
 
 Without `LD_LIBRARY_PATH`, `import mujoco_py` raises `Missing path to your environment
 variable` and every simulator-backed test fails at import.
+
+Reuse the existing project `.venv` and native runtime before proposing dependency
+installation. They may be local links to a preserved workspace backup; missing
+packages in `/usr/bin/python3` do not establish that RoboVerify's environment is
+missing. `.python-version` selects Python 3.10. For a diagnostic that must retain
+the installed environment, use `uv run --no-sync python` or `.venv/bin/python`.
+In this workspace, an existing `uv` executable is also available at
+`/tmp/roboverify-tools/bin/uv` when it is not on `PATH`. Runtime links are local,
+ignored files; keep their backup targets while the links are in use.
+The recovered local installation includes a GPU/EGL binding. Clear a leftover
+`MUJOCO_PY_FORCE_CPU` troubleshooting override when reusing that installation;
+switching it to OSMesa would request a different native build.
 
 Run everything as a module from `roboverify/` — the `synthesis` package uses relative
 imports and files under `synthesis/entry/` are not runnable as bare scripts:
