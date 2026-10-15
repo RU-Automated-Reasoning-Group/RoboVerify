@@ -217,3 +217,13 @@ Neither trial completed Stack. The shared API requires
 videos, and the paired report are retained under
 `runs/cap-stack-comparison/20261015-135348/`. This is one paired pilot, not an
 aggregate success-rate comparison; broader task-policy evaluation remains open.
+
+Five independent method-1 experiments then used `max_attempts=5` on the same
+three-block initial state, with all other settings retained (including
+temperature 0). They produced five distinct initial program texts but no task
+success: observed pass@5 on this instance was false (0/5 successes). Each used
+five model calls and four repairs; four trials ended on Move arity and one on
+unsupported `is` syntax. No robot actions ran. The batch used 25 model calls and
+20248 reported tokens. Per-trial programs, diagnostics, and the report are under
+`runs/cap-stack-pass5/20261015-150331/`. This is a single-instance pass@5 outcome,
+not a benchmark-wide probability estimate.
