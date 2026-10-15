@@ -285,8 +285,8 @@ terminates the attempt from either flow.
 flowchart TD
     subgraph Policy["Policy generation and execution"]
         I["Instruction, allowed DSL APIs, and input handles"] --> G["Generate policy source"]
-        G --> T{"Top-level source obeys DSL constraints?"}
-        T -->|"Yes"| R[["Resolve missing helpers with required roles"]]
+        G --> T{"Local syntax and API checks pass?"}
+        T -->|"Yes; missing helpers may remain"| R[["Resolve missing helpers with required roles"]]
         T -->|"No: report violations"| P{"Policy repair budget remains?"}
         P -->|"Yes"| W["LLM rewrites affected policy code"]
         W --> T
@@ -299,7 +299,7 @@ flowchart TD
         E -->|"Runtime LMP request"| N["Generate query code; apply the same checks before it runs"]
     end
 
-    subgraph Helper["Expanded procedure: resolve_helper"]
+    subgraph Helper["Expanded flow: prepare one helper and its dependencies"]
         H["Infer required role from call sites and value dependencies"] --> B{"Helper attempt budget remains?"}
         B -->|"Yes"| D["Generate or revise helper definition"]
         B -->|"No"| U["Return failure to caller; parent may be revised"]
@@ -326,50 +326,171 @@ parent is accepted only after its dependencies pass. Returned definitions remain
 source until the policy-level validation succeeds. A runtime LMP query resumes
 its waiting caller only after its generated code passes the same validation.
 
-The following makes the recursion explicit. `budget` is shared by the entire
-generation attempt, including parent repairs, child generation, and runtime LMP
-requests; budget exhaustion propagates as a terminal failure. Definitions are
-kept as source until the complete bundle has passed validation.
+#### Complete high-level pseudocode
+
+Labels describe reuse of the reviewed Google notebook: **REUSE** preserves a
+mechanism, **REFINE** modifies an existing mechanism, and **NEW** requires new
+integration code. They do not imply that the notebook's historical model client
+or prompts can be copied unchanged. All functions below are abstractions, not
+implemented repository entry points.
+
+The policy and each helper use the same bounded preparation routine. It repairs
+the current source unit: either the top-level policy or one helper definition.
+It recursively prepares children before accepting their parent. The shared
+`budget` covers all model calls, repairs, dependency depth, and runtime LMP
+requests; global exhaustion propagates without entering a local repair loop.
 
 ```python
-# CHANGED: each missing helper has a required role and bounded repair.
+# REFINE setup_LMP: retain callable modules; replace their exposed capabilities.
+def setup_constrained_cap(env, task_spec, budget):
+    namespace = build_dsl_namespace(env, task_spec)             # NEW
+    for name in task_spec.relational_query_modules:
+        namespace[name] = callable_lmp(
+            name, namespace, role="condition", budget=budget
+        )                                                     # REFINE
+    return callable_lmp(
+        "policy", namespace, role="body", budget=budget
+    )                                                         # REFINE
+
+
+# REFINE LMP.__call__: every module, including runtime queries, uses this path.
+def invoke_lmp(module, instruction, context, arguments):
+    check_module_inputs(module, context, arguments)            # NEW
+    prompt = assemble_prompt(
+        module.examples, module.api_names,
+        module.optional_history, context, instruction
+    )                                                         # REUSE structure
+    source = generate_code(prompt, module.budget)              # REFINE budgets
+    source = include_executable_context(module, context, source)
+
+    source, helpers = prepare_checked_source(
+        source, module.namespace, module.role, module.budget
+    )                                                         # NEW
+
+    # NEW: install only validated definitions in a checked execution scope.
+    scope = prepare_execution_scope(module.namespace, helpers)
+    result, locals = execute_checked(
+        source, scope, arguments, module.return_spec, module.budget
+    )                                                         # NEW runtime
+
+    module.remember_source(source)                            # REUSE history
+    publish_validated_helpers(module.namespace, helpers)       # REFINE
+    if module.maintain_session:
+        persist_checked_locals(module.namespace, locals)        # REFINE
+    return result                                             # REUSE output
+
+
+# NEW: repair the current policy source or helper definition using violations.
+def prepare_checked_source(source, namespace, required_role, budget):
+    for attempt in range(MAX_ATTEMPTS):
+        budget.check_remaining()
+        try:
+            # NEW: deterministic checks; missing helpers are not violations.
+            validate_local_constraints(source, namespace, required_role)
+
+            # REFINE: recursively fill missing helpers under role constraints.
+            helpers = resolve_missing_helpers(
+                source, namespace, required_role, budget
+            )
+
+            # NEW: check all definitions, existing calls, and value dependencies.
+            validate_complete_bundle(
+                source, namespace | helpers, required_role
+            )
+            return source, helpers
+
+        except ConstraintFailure as error:
+            if attempt + 1 == MAX_ATTEMPTS:
+                raise
+            source = revise_source(
+                source, violations=error.report,
+                allowed_api=namespace.api_spec,
+                required_role=required_role, budget=budget,
+            )                                                 # NEW repair
+
+
+# REFINE LMPFGen.create_new_fs_from_code: keep recursive helper expansion.
 def resolve_missing_helpers(source, namespace, required_role, budget):
     helpers = {}
     for call in unresolved_calls(source, namespace):
-        role = infer_required_role(source, call, required_role)
-        resolved = resolve_helper(call, namespace | helpers, role, budget)
-        helpers.update(resolved)
+        available = namespace | helpers
+        if call.name in available:
+            continue
+        role = infer_required_role(source, call, required_role) # NEW
+        definition = generate_function(
+            call.signature, available.api_spec, role, budget
+        )                                                     # REFINE FGen
+
+        # RECURSION: preparation resolves this helper's children in turn.
+        definition, children = prepare_checked_source(
+            definition, available, role, budget
+        )
+        helpers.update(children)
+        helpers[call.name] = definition                        # NEW: source only
+
     return helpers
 
 
-def resolve_helper(call, namespace, required_role, budget):
-    feedback = None
-
-    for attempt in range(MAX_ATTEMPTS):
-        budget.consume_model_call()
-        definition = generate_function(call.signature, required_role, feedback)
-
-        try:
-            # Reject forbidden access before synthesizing dependencies.
-            validate_local_constraints(definition, required_role)
-
-            # RECURSION: resolve and validate the helper's children.
-            children = resolve_missing_helpers(
-                function_body(definition), namespace, required_role, budget
-            )
-
-            # Check transitive calls, value dependencies, and existing APIs.
-            validate_resolved_helper(
-                definition, namespace | children, required_role
-            )
-        except ConstraintFailure as error:
-            feedback = str(error)
-            continue
-
-        return children | {call.name: definition}
-
-    raise ConstraintFailure("Helper repair budget exhausted")
+# NEW host-side evaluation; the policy cannot access the env or evaluator.
+env = prepare_trial_environment(task_spec, initial_snapshot)
+try:
+    policy = setup_constrained_cap(env, task_spec, budget)
+    outcome = record_rollout(
+        lambda: policy(instruction, object_context), env, budget
+    )
+    report_trial(outcome, evaluate_terminal_state(env, task_spec))
+finally:
+    env.close()
 ```
+
+`callable_lmp` has the same meaning as in Section 1: calling it dispatches to
+`invoke_lmp`. Relational query modules return predicate-derived values or allowed
+object bindings; their metadata includes output types as well as the no-action
+role. The old coordinate-returning parsing prompts must be replaced. Queries
+generated during execution use the same preparation routine before they run.
+
+The recursion is `prepare_checked_source` -> `resolve_missing_helpers` ->
+`prepare_checked_source` for each child. An empty unresolved-call set returns
+`{}` naturally; it does not establish compliance on its own. Local validation
+rejects definite violations while allowing declared missing-helper obligations;
+complete validation requires every obligation to be resolved and every call to
+meet its role. Neither validator asks an LLM to decide validity. Unsupported
+syntax is reported explicitly under the declared restricted-Python contract.
+
+`namespace` here abstracts API metadata, checked value types, and retained helper
+source with validation summaries, rather than just a dictionary of raw Python
+callables. Its union operation preserves that metadata. Definitions already
+present in source are analyzed in their lexical scopes; shadowing protected APIs
+is rejected. `validate_complete_bundle` combines requirements from all uses,
+including existing helpers later used in a stricter role. Arguments, executable
+context, query results, and persisted locals must not introduce unchecked values,
+callables, or API rebinding. The trusted executor owns environment access and
+enforces the checked subset; it is not the notebook's `exec_safe` unchanged.
+
+`record_rollout` is a proposed host wrapper that records generation, constraint,
+budget, and execution failures as trial outcomes, as well as trajectories.
+Terminal success requires a completed rollout and the independent task check;
+an initial or partially reached goal cannot turn a failed attempt into success.
+Host environment preparation restores the supplied snapshot exactly. The host
+can reuse the existing controller and snapshot machinery described in Section 4;
+general nested-loop/If execution and six-task adapters still require work.
+
+#### Reuse, refinement, and new implementation
+
+The mappings below refer to the pinned
+[Interactive Demo notebook](https://github.com/google-research/google-research/blob/8c116f61a61b4339cbbae92be89ff83d9897d4b5/code_as_policies/Interactive_Demo.ipynb).
+
+| Component | Classification | Google CaP starting point and required work |
+| --- | --- | --- |
+| Prompt assembly, instruction/context formatting, optional history, configured return extraction | REUSE mechanism | `LMP.build_prompt` and the corresponding parts of `LMP.__call__`. Supply DSL examples and API metadata; validate any executable context. |
+| Callable policy and auxiliary modules | REFINE | Preserve `LMP` objects and `setup_LMP` wiring. Attach roles, output contracts, shared budgets, and the checked invocation path; replace geometry-oriented query prompts. |
+| Model generation of a helper from its signature | REFINE | Use the generation part of `LMPFGen.create_f_from_sig`. Add role/API instructions and bounded model transport. Return source without executing the definition before validation. |
+| Recursive discovery and generation of missing helpers | REFINE | Start from `LMPFGen.create_new_fs_from_code` and `FunctionParser`. Add lexical binding analysis, role propagation, dependency limits, and checked preparation for each child. The original parser is not the complete validator. |
+| DSL namespace and environment adapter | NEW integration | Replace `LMP_wrapper` and the numerical/perception namespace with typed DSL APIs and opaque object references. Reuse RoboVerify controllers and predicate semantics behind the adapter. |
+| Local and complete validation | NEW | Implement restricted syntax, protected API bindings, types/value provenance, action-effect checks, and transitive dependency checks with deterministic diagnostics. |
+| Violation-guided local repair | NEW | `revise_source` receives the current source and checker diagnostics. The notebook's optional `fix_bugs` edit is not a DSL compliance loop. |
+| Checked execution and namespace updates | NEW runtime; REFINE session handling | Replace `exec_safe` with execution that enforces the supported subset. Preserve configured output/history behavior, but only install checked definitions and persist permitted values. |
+| Trial preparation, recording, terminal scoring, and cost/failure reporting | NEW integration | Reuse RoboVerify snapshot/controller utilities. Add the CaP trial harness and remaining task adapters; do not expose evaluator feedback to policy repair. |
 
 `infer_required_role` propagates condition restrictions through descendants; for
 a body helper, it distinguishes action uses from internal condition uses.
