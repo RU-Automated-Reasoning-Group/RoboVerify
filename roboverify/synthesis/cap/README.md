@@ -243,3 +243,16 @@ enabled; rejected requests with reasoning disabled are retained separately as
 setup diagnostics. All evaluation trials used reasoning enabled, temperature 0,
 and exactly matching full initial states. The report and per-trial artifacts are
 under `runs/cap-stack-gemini-pass5/20261015-160329-reasoning/`.
+
+The same Gemini configuration was also evaluated on one five-block Stack scene,
+with five fresh trials per method. Both methods returned 0/5 successes, so both
+observed pass@5 outcomes were false. All five method-1 policies passed initial
+validation without repair; three failed Pick convergence and two failed Move
+convergence. The baseline had three helper-name errors, one generated syntax
+error, and one Move convergence failure. Method 1 used five model calls and
+4233 reported tokens; the baseline used 15 calls and 11433 tokens. Every trial
+restored the same precondition-validated, seed-0 snapshot after 50 settling steps;
+all ten videos were checked against their recorded frame counts. Reports and
+artifacts are under `runs/cap-stack-gemini-5blocks-pass5/20261015-164132/`.
+This is one fixed five-block scene, not a benchmark-wide result; comparison with
+the three-block batch changes the layout as well as the block count.
