@@ -227,3 +227,19 @@ unsupported `is` syntax. No robot actions ran. The batch used 25 model calls and
 20248 reported tokens. Per-trial programs, diagnostics, and the report are under
 `runs/cap-stack-pass5/20261015-150331/`. This is a single-instance pass@5 outcome,
 not a benchmark-wide probability estimate.
+
+A matched Gemini batch used `google/gemini-4-argon`, five independent trials per
+method, and `max_attempts=5` on the same saved three-block scene. Method 1
+succeeded in 2/5 trials (trials 3 and 4); the baseline succeeded in 0/5. Observed
+pass@5 was therefore true for method 1 and false for the baseline on this scene.
+All five method-1 policies passed validation on their first candidate, with no
+repairs; the other three trials failed Move convergence. Baseline failures were
+three helper-name visibility errors, one Move convergence failure, and one
+normal return with a failed physical goal despite a true DSL postcondition.
+Method 1 used five model calls and 4261 reported tokens; the baseline used 15
+calls and 11481 tokens. This does not establish a benefit from the larger repair
+budget or a benchmark-wide advantage. The endpoint required reasoning to be
+enabled; rejected requests with reasoning disabled are retained separately as
+setup diagnostics. All evaluation trials used reasoning enabled, temperature 0,
+and exactly matching full initial states. The report and per-trial artifacts are
+under `runs/cap-stack-gemini-pass5/20261015-160329-reasoning/`.
