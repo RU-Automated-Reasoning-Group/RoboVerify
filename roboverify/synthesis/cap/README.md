@@ -205,4 +205,15 @@ the same saved snapshot: each controller converged in 14 steps, the action
 sequences matched exactly, and each video contained 15 frames. These were
 integration diagnostics using fixed responses, not model-generated Stack
 solutions. Their `goal_failed` results are expected because a single Pick does
-not complete the Stack task. Full task-policy performance remains unmeasured.
+not complete the Stack task.
+
+A subsequent real-model three-block Stack pilot used identical full initial
+states, a specification-only task prompt, and matched DeepSeek/OpenRouter
+settings for both methods. The baseline completed one Pick (15 controller steps)
+before failing on a six-argument Move call. Method 1 rejected the same invalid
+API call in all three candidates (two repairs), so it executed no robot actions.
+Neither trial completed Stack. The shared API requires
+`Move(x_ref, y_ref, z_ref, [dx, dy, dz])`. Programs, diagnostics, trajectories,
+videos, and the paired report are retained under
+`runs/cap-stack-comparison/20261015-135348/`. This is one paired pilot, not an
+aggregate success-rate comparison; broader task-policy evaluation remains open.
