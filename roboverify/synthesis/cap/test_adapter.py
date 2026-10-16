@@ -5,13 +5,14 @@ import unittest
 from types import SimpleNamespace
 
 import numpy as np
+
 from synthesis.cfg.reset import capture, restore
 from synthesis.predicates.scene import evaluate, scene_from_obs
 from synthesis.predicates.term import atom, block_id
 
 from .adapter import RoboVerifyAdapter
 from .budget import Budget
-from .contracts import CapError, ObjectHandle, PrimitiveFailure
+from .contracts import CapError, ObjectHandle, Position3, PrimitiveFailure
 from .logger import CapLogger
 
 
@@ -110,6 +111,40 @@ class AdapterTests(unittest.TestCase):
                 "ON_star_zero", [self.adapter.handles[1], self.adapter.b0]
             )
         )
+
+    def test_positions_are_current_immutable_copies_without_steps(self):
+        g = self.adapter.call("get_gripper_position", [])
+        b = self.adapter.call("get_block_position", [self.adapter.handles[1]])
+        self.assertIsInstance(g, Position3)
+        self.assertEqual(g, tuple(self.env.obs[:3]))
+        self.assertEqual(b, tuple(self.env.obs[22:25]))
+        with self.assertRaises(TypeError):
+            g[0] = 4
+        self.env.obs[:3] += 0.3
+        self.env.obs[22:25] += 0.2
+        self.assertEqual(g, (0.0, 0.0, 0.2))
+        self.assertEqual(b, (0.2, 0.0, 0.025))
+        self.assertEqual(
+            self.adapter.call("get_gripper_position", []), tuple(self.env.obs[:3])
+        )
+        self.assertEqual(
+            self.adapter.call("get_block_position", [self.adapter.handles[1]]),
+            tuple(self.env.obs[22:25]),
+        )
+        self.assertEqual(self.env.actions, [])
+
+    def test_position_argument_and_finiteness_checks(self):
+        for name, args in [
+            ("get_gripper_position", [self.adapter.b0]),
+            ("get_block_position", []),
+            ("get_block_position", [0]),
+            ("get_block_position", [ObjectHandle("b0", "other")]),
+        ]:
+            with self.subTest(name=name, args=args), self.assertRaises(CapError):
+                self.adapter.call(name, args)
+        self.env.obs[0] = float("nan")
+        with self.assertRaises(CapError):
+            self.adapter.call("get_gripper_position", [])
 
     def test_query_order_and_no_witness(self):
         self.assertEqual(self.adapter.call("get", [lambda x: True]), self.adapter.b0)

@@ -8,10 +8,12 @@ import uuid
 from .contracts import (
     ACTIONS,
     API_NAMES,
+    POSITION_QUERIES,
     PREDICATES,
     QUERIES,
     CapError,
     ObjectHandle,
+    Position3,
     PrimitiveFailure,
     task_api_names,
 )
@@ -65,6 +67,16 @@ class RoboVerifyAdapter:
         self.budget.tick()
         if name not in self.api_names:
             raise CapError(f"API unavailable for this task: {name}")
+        if name in POSITION_QUERIES:
+            expected = 0 if name == "get_gripper_position" else 1
+            if len(args) != expected:
+                raise CapError(f"{name} requires {expected} arguments")
+            start = 0 if not args else 10 + 12 * self.object_id(args[0])
+            result = Position3(float(v) for v in self.observe()[start : start + 3])
+            self.logger.emit(
+                "coordinate_query", query=name, arguments=args, result=result
+            )
+            return result
         if name in QUERIES:
             if len(args) != 1 or not callable(args[0]):
                 raise CapError("A query requires one callable condition")
