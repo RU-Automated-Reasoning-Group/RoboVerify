@@ -14,12 +14,13 @@ and data flow is in [METHOD-1-FLOW.md](METHOD-1-FLOW.md).
 | Runtime observations exposed to policy | DSL predicate truth and selected object handles | Add current gripper/block XYZ through a shared read-only API. |
 | Method-1 conditions | DSL-only; no mode selector | `dsl_only` or `coordinate_predicates`, with `dsl_only` the default. |
 | Coordinate-based predicates | Unsupported | LLM-generated pure predicates allowed in `coordinate_predicates`. |
-| Method-1 numeric operations | Action-parameter arithmetic; object-only comparisons | Add Position3 component reads and provenance-checked comparisons where the mode permits. |
+| Method-1 numeric operations | Action-parameter arithmetic; object-only comparisons | Add Position3 component reads; allow general numeric comparisons and counter guards in coordinate_predicates, with DSL-only conditions in dsl_only. |
 | LLM feedback | Task/API text, helper signatures, static repair diagnostics | Also include selected mode and coordinate API descriptions; keep actual coordinates runtime-only. |
 | Physical execution | Shared Pick/Move/Release controllers | Preserve signatures, controller settings, failure behavior, and scoring. |
 
-Both method-1 modes have access to the same O_t; only permission to use its
-coordinates in conditions differs. Thus future `dsl_only` retains the current
+Both method-1 modes have access to the same O_t. The condition language differs:
+DSL-only versus DSL plus general numeric predicates, including coordinates,
+counters, and numeric computations without a coordinate dependency. Thus future `dsl_only` retains the current
 condition restriction while gaining position-derived action parameters. The
 shared API should also be exposed to the Google baseline for matched-observation
 comparisons, without routing it through method 1's checker or repair loop.
@@ -65,21 +66,25 @@ invalid-handle rejection and zero simulation steps for queries.
 ### 3. Extend static checking and checked execution together
 
 Update [validation.py](../validation.py) and [runtime.py](../runtime.py).
-Introduce Position3 values, literal component reads, and numeric provenance.
+Introduce Position3 values, literal component reads, numeric type checks, and
+condition-source tracking for strict mode.
 Preserve restricted syntax; do not enable arbitrary subscripting or imports.
 
 In `dsl_only`, reject direct and indirect coordinate-derived conditions while
 allowing coordinate-derived action offsets. In `coordinate_predicates`, permit
-pure synthesized coordinate predicates, direct coordinate comparisons, and
-composition with DSL predicates. Apply the same rules in if/while, selection
+pure synthesized numeric predicates, coordinate comparisons, counter guards,
+constant comparisons, and composition with DSL predicates. Do not require
+numeric expressions in this mode to originate from coordinates. Apply the same rules in if/while, selection
 lambdas, helper arguments/returns, and dependencies. Keep action effects out of
 all condition evaluations. Runtime must enforce the same selected mode.
 
 Acceptance: paired tests run the same source under both modes, including nested
 helpers and value assignments. Positive cases cover DSL-only helpers in both
-modes and coordinate predicates in the extended mode. Negative cases cover
-coordinate-condition bypasses in strict mode, actions in predicates, non-finite
-values, invalid indexing, protected API rebinding, and unrelated numeric guards.
+modes, plus coordinate predicates, counter guards, constant comparisons, and
+numeric helper arguments in the extended mode. Negative cases cover numeric
+condition bypasses in strict mode, actions in predicates, non-finite values,
+invalid indexing, and protected API rebinding. General numeric guards are
+positive cases in coordinate_predicates, not a rejection category.
 
 ### 4. Thread the mode through recursive generation and repair
 
@@ -135,7 +140,8 @@ implementation plan does not assume one has been run.
 - Both modes and the baseline read the same position interface from matched states.
 - Strict-mode conditions remain DSL-only, including indirect dependencies.
 - Extended-mode generated predicates can read gripper/block coordinates and combine
-  checked comparisons with existing DSL predicates.
+  numeric comparisons with existing DSL predicates; counters and other numeric
+  conditions are accepted without requiring coordinate-derived values.
 - Position reads are fresh, read-only, and local to program execution.
 - Primitive/action semantics, independent scoring, and failure accounting remain intact.
 - Tests and documentation distinguish interface compliance, execution success, and

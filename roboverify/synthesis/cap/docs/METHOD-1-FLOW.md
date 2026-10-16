@@ -21,7 +21,7 @@ modes while preserving recursive generation and interface-only repair.
 | Target mode | Runtime positions | Permitted loop/branch and selection conditions |
 | --- | --- | --- |
 | `dsl_only` | Readable for action-parameter computation | Existing DSL predicates, identity, logic, quantifiers, and pure compositions of them. |
-| `coordinate_predicates` | Readable for action parameters and predicates | The same DSL conditions plus pure generated coordinate predicates and checked coordinate comparisons. |
+| `coordinate_predicates` | Readable for action parameters and predicates | The same DSL conditions plus pure generated numeric predicates, coordinate comparisons, counter guards, and other numeric conditions. |
 
 Both use `O_t = (p_gripper(t), p_1(t), ..., p_n(t))`, exposed through
 `get_gripper_position()` and `get_block_position(handle)`. These return copied
@@ -59,19 +59,19 @@ execution. Mode selection applies to local, complete, and runtime checks.
 flowchart TD
     T["Runner: resolve trial and condition mode"] -->|"Task, seed or full snapshot, block count"| E["MuJoCo and shared primitive controllers"]
     T -->|"Instruction, b0 context, API and mode rules"| L["Text LLM via shared transport"]
-    L -->|"Policy or helper source; required role"| V["Parse, type and provenance analysis"]
-    V -->|"Source, dependencies, condition provenance, mode"| M{"Selected condition mode"}
-    M -->|"dsl_only: reject coordinate-derived conditions"| D["DSL condition and purity checks"]
-    M -->|"coordinate_predicates: permit checked coordinate comparisons"| X["DSL and coordinate condition purity checks"]
+    L -->|"Policy or helper source; required role"| V["Parse and analyze types, dependencies and effects"]
+    V -->|"Source, dependencies, types, effects and mode"| M{"Selected condition mode"}
+    M -->|"dsl_only: conditions must derive from DSL predicates"| D["DSL condition and purity checks"]
+    M -->|"coordinate_predicates: allow general numeric conditions"| X["DSL and numeric condition type and purity checks"]
     D -->|"Local pass and unresolved calls"| H["Resolve helpers recursively"]
     X -->|"Local pass and unresolved calls"| H
     V -->|"Syntax, API, or type diagnostics"| Q["Local repair budget check"]
     D -->|"Condition or side-effect diagnostics"| Q
-    X -->|"Provenance or side-effect diagnostics"| Q
+    X -->|"Numeric type or side-effect diagnostics"| Q
     H -->|"Missing call, required role, API and mode rules"| L
     H -->|"Prepared sources and dependencies"| C["Complete root validation under selected mode"]
     H -->|"Accepted child source to waiting parent"| H
-    C -->|"Cross-helper type, effect, or provenance diagnostics"| Q
+    C -->|"Cross-helper type, effect, or mode-rule diagnostics"| Q
     Q -->|"Budget available: current source, role, mode and diagnostics"| L
     Q -->|"Attempts exhausted; child failure propagates to parent"| F["Parent repair or terminal failure"]
     F -->|"Parent source and child diagnostics; attempts remain"| Q
@@ -112,10 +112,13 @@ In `dsl_only`, `ready = helper(b); if ready:` must fail if any dependency of
 Coordinates may parameterize actions but cannot control branches or selections.
 
 In `coordinate_predicates`, the same structure may pass when `helper` is a pure
-Boolean computation over position data, finite parameters, and permitted DSL
-predicates. Effects and value provenance remain checked. Actions inside a
-predicate, ID-based selection, and arbitrary numeric-counter conditions are
-not enabled by this mode. See the configuration document for examples.
+Boolean computation over positions, counters, finite parameters, other local
+numeric values, and permitted DSL predicates. Direct guards such as
+`while attempts < 10` are also allowed. There is no requirement for a numeric
+condition to depend on coordinates. Type and effect checks remain in force;
+actions inside conditions are rejected, and object handles retain identity
+semantics. DSL-origin tracking is specific to `dsl_only`. See the configuration
+document for examples.
 
 Both modes preserve existing predicate meanings and frozen trial-entry
 `ON_star_zero` for Reverse. New coordinate predicates are not automatically

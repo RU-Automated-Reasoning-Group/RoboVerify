@@ -33,7 +33,8 @@ API version, and checker version in configuration and source checkpoints.
 | Generated helpers combining existing DSL predicates | Allowed | Allowed |
 | Read current gripper/block coordinates | Allowed | Allowed |
 | Use coordinates to compute action offsets | Allowed | Allowed |
-| Use coordinate comparisons as conditions | Rejected, including indirect uses | Allowed with checked numeric provenance |
+| Use coordinate comparisons as conditions | Rejected, including indirect uses | Allowed with numeric type checks; no coordinate-origin requirement |
+| Counter-based and other numeric conditions | Rejected | Allowed |
 | LLM-generated predicates reading coordinates | Rejected when used as conditions | Allowed, including composition with DSL predicates |
 | Actions inside conditions or query lambdas | Rejected | Rejected |
 | Raw simulator objects, rewards, success flags, images | Unavailable | Unavailable |
@@ -42,7 +43,8 @@ API version, and checker version in configuration and source checkpoints.
 `dsl_only` preserves the current condition restriction. Its proposed ability to
 read positions for action parameters is an extension over today's implementation;
 it must not be described as already available. Sharing this observation API
-makes the mode comparison about permission to use coordinates in conditions.
+makes the mode comparison about the allowed condition language: DSL-only versus
+DSL plus general numeric predicates, including coordinate and counter tests.
 The three physical primitives and their meanings are unchanged.
 
 ## Runtime observation contract
@@ -134,8 +136,10 @@ but cannot determine which branch, loop iteration, or object binding is chosen.
 The existing DSL remains available. In addition, the LLM may generate pure
 predicate functions that read positions and combine checked finite arithmetic,
 numeric comparisons, Boolean logic, identity, and existing DSL predicates.
-Direct coordinate comparisons in guards are also allowed; requiring a named
-wrapper would not change their meaning.
+Direct numeric comparisons in guards are also allowed; requiring a named
+wrapper would not change their meaning. Despite the mode name
+`coordinate_predicates`, numbers need not originate from coordinates: counters,
+iteration limits, thresholds, and other local numeric computations are allowed.
 
 Proposed examples, with handles bound by the caller:
 
@@ -162,14 +166,34 @@ requires model calls; invoking an already prepared helper does not. Thresholds
 are model-generated finite constants or checked numeric arguments, recorded in
 source artifacts. There is no rollout-based threshold optimization or CEM.
 
-Numeric provenance must distinguish position-derived values and finite parameter
-expressions from counters, object IDs, or external data. Coordinate predicates
-may compare position-derived expressions with constants or each other. This
-extension does not authorize count-based loop guards, identity ordering, action
-results as Booleans, or unrelated numeric tests. Permit the necessary numeric
-comparison operators while preserving existing object `==` / `!=` semantics.
-Carry provenance across assignments, helper arguments/returns, and dependencies.
-A helper used as a condition remains action-free throughout its call graph.
+No numeric-origin restriction applies in this mode. The checker verifies types,
+supported operations, and condition purity rather than requiring a dependency
+on position data. Permit numeric `<`, `<=`, `>`, `>=`, `==`, and `!=`, while
+preserving identity semantics for object `==` / `!=`. Local counters may be
+updated in program bodies and tested in guards. For example:
+
+```python
+def near_within_limit(b, attempts, limit):
+    return attempts < limit and gripper_near(b)
+
+
+attempts = 0
+while attempts < 10:
+    attempts = attempts + 1
+```
+
+These examples illustrate permitted conditions, not a complete task policy.
+Numeric constants and helper arguments are valid comparison operands even when
+neither side depends on a coordinate. Apply these rules equally to direct guards,
+query lambdas, and nested helpers. Conditions must still return Booleans and
+remain free of action side effects throughout their call graph. Object handles
+do not become numbers, and the API still exposes no physical IDs or simulator
+internals. Existing execution budgets apply even when a program uses its own
+counter-based stopping condition.
+
+Value-flow analysis is still required to enforce DSL-only conditions in
+`dsl_only`; it must not impose that mode's origin restrictions on
+`coordinate_predicates`.
 
 `above_by_margin` is not an alternative implementation of `Higher`; their
 semantics differ. Generated functions cannot redefine protected DSL APIs. They
@@ -204,14 +228,16 @@ limit remain in force.
 | [config.py](../config.py), [run_cap.py](../../entry/run_cap.py), [runner.py](../runner.py) | Resolve, validate, propagate, and record the method-1 mode. |
 | [contracts.py](../contracts.py), [adapter.py](../adapter.py) | Define position API types/metadata and fresh read-only getters over the existing observation. |
 | [generation.py](../cap_method_1/generation.py), [prompt templates](../cap_method_1/prompts/policy.txt) | Carry mode/API rules into policy, helper, and repair requests and recursive preparation. |
-| [validation.py](../validation.py) | Add Position3 and coordinate provenance, restricted indexing, mode-sensitive comparisons, and transitive condition checking. |
+| [validation.py](../validation.py) | Add Position3, restricted indexing, mode-sensitive comparisons, and transitive condition checking. Track condition sources for dsl_only; allow general numeric conditions in coordinate_predicates. |
 | [runtime.py](../runtime.py) | Interpret the added checked operations and enforce the same selected mode; retain no-action condition guards. |
 | [checkpoints.py](../checkpoints.py), [logger.py](../logger.py) | Retain mode/version provenance and coordinate-query events without feeding them into repairs. |
 
 Validation must cover fresh reads after movement, immutable returned positions,
 invalid handles, index/type errors, and both modes on the same generated source.
 Include indirect coordinate conditions, nested helper dependencies, query
-lambdas, action attempts inside predicates, and protected API rebinding. Test
+lambdas, action attempts inside predicates, and protected API rebinding. Counter
+guards, constant comparisons, and numeric helper arguments must pass in
+`coordinate_predicates` and fail as conditions in `dsl_only`. Test
 that model requests do not acquire actual runtime coordinate values through
 logging or repair. Existing DSL-only cases must retain their behavior.
 
