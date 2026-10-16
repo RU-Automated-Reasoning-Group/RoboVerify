@@ -13,6 +13,11 @@ See [CAP-INTEGRATION.md](docs/CAP-INTEGRATION.md) for the design and
 [vendor provenance](vendor/google_cap/README.md) for the baseline's exact source
 and compatibility differences. Plan 2 is documented but not implemented.
 
+Implemented observation boundaries and flowcharts with labeled data edges:
+
+- [Google baseline](docs/BASELINE-FLOW.md).
+- [Method 1](docs/METHOD-1-FLOW.md).
+
 ## Implemented scope
 
 The adapter connects Stack, Unstack, Reverse, and ReStack to the existing

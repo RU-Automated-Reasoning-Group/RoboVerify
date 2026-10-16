@@ -12,6 +12,10 @@ adapters, and optional runtime query-LMP configuration remain unimplemented.
 The shared DSL is described in [DSL.md](DSL.md). The high-level design below also
 describes those extension points; it is not a claim of six-task physical success.
 
+For implementation-specific model inputs, runtime observations, and data-flow
+diagrams, see [Google baseline](BASELINE-FLOW.md) and
+[method 1](METHOD-1-FLOW.md).
+
 Source review: 2026-10-14. The Google code reviewed is pinned to
 `8c116f61a61b4339cbbae92be89ff83d9897d4b5`. Pseudocode abstracts the implementation;
 it is neither copied source nor directly executable Python.
