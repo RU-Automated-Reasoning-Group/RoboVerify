@@ -119,14 +119,14 @@ def load_core(model, logger, checkpoints, budget):
     return SimpleNamespace(**globals_)
 
 
-def module_config(*, helper=False, api_names=API_NAMES):
+def module_config(*, helper=False, api_names=API_NAMES, condition_mode="dsl_only"):
     return {
         "prompt_text": (
             "Define the missing Python helper. Output only its definition.\n"
             if helper
             else "Generate Python robot policy code. Output code only.\n"
         )
-        + api_description(api_names),
+        + api_description(api_names, condition_mode),
         "query_prefix": "\n# " if helper else "\n# Instruction: ",
         "query_suffix": "",
         "stop": [],

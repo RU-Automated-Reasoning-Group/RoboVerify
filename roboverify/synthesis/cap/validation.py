@@ -11,11 +11,13 @@ from dataclasses import dataclass
 from .contracts import (
     ACTIONS,
     API_NAMES,
+    POSITION_QUERIES,
     PREDICATES,
     QUERIES,
     Bundle,
     ConstraintFailure,
     Diagnostic,
+    validate_condition_mode,
 )
 
 
@@ -29,6 +31,7 @@ UNKNOWN = Value("unknown")
 BOOL = Value("bool")
 OBJECT = Value("object")
 NUMBER = Value("number")
+POSITION = Value("position")
 NONE = Value("none")
 
 
@@ -95,7 +98,12 @@ ALLOWED = (
     ast.Sub,
     ast.Mult,
     ast.Div,
+    ast.Subscript,
     ast.Compare,
+    ast.Lt,
+    ast.LtE,
+    ast.Gt,
+    ast.GtE,
     ast.Eq,
     ast.NotEq,
 )
@@ -218,6 +226,21 @@ def parse(source, unit="policy"):
                         )
                     ]
                 )
+        if isinstance(node, ast.Subscript) and not (
+            isinstance(node.slice, ast.Constant)
+            and type(node.slice.value) is int
+            and node.slice.value in (0, 1, 2)
+        ):
+            raise ConstraintFailure(
+                [
+                    diagnostic(
+                        node,
+                        "POSITION_INDEX",
+                        "Use literal position index 0, 1 or 2",
+                        unit,
+                    )
+                ]
+            )
         if isinstance(node, ast.Assign):
             if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
                 raise ConstraintFailure(
@@ -261,7 +284,23 @@ def definitions(bundle):
 
 
 class Checker:
-    def __init__(self, bundle, *, complete=True, role="body", inputs=None):
+    def __init__(
+        self,
+        bundle,
+        *,
+        complete=True,
+        role="body",
+        inputs=None,
+        condition_mode="dsl_only",
+    ):
+        self.condition_mode = validate_condition_mode(condition_mode)
+        if (
+            bundle.condition_mode is not None
+            and bundle.condition_mode != condition_mode
+        ):
+            raise ConstraintFailure(
+                [Diagnostic("CONDITION_MODE", "Bundle and checker modes differ")]
+            )
         self.bundle, self.complete, self.role = bundle, complete, role
         self.trees, self.functions = definitions(bundle)
         self.inputs = inputs or {"b0": OBJECT}
@@ -320,6 +359,10 @@ class Checker:
             for n, value in zip(node.elts, values):
                 self.expect(n, value, "number")
             return Value("vector", any(v.actions for v in values))
+        if isinstance(node, ast.Subscript):
+            value = self.expr(node.value, env, role)
+            self.expect(node.value, value, "position")
+            return Value("number", value.actions)
         if isinstance(node, ast.UnaryOp):
             value = (
                 self.condition(node.operand, env)
@@ -340,22 +383,41 @@ class Checker:
                 self.condition(item, env)
             return BOOL
         if isinstance(node, ast.Compare):
-            for item in [node.left, *node.comparators]:
-                value = self.expr(item, env, "condition")
-                if value.kind != "object" and not (
-                    value.kind == "unknown" and not self.complete
-                ):
-                    self.fail(
-                        item,
-                        "IDENTITY_COMPARISON",
-                        "== and != compare object handles only; combine Boolean conditions with and/or/not",
-                    )
+            operands = [node.left, *node.comparators]
+            values = [self.expr(item, env, "condition") for item in operands]
+            for item, value in zip(operands, values):
                 if value.actions:
                     self.fail(
                         item,
                         "ACTION_IN_CONDITION",
-                        "Identity operand depends on an action",
+                        "Comparison operand depends on an action",
                     )
+            for op, left, right in zip(node.ops, values, values[1:]):
+                kinds = {left.kind, right.kind}
+                if self.condition_mode == "dsl_only":
+                    if not isinstance(op, (ast.Eq, ast.NotEq)) or not kinds <= {
+                        "object",
+                        "unknown",
+                    }:
+                        self.fail(
+                            node,
+                            "NUMERIC_CONDITION",
+                            "dsl_only permits only object identity comparisons; numerical conditions require coordinate_predicates",
+                        )
+                    self.expect(node, left, "object")
+                    self.expect(node, right, "object")
+                elif "object" in kinds:
+                    if not isinstance(op, (ast.Eq, ast.NotEq)):
+                        self.fail(
+                            node,
+                            "IDENTITY_COMPARISON",
+                            "Objects support only == and !=",
+                        )
+                    self.expect(node, left, "object")
+                    self.expect(node, right, "object")
+                else:
+                    self.expect(node, left, "number")
+                    self.expect(node, right, "number")
             return BOOL
         if not isinstance(node, ast.Call):
             self.fail(node, "EXPRESSION", type(node).__name__)
@@ -372,6 +434,16 @@ class Checker:
             self.condition(query.body, env | dict.fromkeys(params, OBJECT))
             return OBJECT if name == "get" else BOOL
         args = [self.expr(arg, env, role) for arg in node.args]
+        if name in POSITION_QUERIES:
+            expected = [] if name == "get_gripper_position" else ["object"]
+            if len(args) != len(expected):
+                self.fail(node, "ARITY", f"{name} expects {len(expected)} arguments")
+            for arg, value, kind in zip(node.args, args, expected):
+                self.expect(arg, value, kind)
+            acting = any(value.actions for value in args)
+            if role == "condition" and acting:
+                self.fail(node, "ACTION_IN_CONDITION", name)
+            return Value("position", acting)
         if name in API_NAMES:
             expected = (
                 ["object", "object"]
@@ -528,13 +600,26 @@ def merge_env(a, b):
     return {name: merge_values([a[name], b[name]]) for name in a.keys() & b.keys()}
 
 
-def validate(bundle, *, complete=True, role="body", inputs=None):
-    return Checker(bundle, complete=complete, role=role, inputs=inputs).check()
+def validate(
+    bundle, *, complete=True, role="body", inputs=None, condition_mode="dsl_only"
+):
+    return Checker(
+        bundle,
+        complete=complete,
+        role=role,
+        inputs=inputs,
+        condition_mode=condition_mode,
+    ).check()
 
 
-def validate_helper(source, name, known, role):
+def validate_helper(source, name, known, role, *, condition_mode="dsl_only"):
     """Check a helper locally before its caller supplies concrete argument types."""
-    checker = Checker(Bundle("", known | {name: source}), complete=False, role=role)
+    checker = Checker(
+        Bundle("", known | {name: source}),
+        complete=False,
+        role=role,
+        condition_mode=condition_mode,
+    )
     fn, checker.unit = checker.functions[name]
     checker.stack = [name]
     checker.block(

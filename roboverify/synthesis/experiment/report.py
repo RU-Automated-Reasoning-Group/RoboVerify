@@ -414,6 +414,9 @@ class RunSummary:
             for key in (
                 "method",
                 "task",
+                "condition_mode",
+                "observation_api_version",
+                "checker_version",
                 "model_backend",
                 "generate_only",
                 "validation_enabled",

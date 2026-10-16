@@ -13,11 +13,14 @@ from .adapter import GenerationOnlyAdapter, RoboVerifyAdapter
 from .budget import Budget
 from .checkpoints import Checkpoints
 from .contracts import (
+    CHECKER_VERSION,
+    OBSERVATION_API_VERSION,
     AdapterGap,
     BudgetExceeded,
     ConstraintFailure,
     EnvironmentUnavailable,
     PrimitiveFailure,
+    validate_condition_mode,
 )
 from .llm import HTTPModel, LoggedModel, ModelError
 from .logger import CapLogger
@@ -58,15 +61,34 @@ def deadline(budget):
             )
 
 
-def make_method(name, model, adapter, logger, checkpoints, budget, attempts):
+def make_method(
+    name,
+    model,
+    adapter,
+    logger,
+    checkpoints,
+    budget,
+    attempts,
+    condition_mode="dsl_only",
+):
     if name == "cap_method_1":
         from .cap_method_1 import Method1
 
-        return Method1(model, adapter, logger, checkpoints, budget, attempts)
+        return Method1(
+            model,
+            adapter,
+            logger,
+            checkpoints,
+            budget,
+            attempts,
+            condition_mode=condition_mode,
+        )
     if name == "cap_google_baseline":
         from .cap_google_baseline import GoogleBaseline
 
-        return GoogleBaseline(model, adapter, logger, checkpoints, budget)
+        return GoogleBaseline(
+            model, adapter, logger, checkpoints, budget, condition_mode=condition_mode
+        )
     raise ValueError(f"Unknown method: {name}")
 
 
@@ -98,6 +120,7 @@ def run(
 ):
     from synthesis.experiment.run_logger import RunLogger
 
+    validate_condition_mode(config.condition_mode)
     if config.method not in {"cap_method_1", "cap_google_baseline"}:
         raise ValueError("Unknown CaP method")
     if config.timeout <= 0 or config.max_attempts < 1:
@@ -120,6 +143,8 @@ def run(
         "trace_index": trace_index,
         "validation_enabled": config.method == "cap_method_1",
         "refinement_enabled": config.method == "cap_method_1",
+        "observation_api_version": OBSERVATION_API_VERSION,
+        "checker_version": CHECKER_VERSION if config.method == "cap_method_1" else None,
         "auxiliary_lmp_modules": [],
         "model_backend": type(backend).__name__ if backend else "HTTPModel",
     }
@@ -131,7 +156,9 @@ def run(
         capture_stdout=capture_stdout,
     )
     logger = CapLogger(run_log.run_dir, run=run_log)
-    checkpoints = Checkpoints(logger, method=config.method)
+    checkpoints = Checkpoints(
+        logger, method=config.method, condition_mode=config.condition_mode
+    )
     model = LoggedModel(
         backend or HTTPModel(model_config),
         logger,
@@ -155,6 +182,7 @@ def run(
                     checkpoints,
                     budget,
                     config.max_attempts,
+                    condition_mode=config.condition_mode,
                 )
                 if config.method == "cap_method_1":
                     method.generator.generate(instruction)
@@ -240,6 +268,7 @@ def run(
                         checkpoints,
                         budget,
                         config.max_attempts,
+                        condition_mode=config.condition_mode,
                     )
                     with recorder:
                         method(instruction)
@@ -276,6 +305,8 @@ def run(
                 logger.emit("close_failure", error=str(exc))
         outcome.update(
             method=config.method,
+            condition_mode=config.condition_mode,
+            observation_api_version=OBSERVATION_API_VERSION,
             task=config.task,
             model_calls=budget.calls,
             known_tokens=budget.tokens,

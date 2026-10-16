@@ -4,9 +4,12 @@ import difflib
 import hashlib
 from pathlib import Path
 
+from .contracts import CHECKER_VERSION, OBSERVATION_API_VERSION, validate_condition_mode
+
 
 class Checkpoints:
-    def __init__(self, logger, *, method):
+    def __init__(self, logger, *, method, condition_mode="dsl_only"):
+        self.condition_mode = validate_condition_mode(condition_mode)
         self.logger, self.method = logger, method
         self.counter = 0
         self.previous = None
@@ -74,6 +77,12 @@ class Checkpoints:
                 "checkpoint_id": cid,
                 "parent_checkpoint_id": parent_id,
                 "method": self.method,
+                "condition_mode": self.condition_mode,
+                "observation_api_version": OBSERVATION_API_VERSION,
+                "checker_version": (
+                    CHECKER_VERSION if self.method == "cap_method_1" else None
+                ),
+                "refinement_enabled": self.method == "cap_method_1",
                 "checker_sha256": self.checker_hash,
                 "reason": reason,
                 "validation": validation,

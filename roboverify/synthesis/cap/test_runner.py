@@ -36,6 +36,7 @@ class RunnerTests(unittest.TestCase):
     def execute(self, method, responses, **options):
         config = RunConfig(
             method=method,
+            condition_mode=options.pop("condition_mode", "dsl_only"),
             num_blocks=1,
             save_video=options.pop("save_video", False),
             output_root=self.tmp.name,
@@ -47,7 +48,7 @@ class RunnerTests(unittest.TestCase):
                 backend=ScriptedModel(responses),
                 environment_factory=self.factory,
                 capture_stdout=False,
-                **options
+                **options,
             )
 
     def test_both_methods_record_the_shared_primitive_path(self):
@@ -65,6 +66,46 @@ class RunnerTests(unittest.TestCase):
                 self.assertTrue(self.envs[-1].closed)
                 self.assertIn("primitive_end", (root / "stdout.log").read_text())
                 self.assertIn(method, RunSummary(root).render())
+
+    def test_four_combinations_share_position_reads_actions_and_mode_metadata(self):
+        import numpy as np
+
+        source = "p=get_block_position(b0)\ng=get_gripper_position()\nPick(b0)\nduring=get_gripper_position()\nMove(b0,b0,b0,[0,0,g[2]-p[2]])\nafter=get_gripper_position()"
+        actions, reads, snapshot = [], [], None
+        for method in ("cap_google_baseline", "cap_method_1"):
+            for mode in ("dsl_only", "coordinate_predicates"):
+                with self.subTest(method=method, mode=mode):
+                    result = self.execute(
+                        method, [source], condition_mode=mode, initial_state=snapshot
+                    )
+                    self.assertEqual(result["status"], "completed")
+                    self.assertEqual(result["condition_mode"], mode)
+                    directory = Path(result["run_dir"])
+                    root = directory / "artifacts/trial_001"
+                    if snapshot is None:
+                        snapshot = root / "initial_state.npz"
+                    events = [
+                        json.loads(line)
+                        for line in (root / "timeline.jsonl").read_text().splitlines()
+                    ]
+                    reads.append(
+                        [e["result"] for e in events if e["kind"] == "coordinate_query"]
+                    )
+                    actions.append(np.array(self.envs[-1].actions))
+                    self.assertIn(
+                        f"condition_mode: {mode}", RunSummary(directory).render()
+                    )
+                    for path in root.glob("checkpoints/*/manifest.json"):
+                        manifest = json.loads(path.read_text())
+                        self.assertEqual(manifest["condition_mode"], mode)
+                        self.assertEqual(
+                            manifest["validation_enabled"], method == "cap_method_1"
+                        )
+        for action in actions[1:]:
+            np.testing.assert_array_equal(actions[0], action)
+        for read in reads[1:]:
+            self.assertEqual(reads[0], read)
+        self.assertNotEqual(reads[0][1], reads[0][2])
 
     def test_failure_preserves_partial_recording_and_cannot_become_success(self):
         result = self.execute("cap_google_baseline", ["Pick(b0)\nmissing_value"])

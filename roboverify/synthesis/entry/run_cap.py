@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from synthesis.cap.config import ModelConfig, RunConfig
+from synthesis.cap.contracts import CONDITION_MODES
 from synthesis.cap.llm import ScriptedModel
 from synthesis.cap.runner import run
 from synthesis.cap.tasks import TASK_INSTRUCTIONS
@@ -15,6 +16,7 @@ def main(argv=None):
     parser.add_argument(
         "--method", choices=["cap_google_baseline", "cap_method_1"], required=True
     )
+    parser.add_argument("--condition-mode", choices=CONDITION_MODES, default="dsl_only")
     parser.add_argument("--task", choices=TASK_INSTRUCTIONS, default="stack")
     parser.add_argument("--num-blocks", type=int, default=3)
     parser.add_argument("--seed", type=int, default=0)
@@ -93,6 +95,7 @@ def main(argv=None):
     )
     config = RunConfig(
         method=args.method,
+        condition_mode=args.condition_mode,
         task=args.task,
         num_blocks=args.num_blocks,
         seed=args.seed,

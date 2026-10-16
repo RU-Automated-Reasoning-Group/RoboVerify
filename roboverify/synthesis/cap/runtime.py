@@ -2,8 +2,16 @@
 
 import ast
 import math
+import operator
 
-from .contracts import ACTIONS, BudgetExceeded, CapError, ObjectHandle
+from .contracts import (
+    ACTIONS,
+    BudgetExceeded,
+    CapError,
+    ObjectHandle,
+    Position3,
+    validate_condition_mode,
+)
 from .validation import definitions, validate
 
 
@@ -21,7 +29,8 @@ class ContinueLoop(Exception):
 
 
 class Runtime:
-    def __init__(self, adapter, budget, logger):
+    def __init__(self, adapter, budget, logger, condition_mode="dsl_only"):
+        self.condition_mode = validate_condition_mode(condition_mode)
         self.adapter, self.budget, self.logger = adapter, budget, logger
         self.functions = {}
         self.global_values = {}
@@ -35,7 +44,12 @@ class Runtime:
         arguments = arguments or {"b0": self.adapter.b0}
         if any(not isinstance(v, ObjectHandle) for v in arguments.values()):
             raise CapError("Module inputs must be object handles")
-        validate(bundle, inputs=dict.fromkeys(arguments, OBJECT), role=role)
+        validate(
+            bundle,
+            inputs=dict.fromkeys(arguments, OBJECT),
+            role=role,
+            condition_mode=self.condition_mode,
+        )
         trees, self.functions = definitions(bundle)
         self.global_values = dict(arguments)
         self.condition_depth = int(role == "condition")
@@ -68,6 +82,16 @@ class Runtime:
             return env[node.id]
         if isinstance(node, (ast.List, ast.Tuple)):
             return [self.expr(item, env) for item in node.elts]
+        if isinstance(node, ast.Subscript):
+            value = self.expr(node.value, env)
+            if not (
+                isinstance(value, Position3)
+                and isinstance(node.slice, ast.Constant)
+                and type(node.slice.value) is int
+                and node.slice.value in (0, 1, 2)
+            ):
+                raise CapError("Only literal Position3 component reads are supported")
+            return self.numeric(value[node.slice.value])
         if isinstance(node, ast.UnaryOp):
             if isinstance(node.op, ast.Not):
                 return not self.condition(node.operand, env)
@@ -98,12 +122,26 @@ class Runtime:
             left = self.expr(node.left, env)
             for op, right_node in zip(node.ops, node.comparators):
                 right = self.expr(right_node, env)
-                if not isinstance(left, ObjectHandle) or not isinstance(
-                    right, ObjectHandle
-                ):
-                    raise CapError("Only object identity comparisons are supported")
-                equal = self.adapter.call("eq", [left, right])
-                if equal != isinstance(op, ast.Eq):
+                if isinstance(left, ObjectHandle) and isinstance(right, ObjectHandle):
+                    if not isinstance(op, (ast.Eq, ast.NotEq)):
+                        raise CapError("Objects support only identity comparisons")
+                    equal = self.adapter.call("eq", [left, right])
+                    result = equal if isinstance(op, ast.Eq) else not equal
+                elif self.condition_mode == "coordinate_predicates":
+                    operations = {
+                        ast.Eq: operator.eq,
+                        ast.NotEq: operator.ne,
+                        ast.Lt: operator.lt,
+                        ast.LtE: operator.le,
+                        ast.Gt: operator.gt,
+                        ast.GtE: operator.ge,
+                    }
+                    result = operations[type(op)](
+                        self.numeric(left), self.numeric(right)
+                    )
+                else:
+                    raise CapError("Numeric conditions require coordinate_predicates")
+                if not result:
                     return False
                 left = right
             return True

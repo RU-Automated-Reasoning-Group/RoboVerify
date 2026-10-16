@@ -10,24 +10,35 @@ from ..contracts import (
     ConstraintFailure,
     Diagnostic,
     api_description,
+    validate_condition_mode,
 )
 from ..validation import definitions, missing_calls, parse, validate, validate_helper
 
 PROMPTS = Path(__file__).with_name("prompts")
 
 
-def prompt(name, *, api_names=API_NAMES, **fields):
+def prompt(name, *, api_names=API_NAMES, condition_mode="dsl_only", **fields):
     return (
         (PROMPTS / f"{name}.txt")
         .read_text()
-        .format(api=api_description(api_names), **fields)
+        .format(api=api_description(api_names, condition_mode), **fields)
     ).rstrip("\n")
 
 
 class Generator:
     def __init__(
-        self, model, logger, checkpoints, budget, max_attempts=3, api_names=API_NAMES
+        self,
+        model,
+        logger,
+        checkpoints,
+        budget,
+        max_attempts=3,
+        api_names=API_NAMES,
+        condition_mode="dsl_only",
     ):
+        self.condition_mode = validate_condition_mode(condition_mode)
+        if checkpoints.condition_mode != condition_mode:
+            raise ValueError("Checkpoint and generator condition modes differ")
         if max_attempts < 1:
             raise ValueError("max_attempts must be positive")
         self.model, self.logger, self.checkpoints, self.budget = (
@@ -44,6 +55,7 @@ class Generator:
             prompt(
                 "policy",
                 api_names=self.api_names,
+                condition_mode=self.condition_mode,
                 instruction=instruction,
                 context=context,
             ),
@@ -118,9 +130,16 @@ class Generator:
                                 ]
                             )
                 if unit == "policy":
-                    validate(Bundle(source, helpers), complete=False, role=role)
+                    validate(
+                        Bundle(source, helpers),
+                        complete=False,
+                        role=role,
+                        condition_mode=self.condition_mode,
+                    )
                 else:
-                    validate_helper(source, unit, helpers, role)
+                    validate_helper(
+                        source, unit, helpers, role, condition_mode=self.condition_mode
+                    )
                 self.logger.emit(
                     "local_validation_pass", checkpoint_id=cp, parent_event_id=event
                 )
@@ -143,6 +162,7 @@ class Generator:
                         prompt(
                             "helper",
                             api_names=self.api_names,
+                            condition_mode=self.condition_mode,
                             signature=call.signature,
                             role=call.role,
                         ),
@@ -162,7 +182,12 @@ class Generator:
                     helpers.update(child.helpers)
                     helpers[call.name] = child.source
                 if unit == "policy":
-                    validate(Bundle(source, helpers), complete=True, role=role)
+                    validate(
+                        Bundle(source, helpers),
+                        complete=True,
+                        role=role,
+                        condition_mode=self.condition_mode,
+                    )
                 # Parent-level complete checking uses actual argument types and value flow.
                 self.checkpoints.save(
                     source if unit == "policy" else root_source,
@@ -178,7 +203,7 @@ class Generator:
                     scope="complete" if unit == "policy" else "local",
                     checkpoint_id=cp,
                 )
-                return Bundle(source, helpers)
+                return Bundle(source, helpers, condition_mode=self.condition_mode)
             except ConstraintFailure as exc:
                 self.checkpoints.save(
                     source if unit == "policy" else root_source,
@@ -204,6 +229,7 @@ class Generator:
                     prompt(
                         "repair",
                         api_names=self.api_names,
+                        condition_mode=self.condition_mode,
                         source=source,
                         role=role,
                         diagnostics=str(exc),

@@ -3,6 +3,8 @@
 import re
 from dataclasses import dataclass, field
 
+from .contracts import validate_condition_mode
+
 
 @dataclass
 class ModelConfig:
@@ -54,3 +56,7 @@ class RunConfig:
     higher_tolerance: float = 0.001
     save_video: bool = True
     output_root: str = "runs"
+    condition_mode: str = "dsl_only"
+
+    def __post_init__(self):
+        validate_condition_mode(self.condition_mode)
