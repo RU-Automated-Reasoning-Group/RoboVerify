@@ -13,10 +13,15 @@ See [CAP-INTEGRATION.md](docs/CAP-INTEGRATION.md) for the design and
 [vendor provenance](vendor/google_cap/README.md) for the baseline's exact source
 and compatibility differences. Plan 2 is documented but not implemented.
 
-Implemented observation boundaries and flowcharts with labeled data edges:
+Observation boundaries and flowcharts with labeled data edges:
 
 - [Google baseline](docs/BASELINE-FLOW.md).
-- [Method 1](docs/METHOD-1-FLOW.md).
+- [Method 1: current status and proposed two-mode flow](docs/METHOD-1-FLOW.md).
+
+Planned position-observation extension (not yet implemented):
+
+- [Method 1 configuration](docs/Method1_Configuration.md).
+- [Revision 1 implementation plan](docs/revision_1.md).
 
 ## Implemented scope
 

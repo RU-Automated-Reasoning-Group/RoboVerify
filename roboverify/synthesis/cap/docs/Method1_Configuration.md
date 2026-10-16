@@ -1,0 +1,219 @@
+# Method 1 configuration: condition modes and position observations
+
+Status: requested design, not yet implemented. The current implementation has
+DSL-only conditions and no policy-visible position API. This document specifies
+two condition modes over a shared runtime position interface. See
+[METHOD-1-FLOW.md](METHOD-1-FLOW.md) for the proposed flow and
+[revision_1.md](revision_1.md) for the implementation plan.
+
+## Configuration boundary
+
+Both modes let generated programs read the same position observations. The mode
+controls whether those values may influence loop/branch conditions and object
+selection. Position data is read by the executing program; it is not
+implicitly serialized into LLM prompts or sent to the model after every action.
+
+Proposed configuration:
+
+```text
+RunConfig.condition_mode = "dsl_only" | "coordinate_predicates"
+CLI: --condition-mode dsl_only|coordinate_predicates
+Default: dsl_only
+```
+
+These fields and flags do not exist yet. Reject unknown values. The flag is
+specific to `cap_method_1`; explicitly passing it for the Google baseline should
+be rejected rather than silently ignored. Record the resolved mode, observation
+API version, and checker version in configuration and source checkpoints.
+
+| Property | `dsl_only` | `coordinate_predicates` |
+| --- | --- | --- |
+| Existing task-available DSL predicates | Allowed | Allowed |
+| Boolean composition, identity, relational quantifiers | Allowed | Allowed |
+| Generated helpers combining existing DSL predicates | Allowed | Allowed |
+| Read current gripper/block coordinates | Allowed | Allowed |
+| Use coordinates to compute action offsets | Allowed | Allowed |
+| Use coordinate comparisons as conditions | Rejected, including indirect uses | Allowed with checked numeric provenance |
+| LLM-generated predicates reading coordinates | Rejected when used as conditions | Allowed, including composition with DSL predicates |
+| Actions inside conditions or query lambdas | Rejected | Rejected |
+| Raw simulator objects, rewards, success flags, images | Unavailable | Unavailable |
+| Model repair feedback | Static interface diagnostics | Static interface diagnostics under the extended condition rules |
+
+`dsl_only` preserves the current condition restriction. Its proposed ability to
+read positions for action parameters is an extension over today's implementation;
+it must not be described as already available. Sharing this observation API
+makes the mode comparison about permission to use coordinates in conditions.
+The three physical primitives and their meanings are unchanged.
+
+## Runtime observation contract
+
+For a scene with n blocks, expose the position component of state:
+
+```text
+O_t = (p_gripper(t), p_1(t), ..., p_n(t))
+p_i(t) = (x_i(t), y_i(t), z_i(t))
+```
+
+All positions use the simulator world frame and metres. Gripper position means
+the existing end-effector XYZ observation used by the shared controller, not
+finger joint positions. Block positions are block centres. Velocity, orientation,
+gripper opening, desired goals, and reward are outside this observation contract.
+Object identity remains separate from position equality.
+
+Proposed API:
+
+```text
+get_gripper_position() -> Position3
+get_block_position(block) -> Position3
+```
+
+`Position3` is a copied, immutable triple of finite numbers. Permit component
+access only by literal indices `0`, `1`, and `2`; this is a narrow extension to
+method 1's current ban on subscripting. It does not authorize arbitrary container
+indexing, attributes, dynamic indices, array libraries, or imports.
+
+Block operands use existing validated object handles (`b0`, assignments, and
+query-bound objects). No physical-ID lookup API or coordinate-bearing `tbl` is
+introduced. The notation `p_1` through `p_n` denotes the physical domain; it does
+not introduce hard-coded `block_1` variables into generated code. Quantifier
+lambdas can inspect each bound object's position in `coordinate_predicates` mode.
+
+Each getter reads current state without advancing physics, returns a copy, and
+logs its query and result. Saving `p = get_block_position(b)` saves a snapshot:
+`p` does not change after a Move. Call the getter again to observe the updated
+position. Pure condition evaluation performs no physical actions, so component
+reads during a condition refer to the same unchanged simulation state. Any
+future asynchronous simulator would need an explicit observation snapshot rule.
+
+The adapter obtains gripper XYZ from `obs[:3]` and block i XYZ from
+`obs[10 + 12*i : 13 + 12*i]`. The host retains the ID mapping. Reverse's
+`ON_star_zero` continues using frozen trial-entry geometry independently of
+these current-state position getters.
+
+## Mode 1: DSL-only conditions
+
+The permitted atoms remain the task-available `ON`, `ON_star`, `Higher`,
+`Scattered`, and object identity. `ON_star_zero` is available for Reverse only.
+Conditions may use Boolean constants, logical composition, quantifiers, and
+pure generated helpers that expand to these operations.
+
+Allowed example using the current predicate interface:
+
+```python
+def clear_above(b):
+    return forall(lambda other: eq(other, b) or not ON_star(other, b))
+
+if clear_above(b0):
+    Pick(b0)
+```
+
+This illustrates permitted syntax, not a complete task solution. New helper
+names do not imply new primitive predicates: `clear_above` only composes the
+existing vocabulary.
+
+Rejected example under this mode, even with the proposed position getters:
+
+```python
+def above_by_margin(a, b):
+    return get_block_position(a)[2] > get_block_position(b)[2] + 0.01
+
+ready = above_by_margin(a, b)
+if ready:
+    Pick(a)
+```
+
+Here `a` and `b` denote previously bound handles. The checker must follow the
+value from `above_by_margin` through `ready` to the branch, including dependencies
+and helper arguments. A wrapper returning bool cannot hide a coordinate-derived
+condition. The same rule applies to while guards, query selection, and conditional
+break/continue paths. Coordinate arithmetic is permitted for action parameters,
+but cannot determine which branch, loop iteration, or object binding is chosen.
+
+## Mode 2: DSL and synthesized coordinate predicates
+
+The existing DSL remains available. In addition, the LLM may generate pure
+predicate functions that read positions and combine checked finite arithmetic,
+numeric comparisons, Boolean logic, identity, and existing DSL predicates.
+Direct coordinate comparisons in guards are also allowed; requiring a named
+wrapper would not change their meaning.
+
+Proposed examples, with handles bound by the caller:
+
+```python
+def above_by_margin(a, b):
+    return get_block_position(a)[2] > get_block_position(b)[2] + 0.01
+
+
+def gripper_near(b):
+    g = get_gripper_position()
+    p = get_block_position(b)
+    dx = g[0] - p[0]
+    dy = g[1] - p[1]
+    dz = g[2] - p[2]
+    return dx * dx + dy * dy + dz * dz <= 0.0025
+
+
+def higher_and_separated(a, b):
+    return Higher(a, b) and above_by_margin(a, b)
+```
+
+These helpers execute locally on current observations. Synthesizing their source
+requires model calls; invoking an already prepared helper does not. Thresholds
+are model-generated finite constants or checked numeric arguments, recorded in
+source artifacts. There is no rollout-based threshold optimization or CEM.
+
+Numeric provenance must distinguish position-derived values and finite parameter
+expressions from counters, object IDs, or external data. Coordinate predicates
+may compare position-derived expressions with constants or each other. This
+extension does not authorize count-based loop guards, identity ordering, action
+results as Booleans, or unrelated numeric tests. Permit the necessary numeric
+comparison operators while preserving existing object `==` / `!=` semantics.
+Carry provenance across assignments, helper arguments/returns, and dependencies.
+A helper used as a condition remains action-free throughout its call graph.
+
+`above_by_margin` is not an alternative implementation of `Higher`; their
+semantics differ. Generated functions cannot redefine protected DSL APIs. They
+are runtime predicates, not automatically registered symbolic predicates with
+Z3 axioms, weakest-precondition rules, or invariant-inference support. Formal
+verification of programs using them would require a separate extension.
+
+## Shared generation, execution, and evaluation
+
+Pass the selected mode and position API contract to policy, helper, and repair
+prompts, deterministic validation, and the checked interpreter. Resolve the
+mode once in the runner. A mismatch between prompt, checker, and runtime modes
+must fail rather than execute under a different policy.
+
+Both modes retain recursive helper generation, local interface-only repair,
+complete bundle validation, checked execution, and independent terminal scoring.
+Model feedback contains source diagnostics, not observed coordinates, failed
+rollout trajectories, controller errors, task-success feedback, or reference
+solutions. Actual position values remain runtime data and host-side artifacts.
+
+For comparisons, use identical initial snapshots, model settings, controllers,
+position interfaces, and budgets, with mode-specific rule text disclosed.
+Report mode, generation/repair costs, validation failures, execution failures,
+and physical success separately. Constraint acceptance does not establish task
+success or a formal proof. Existing task-adapter gaps and Unstack's 60-second
+limit remain in force.
+
+## Required implementation and validation
+
+| Area | Required change |
+| --- | --- |
+| [config.py](../config.py), [run_cap.py](../../entry/run_cap.py), [runner.py](../runner.py) | Resolve, validate, propagate, and record the method-1 mode. |
+| [contracts.py](../contracts.py), [adapter.py](../adapter.py) | Define position API types/metadata and fresh read-only getters over the existing observation. |
+| [generation.py](../cap_method_1/generation.py), [prompt templates](../cap_method_1/prompts/policy.txt) | Carry mode/API rules into policy, helper, and repair requests and recursive preparation. |
+| [validation.py](../validation.py) | Add Position3 and coordinate provenance, restricted indexing, mode-sensitive comparisons, and transitive condition checking. |
+| [runtime.py](../runtime.py) | Interpret the added checked operations and enforce the same selected mode; retain no-action condition guards. |
+| [checkpoints.py](../checkpoints.py), [logger.py](../logger.py) | Retain mode/version provenance and coordinate-query events without feeding them into repairs. |
+
+Validation must cover fresh reads after movement, immutable returned positions,
+invalid handles, index/type errors, and both modes on the same generated source.
+Include indirect coordinate conditions, nested helper dependencies, query
+lambdas, action attempts inside predicates, and protected API rebinding. Test
+that model requests do not acquire actual runtime coordinate values through
+logging or repair. Existing DSL-only cases must retain their behavior.
+
+See [revision_1.md](revision_1.md) for the concrete work sequence and acceptance
+criteria. This design document does not implement any of these changes.
