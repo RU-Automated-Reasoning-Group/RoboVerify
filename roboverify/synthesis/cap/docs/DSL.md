@@ -2,7 +2,7 @@
 
 This document describes the paper's language, the current upstream implementation,
 and the interface boundaries needed to reconnect CaP.
-The [CaP implementation](README.md) now connects the tower block-reference
+The [CaP implementation](../README.md) now connects the tower block-reference
 interface to the original Google baseline and constrained method 1. Goal adapters
 and six-task physical evaluation remain incomplete; the limits below still apply.
 
@@ -11,7 +11,7 @@ proposed RoboVerify pseudocode, highlighted changes, and environment interfaces.
 
 Review date: 2026-10-14. Code baseline: upstream `main` at
 `1f55b1b188bde1045b1d1771ed2ba7988d4e2e73`; current working branch: `feature/cap`.
-The paper is the repository's [POPL2027.pdf](../../../POPL2027.pdf); all page
+The paper is the repository's [POPL2027.pdf](../../../../POPL2027.pdf); all page
 references below use PDF page numbers. Implementations and experimental results
 from the old `cap-baseline` are not treated as current capabilities here.
 
@@ -38,14 +38,14 @@ experiments are excluded.
 | Grid | Place blocks at given grid goal positions | `RoboVerifyGrid` / `make_roboverify_grid_env` | Physical goal layout exists; no Goal DSL execution adapter connects it to the three primitives yet |
 | Pyramid | Place blocks at given pyramid goal positions | `RoboVerifyPyramid` / `make_roboverify_pyramid_env` | Currently fixed at six blocks in a `3+2+1` layout; also lacks Goal execution adaptation |
 
-Factories are in [mcmc/synthesis.py](../mcmc/synthesis.py).
+Factories are in [mcmc/synthesis.py](../../mcmc/synthesis.py).
 `make_roboverify_env` accepts `stack/unstack/reverse/partial_stack/partial`;
 Grid/Pyramid require their respective factories. There is currently no `restack`
 string entry point. The grid factory defaults to `3×2`, with the block count equal
 to rows times columns.
 
 `PartialStack` is more general than adding scattered blocks to a single existing
-tower. Its [reset implementation](../environment/cee_us_env/fpp_construction_env.py)
+tower. Its [reset implementation](../../environment/cee_us_env/fpp_construction_env.py)
 randomly partitions blocks into at least two towers and allows `b0` inside a
 tower, providing a scene basis for the paper's ReStack task. An existing
 environment does not establish complete integration of the corresponding
@@ -56,7 +56,7 @@ environment requires the final tower order to reverse the initial canonical
 order, making the original `b0` the top block. Paper §6's wording that `b0`
 remains the base conflicts with Table 8's full-reversal formula. The evaluation
 specification must be settled before running experiments; see
-[discrepancy 40](../../../PAPER-DISCREPANCIES.md#40-six-task-specifications-in-table-8-contain-domain-and-binding-errors).
+[discrepancy 40](../../../../PAPER-DISCREPANCIES.md#40-six-task-specifications-in-table-8-contain-domain-and-binding-errors).
 
 ## 2. Language Layers in the Paper
 
@@ -121,8 +121,8 @@ adaptation.
 
 ## 4. The Three Reusable Physical Primitives
 
-Implementation: [api/instructions.py](../api/instructions.py) and
-[api/control.py](../api/control.py). ID and ByName variants resolve operands
+Implementation: [api/instructions.py](../../api/instructions.py) and
+[api/control.py](../../api/control.py). ID and ByName variants resolve operands
 first, then call the same controllers.
 
 | Paper form | Current constructor interface | Exact runtime semantics | Trainable numeric parameters |
@@ -157,8 +157,8 @@ arm-geometry, or dynamics behavior of the MuJoCo controller.
 
 ## 5. Tower Predicates and Their Exact Definitions
 
-Reuse [predicates/term.py](../predicates/term.py),
-[predicates/scene.py](../predicates/scene.py), and [util/on.py](../util/on.py).
+Reuse [predicates/term.py](../../predicates/term.py),
+[predicates/scene.py](../../predicates/scene.py), and [util/on.py](../../util/on.py).
 Do not implement a separate set of approximate geometric checks in CaP. Block
 side length is `L=0.05 m`.
 
@@ -187,7 +187,7 @@ side length is `L=0.05 m`.
 If CaP exposes `on`, it should explicitly mean relational `ON`, with its
 semantics recorded in experiment configuration. Do not directly connect the
 geometric function with the same name. See
-[entry 14](../../../PAPER-DISCREPANCIES.md#14-afr-and-predicate-definitions-are-inconsistent-across-the-paper)
+[entry 14](../../../../PAPER-DISCREPANCIES.md#14-afr-and-predicate-definitions-are-inconsistent-across-the-paper)
 for the existing discrepancy.
 
 `HighLevelContext` has no separate uninterpreted `ON` function;
@@ -228,7 +228,7 @@ snapshot/historical relations at task scope, rather than freezing the dismantled
 scene again for stage two. Symbolic specifications equate
 `ON_star_zero == ON_star` only at task entry; a global axiom must not keep them
 permanently equal. See
-[entry 5](../../../PAPER-DISCREPANCIES.md#5-the-geometric-translator-conflated-initial-and-current-on_star).
+[entry 5](../../../../PAPER-DISCREPANCIES.md#5-the-geometric-translator-conflated-initial-and-current-on_star).
 
 ## 6. Conditions, Object Selection, and Control Flow
 
@@ -256,7 +256,7 @@ exists vars. P  and  forall vars. (P implies Q)
 ```
 
 This is a settled decision; see
-[entry 9](../../../PAPER-DISCREPANCIES.md#9-executable-get-needs-a-witness-existence-obligation).
+[entry 9](../../../../PAPER-DISCREPANCIES.md#9-executable-get-needs-a-witness-existence-obligation).
 While's execution limit is a resource budget, rather than a termination proof;
 a timeout cannot count as success.
 
@@ -287,7 +287,7 @@ implementations.
 | `r := r.next_r`, `d := d.next_c` | `MoveRight`, `MoveDown` | Goal-pointer steps for verification only; do not move the arm right/down |
 | Abstract update after placement | `MarkGoal` | Rewrites Mark only; does not execute Pick/Move/Release |
 
-[verify_2d_with_learned_invariant.py](../entry/verify_2d_with_learned_invariant.py)
+[verify_2d_with_learned_invariant.py](../../entry/verify_2d_with_learned_invariant.py)
 constructs a nested symbolic program that traverses and marks goals. It does not
 connect block selection, transport, and actual goal occupancy in a physical
 implementation. Executing or verifying Mark-all alone cannot establish physical
@@ -383,7 +383,7 @@ execution, rather than relying only on the prompt.
 
 ## 10. The Reusable Stack Example
 
-Existing [examples/stack.py](../examples/stack.py) demonstrates a physical program
+Existing [examples/stack.py](../../examples/stack.py) demonstrates a physical program
 using the three-primitive interface. The following is a readable structural
 version, **not a new CaP API or complete runnable Python**:
 
@@ -431,7 +431,7 @@ Both `verify_reverse_with_learned_invariant.py` and
 with `Put(selected,tbl)` and require no nontrivial ON*, equal physical block
 heights, and Scattered at the end. This does not verify the paper's
 Reverse/ReStack tasks. These existing implementation gaps are recorded in
-[discrepancy 39](../../../PAPER-DISCREPANCIES.md#39-six-task-dsl-coverage-does-not-match-the-named-verification-entry-points);
+[discrepancy 39](../../../../PAPER-DISCREPANCIES.md#39-six-task-dsl-coverage-does-not-match-the-named-verification-entry-points);
 this review neither fixes nor runs those entry points.
 
 The first evaluation should report physical successes/total trials for all six
@@ -446,25 +446,25 @@ experiments.
 
 | Source | Material used here |
 | --- | --- |
-| [Paper Fig.2 / §2.2](../../../POPL2027.pdf#page=4), pp.4–5 | Types, predicates, three primitives, selection, loops, and branches |
-| [Paper §3–5](../../../POPL2027.pdf#page=11), pp.11–35 | Guard/structure recovery, abstract/physical layers, WP, and verification scope |
-| [Paper §6](../../../POPL2027.pdf#page=36), pp.36–38 | Six tasks, demonstrations, and experiment metrics |
-| [Paper Appendix A](../../../POPL2027.pdf#page=43), pp.43–44 | Predicate axioms and Put WP |
-| [Paper Appendices B/C](../../../POPL2027.pdf#page=45), pp.45–48 | Task specifications, Goal, historical relations, goal traversal, and dynamic coordinate references |
-| [api/instructions.py](../api/instructions.py) | All instruction classes, parameters, loops/Get/aliases, and verification-only instructions |
-| [api/control.py](../api/control.py) | Actual control steps and budgets of the three primitives |
-| [api/program.py](../api/program.py) | Program execution, parameter registration, WP/VC dispatch, and abstract updates |
-| [api/guard_eval.py](../api/guard_eval.py), [api/runtime.py](../api/runtime.py) | Guard evaluation/binding/replay and instruction events |
-| [predicates/term.py](../predicates/term.py), [scene.py](../predicates/scene.py), [language.py](../predicates/language.py) | Condition AST, predicate interpretations, and default vocabulary |
-| [predicates/guard.py](../predicates/guard.py), [classifier.py](../predicates/classifier.py), [enumerate.py](../predicates/enumerate.py) | Guard/classifier boundaries and quantified search |
-| [util/on.py](../util/on.py), [lowlevel_verification_lib.py](../verification_lib/lowlevel_verification_lib.py) | Numeric and geometric Z3 predicates |
-| [highlevel_verification_lib.py](../verification_lib/highlevel_verification_lib.py) | Box/Goal types, relation axioms, and goal successors |
-| [primitive_motion.py](../verification_lib/primitive_motion.py), [motion documentation](../verification_lib/README.md) | Distinction between idealized primitive models and actual controllers |
-| [cfg/tasks.py](../cfg/tasks.py), [lower.py](../cfg/lower.py), [region.py](../cfg/region.py) | Shared task specifications, sequence/loop lowering, and current structure |
-| [cfg/program_source.py](../cfg/program_source.py), [program_adapter.py](../cfg/program_adapter.py) | Source checks, named operands, and supported program scope |
-| [inference_lib/demo_store.py](../inference_lib/demo_store.py), [inference.py](../inference_lib/inference.py) | Frozen entry, vocabulary configuration, and Goal inference interpretation helpers |
-| [mcmc/synthesis.py](../mcmc/synthesis.py) | Six environment factories |
-| [fpp_construction_env.py](../environment/cee_us_env/fpp_construction_env.py) | Reset, goal positions, initial aliases, and six-task success checks |
-| [examples/stack.py](../examples/stack.py), [collect_demos.py](../entry/collect_demos.py) | Explicit primitive example and current Stack collection scope |
-| [Unstack entry point](../entry/verify_unstack_with_learned_invariant.py), [Reverse entry point](../entry/verify_reverse_with_learned_invariant.py), [Partial entry point](../entry/verify_partial_with_learned_invariant.py), [2D entry point](../entry/verify_2d_with_learned_invariant.py) | Actual standalone verification programs and capability gaps |
-| [PAPER-DISCREPANCIES.md](../../../PAPER-DISCREPANCIES.md) | Settled semantics, paper corrections, implementation gaps, and model limits |
+| [Paper Fig.2 / §2.2](../../../../POPL2027.pdf#page=4), pp.4–5 | Types, predicates, three primitives, selection, loops, and branches |
+| [Paper §3–5](../../../../POPL2027.pdf#page=11), pp.11–35 | Guard/structure recovery, abstract/physical layers, WP, and verification scope |
+| [Paper §6](../../../../POPL2027.pdf#page=36), pp.36–38 | Six tasks, demonstrations, and experiment metrics |
+| [Paper Appendix A](../../../../POPL2027.pdf#page=43), pp.43–44 | Predicate axioms and Put WP |
+| [Paper Appendices B/C](../../../../POPL2027.pdf#page=45), pp.45–48 | Task specifications, Goal, historical relations, goal traversal, and dynamic coordinate references |
+| [api/instructions.py](../../api/instructions.py) | All instruction classes, parameters, loops/Get/aliases, and verification-only instructions |
+| [api/control.py](../../api/control.py) | Actual control steps and budgets of the three primitives |
+| [api/program.py](../../api/program.py) | Program execution, parameter registration, WP/VC dispatch, and abstract updates |
+| [api/guard_eval.py](../../api/guard_eval.py), [api/runtime.py](../../api/runtime.py) | Guard evaluation/binding/replay and instruction events |
+| [predicates/term.py](../../predicates/term.py), [scene.py](../../predicates/scene.py), [language.py](../../predicates/language.py) | Condition AST, predicate interpretations, and default vocabulary |
+| [predicates/guard.py](../../predicates/guard.py), [classifier.py](../../predicates/classifier.py), [enumerate.py](../../predicates/enumerate.py) | Guard/classifier boundaries and quantified search |
+| [util/on.py](../../util/on.py), [lowlevel_verification_lib.py](../../verification_lib/lowlevel_verification_lib.py) | Numeric and geometric Z3 predicates |
+| [highlevel_verification_lib.py](../../verification_lib/highlevel_verification_lib.py) | Box/Goal types, relation axioms, and goal successors |
+| [primitive_motion.py](../../verification_lib/primitive_motion.py), [motion documentation](../../verification_lib/README.md) | Distinction between idealized primitive models and actual controllers |
+| [cfg/tasks.py](../../cfg/tasks.py), [lower.py](../../cfg/lower.py), [region.py](../../cfg/region.py) | Shared task specifications, sequence/loop lowering, and current structure |
+| [cfg/program_source.py](../../cfg/program_source.py), [program_adapter.py](../../cfg/program_adapter.py) | Source checks, named operands, and supported program scope |
+| [inference_lib/demo_store.py](../../inference_lib/demo_store.py), [inference.py](../../inference_lib/inference.py) | Frozen entry, vocabulary configuration, and Goal inference interpretation helpers |
+| [mcmc/synthesis.py](../../mcmc/synthesis.py) | Six environment factories |
+| [fpp_construction_env.py](../../environment/cee_us_env/fpp_construction_env.py) | Reset, goal positions, initial aliases, and six-task success checks |
+| [examples/stack.py](../../examples/stack.py), [collect_demos.py](../../entry/collect_demos.py) | Explicit primitive example and current Stack collection scope |
+| [Unstack entry point](../../entry/verify_unstack_with_learned_invariant.py), [Reverse entry point](../../entry/verify_reverse_with_learned_invariant.py), [Partial entry point](../../entry/verify_partial_with_learned_invariant.py), [2D entry point](../../entry/verify_2d_with_learned_invariant.py) | Actual standalone verification programs and capability gaps |
+| [PAPER-DISCREPANCIES.md](../../../../PAPER-DISCREPANCIES.md) | Settled semantics, paper corrections, implementation gaps, and model limits |

@@ -9,7 +9,7 @@ immutable code checkpoints, recording, and independent trial evaluation:
 - `cap_method_1`: deterministic subset validation, recursive helper generation,
   bounded local repair, and an explicit checked interpreter.
 
-See [CAP-INTEGRATION.md](CAP-INTEGRATION.md) for the design and
+See [CAP-INTEGRATION.md](docs/CAP-INTEGRATION.md) for the design and
 [vendor provenance](vendor/google_cap/README.md) for the baseline's exact source
 and compatibility differences. Plan 2 is documented but not implemented.
 

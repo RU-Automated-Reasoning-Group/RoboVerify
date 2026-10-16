@@ -6,7 +6,7 @@ It also gives an optional Stack compiler prototype and the concrete RoboVerify
 environment interfaces involved.
 **Implementation update (2026-10-15):** `cap_google_baseline` and `cap_method_1`
 now have code, shared text-model transport, logging/checkpoints, and a tower-task
-adapter/runner. See [README.md](README.md) for commands, the exact Python subset,
+adapter/runner. See [README.md](../README.md) for commands, the exact Python subset,
 and validation limits. Plan 2, the optional Program compiler prototype, Goal
 adapters, and optional runtime query-LMP configuration remain unimplemented.
 The shared DSL is described in [DSL.md](DSL.md). The high-level design below also
@@ -104,7 +104,7 @@ flowchart TD
 
 ### 1.1 Google CaP baseline adapted to RoboVerify
 
-**Status: implemented for the configuration documented in [README.md](README.md).** Use
+**Status: implemented for the configuration documented in [README.md](../README.md).** Use
 `cap_google_baseline` alongside the two constrained methods. It uses Google's
 original LMP generation, recursive missing-helper generation, and Python
 execution flow, connected to RoboVerify with minimal necessary changes. It does
@@ -371,7 +371,7 @@ of RoboVerify superiority follows from this design document.
 ### 2.6 Plan 1: Recursive helper generation with constraint repair
 
 **Status: core implementation available; optional query-LMP/session extensions
-remain as documented in [README.md](README.md).** Extend the recursive helper generation in
+remain as documented in [README.md](../README.md).** Extend the recursive helper generation in
 Section 1 with a bounded generate/check/repair loop for each helper. Original
 CaP supplies missing function definitions recursively; the role checks and
 constraint-driven repair below are our additions.
@@ -848,7 +848,7 @@ that report rather than reading full stdout or metrics files. Validate that
 console lines are retained, repeated failures are not throttled, checkpoints
 reconstruct the executed bundle, and failing rollouts retain correlated traces
 and video metadata. The current implementation and commands are documented in
-[README.md](README.md); optional module configurations remain extension points.
+[README.md](../README.md); optional module configurations remain extension points.
 
 ### 2.9 Text model transport and provider configuration
 
@@ -859,7 +859,7 @@ raw images or an automatically enumerated symbolic state. Predicate queries run
 inside the host against current state. Videos and full observations remain log
 artifacts. A VLM is not required for this interface.
 
-The shared [llm.py](llm.py) supports configurable OpenAI-compatible Chat
+The shared [llm.py](../llm.py) supports configurable OpenAI-compatible Chat
 Completions and a separate Responses text adapter. Initial configuration is
 OpenRouter with the user-selected `deepseek/deepseek-v4.1-flash`; no live model
 availability or performance claim follows from offline tests. Both methods use
@@ -1206,19 +1206,19 @@ nor a model proof alone establishes physical task completion.
 
 | Source | Interface verified for this document |
 | --- | --- |
-| [mcmc/synthesis.py](../mcmc/synthesis.py) | `make_roboverify_stack_env`, shared Stack factory settings |
-| [environment/general_env.py](../environment/general_env.py) | `GymToGymnasium.reset`, `step`, and render behavior |
-| [fpp_construction_env.py](../environment/cee_us_env/fpp_construction_env.py) | Observation flattening, bindings, GT state, task success, and table heights |
-| [construction.py](../environment/cee_us_env/fpp_construction/construction.py) | `_get_obs` dictionary and block observation layout |
-| [api/control.py](../api/control.py) | Shared primitive controllers, observation reads, action generation, and convergence |
-| [api/instructions.py](../api/instructions.py) | Named primitives, Assign/Get/While, and alias resolution |
-| [api/program.py](../api/program.py) | `Program.eval` and initial observation handling |
-| [api/guard_eval.py](../api/guard_eval.py) | Current-state guard evaluation and witness binding |
-| [predicates/scene.py](../predicates/scene.py) | Shared observation adapter and predicate interpretation |
-| [util/actions.py](../util/actions.py), [util/on.py](../util/on.py) | Uniform action bounds, shared geometry, and Higher tolerance |
-| [cfg/program_source.py](../cfg/program_source.py) | `prepare_program`, initial bindings, and fingerprints |
-| [cfg/reset.py](../cfg/reset.py) | `inner_env`, `capture`, `restore`, and `collect_recording` |
-| [cfg/collection.py](../cfg/collection.py) | `record_execution`, settling, deadlines, and `validate_trace` |
-| [cfg/tasks.py](../cfg/tasks.py) | Shared Stack pre/postconditions |
-| [experiment/run_logger.py](../experiment/run_logger.py), [experiment/report.py](../experiment/report.py) | Run-directory contract, stdout capture, progress output, event throttling, artifact helpers, and bounded reporting |
-| [cfg/VERIFICATION.md](../cfg/VERIFICATION.md), [inference guide](../inference_lib/README.md) | Existing proof scope, archive contracts, and collection/replay workflow |
+| [mcmc/synthesis.py](../../mcmc/synthesis.py) | `make_roboverify_stack_env`, shared Stack factory settings |
+| [environment/general_env.py](../../environment/general_env.py) | `GymToGymnasium.reset`, `step`, and render behavior |
+| [fpp_construction_env.py](../../environment/cee_us_env/fpp_construction_env.py) | Observation flattening, bindings, GT state, task success, and table heights |
+| [construction.py](../../environment/cee_us_env/fpp_construction/construction.py) | `_get_obs` dictionary and block observation layout |
+| [api/control.py](../../api/control.py) | Shared primitive controllers, observation reads, action generation, and convergence |
+| [api/instructions.py](../../api/instructions.py) | Named primitives, Assign/Get/While, and alias resolution |
+| [api/program.py](../../api/program.py) | `Program.eval` and initial observation handling |
+| [api/guard_eval.py](../../api/guard_eval.py) | Current-state guard evaluation and witness binding |
+| [predicates/scene.py](../../predicates/scene.py) | Shared observation adapter and predicate interpretation |
+| [util/actions.py](../../util/actions.py), [util/on.py](../../util/on.py) | Uniform action bounds, shared geometry, and Higher tolerance |
+| [cfg/program_source.py](../../cfg/program_source.py) | `prepare_program`, initial bindings, and fingerprints |
+| [cfg/reset.py](../../cfg/reset.py) | `inner_env`, `capture`, `restore`, and `collect_recording` |
+| [cfg/collection.py](../../cfg/collection.py) | `record_execution`, settling, deadlines, and `validate_trace` |
+| [cfg/tasks.py](../../cfg/tasks.py) | Shared Stack pre/postconditions |
+| [experiment/run_logger.py](../../experiment/run_logger.py), [experiment/report.py](../../experiment/report.py) | Run-directory contract, stdout capture, progress output, event throttling, artifact helpers, and bounded reporting |
+| [cfg/VERIFICATION.md](../../cfg/VERIFICATION.md), [inference guide](../../inference_lib/README.md) | Existing proof scope, archive contracts, and collection/replay workflow |
