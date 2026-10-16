@@ -61,8 +61,8 @@ class Runtime:
 
     def numeric(self, value):
         if type(value) not in (int, float) or not math.isfinite(value):
-            raise CapError("Expected a finite action parameter")
-        return float(value)
+            raise CapError("Expected a finite numeric value")
+        return value
 
     def condition(self, node, env):
         self.condition_depth += 1

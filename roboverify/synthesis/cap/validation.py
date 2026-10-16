@@ -31,7 +31,6 @@ UNKNOWN = Value("unknown")
 BOOL = Value("bool")
 OBJECT = Value("object")
 NUMBER = Value("number")
-POSITION = Value("position")
 NONE = Value("none")
 
 

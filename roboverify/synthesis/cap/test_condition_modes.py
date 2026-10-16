@@ -104,6 +104,19 @@ class ConditionModeTests(unittest.TestCase):
                     self.assertEqual(len(backend.prompts), 1)
                     self.assertEqual(adapter.actions, [])
 
+    def test_numeric_comparisons_preserve_integer_precision(self):
+        source = "n=9007199254740992 + 1\nif n > 9007199254740992:\n    Pick(b0)"
+        for baseline in (False, True):
+            with (
+                self.subTest(baseline=baseline),
+                self.execution(
+                    "coordinate_predicates", [source], baseline=baseline
+                ) as data,
+            ):
+                method, adapter, _, _, _ = data
+                method("Compare integers exactly")
+                self.assertEqual(len(adapter.actions), 1)
+
     def test_position_parameters_work_in_both_modes(self):
         source = "def height(p):\n    return p[2]\ng = get_gripper_position()\nMove(b0,b0,b0,[0,0,height(g)])"
         for mode in CONDITION_MODES:
