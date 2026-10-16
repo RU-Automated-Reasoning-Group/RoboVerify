@@ -4,7 +4,9 @@ This describes the implemented `cap_google_baseline` path, reviewed on
 2026-10-16. It distinguishes **text sent to the LLM**, **values available to the
 generated Python policy**, and **environment data retained by the host**.
 See [method 1](METHOD-1-FLOW.md) for the checked generation path and
-[the shared DSL](DSL.md) for predicate and action semantics.
+[the shared DSL](DSL.md) for predicate and action semantics. The current path
+below is unchanged; the planned shared observations and two prompt modes are
+described in the Revision 1 section at the end.
 
 ## What the LLM receives
 
@@ -133,6 +135,64 @@ postconditions are separate diagnostics. Failures remain failures even when a
 partial final scene satisfies the goal. Grid/Pyramid return `adapter_gap` before
 any model request. No invariant inference, formal verification feedback, CEM,
 or rollout-feedback repair is part of this baseline.
+
+## Revision 1 target: shared positions and two prompt modes
+
+Status: planned, not yet implemented. Both baseline and method 1 will accept
+`--condition-mode dsl_only|coordinate_predicates`, defaulting to `dsl_only`, and
+share the runtime observation API described in
+[Method1_Configuration.md](Method1_Configuration.md).
+
+```text
+O_t = (p_gripper(t), p_1(t), ..., p_n(t))
+get_gripper_position() -> Position3
+get_block_position(handle) -> Position3
+```
+
+Position3 contains copied current XYZ values in world-frame metres. Reads do not
+advance physics or call the LLM. Re-read after actions; saved triples are
+snapshots. The original predicate and primitive interfaces remain available.
+
+| Baseline mode | Rules supplied in both policy and helper prompts |
+| --- | --- |
+| `dsl_only` | Read positions for action parameters; use only DSL predicates, identity, logic, quantifiers, and their compositions for loop/branch/selection conditions. |
+| `coordinate_predicates` | Also allow LLM-generated coordinate predicates and general numeric conditions, including counters and comparisons without coordinate inputs. |
+
+The selected mode changes prompt instructions, not the baseline execution
+checker. This preserves the original Google CaP implementation as closely as
+possible: keep the pinned `LMP`, `LMPFGen`, and `exec_safe` algorithms unchanged
+and adapt prompts/API bindings through the compatibility layer. It remains on
+upstream Python execution with no added DSL validation
+or compliance repair. Thus a numeric branch generated in `dsl_only` may still
+execute; this is a prompt violation, not something a new gate rejects. Retain
+`validation=not_run`, `validation_enabled=false`, and
+`refinement_enabled=false` for both modes. Shared adapter and budget checks
+remain active. Method 1 enforces the same advertised rules through its checker
+and interpreter.
+
+This proposed data flow supplements the current implementation diagram above:
+
+```mermaid
+flowchart TD
+    T["Runner: method and condition mode"] -->|"Mode-specific rules, shared API, task and b0 context"| G["Baseline policy and helper prompt assembly"]
+    G -->|"Text generation request"| L["LLM"]
+    L -->|"Generated source"| F["Upstream recursive helper generation and binding"]
+    F -->|"Missing call and the same mode/API rules"| G
+    F -->|"Policy source and helper namespace; no DSL gate"| P["Upstream Python policy execution"]
+    P -->|"Gripper query or block handle"| A["Shared position API"]
+    E["Current environment state"] -->|"Current XYZ observation"| A
+    A -->|"Copied Position3 value"| P
+    P -->|"Primitive operands and numeric offsets"| C["Shared primitive controllers"]
+    C -->|"Physical actions"| E
+    P -->|"Completion or failure"| R["Host evaluator and report"]
+    E -->|"Terminal state"| R
+    T -->|"Method, mode, validation disabled, repair disabled"| R
+```
+
+Coordinate query results return to the generated program, not to the LLM.
+Model requests remain code-generation text. Record outcomes separately for all
+four method/mode combinations. The implementation work and acceptance criteria
+are in [revision_1.md](revision_1.md).
 
 ## Implementation references
 

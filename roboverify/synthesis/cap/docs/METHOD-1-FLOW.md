@@ -23,6 +23,11 @@ modes while preserving recursive generation and interface-only repair.
 | `dsl_only` | Readable for action-parameter computation | Existing DSL predicates, identity, logic, quantifiers, and pure compositions of them. |
 | `coordinate_predicates` | Readable for action parameters and predicates | The same DSL conditions plus pure generated numeric predicates, coordinate comparisons, counter guards, and other numeric conditions. |
 
+The baseline is also planned to support both modes and the same observation
+API; mode selection is shared configuration, not a method-1-only flag. Its
+two modes are prompt-only condition rules, without a DSL checker or repair;
+method 1 enforces them. See [revision_1.md](revision_1.md).
+
 Both use `O_t = (p_gripper(t), p_1(t), ..., p_n(t))`, exposed through
 `get_gripper_position()` and `get_block_position(handle)`. These return copied
 XYZ triples in world-frame metres. Literal indices 0/1/2 select components.

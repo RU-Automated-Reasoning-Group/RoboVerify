@@ -2,7 +2,9 @@
 
 Status: requested design, not yet implemented. The current implementation has
 DSL-only conditions and no policy-visible position API. This document specifies
-two condition modes over a shared runtime position interface. See
+two condition modes over a shared runtime position interface. Both
+`cap_method_1` and `cap_google_baseline` must support the same mode selector and
+observation API. Method-1 checking and repair remain method-specific. See
 [METHOD-1-FLOW.md](METHOD-1-FLOW.md) for the proposed flow and
 [revision_1.md](revision_1.md) for the implementation plan.
 
@@ -21,10 +23,18 @@ CLI: --condition-mode dsl_only|coordinate_predicates
 Default: dsl_only
 ```
 
-These fields and flags do not exist yet. Reject unknown values. The flag is
-specific to `cap_method_1`; explicitly passing it for the Google baseline should
-be rejected rather than silently ignored. Record the resolved mode, observation
-API version, and checker version in configuration and source checkpoints.
+These fields and flags do not exist yet. The selector applies to both
+`cap_method_1` and `cap_google_baseline`, with `dsl_only` the default for each.
+Reject unknown modes, not valid baseline/mode combinations. Record method, mode,
+observation API version, and actual validation configuration in every trial and
+source checkpoint. A checker version must not imply that checking ran.
+
+The advertised condition rules are identical for the same mode across methods.
+The table below specifies method 1's enforced behavior. The current baseline has
+no complete DSL checker: its API checks and upstream Python filtering do not
+establish compliance. Revision 1 deliberately preserves that baseline behavior: modes change its
+prompts and shared observation API, with no added DSL checker or repair. See
+[revision_1.md](revision_1.md); do not infer enforcement from mode selection.
 
 | Property | `dsl_only` | `coordinate_predicates` |
 | --- | --- | --- |
@@ -208,11 +218,18 @@ prompts, deterministic validation, and the checked interpreter. Resolve the
 mode once in the runner. A mismatch between prompt, checker, and runtime modes
 must fail rather than execute under a different policy.
 
-Both modes retain recursive helper generation, local interface-only repair,
+Both method-1 modes retain recursive helper generation, local interface-only repair,
 complete bundle validation, checked execution, and independent terminal scoring.
 Model feedback contains source diagnostics, not observed coordinates, failed
 rollout trajectories, controller errors, task-success feedback, or reference
 solutions. Actual position values remain runtime data and host-side artifacts.
+
+The baseline receives the same mode-specific condition contract in policy and
+helper prompts, but continues original Python execution with
+`validation_enabled=false` and `refinement_enabled=false`. Unsupported code may
+fail at execution, and some prompt violations may run. No DSL-compliance claim
+follows from its selected mode or physical success. Shared adapter checks remain
+active; these are not complete loop/branch condition validation.
 
 For comparisons, use identical initial snapshots, model settings, controllers,
 position interfaces, and budgets, with mode-specific rule text disclosed.
@@ -225,9 +242,10 @@ limit remain in force.
 
 | Area | Required change |
 | --- | --- |
-| [config.py](../config.py), [run_cap.py](../../entry/run_cap.py), [runner.py](../runner.py) | Resolve, validate, propagate, and record the method-1 mode. |
+| [config.py](../config.py), [run_cap.py](../../entry/run_cap.py), [runner.py](../runner.py) | Resolve, validate, propagate, and record the condition mode for both methods. |
 | [contracts.py](../contracts.py), [adapter.py](../adapter.py) | Define position API types/metadata and fresh read-only getters over the existing observation. |
 | [generation.py](../cap_method_1/generation.py), [prompt templates](../cap_method_1/prompts/policy.txt) | Carry mode/API rules into policy, helper, and repair requests and recursive preparation. |
+| [baseline setup](../cap_google_baseline/method.py), [compatibility.py](../cap_google_baseline/compatibility.py) | Pass the shared position API and selected condition rules to baseline policy/helper prompts; keep validation status explicit. |
 | [validation.py](../validation.py) | Add Position3, restricted indexing, mode-sensitive comparisons, and transitive condition checking. Track condition sources for dsl_only; allow general numeric conditions in coordinate_predicates. |
 | [runtime.py](../runtime.py) | Interpret the added checked operations and enforce the same selected mode; retain no-action condition guards. |
 | [checkpoints.py](../checkpoints.py), [logger.py](../logger.py) | Retain mode/version provenance and coordinate-query events without feeding them into repairs. |

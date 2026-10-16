@@ -17,7 +17,9 @@ For current baseline model inputs and runtime data flow, see
 [current status and proposed two-mode flow](METHOD-1-FLOW.md),
 [configuration design](Method1_Configuration.md), and
 [revision 1 implementation plan](revision_1.md). The position API and condition
-mode selector in that design are not yet implemented.
+mode selector in that design are not yet implemented. Both methods will share
+the position API and two advertised condition modes; the baseline retains
+prompt-only constraints without a DSL checker or repair.
 
 Source review: 2026-10-14. The Google code reviewed is pinned to
 `8c116f61a61b4339cbbae92be89ff83d9897d4b5`. Pseudocode abstracts the implementation;

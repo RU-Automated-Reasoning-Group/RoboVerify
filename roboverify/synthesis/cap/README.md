@@ -15,10 +15,11 @@ and compatibility differences. Plan 2 is documented but not implemented.
 
 Observation boundaries and flowcharts with labeled data edges:
 
-- [Google baseline](docs/BASELINE-FLOW.md).
+- [Google baseline: current flow and proposed two prompt modes](docs/BASELINE-FLOW.md).
 - [Method 1: current status and proposed two-mode flow](docs/METHOD-1-FLOW.md).
 
-Planned position-observation extension (not yet implemented):
+Planned shared position observations and two condition modes for both methods
+(not yet implemented; baseline modes are prompt-only, method-1 modes are checked):
 
 - [Method 1 configuration](docs/Method1_Configuration.md).
 - [Revision 1 implementation plan](docs/revision_1.md).
