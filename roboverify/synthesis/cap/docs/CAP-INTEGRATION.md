@@ -12,14 +12,21 @@ adapters, and optional runtime query-LMP configuration remain unimplemented.
 The shared DSL is described in [DSL.md](DSL.md). The high-level design below also
 describes those extension points; it is not a claim of six-task physical success.
 
-For current baseline model inputs and runtime data flow, see
-[Google baseline](BASELINE-FLOW.md). For method 1, see the
-[current status and proposed two-mode flow](METHOD-1-FLOW.md),
-[configuration design](Method1_Configuration.md), and
-[revision 1 implementation plan](revision_1.md). The position API and condition
-mode selector in that design are not yet implemented. Both methods will share
-the position API and two advertised condition modes; the baseline retains
-prompt-only constraints without a DSL checker or repair.
+**Revision 1 implemented (2026-10-16):** both methods expose current gripper/block
+XYZ through shared read-only position getters and accept
+`--condition-mode dsl_only|coordinate_predicates`. The default retains DSL-only
+conditions; extended mode permits generated coordinate predicates and general
+numeric conditions, including counters. Baseline modes are prompt-only; method 1
+enforces its mode and retains interface-only repair. The pinned Google core is
+unchanged. See [configuration](Method1_Configuration.md),
+[baseline flow](BASELINE-FLOW.md), [method-1 flow](METHOD-1-FLOW.md), and
+[implementation/validation](revision_1.md).
+
+The original design and optional pseudocode below remain useful for architecture
+and extension points. Coordinate-read exclusions and DSL-only condition
+requirements in that original design are superseded by the mode-aware contract
+above. The optional compiler, query-LMP configuration, and Goal adapters remain
+unimplemented; numeric predicates have no automatic symbolic proof support.
 
 Source review: 2026-10-14. The Google code reviewed is pinned to
 `8c116f61a61b4339cbbae92be89ff83d9897d4b5`. Pseudocode abstracts the implementation;
@@ -159,8 +166,9 @@ changes to extracted core code.
 The default comparison uses the **same advertised RoboVerify DSL API** as Plan 1
 and Plan 2, but has **no added static DSL enforcement or compliance-repair loop**.
 Expose the same primitive controllers, predicates, input handles, action-offset
-semantics, and task adapters. Do not silently add raw `get_obj_pos`, observation,
-simulator access, or hand-written composite skills to this variant. The absence
+semantics, and task adapters. The shared read-only position getters are part of Revision 1. Do not add full
+raw observation arrays, simulator access, or hand-written composite skills to
+this variant. The absence
 of the checker does not itself grant new environment capabilities.
 
 Generated code can still attempt unsupported calls or construct conditions
@@ -246,17 +254,17 @@ method changes; they do not follow from restricting primitives and predicates.
 | Tower predicates | Expose `ON`, `ON_star`, `Higher`, `Scattered`, and object identity `eq`, according to the shared DSL vocabulary. Use the relational definition of `ON`. |
 | Historical relation | Permit `ON_star_zero` where the task uses it, particularly Reverse; preserve its declared historical scope through all stages. |
 | Goal interface | Grid/Pyramid require shared typed Goal handles, goal traversal/relations, and occupancy conditions. Finalize their semantics and execution adapters for both methods; do not invent CaP-only predicates. |
-| Object access | Supply input handles such as `b0` and `h0`. Select other objects through allowed relational queries and bindings. Keep raw physical IDs and coordinates inside the host. |
-| Logic and code structure | Retain sequencing, identity assignment, predicate-based conditionals/loops, quantified queries, and generated helpers. Every condition and selection must be expressible through the allowed DSL. |
-| Numeric parameters | Permit explicit finite action offsets and computations that only parameterize allowed actions. They must not introduce new geometric tests or learned predicate thresholds. |
+| Object access | Supply input handles such as `b0` and `h0`. Select other objects through allowed relational queries and bindings. Keep physical IDs inside the host; positions are available through the shared read-only getters. |
+| Logic and code structure | Retain sequencing, identity assignment, predicate-based conditionals/loops, quantified queries, and generated helpers. Conditions and selections follow the configured mode: DSL-only or DSL plus general numeric predicates. |
+| Numeric parameters | Permit explicit finite action offsets and computations that only parameterize allowed actions. In strict mode, numbers parameterize actions only; extended mode also permits numeric predicates and model-generated thresholds, without rollout optimization. |
 
-Do not expose `get_obj_pos`, raw observations, `desired_goal`, images, distances,
-reward/success flags, controller feedback, or arbitrary environment/simulator
-access. Numeric comparisons, filtering, sorting, and helper return values must
-not bypass the predicate boundary. A bool-returning function is permitted only
-when its result is derived from allowed conditions. A host may enumerate objects
-to interpret quantifiers and relational queries; this does not expose ID-based
-ordering or count-based policy conditions.
+Expose positions only through `get_gripper_position` and `get_block_position`.
+Full raw observations, desired goals, images, reward/success flags, controller
+feedback, and simulator objects remain host-only. Strict mode rejects numeric
+conditions, including those hidden behind helper returns. Extended mode permits
+pure coordinate computations and general numeric conditions such as counters.
+Neither mode exposes physical-ID ordering. Method 1 enforces these rules; the
+baseline supplies them in prompts without a DSL checker.
 
 Do not supply composite physical skills such as `put_first_on_second`,
 `stack_objects_in_order`, `PickPlace`, or an executable `Put`. CaP may generate a
@@ -287,8 +295,8 @@ changes; implementation choices in Section 3 are only one possible prototype.
 
 Runtime auxiliary LMP calls remain allowed within declared budgets. Each newly
 generated helper or query must pass the same checks before it can run. Queries
-may return predicate truth or handles bound by allowed conditions, but cannot
-return selections made from hidden coordinate calculations. Their truth is
+may return predicate truth or handles bound by conditions permitted in the
+selected mode. Extended-mode selections can use the shared position getters. Their truth is
 evaluated against the current environment state, not frozen at generation time.
 Preserve the shared witness-selection semantics and allow multiple legal
 witnesses. Generated code must not inspect the host's internal selection order.
@@ -390,7 +398,7 @@ uses through assignments, arguments, returns, and other helpers:
 
 | Required role | Allowed implementation |
 | --- | --- |
-| Condition | A side-effect-free expression of the shared DSL predicates, identity, logical composition, and permitted quantification/binding. All dependencies must obey the same restrictions. |
+| Condition | A side-effect-free expression under the selected mode: DSL predicates/identity/logic/queries, plus general numeric predicates in extended mode. All dependencies obey the same mode. |
 | Body | Composition of shared control APIs, allowed predicates, and permitted local computation. Conditions and object selections inside the body still obey the condition restrictions. |
 
 The body role permits actions; it does not require every helper to perform an
@@ -443,8 +451,9 @@ flowchart TD
     class T,P,W,V,H,B,L,Q,A changed;
 ```
 
-For a **condition** helper, the role check requires side-effect-free DSL
-predicate expressions throughout its dependencies. For a **body** helper, it
+For a **condition** helper, the role check requires side-effect-free expressions
+throughout its dependencies: DSL predicates in strict mode, or DSL and numeric
+predicates in extended mode. For a **body** helper, it
 allows DSL control APIs while imposing the condition role on internal guards
 and selections. The recursive child call returns to its current parent; the
 parent is accepted only after its dependencies pass. Returned definitions remain
@@ -1008,7 +1017,7 @@ trial accepted. Evaluation exceptions must be recorded as evaluation failures.
 
 ### 4.1 Model-visible interface versus environment interface
 
-The model receives the shared DSL interface. It does **not** receive the live
+The model receives descriptions of the shared APIs and selected condition mode. It does **not** receive the live
 environment or simulator. The trusted runtime calls environment methods while
 interpreting compiled instructions.
 
@@ -1019,7 +1028,7 @@ interpreting compiled instructions.
 | `Release(b,h)` | `ReleaseByName(b,target_z=h)` and `PrimitiveController.release` | Read invocation-time block Z; open the gripper; retreat with frozen target XY and XYZ correction through `env.step(action)` |
 | Identity assignment | `Assign(left,right)` | Update the runtime alias dictionary; no physical step |
 | Get / While witness selection | `find_and_bind` and `While`/`Get` | Build a Scene from the current recorded observation and aliases; bind an enabled witness; no extra step for querying |
-| Predicate formulas | `Term`, `Scene`, `evaluate` | Interpret shared predicates over internally extracted block positions; return predicate truth rather than raw geometry |
+| Predicate formulas | `Term`, `Scene`, `evaluate` | Interpret shared predicates over internally extracted block positions; return predicate truth; separate position getters expose copied XYZ triples |
 
 A host-provided `stack_one`, `stack_all`, `Put`, or `PickPlace` is not an
 additional physical primitive. A model-generated helper may compose allowed
@@ -1128,9 +1137,9 @@ steps. Queries read the current state without advancing physics.
 | Work item | Reuse directly | New adapter responsibility |
 | --- | --- | --- |
 | Environment lifecycle | Task factories, `inner_env`, `capture`, `restore`, `env.close` | Keep lifecycle operations in the host; construct one adapter per trial after restoring the start. |
-| Object identity | `symbolic_name_to_box_id`, named operand resolution, `Assign` semantics | Expose opaque object handles and identity operations; keep physical IDs, coordinates, simulator objects, and alias tables internal. Reject invalid or cross-trial handles. |
+| Object identity | `symbolic_name_to_box_id`, named operand resolution, `Assign` semantics | Expose opaque object handles and identity operations; keep physical IDs, simulator objects, and alias tables internal; expose XYZ only through the shared position getters. Reject invalid or cross-trial handles. |
 | Physical primitives | `PickByName`, `MoveByName`, `ReleaseByName`, their existing execution path and `PrimitiveController` | Validate operand types and finite offsets, resolve handles to internal aliases, invoke existing primitives with the same configuration, and retain controller results for the host recorder. |
-| Current predicates | `Term`, `scene_from_obs`, `evaluate`, shared `util/on.py` semantics | Convert checked query expressions and handles into existing terms/bindings; build a current Scene and return predicate truth. Do not return raw Scene objects or coordinates. |
+| Current predicates | `Term`, `scene_from_obs`, `evaluate`, shared `util/on.py` semantics | Convert checked query expressions and handles into existing terms/bindings; build a current Scene and return predicate truth. Do not return raw Scene objects; use the shared position getters for XYZ reads. |
 | Object selection | `Get`/`While` and `find_and_bind` semantics | Preserve the common witness-selection rule and bind returned handles. Report no-witness outcomes according to the shared query contract, without adding a geometric fallback. |
 | Historical predicates | `Scene.entry_positions`, `scene_from_obs(..., entry_obs=...)`, existing frozen geometry support | Capture the declared entry geometry once; pass it explicitly to later queries. Preserve task-entry history through Reverse stages rather than freezing a new history on each query. |
 | API metadata | Existing DSL definitions and operand meanings | Register parameter/return types and action effects for the deterministic checker; protect API bindings and specify which outputs are legal in conditions. |

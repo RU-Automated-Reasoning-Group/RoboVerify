@@ -110,7 +110,11 @@ geometric model, not total termination or physical-controller refinement.
 
 The [CaP comparison implementation](roboverify/synthesis/cap/README.md) provides
 the pinned Google baseline and constrained method 1 with shared text-model
-transport, tower-task adapters, checkpoints, and rollout logging. Offline tests
+transport, tower-task adapters, checkpoints, and rollout logging. Both methods
+now share read-only position observations and `dsl_only` /
+`coordinate_predicates` condition modes: baseline modes constrain prompts, while
+method 1 checks and repairs code under the selected mode. See the
+[configuration and validation](roboverify/synthesis/cap/docs/revision_1.md). Offline tests
 cover the methods and shared interfaces. Both methods have also executed an
 identical scripted Pick in the existing MuJoCo runtime, with matching actions and
 recorded video. Full task-policy evaluation and Grid/Pyramid Goal adapters remain

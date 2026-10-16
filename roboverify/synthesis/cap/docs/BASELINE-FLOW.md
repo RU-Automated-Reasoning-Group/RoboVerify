@@ -4,9 +4,9 @@ This describes the implemented `cap_google_baseline` path, reviewed on
 2026-10-16. It distinguishes **text sent to the LLM**, **values available to the
 generated Python policy**, and **environment data retained by the host**.
 See [method 1](METHOD-1-FLOW.md) for the checked generation path and
-[the shared DSL](DSL.md) for predicate and action semantics. The current path
-below is unchanged; the planned shared observations and two prompt modes are
-described in the Revision 1 section at the end.
+[the shared DSL](DSL.md) for predicate and action semantics. Revision 1 adds
+shared position observations and two prompt modes while retaining the pinned
+upstream generation and execution algorithm.
 
 ## What the LLM receives
 
@@ -16,8 +16,8 @@ method instance and invokes it once per trial.
 
 | Model request | Text actually assembled by the implementation |
 | --- | --- |
-| Initial policy | Code-generation instruction, task-filtered API description, the context `b0 is the input block.`, and the task instruction from `TASK_INSTRUCTIONS` or the caller's override. |
-| Missing helper | Helper-definition instruction, the same API description, and an unresolved call expression, possibly its enclosing assignment, extracted by the upstream parser. |
+| Initial policy | Code-generation instruction, task-filtered API description and selected condition-mode rules, the context `b0 is the input block.`, and the task instruction from `TASK_INSTRUCTIONS` or the caller's override. |
+| Missing helper | Helper-definition instruction, the same API/mode description, and an unresolved call expression, possibly its enclosing assignment, extracted by the upstream parser. |
 | Later policy invocation on the same instance | Upstream `maintain_session=True` adds previous executed policy source to the prompt. The standard runner makes only one invocation, so this history is initially empty. |
 
 For Stack, the default task instruction is:
@@ -30,7 +30,7 @@ The API description supplies signatures and semantic guidance, including Move's
 four arguments, reference-relative offsets, relational ON, the default Higher
 tolerance, and Scattered's separation rule. This is interface knowledge, not an
 observation of the sampled scene. The first policy prompt is identical to method
-1's for the same instruction, context, and available APIs.
+1's for the same instruction, context, available APIs, and condition mode.
 
 The runner does not automatically insert `num_blocks`, a roster of all handles,
 initial coordinates, predicate truth tables, seed, snapshot, or actual controller
@@ -59,6 +59,7 @@ keeps the physical block enumeration and handle-to-ID mapping internally.
 | `ON_star_zero(a,b)` | Boolean result from frozen trial-entry geometry; exposed only for Reverse. |
 | `exists(lambda ...: condition)`, `forall(lambda ...: condition)` | Boolean over the physical-block domain; multiple lambda parameters are allowed. |
 | `get(lambda x: condition)` | One opaque block handle: the first matching witness in internal physical-ID order. Absence raises an error. |
+| `get_gripper_position()`, `get_block_position(b)` | Copied current XYZ triple in world-frame metres, readable at literal components 0/1/2 under the advertised contract. |
 | `Pick(b)`, `Move(u,v,w,[dx,dy,dz])`, `Release(b,h)` | `None` after convergence; primitive failure raises an exception. They do not return a perception vector or a success Boolean. |
 
 Queries read current state without stepping physics. The adapter refreshes
@@ -85,10 +86,10 @@ Python policy, and terminal results go to the host report.
 ```mermaid
 flowchart TD
     T["Trial runner"] -->|"Task, seed or full snapshot, block count"| E["MuJoCo environment and shared controllers"]
-    T -->|"Task API names, default b0 context, instruction"| G["Upstream LMP prompt assembly"]
+    T -->|"Task API names, condition mode, b0 context, instruction"| G["Upstream LMP prompt assembly"]
     G -->|"Policy prompt text via shared model transport"| L["Text LLM"]
     L -->|"Policy Python source"| F["Upstream LMPFGen: discover missing helpers"]
-    F -->|"API description and missing call or assignment text"| L
+    F -->|"API/mode description and missing call or assignment text"| L
     L -->|"Helper definition source"| B["Upstream exec_safe: bind helper definition"]
     B -->|"Helper body source; recursively resolve child calls"| F
     F -->|"Resolved child functions; rebind parent if needed"| B
@@ -97,6 +98,8 @@ flowchart TD
     P -->|"Predicate operands or query lambda"| A["Shared RoboVerify adapter"]
     E -->|"Current observation; entry observation captured once"| A
     A -->|"Predicate truth, quantified truth, or selected handle"| P
+    P -->|"Gripper query or block handle"| A
+    A -->|"Copied current XYZ position"| P
     P -->|"Pick, Move, Release operands and finite offsets"| A
     A -->|"Named primitive invocation using shared controller"| E
     E -->|"Controller convergence or exhaustion"| A
@@ -124,10 +127,11 @@ does not invoke the model.
 
 ## Host-only observations and outcomes
 
-Raw observation arrays, XYZ positions, full simulator snapshots, physical IDs,
+Raw observation arrays, full simulator snapshots, physical IDs,
 goals, rewards, controller errors, images/video, and terminal success are used
 by the adapter, recorder, or evaluator. They are not automatically supplied to
-the model. Saved artifacts are not automatically read back into prompts.
+the model. Position getters expose only the documented XYZ components to the
+program. Saved artifacts are not automatically read back into prompts.
 
 Physical success requires normal completion and the environment's terminal
 success check; unconverged primitives fail execution. Stack/Unstack DSL
@@ -136,9 +140,9 @@ partial final scene satisfies the goal. Grid/Pyramid return `adapter_gap` before
 any model request. No invariant inference, formal verification feedback, CEM,
 or rollout-feedback repair is part of this baseline.
 
-## Revision 1 target: shared positions and two prompt modes
+## Revision 1: shared positions and two prompt modes
 
-Status: planned, not yet implemented. Both baseline and method 1 will accept
+Implemented on 2026-10-16. Both baseline and method 1 accept
 `--condition-mode dsl_only|coordinate_predicates`, defaulting to `dsl_only`, and
 share the runtime observation API described in
 [Method1_Configuration.md](Method1_Configuration.md).
@@ -170,7 +174,7 @@ execute; this is a prompt violation, not something a new gate rejects. Retain
 remain active. Method 1 enforces the same advertised rules through its checker
 and interpreter.
 
-This proposed data flow supplements the current implementation diagram above:
+This data flow summarizes the position interface and supplements the current implementation diagram above:
 
 ```mermaid
 flowchart TD
@@ -191,7 +195,7 @@ flowchart TD
 
 Coordinate query results return to the generated program, not to the LLM.
 Model requests remain code-generation text. Record outcomes separately for all
-four method/mode combinations. The implementation work and acceptance criteria
+four method/mode combinations. Implementation status and validation evidence
 are in [revision_1.md](revision_1.md).
 
 ## Implementation references

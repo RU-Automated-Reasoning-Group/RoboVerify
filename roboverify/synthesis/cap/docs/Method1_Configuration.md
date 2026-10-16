@@ -1,12 +1,10 @@
 # Method 1 configuration: condition modes and position observations
 
-Status: requested design, not yet implemented. The current implementation has
-DSL-only conditions and no policy-visible position API. This document specifies
-two condition modes over a shared runtime position interface. Both
+Status: implemented on 2026-10-16. This document specifies two condition modes over a shared runtime position interface. Both
 `cap_method_1` and `cap_google_baseline` must support the same mode selector and
 observation API. Method-1 checking and repair remain method-specific. See
-[METHOD-1-FLOW.md](METHOD-1-FLOW.md) for the proposed flow and
-[revision_1.md](revision_1.md) for the implementation plan.
+[METHOD-1-FLOW.md](METHOD-1-FLOW.md) for the execution flow and
+[revision_1.md](revision_1.md) for implementation status and validation evidence.
 
 ## Configuration boundary
 
@@ -15,7 +13,7 @@ controls whether those values may influence loop/branch conditions and object
 selection. Position data is read by the executing program; it is not
 implicitly serialized into LLM prompts or sent to the model after every action.
 
-Proposed configuration:
+Configuration:
 
 ```text
 RunConfig.condition_mode = "dsl_only" | "coordinate_predicates"
@@ -23,8 +21,7 @@ CLI: --condition-mode dsl_only|coordinate_predicates
 Default: dsl_only
 ```
 
-These fields and flags do not exist yet. The selector applies to both
-`cap_method_1` and `cap_google_baseline`, with `dsl_only` the default for each.
+The selector applies to both `cap_method_1` and `cap_google_baseline`, with `dsl_only` the default for each.
 Reject unknown modes, not valid baseline/mode combinations. Record method, mode,
 observation API version, and actual validation configuration in every trial and
 source checkpoint. A checker version must not imply that checking ran.
@@ -32,8 +29,8 @@ source checkpoint. A checker version must not imply that checking ran.
 The advertised condition rules are identical for the same mode across methods.
 The table below specifies method 1's enforced behavior. The current baseline has
 no complete DSL checker: its API checks and upstream Python filtering do not
-establish compliance. Revision 1 deliberately preserves that baseline behavior: modes change its
-prompts and shared observation API, with no added DSL checker or repair. See
+establish compliance. Revision 1 deliberately preserves that baseline behavior:
+modes change its prompts and shared observation API, with no added DSL checker or repair. See
 [revision_1.md](revision_1.md); do not infer enforcement from mode selection.
 
 | Property | `dsl_only` | `coordinate_predicates` |
@@ -50,9 +47,8 @@ prompts and shared observation API, with no added DSL checker or repair. See
 | Raw simulator objects, rewards, success flags, images | Unavailable | Unavailable |
 | Model repair feedback | Static interface diagnostics | Static interface diagnostics under the extended condition rules |
 
-`dsl_only` preserves the current condition restriction. Its proposed ability to
-read positions for action parameters is an extension over today's implementation;
-it must not be described as already available. Sharing this observation API
+`dsl_only` preserves the earlier condition restriction while adding position
+reads for action parameters. Sharing this observation API
 makes the mode comparison about the allowed condition language: DSL-only versus
 DSL plus general numeric predicates, including coordinate and counter tests.
 The three physical primitives and their meanings are unchanged.
@@ -72,7 +68,7 @@ finger joint positions. Block positions are block centres. Velocity, orientation
 gripper opening, desired goals, and reward are outside this observation contract.
 Object identity remains separate from position equality.
 
-Proposed API:
+Runtime API:
 
 ```text
 get_gripper_position() -> Position3
@@ -81,7 +77,7 @@ get_block_position(block) -> Position3
 
 `Position3` is a copied, immutable triple of finite numbers. Permit component
 access only by literal indices `0`, `1`, and `2`; this is a narrow extension to
-method 1's current ban on subscripting. It does not authorize arbitrary container
+method 1's earlier ban on all subscripting. It does not authorize arbitrary container
 indexing, attributes, dynamic indices, array libraries, or imports.
 
 Block operands use existing validated object handles (`b0`, assignments, and
@@ -123,7 +119,7 @@ This illustrates permitted syntax, not a complete task solution. New helper
 names do not imply new primitive predicates: `clear_above` only composes the
 existing vocabulary.
 
-Rejected example under this mode, even with the proposed position getters:
+Rejected example under this mode:
 
 ```python
 def above_by_margin(a, b):
@@ -151,7 +147,7 @@ wrapper would not change their meaning. Despite the mode name
 `coordinate_predicates`, numbers need not originate from coordinates: counters,
 iteration limits, thresholds, and other local numeric computations are allowed.
 
-Proposed examples, with handles bound by the caller:
+Examples, with handles bound by the caller:
 
 ```python
 def above_by_margin(a, b):
@@ -193,6 +189,8 @@ while attempts < 10:
 ```
 
 These examples illustrate permitted conditions, not a complete task policy.
+Method 1 supports finite `+`, `-`, `*`, `/` arithmetic and numeric comparisons
+within its declared subset; this mode does not enable arbitrary Python libraries.
 Numeric constants and helper arguments are valid comparison operands even when
 neither side depends on a coordinate. Apply these rules equally to direct guards,
 query lambdas, and nested helpers. Conditions must still return Booleans and
@@ -238,7 +236,7 @@ and physical success separately. Constraint acceptance does not establish task
 success or a formal proof. Existing task-adapter gaps and Unstack's 60-second
 limit remain in force.
 
-## Required implementation and validation
+## Implementation and validation
 
 | Area | Required change |
 | --- | --- |
@@ -259,5 +257,5 @@ guards, constant comparisons, and numeric helper arguments must pass in
 that model requests do not acquire actual runtime coordinate values through
 logging or repair. Existing DSL-only cases must retain their behavior.
 
-See [revision_1.md](revision_1.md) for the concrete work sequence and acceptance
-criteria. This design document does not implement any of these changes.
+See [revision_1.md](revision_1.md) for completed implementation and validation.
+The new coordinate predicates have no automatic symbolic-proof support.

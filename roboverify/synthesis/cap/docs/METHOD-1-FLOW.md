@@ -1,29 +1,28 @@
 # Method 1: observations, condition modes, and program flow
 
-This document separates the current implementation from the requested two-mode
-design. The configuration contract is in
-[Method1_Configuration.md](Method1_Configuration.md); the implementation plan is
+This document describes the implemented two-mode method-1 path (2026-10-16).
+The configuration contract is in
+[Method1_Configuration.md](Method1_Configuration.md); implementation status and
+validation are in
 [revision_1.md](revision_1.md). See [the baseline flow](BASELINE-FLOW.md) for the
 current upstream Python execution path.
 
 ## Implementation status
 
-Today, method 1 generates and repairs code, checks DSL-only conditions, and
-executes an accepted bundle through its checked interpreter. It exposes
-predicate truth and query-bound object handles; position getters and a selectable
-condition mode are not implemented. The existing initial policy prompt matches
-the baseline's for identical task/API inputs.
+Method 1 generates and repairs code, checks conditions under the configured
+mode, and executes an accepted bundle through its checked interpreter. It exposes
+predicate truth, query-bound object handles, and current position getters. The
+initial policy prompt matches the baseline's for identical task/API/mode inputs.
 
-The flow below is the **proposed target**, not a diagram of already implemented
-coordinate access. It adds shared runtime position observations and two checking
-modes while preserving recursive generation and interface-only repair.
+The flow below includes shared runtime position observations and both checking
+modes, preserving recursive generation and interface-only repair.
 
-| Target mode | Runtime positions | Permitted loop/branch and selection conditions |
+| Mode | Runtime positions | Permitted loop/branch and selection conditions |
 | --- | --- | --- |
 | `dsl_only` | Readable for action-parameter computation | Existing DSL predicates, identity, logic, quantifiers, and pure compositions of them. |
 | `coordinate_predicates` | Readable for action parameters and predicates | The same DSL conditions plus pure generated numeric predicates, coordinate comparisons, counter guards, and other numeric conditions. |
 
-The baseline is also planned to support both modes and the same observation
+The baseline also supports both modes and the same observation
 API; mode selection is shared configuration, not a method-1-only flag. Its
 two modes are prompt-only condition rules, without a DSL checker or repair;
 method 1 enforces them. See [revision_1.md](revision_1.md).
@@ -35,7 +34,7 @@ Stored positions remain snapshots; callers must read again after movement.
 
 ## LLM inputs versus runtime observations
 
-| Recipient | Information it receives in the target design |
+| Recipient | Information it receives during execution |
 | --- | --- |
 | Policy-generation LLM request | Task instruction, symbolic `b0` context, API descriptions, selected condition mode and its rules. |
 | Helper-generation LLM request | Missing call expression, required condition/body role, API description, and selected mode. |
@@ -46,7 +45,7 @@ Stored positions remain snapshots; callers must read again after movement.
 The model is not automatically sent `O_t`, a scene truth table, or execution
 feedback. Each request is assembled text; helper requests do not automatically
 contain the complete parent policy, and repair requests contain the current
-source unit rather than every checkpoint source. The proposed change adds
+source unit rather than every checkpoint source. The implementation adds
 mode/API instructions to all three request types, not runtime values.
 
 A generated coordinate predicate runs locally each time it is called. Reading a
@@ -54,7 +53,7 @@ position or evaluating a predicate does not advance physics or invoke the LLM.
 The standard runner still generates a fresh policy per trial and registers no
 auxiliary query LMPs.
 
-## Proposed flow with labeled data edges
+## Flow with labeled data edges
 
 The preparation steps recurse for missing helpers. A child returns checked
 source to its waiting parent; only an accepted complete root bundle reaches
@@ -143,7 +142,8 @@ after normal completion; DSL postconditions remain separate diagnostics.
 
 The current Grid/Pyramid adapter gaps and Unstack's 60-second limit are
 unchanged. Interface acceptance does not establish a formal proof or physical
-success. This document does not claim that the target modes have been evaluated.
+success. All four method/mode combinations passed the scripted simulator parity check
+recorded in [revision_1.md](revision_1.md); this is not a task benchmark.
 
 ## Implementation references
 

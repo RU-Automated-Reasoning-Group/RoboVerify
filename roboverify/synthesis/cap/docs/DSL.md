@@ -6,6 +6,14 @@ The [CaP implementation](../README.md) now connects the tower block-reference
 interface to the original Google baseline and constrained method 1. Goal adapters
 and six-task physical evaluation remain incomplete; the limits below still apply.
 
+**CaP Revision 1 (2026-10-16):** the runtime now exposes read-only gripper/block
+XYZ and two condition modes. `dsl_only` retains the predicate-only restriction;
+`coordinate_predicates` also permits pure generated coordinate predicates and
+general numeric conditions. Baseline modes are prompt-only; method 1 checks
+them. These are CaP execution extensions, not new symbolic `Term` atoms or WP
+rules. See [configuration](Method1_Configuration.md) and
+[validation evidence](revision_1.md).
+
 See [CAP-INTEGRATION.md](CAP-INTEGRATION.md) for the original Google CaP and
 proposed RoboVerify pseudocode, highlighted changes, and environment interfaces.
 
@@ -324,7 +332,7 @@ is required; do not silently switch to arbitrary permutation matching.
 | `Skip(skip_steps=20)` | Repeated observation recording | Does not call `env.step`; cannot mean waiting for 20 physical steps |
 | `Top/top` | Shorthand in some paper examples | Removed from the current vocabulary; expand into formulas over existing predicates |
 | Dynamic `X_m/Z_m` | Maximum-X/Z object selectors in paper Appendix C | Current primitives resolve ordinary IDs/names only; reviewed shared interfaces have no automatic extrema selectors |
-| Raw positions, distances, images, reward/success, controller feedback | Data needed by controllers or host evaluation | Must not provide extra conditions or object-ordering criteria to generated programs |
+| Raw observation arrays, images, reward/success, controller feedback | Data needed by controllers or host evaluation | Host-only. Separate shared position getters expose current XYZ; numeric conditions are permitted in extended mode. |
 | Arbitrary `env/sim` objects or library imports | Underlying implementation | Would bypass the experiment's shared primitives/predicates constraint |
 
 Dynamic maximum-coordinate references on paper pp.45–47 also need explicit
@@ -342,44 +350,35 @@ forall n:block. (n = candidate or not ON_star(n,candidate))
 This may be a generated query helper, provided it transparently expands to
 allowed predicates and uses the correct object domain.
 
-## 9. Proposed New CaP Boundary (Not Yet Implemented)
+## 9. CaP Runtime Boundary and Condition Modes
 
-This section translates the user's requirements into checkable interface
-proposals, preserving the existing semantics above.
+Both methods share primitive actions, object handles, task-available predicates,
+and `get_gripper_position()` / `get_block_position(handle)`. Position getters
+return copied immutable XYZ triples in world-frame metres, without a physics
+step. Method 1 permits only literal 0/1/2 component indices. Query again after
+movement to obtain current positions.
 
-| Category | Proposed allowed scope |
+| Configuration | Condition language |
 | --- | --- |
-| Actions | Only `Pick/Move/Release`, with parameters and operands retaining DSL meaning |
-| Object operations | Input handles, object-identity assignment, and Get/loop-witness binding defined through relational conditions |
-| Tower conditions | `ON/ON_star/Higher/Scattered/eq`; Reverse may use `ON_star_zero` with explicit scope |
-| Goal conditions | Goal relations, occupancy/AtGoal, and Goal identity/NULL comparisons after definitions are aligned; mark pending adaptation explicitly |
-| Logic | Boolean constants, Boolean combinations, and typed quantifiers |
-| Program structure | Sequences, predicate-based if/while, and primitive helper functions; If and nested Goal workflows require runtime support |
-| Numbers | Explicit action parameters only; no additional environment observations or algorithmic branch conditions |
+| `dsl_only` (default) | Existing DSL predicates, identity, Boolean logic, quantifiers, and their pure helper compositions. Numeric comparisons are rejected by method 1 even through assignments/helpers. Positions may parameterize actions. |
+| `coordinate_predicates` | Also permits pure generated coordinate predicates and general numeric comparisons, including counters, constants, and numeric helper arguments. No coordinate-origin restriction. |
 
-The requirement that conditions use only DSL predicates must cover the entire
-generated call graph, including:
+Method 1 retains deterministic checks, interface-only repair, and a checked
+interpreter. Conditions and query lambdas cannot perform physical actions.
+Imports, attributes, arbitrary indexing, dynamic calls, and `for` loops remain
+outside its supported subset. Numeric calculations use finite `+`, `-`, `*`, `/`
+and comparisons; object handles retain identity semantics. Baseline receives
+the same advertised API/mode rules in prompts and keeps its upstream Python
+execution without a DSL gate or repair.
 
-- Sources of conditions in `if/elif/while`, conditional expressions, and
-  `break/continue`.
-- List filtering, sort keys, and object selection, without hidden `position.z`,
-  distances, ID ordering, or numeric comparisons.
-- Helper return values and intermediate variables, without first computing an
-  illegal numeric condition and then writing `if result`.
-- All model-generated helpers, so their bodies cannot bypass restrictions that
-  the top level satisfies.
+Generated helpers evaluate positions locally. The LLM receives API/mode text,
+source, and method-1 static diagnostics, not automatic coordinate observations
+or task outcomes. Runtime reads and host logging do not become model calls.
+Existing Goal-adapter gaps remain. Numeric predicates are not automatically
+available to invariant inference, symbolic WP, or motion proofs.
 
-The host may enumerate objects for quantifiers and enforce loop, primitive, and
-time budgets. This does not grant generated programs arbitrary `for range(...)`,
-count-based branches, set algorithms, or environment-data access. Even a function
-returning bool must be traceable to a legal DSL condition expression. Retain a
-typed condition AST, interpret it through existing Scene/Term semantics, and add
-Goal support separately.
-
-Numeric restrictions on conditions and action-parameter optimization are
-separate concerns. Allowing CEM to adjust Move offsets does not permit optimizing
-`if distance<theta`. Enforce restrictions before and during generated-code
-execution, rather than relying only on the prompt.
+See [Method1_Configuration.md](Method1_Configuration.md) for the precise
+configuration and [revision_1.md](revision_1.md) for tests and simulator parity.
 
 ## 10. The Reusable Stack Example
 
@@ -418,8 +417,8 @@ The following table lists current gaps, rather than completed implementation:
 
 | Work item | Reusable foundation | Missing work |
 | --- | --- | --- |
-| Primitive consistency | Shared controllers and Parameter | Restricted CaP call adaptation; host records control results without exposing feedback as extra model guards |
-| Condition consistency | Term, Scene, Z3 guard evaluation | Strict type/provenance checks; Goal conditions; If execution semantics |
+| Primitive consistency | Shared controllers, Parameter, implemented CaP adapters | Retain matched execution across future task adapters; controller feedback stays host-only |
+| Condition consistency | Term/Scene plus implemented mode-aware CaP checker/interpreter | Goal conditions and symbolic proof support for numeric predicates remain separate work |
 | Object binding | Assign/Get/While | Goal and null bindings; program-level frozen history; consistent witness selection |
 | Task specifications | Stack/Unstack in `cfg/tasks.py`; six environment classes | Correct Reverse/ReStack specifications/reference programs; occupancy and identity conventions for goal tasks |
 | Goal transport | Grid/Pyramid goal coordinates | Trusted Goal-reference resolution through the same three primitives, without coordinate queries |

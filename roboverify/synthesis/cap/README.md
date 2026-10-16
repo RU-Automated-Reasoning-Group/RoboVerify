@@ -15,21 +15,23 @@ and compatibility differences. Plan 2 is documented but not implemented.
 
 Observation boundaries and flowcharts with labeled data edges:
 
-- [Google baseline: current flow and proposed two prompt modes](docs/BASELINE-FLOW.md).
-- [Method 1: current status and proposed two-mode flow](docs/METHOD-1-FLOW.md).
+- [Google baseline: flow and two prompt modes](docs/BASELINE-FLOW.md).
+- [Method 1: two-mode execution flow](docs/METHOD-1-FLOW.md).
 
-Planned shared position observations and two condition modes for both methods
-(not yet implemented; baseline modes are prompt-only, method-1 modes are checked):
+Shared position observations and two condition modes are implemented for both
+methods. Baseline modes are prompt-only; method-1 modes are checked:
 
 - [Method 1 configuration](docs/Method1_Configuration.md).
-- [Revision 1 implementation plan](docs/revision_1.md).
+- [Revision 1 implementation and validation](docs/revision_1.md).
 
 ## Implemented scope
 
 The adapter connects Stack, Unstack, Reverse, and ReStack to the existing
 block-reference `PickByName`/`MoveByName`/`ReleaseByName` controllers and shared
-predicate evaluator. It exposes no raw observations, positions, images, reward,
-or simulator objects. `ON_star_zero` is available for Reverse and retains the
+predicate evaluator. Both methods expose current gripper/block XYZ through
+`get_gripper_position()` and `get_block_position(handle)`. They return immutable
+`Position3` snapshots in world-frame metres without stepping physics. Full raw
+observations, images, rewards, and simulator objects remain host-only. `ON_star_zero` is available for Reverse and retains the
 trial-entry geometry. Other tasks expose the current-state tower vocabulary.
 There is no coordinate-bearing `tbl` handle or added placement macro.
 
@@ -45,9 +47,12 @@ the DSL postcondition is a separate diagnostic, not an extra scoring gate.
 Method 1 supports plain top-level function definitions, assignment, arithmetic
 for action parameters, object equality, Boolean conditions, nested `if`/`while`,
 `return`, `break`, `continue`, and `exists`/`forall`/`get` with query lambdas.
-It rejects imports, attributes, subscripts, function aliases, dynamic calls,
-decorators, default arguments, comprehensions, `for` loops, and numeric branch
-tests. This is a declared Python subset, not a complete analyzer of Python.
+It rejects imports, attributes, general subscripts, function aliases, dynamic
+calls, decorators, default arguments, comprehensions, and `for` loops. Literal
+Position3 component reads at indices 0/1/2 are supported. With the default
+`--condition-mode dsl_only`, numeric conditions remain forbidden;
+`--condition-mode coordinate_predicates` also permits pure coordinate predicates
+and general numeric conditions, including counters and constant comparisons. This is a declared Python subset, not a complete analyzer of Python.
 Complete validation rechecks dependencies and value provenance before any action.
 Local helper validation uses unknown parameter types until caller-level checking
 can supply them; a local pass is not labeled an executable complete pass.
@@ -58,11 +63,39 @@ optional runtime query-LMP registration and cross-invocation method-1 session
 persistence remain extension points. The logger can record new runtime-generated
 sources, but this release does not claim those optional module configurations.
 
+## Condition modes
+
+Both `--method cap_google_baseline` and `--method cap_method_1` accept:
+
+| Flag | Allowed loop/branch/selection conditions |
+| --- | --- |
+| `--condition-mode dsl_only` (default) | DSL predicates, identity, Boolean logic, quantifiers, and their pure helper compositions. Coordinates may still parameterize actions. |
+| `--condition-mode coordinate_predicates` | The same DSL plus generated coordinate predicates and general numeric conditions, including counters. No coordinate-origin restriction. |
+
+Baseline modes change policy/helper prompts only: upstream `LMP`, `LMPFGen`, and
+`exec_safe` stay unchanged, with no added DSL gate or repair. A baseline prompt
+violation can therefore execute. Method 1 enforces the selected mode through
+complete checking and its interpreter; repairs receive static diagnostics only.
+The initial policy prompts are identical for the same task/API/mode inputs.
+
+For example, from `roboverify/` with the documented simulator environment:
+
+```bash
+.venv/bin/python -m synthesis.entry.run_cap --method cap_method_1 --condition-mode coordinate_predicates --task stack --num-blocks 3
+.venv/bin/python -m synthesis.entry.run_cap --method cap_google_baseline --condition-mode dsl_only --task stack --num-blocks 3
+```
+
+These commands use the configured model provider and require its credentials.
+Use `--generate-only --responses-file ...` for an offline generation diagnostic.
+Mode, observation API version, validation configuration, and method-1 checker
+version are retained in config/checkpoints and the bounded run report.
+
 ## Model providers and observation modality
 
 Both methods use a **text-only LLM**. Prompts contain instructions, the API
 contract, symbolic input names, source code, and (method 1 only) compliance
-diagnostics. The model is not automatically sent a full symbolic state table.
+diagnostics. All requests include the configured condition-mode rules. The
+model is not automatically sent coordinates or a full symbolic state table.
 Predicate truth is evaluated by the host on current simulator state during
 execution. Videos and raw states are host-side artifacts, not model inputs.
 
@@ -267,3 +300,13 @@ all ten videos were checked against their recorded frame counts. Reports and
 artifacts are under `runs/cap-stack-gemini-5blocks-pass5/20261015-164132/`.
 This is one fixed five-block scene, not a benchmark-wide result; comparison with
 the three-block batch changes the layout as well as the block count.
+
+Revision 1 validation (2026-10-16): all 57 CaP tests passed, including strict/extended
+condition behavior, recursive mode propagation, query freshness, and unchanged
+pinned Google core. A real MuJoCo scripted Pick/Move diagnostic compared all four
+method/mode combinations from the same saved three-block Stack start. Initial
+observations, all position-read values, and all 19 controller actions matched
+exactly; Pick converged in 14 steps and Move in 5. Each run returned `goal_failed`
+because the short diagnostic does not complete Stack. No live model requests
+were made. Artifacts and the compact parity summary are under
+`runs/cap-revision-1/20261016-213331/`; see [Revision 1](docs/revision_1.md).
