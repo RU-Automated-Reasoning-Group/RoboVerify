@@ -23,7 +23,7 @@ methods. Baseline modes are prompt-only; method-1 modes are checked:
 
 - [Method 1 configuration](docs/Method1_Configuration.md).
 - [Revision 1 implementation and validation](docs/revision_1.md).
-- [Revision 2 discussion: API prompt clarity](docs/revision_2.md).
+- [Revision 2 plan: prompts, versions, and parallel batches](docs/revision_2.md).
 
 ## Implemented scope
 
@@ -370,3 +370,43 @@ links, audits, source hashes, and recordings are under
 `runs/cap-stack-reasoning-comparison/20261018-180533-16k/`; individual batches are
 under the matching `20261018-180533-reasoning-16k` directories in
 `runs/cap-stack-gpt61sol-revision1/` and `runs/cap-stack-deepseek-revision1/`.
+
+A subsequent matched comparison on 2026-10-18 switched only the condition-mode
+configuration and its prompt rule text to **`coordinate_predicates`**, retaining
+reasoning enabled, 16,384 output tokens, the same three-block initial snapshot,
+and the previous B/C budgets. Five fresh trials were run for each method/model:
+
+| Model | Method | Physical successes | Model calls | Reported tokens |
+| --- | --- | --- | --- | --- |
+| `openai/gpt-6.1-sol` | Google baseline | 4/5 | 21 | 33,394 |
+| `openai/gpt-6.1-sol` | Method 1 | 5/5 | 7 | 9,422 |
+| `deepseek/deepseek-v4.1-flash` | Google baseline | 0/5 | 8 | 75,190 |
+| `deepseek/deepseek-v4.1-flash` | Method 1 | 2/5 | 5 | 75,019 |
+
+GPT baseline had one Pick nonconvergence; all method-1 trials succeeded, with
+two static repairs in total. DeepSeek baseline had three invalid-object-reference
+failures, one total-deadline failure, and one Move nonconvergence. DeepSeek method
+1 had two output-limit failures and one Move nonconvergence, without repair calls.
+Nineteen saved videos passed frame/state-count checks; the deadline-interrupted
+DeepSeek baseline video did not finalize and is marked unavailable.
+
+Every trial row in the new combined and model-specific reports includes
+`# of tokens used`, summing provider-reported input and output usage across all
+initial/helper/repair requests. All twenty totals matched the saved usage data;
+reasoning tokens were not added twice. The previous DSL-only B/C reports also
+received the per-trial token column, retaining incomplete-usage markers for their
+unreturned requests.
+
+The combined report, prior-mode comparison, configuration/prompt audits, source
+hashes, and video links are under
+`runs/cap-stack-coordinate-comparison/20261018-184618-reasoning-16k/`.
+Individual batches are under the corresponding
+`20261018-184618-coordinate-reasoning-16k` directories in
+`runs/cap-stack-gpt61sol-revision1/` and `runs/cap-stack-deepseek-revision1/`.
+The current samples are separate from the prior DSL-only trials; five trials on
+one scene do not establish a general advantage for either condition mode.
+Position reads alone also do not show that a policy used coordinates in its
+conditions: they may only parameterize actions. Revision 2 remained documentation
+only during these runs, and all checked executable/prompt sources matched the
+prior B/C code. Its proposed trial-level parallel scheduler was not applied to
+this batch.
