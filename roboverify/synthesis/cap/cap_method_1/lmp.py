@@ -15,6 +15,8 @@ class Method1:
         max_attempts=3,
         *,
         condition_mode="dsl_only",
+        prompt_version="legacy_v1",
+        higher_tolerance=0.001,
     ):
         self.generator = Generator(
             model,
@@ -24,6 +26,8 @@ class Method1:
             max_attempts,
             adapter.api_names,
             condition_mode,
+            prompt_version=prompt_version,
+            higher_tolerance=higher_tolerance,
         )
         self.runtime = Runtime(adapter, budget, logger, condition_mode)
 

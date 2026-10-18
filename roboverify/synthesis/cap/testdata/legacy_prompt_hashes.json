@@ -1,0 +1,202 @@
+[
+  {
+    "method": "cap_method_1",
+    "task": "stack",
+    "mode": "dsl_only",
+    "role": "policy",
+    "fields": {
+      "instruction": "Manipulate the input.\n",
+      "context": "b0 is the input block."
+    },
+    "sha256": "1f719ddb46c72f0fce2d1f991ba5a41fdd0b38a568d78f343a222f34b11b6056"
+  },
+  {
+    "method": "cap_method_1",
+    "task": "stack",
+    "mode": "dsl_only",
+    "role": "helper",
+    "fields": {
+      "signature": "ready(b0)",
+      "role": "condition"
+    },
+    "sha256": "ceba1650cd4a74c328627e48968702a30289e40d3b3fc4641598a1bfe0519c50"
+  },
+  {
+    "method": "cap_method_1",
+    "task": "stack",
+    "mode": "dsl_only",
+    "role": "repair",
+    "fields": {
+      "source": "def ready(b):\n    return 1 < 2\n",
+      "role": "condition",
+      "diagnostics": "NUMERIC_CONDITION"
+    },
+    "sha256": "f9783880e314a2f9fce004645ad6b7d2470de68281bd26c8bf864bfcc14e5450"
+  },
+  {
+    "method": "cap_google_baseline",
+    "task": "stack",
+    "mode": "dsl_only",
+    "role": "policy",
+    "tail": "\n\nPick(b0)\ncontext\n\n# Instruction: Manipulate\n",
+    "sha256": "026fc92cdadce677e79f63d67f97a4018e8762cfa8ff9d3a85caf8dca3bb8d5e"
+  },
+  {
+    "method": "cap_google_baseline",
+    "task": "stack",
+    "mode": "dsl_only",
+    "role": "helper",
+    "tail": "\n\n# ready(b0)",
+    "sha256": "a6a4e5b24f3137014a2939ccdbd48e73fe4e1f7a2bb09fc989acc63edfabc543"
+  },
+  {
+    "method": "cap_method_1",
+    "task": "stack",
+    "mode": "coordinate_predicates",
+    "role": "policy",
+    "fields": {
+      "instruction": "Manipulate the input.\n",
+      "context": "b0 is the input block."
+    },
+    "sha256": "258d9fc7bbd5a5641ec870a4c5b34ab7f6eb84110ba910b96b355aa122b223ac"
+  },
+  {
+    "method": "cap_method_1",
+    "task": "stack",
+    "mode": "coordinate_predicates",
+    "role": "helper",
+    "fields": {
+      "signature": "ready(b0)",
+      "role": "condition"
+    },
+    "sha256": "eea3640364dd0d6bfc760b05dbbbafd1a6a7413af2c68ff9f2bc1c559be37455"
+  },
+  {
+    "method": "cap_method_1",
+    "task": "stack",
+    "mode": "coordinate_predicates",
+    "role": "repair",
+    "fields": {
+      "source": "def ready(b):\n    return 1 < 2\n",
+      "role": "condition",
+      "diagnostics": "NUMERIC_CONDITION"
+    },
+    "sha256": "0772931f5bb0c1c873918147e9feb8699f63501affdbd5d06489bc62340c4873"
+  },
+  {
+    "method": "cap_google_baseline",
+    "task": "stack",
+    "mode": "coordinate_predicates",
+    "role": "policy",
+    "tail": "\n\nPick(b0)\ncontext\n\n# Instruction: Manipulate\n",
+    "sha256": "1a18024fa4424a578aae335eff888e62e2b5e1f072aef81c480e23a64ea3194a"
+  },
+  {
+    "method": "cap_google_baseline",
+    "task": "stack",
+    "mode": "coordinate_predicates",
+    "role": "helper",
+    "tail": "\n\n# ready(b0)",
+    "sha256": "c7f1cd87d0288b3fd4d9910608dfd77d79da8b87185e15a59314d1912724211d"
+  },
+  {
+    "method": "cap_method_1",
+    "task": "reverse",
+    "mode": "dsl_only",
+    "role": "policy",
+    "fields": {
+      "instruction": "Manipulate the input.\n",
+      "context": "b0 is the input block."
+    },
+    "sha256": "906d6039a337ea366dda66cb71bbcb2de90874db39a44fabdfbdb4df476b6a87"
+  },
+  {
+    "method": "cap_method_1",
+    "task": "reverse",
+    "mode": "dsl_only",
+    "role": "helper",
+    "fields": {
+      "signature": "ready(b0)",
+      "role": "condition"
+    },
+    "sha256": "4b5ab32d5af95627597b167666312feb09b0a6d165188d6e168a5a848ad6f69f"
+  },
+  {
+    "method": "cap_method_1",
+    "task": "reverse",
+    "mode": "dsl_only",
+    "role": "repair",
+    "fields": {
+      "source": "def ready(b):\n    return 1 < 2\n",
+      "role": "condition",
+      "diagnostics": "NUMERIC_CONDITION"
+    },
+    "sha256": "07b69ce4334f754ac4f42a842ace658ef366e098361e6e8a3010377249ae7f39"
+  },
+  {
+    "method": "cap_google_baseline",
+    "task": "reverse",
+    "mode": "dsl_only",
+    "role": "policy",
+    "tail": "\n\nPick(b0)\ncontext\n\n# Instruction: Manipulate\n",
+    "sha256": "bf9ac088bd571775ed560690b9e96676987826fc6a23eddecad23144dd38f26d"
+  },
+  {
+    "method": "cap_google_baseline",
+    "task": "reverse",
+    "mode": "dsl_only",
+    "role": "helper",
+    "tail": "\n\n# ready(b0)",
+    "sha256": "097f058fc110b0faf34e41e00ad1bf36b648795c8e86d816b84a12c57003af2d"
+  },
+  {
+    "method": "cap_method_1",
+    "task": "reverse",
+    "mode": "coordinate_predicates",
+    "role": "policy",
+    "fields": {
+      "instruction": "Manipulate the input.\n",
+      "context": "b0 is the input block."
+    },
+    "sha256": "02e3707e14e3ab91159e60e04bf57ed283035889c30cd2a7fdcc8c9b7a79d325"
+  },
+  {
+    "method": "cap_method_1",
+    "task": "reverse",
+    "mode": "coordinate_predicates",
+    "role": "helper",
+    "fields": {
+      "signature": "ready(b0)",
+      "role": "condition"
+    },
+    "sha256": "901d02aee98918eeff8f7d34b4416c123ded08df84667af98400e4329413fbba"
+  },
+  {
+    "method": "cap_method_1",
+    "task": "reverse",
+    "mode": "coordinate_predicates",
+    "role": "repair",
+    "fields": {
+      "source": "def ready(b):\n    return 1 < 2\n",
+      "role": "condition",
+      "diagnostics": "NUMERIC_CONDITION"
+    },
+    "sha256": "9c84ac2dc2d172d081998e1107ed0ed2abb52b52a6f693d2f92f95113785761b"
+  },
+  {
+    "method": "cap_google_baseline",
+    "task": "reverse",
+    "mode": "coordinate_predicates",
+    "role": "policy",
+    "tail": "\n\nPick(b0)\ncontext\n\n# Instruction: Manipulate\n",
+    "sha256": "91abbe4cab8c736022ca76fd74e691fd348da2028b19871f003c52a54a5eda6c"
+  },
+  {
+    "method": "cap_google_baseline",
+    "task": "reverse",
+    "mode": "coordinate_predicates",
+    "role": "helper",
+    "tail": "\n\n# ready(b0)",
+    "sha256": "44671f4e81a3c9cd9add3aeff9996495e01dfb51ae9849bc93570a3af047bcd0"
+  }
+]

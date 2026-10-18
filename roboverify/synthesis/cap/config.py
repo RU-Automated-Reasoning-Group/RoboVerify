@@ -4,6 +4,7 @@ import re
 from dataclasses import dataclass, field
 
 from .contracts import validate_condition_mode
+from .prompt_package import validate_prompt_version
 
 
 @dataclass
@@ -58,6 +59,8 @@ class RunConfig:
     output_root: str = "runs"
     condition_mode: str = "dsl_only"
     max_sim_steps: int = 10000
+    prompt_version: str = "legacy_v1"
 
     def __post_init__(self):
         validate_condition_mode(self.condition_mode)
+        validate_prompt_version(self.prompt_version)

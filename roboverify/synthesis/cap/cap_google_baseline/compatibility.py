@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from ..contracts import API_NAMES, api_description
+from ..prompt_package import package
 
 
 class CompletionShim:
@@ -120,14 +121,24 @@ def load_core(model, logger, checkpoints, budget):
     return SimpleNamespace(**globals_)
 
 
-def module_config(*, helper=False, api_names=API_NAMES, condition_mode="dsl_only"):
+def module_config(
+    *,
+    helper=False,
+    api_names=API_NAMES,
+    condition_mode="dsl_only",
+    prompt_version="legacy_v1",
+    higher_tolerance=0.001,
+):
     return {
-        "prompt_text": (
-            "Define the missing Python helper. Output only its definition.\n"
-            if helper
-            else "Generate Python robot policy code. Output code only.\n"
-        )
-        + api_description(api_names, condition_mode),
+        "prompt_text": package(prompt_version)["baseline_prefixes"][
+            "helper" if helper else "policy"
+        ]
+        + api_description(
+            api_names,
+            condition_mode,
+            prompt_version=prompt_version,
+            higher_tolerance=higher_tolerance,
+        ),
         "query_prefix": "\n# " if helper else "\n# Instruction: ",
         "query_suffix": "",
         "stop": [],

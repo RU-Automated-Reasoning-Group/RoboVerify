@@ -415,6 +415,8 @@ class RunSummary:
                 "method",
                 "task",
                 "condition_mode",
+                "prompt_version",
+                "prompt_package_sha256",
                 "observation_api_version",
                 "checker_version",
                 "model_backend",

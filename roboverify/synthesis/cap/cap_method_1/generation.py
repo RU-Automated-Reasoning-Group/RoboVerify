@@ -1,7 +1,6 @@
 """Source-only recursive generation; no generated Python executes here."""
 
 import ast
-from pathlib import Path
 
 from ..contracts import (
     ACTIONS,
@@ -12,18 +11,39 @@ from ..contracts import (
     api_description,
     validate_condition_mode,
 )
+from ..prompt_package import package, validate_prompt_version
 from ..timing import timed
 from ..validation import definitions, missing_calls, parse, validate, validate_helper
 
-PROMPTS = Path(__file__).with_name("prompts")
 
-
-def prompt(name, *, api_names=API_NAMES, condition_mode="dsl_only", **fields):
+def prompt(
+    name,
+    *,
+    api_names=API_NAMES,
+    condition_mode="dsl_only",
+    prompt_version="legacy_v1",
+    higher_tolerance=0.001,
+    unit="policy",
+    **fields,
+):
+    data = package(prompt_version)
+    if prompt_version != "legacy_v1":
+        fields["output_rule"] = data["output_rules"][
+            "policy" if unit == "policy" else "helper"
+        ]
     return (
-        (PROMPTS / f"{name}.txt")
-        .read_text()
-        .format(api=api_description(api_names, condition_mode), **fields)
-    ).rstrip("\n")
+        data["method1_templates"][name]
+        .format(
+            api=api_description(
+                api_names,
+                condition_mode,
+                prompt_version=prompt_version,
+                higher_tolerance=higher_tolerance,
+            ),
+            **fields,
+        )
+        .rstrip("\n")
+    )
 
 
 class Generator:
@@ -36,7 +56,13 @@ class Generator:
         max_attempts=3,
         api_names=API_NAMES,
         condition_mode="dsl_only",
+        prompt_version="legacy_v1",
+        higher_tolerance=0.001,
     ):
+        self.prompt_version = validate_prompt_version(prompt_version)
+        self.higher_tolerance = higher_tolerance
+        if checkpoints.prompt_version != prompt_version:
+            raise ValueError("Checkpoint and generator prompt versions differ")
         self.condition_mode = validate_condition_mode(condition_mode)
         if checkpoints.condition_mode != condition_mode:
             raise ValueError("Checkpoint and generator condition modes differ")
@@ -56,6 +82,8 @@ class Generator:
         source = self.model.complete(
             prompt(
                 "policy",
+                prompt_version=self.prompt_version,
+                higher_tolerance=self.higher_tolerance,
                 api_names=self.api_names,
                 condition_mode=self.condition_mode,
                 instruction=instruction,
@@ -172,6 +200,9 @@ class Generator:
                     definition = self.model.complete(
                         prompt(
                             "helper",
+                            prompt_version=self.prompt_version,
+                            higher_tolerance=self.higher_tolerance,
+                            unit=call.name,
                             api_names=self.api_names,
                             condition_mode=self.condition_mode,
                             signature=call.signature,
@@ -241,6 +272,9 @@ class Generator:
                 source = self.model.complete(
                     prompt(
                         "repair",
+                        prompt_version=self.prompt_version,
+                        higher_tolerance=self.higher_tolerance,
+                        unit=unit,
                         api_names=self.api_names,
                         condition_mode=self.condition_mode,
                         source=source,

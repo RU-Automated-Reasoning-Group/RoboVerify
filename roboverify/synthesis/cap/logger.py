@@ -33,6 +33,8 @@ class CapLogger:
         self.started = time.monotonic()
         self.sequence = 0
         self.context = {}
+        self.prompt_provenance = {}
+        self.source_generations = {}
         self.state_context = {}
         self.paths = {}
         self.emit("trial_log_start", run_directory=str(self.run_dir))

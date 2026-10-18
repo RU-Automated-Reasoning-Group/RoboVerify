@@ -5,10 +5,21 @@ import hashlib
 from pathlib import Path
 
 from .contracts import CHECKER_VERSION, OBSERVATION_API_VERSION, validate_condition_mode
+from .prompt_package import prompt_provenance
 
 
 class Checkpoints:
-    def __init__(self, logger, *, method, condition_mode="dsl_only"):
+    def __init__(
+        self, logger, *, method, condition_mode="dsl_only", prompt_version="legacy_v1"
+    ):
+        self.provenance = prompt_provenance(prompt_version) | {
+            "method": method,
+            "condition_mode": validate_condition_mode(condition_mode),
+        }
+        self.prompt_version = prompt_version
+        if logger.prompt_provenance and logger.prompt_provenance != self.provenance:
+            raise ValueError("Cannot mix prompt packages within a trial")
+        logger.prompt_provenance = dict(self.provenance)
         self.condition_mode = validate_condition_mode(condition_mode)
         self.logger, self.method = logger, method
         self.counter = 0
@@ -49,6 +60,11 @@ class Checkpoints:
             paths[name] = {
                 "path": self.logger.relative(path),
                 "sha256": hashlib.sha256(text.encode()).hexdigest(),
+                "generation_matches": list(
+                    self.logger.source_generations.get(
+                        hashlib.sha256(text.strip().encode()).hexdigest(), []
+                    )
+                ),
             }
         combined = "\n".join(f"# {name}\n{text}" for name, text in sources.items())
         parent_id = parent or self.previous
@@ -74,6 +90,7 @@ class Checkpoints:
         self.logger.artifact(
             f"{directory}/manifest.json",
             {
+                **self.provenance,
                 "checkpoint_id": cid,
                 "parent_checkpoint_id": parent_id,
                 "method": self.method,

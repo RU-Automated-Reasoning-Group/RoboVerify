@@ -1,5 +1,6 @@
 """Text-only model transports shared by both methods; no SDK coupling."""
 
+import hashlib
 import json
 import os
 import time
@@ -139,8 +140,31 @@ class LoggedModel:
             self.budget.model_call()
             call = f"call_{self.budget.calls:04d}"
             path = f"lmp/{call}"
+            request = self.backend.payload(prompt)
+            role = purpose
+            if purpose == "google_generation":
+                role = "helper" if self.logger.context.get("helper") else "policy"
+            provenance = {
+                **self.logger.prompt_provenance,
+                "call_id": call,
+                "role": role,
+                "retry": retry,
+                "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
+                "request_sha256": hashlib.sha256(
+                    json.dumps(
+                        request,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        ensure_ascii=True,
+                    ).encode()
+                ).hexdigest(),
+                "request_hash_encoding": "json-sort-keys-compact-ascii-utf8",
+            }
             self.logger.artifact(f"{path}/prompt.txt", prompt)
-            self.logger.artifact(f"{path}/request.json", self.backend.payload(prompt))
+            self.logger.artifact(f"{path}/request.json", request)
+            metadata_path = self.logger.artifact(
+                f"{path}/prompt_metadata.json", provenance
+            )
             event = self.logger.emit(
                 "generation_start",
                 purpose=purpose,
@@ -150,9 +174,6 @@ class LoggedModel:
             )
             start = time.monotonic()
             try:
-                role = purpose
-                if purpose == "google_generation":
-                    role = "helper" if self.logger.context.get("helper") else "policy"
                 response = self.budget.timings.call(
                     "model_" + role,
                     self.backend.generate,
@@ -210,7 +231,19 @@ class LoggedModel:
                 raise ModelError(
                     f"Incomplete/empty model response: {response.finish_reason}"
                 )
-            return extract_source(response.text)
+            source = extract_source(response.text)
+            source_key = hashlib.sha256(source.strip().encode()).hexdigest()
+            self.logger.source_generations.setdefault(source_key, []).append(
+                {
+                    **provenance,
+                    "metadata_path": self.logger.relative(metadata_path),
+                    "returned_source_sha256": hashlib.sha256(
+                        source.encode()
+                    ).hexdigest(),
+                    "match": "outer_whitespace_ignored",
+                }
+            )
+            return source
 
 
 def extract_source(text):

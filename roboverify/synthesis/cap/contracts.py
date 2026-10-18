@@ -148,12 +148,14 @@ All condition helpers and query lambdas must remain free of physical actions.
 }
 
 
-def api_description(names, condition_mode="dsl_only"):
+def api_description(
+    names,
+    condition_mode="dsl_only",
+    *,
+    prompt_version="legacy_v1",
+    higher_tolerance=0.001,
+):
     validate_condition_mode(condition_mode)
-    description = "\n".join(
-        line
-        for line in API_DESCRIPTION.splitlines()
-        if "ON_star_zero" in names or not line.startswith("ON_star_zero")
-    )
+    from .prompt_package import render_api
 
-    return description + "\n" + CONDITION_RULES[condition_mode].rstrip("\n")
+    return render_api(names, condition_mode, prompt_version, higher_tolerance)

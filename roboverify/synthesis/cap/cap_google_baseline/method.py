@@ -14,11 +14,15 @@ class GoogleBaseline:
         budget,
         *,
         condition_mode="dsl_only",
+        prompt_version="legacy_v1",
+        higher_tolerance=0.001,
         **kwargs,
     ):
         self.condition_mode = validate_condition_mode(condition_mode)
         if checkpoints.condition_mode != condition_mode:
             raise ValueError("Checkpoint and method condition modes differ")
+        if checkpoints.prompt_version != prompt_version:
+            raise ValueError("Checkpoint and method prompt versions differ")
         self.logger = logger
         core = load_core(model, logger, checkpoints, budget)
         fixed = {}
@@ -46,14 +50,23 @@ class GoogleBaseline:
 
         fgen = ObservedFGen(
             module_config(
-                helper=True, api_names=adapter.api_names, condition_mode=condition_mode
+                helper=True,
+                api_names=adapter.api_names,
+                condition_mode=condition_mode,
+                prompt_version=prompt_version,
+                higher_tolerance=higher_tolerance,
             ),
             fixed,
             variable,
         )
         self.policy = core.LMP(
             "policy",
-            module_config(api_names=adapter.api_names, condition_mode=condition_mode),
+            module_config(
+                api_names=adapter.api_names,
+                condition_mode=condition_mode,
+                prompt_version=prompt_version,
+                higher_tolerance=higher_tolerance,
+            ),
             fgen,
             fixed,
             variable,

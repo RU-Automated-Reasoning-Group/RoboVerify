@@ -25,6 +25,7 @@ from .contracts import (
 )
 from .llm import HTTPModel, LoggedModel, ModelError
 from .logger import CapLogger
+from .prompt_package import package, prompt_provenance
 from .tasks import (
     TASK_INSTRUCTIONS,
     check_task,
@@ -71,6 +72,8 @@ def make_method(
     budget,
     attempts,
     condition_mode="dsl_only",
+    prompt_version="legacy_v1",
+    higher_tolerance=0.001,
 ):
     if name == "cap_method_1":
         from .cap_method_1 import Method1
@@ -83,12 +86,21 @@ def make_method(
             budget,
             attempts,
             condition_mode=condition_mode,
+            prompt_version=prompt_version,
+            higher_tolerance=higher_tolerance,
         )
     if name == "cap_google_baseline":
         from .cap_google_baseline import GoogleBaseline
 
         return GoogleBaseline(
-            model, adapter, logger, checkpoints, budget, condition_mode=condition_mode
+            model,
+            adapter,
+            logger,
+            checkpoints,
+            budget,
+            condition_mode=condition_mode,
+            prompt_version=prompt_version,
+            higher_tolerance=higher_tolerance,
         )
     raise ValueError(f"Unknown method: {name}")
 
@@ -126,6 +138,7 @@ def run(
     if not math.isfinite(queue_wait_seconds) or queue_wait_seconds < 0:
         raise ValueError("Queue wait must be finite and nonnegative")
     validate_condition_mode(config.condition_mode)
+    provenance = prompt_provenance(config.prompt_version)
     if config.method not in {"cap_method_1", "cap_google_baseline"}:
         raise ValueError("Unknown CaP method")
     if config.timeout <= 0 or config.max_attempts < 1:
@@ -141,6 +154,7 @@ def run(
     )
     instruction = instruction or TASK_INSTRUCTIONS.get(config.task)
     resolved = asdict(config) | {
+        **provenance,
         "timeout": timeout,
         "budget_policy": "resource-limits-with-wall-clock-safety-cap-v1",
         "queue_wait_seconds": queue_wait_seconds,
@@ -166,8 +180,12 @@ def run(
     )
     logger = CapLogger(run_log.run_dir, run=run_log, timings=budget.timings)
     checkpoints = Checkpoints(
-        logger, method=config.method, condition_mode=config.condition_mode
+        logger,
+        method=config.method,
+        condition_mode=config.condition_mode,
+        prompt_version=config.prompt_version,
     )
+    logger.artifact("prompt_package.json", package(config.prompt_version))
     model = LoggedModel(
         backend or HTTPModel(model_config),
         logger,
@@ -192,6 +210,8 @@ def run(
                     budget,
                     config.max_attempts,
                     condition_mode=config.condition_mode,
+                    prompt_version=config.prompt_version,
+                    higher_tolerance=config.higher_tolerance,
                 )
                 if config.method == "cap_method_1":
                     budget.timings.call(
@@ -285,6 +305,8 @@ def run(
                         budget,
                         config.max_attempts,
                         condition_mode=config.condition_mode,
+                        prompt_version=config.prompt_version,
+                        higher_tolerance=config.higher_tolerance,
                     )
                     with recorder:
                         budget.timings.call("generation_control", method, instruction)
@@ -328,6 +350,7 @@ def run(
             except Exception as exc:
                 logger.emit("close_failure", error=str(exc))
         outcome.update(
+            **provenance,
             method=config.method,
             condition_mode=config.condition_mode,
             observation_api_version=OBSERVATION_API_VERSION,
