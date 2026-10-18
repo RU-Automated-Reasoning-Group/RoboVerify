@@ -100,11 +100,10 @@ substitute an earlier complete or partial candidate and call it the final output
 
 A proposed checker boundary is:
 
-$$
-\operatorname{CheckBundle}(B,\mathcal{C},s,r,\Gamma)
-\longrightarrow
-R=(\mathrm{status},D,U,\mathrm{coverage},\mathrm{identity}).
-$$
+```python
+report = check_bundle(bundle, contract, scope, role, input_types)
+# Report fields: status, diagnostics, unresolved, coverage, contract_identity.
+```
 
 For complete scope, `pass` requires completed analysis of the supported source
 bundle with no known violations or unresolved dependencies. Local results must
@@ -133,23 +132,10 @@ each report; a caller must not reuse a pass after changing the checked bundle.
 
 ### 3.1 Current DSL checker: high-level abstraction
 
-The algorithms below use LaTeX `algorithm` and `algpseudocode` notation. The
-fenced blocks preserve copyable LaTeX source for a paper; they are not executable
-Python. Add these packages to the document preamble:
-
-```latex
-\usepackage{amsmath}
-\usepackage{algorithm}
-\usepackage{algpseudocode}
-```
-
-Notation: $B$ is a source bundle, $m$ the condition mode,
-$s \in \{\mathsf{Local},\mathsf{Complete}\}$ the scope, $r$ the body/condition
-role, $\Gamma$ the input types, $\mathcal{C}$ the recorded contract, $\beta$ the
-analysis budget, and $U$ unresolved helper obligations. Each named operation
-abstracts a responsibility rather than an AST-level implementation. The
-`On ...` lines denote error handlers, not sequential steps after a return.
-
+The code blocks below use Python-style pseudocode for readability. Named
+operations represent high-level responsibilities, not callable repository APIs
+or a complete implementation. Error handling and reports are schematic; AST
+traversal and type-propagation details are intentionally omitted.
 
 **Status: implemented.** The abstraction below describes
 [validation.py](../validation.py), its use by the
@@ -163,26 +149,19 @@ whether unresolved dependencies may remain during generation; **role** determine
 whether the checked code is a body or a pure condition. The **condition mode**
 selects DSL-only conditions or DSL plus general numeric conditions.
 
-```latex
-\begin{algorithm}[H]
-\caption{Current DSL checker (implemented)}
-\begin{algorithmic}[1]
-\Require Bundle $B$, mode $m$, scope $s$, role $r$, input types $\Gamma$
-\Ensure Unresolved obligations $U$, or a source-located constraint failure
-\Function{CurrentCheck}{$B,m,s,r,\Gamma$}
-    \State \Call{CheckModeConsistency}{$B,m$}
-    \State \Call{CheckSyntaxAndDefinitions}{$B$}
-    \State $U \gets \Call{AnalyzeTypesConditionsAndEffects}{B,m,s,r,\Gamma}$
-    \State $U \gets U \cup \Call{CheckUncalledDefinitions}{B,m}$
-    \If{$s=\mathsf{Complete}$ \textbf{and} $U\neq\emptyset$}
-        \State \textbf{raise} \Call{ConstraintFailure}{$U$}
-    \EndIf
-    \State \Return $U$
-    \Statex \textit{On a rule violation $d$:}
-    \State \hspace{\algorithmicindent}\textbf{raise} \Call{ConstraintFailure}{$d$}
-\EndFunction
-\end{algorithmic}
-\end{algorithm}
+```python
+def current_check(bundle, condition_mode, scope, role, input_types):
+    # Each checking operation raises ConstraintFailure on a rule violation.
+    check_mode_consistency(bundle, condition_mode)
+    check_syntax_and_definitions(bundle)
+    unresolved = analyze_types_conditions_and_effects(
+        bundle, condition_mode, scope, role, input_types
+    )
+    unresolved |= check_uncalled_definitions(bundle, condition_mode)
+
+    if scope == "complete" and unresolved:
+        raise ConstraintFailure(unresolved)
+    return unresolved
 ```
 
 This abstracts the policy-bundle `validate` path. Local `validate_helper` reuses
@@ -193,26 +172,21 @@ An empty unresolved list from a local check does not authorize execution.
 
 The current caller performs some checks outside that core:
 
-```latex
-\begin{algorithm}[H]
-\caption{Current checker callers (implemented)}
-\begin{algorithmic}[1]
-\Procedure{MethodOnePreparation}{generated unit, task}
-    \State \Call{CheckTaskAPIs}{generated unit, task}
-    \State $B \gets \Call{RecursiveGenerateCheckAndRepair}{generated unit}$
-    \State \Call{CurrentCheck}{$B,m,\mathsf{Complete},\mathsf{Body},\Gamma$}
-    \State \Return $B$
-\EndProcedure
-\Procedure{MethodOneExecution}{$B$}
-    \State \Call{CurrentCheck}{$B,m,\mathsf{Complete},\mathsf{Body},\Gamma$}
-    \State \Call{CheckedExecute}{$B$}
-\EndProcedure
-\Procedure{GoogleBaseline}{instruction}
-    \State \Call{OriginalGenerateBindExecute}{instruction}
-    \Comment{No static DSL gate or repair}
-\EndProcedure
-\end{algorithmic}
-\end{algorithm}
+```python
+def method_1_preparation(unit, task, condition_mode, input_types):
+    check_task_apis(unit, task)  # Currently outside the core checker.
+    bundle = recursively_generate_check_and_repair(unit, task, condition_mode)
+    current_check(bundle, condition_mode, "complete", "body", input_types)
+    return bundle
+
+
+def method_1_execution(bundle, condition_mode, input_types):
+    current_check(bundle, condition_mode, "complete", "body", input_types)
+    return checked_execute(bundle)
+
+
+def google_baseline(instruction):
+    return original_generate_bind_execute(instruction)  # No static DSL gate.
 ```
 
 The task API check is currently in the generator, not a parameter of `validate`.
@@ -234,44 +208,29 @@ input types, and executable API/checker versions. Prompt wording/version does
 not select different checking rules. Every report identifies the checked bundle,
 contract, scope, diagnostics, unresolved obligations, and analysis coverage.
 
-```latex
-\begin{algorithm}[H]
-\caption{Planned shared DSL checker}
-\begin{algorithmic}[1]
-\Require Bundle $B$, contract $\mathcal{C}$, scope $s$, role $r$, budget $\beta$
-\Ensure A report tied to $B$, $\mathcal{C}$, and the analyzed scope
-\Function{SharedCheck}{$B,\mathcal{C},s,r,\beta$}
-    \State \Call{SetAnalysisIdentityAndBudget}{$B,\mathcal{C},s,\beta$}
-    \Comment{\textbf{[NEW]}}
-    \State \Call{CheckModeSyntaxAndDefinitions}{$B,\mathcal{C}$}
-    \Comment{\textbf{[KEEP]}}
-    \State \Call{CheckTaskAPIs}{$B,\mathcal{C}$}
-    \Comment{\textbf{[MOVE]}}
-    \State $U \gets \Call{AnalyzeTypesConditionsAndEffects}{B,\mathcal{C},s,r}$
-    \Comment{\textbf{[KEEP]}}
-    \State $U \gets U \cup \Call{CheckUncalledDefinitions}{B,\mathcal{C}}$
-    \Comment{\textbf{[KEEP]}}
-    \If{$s=\mathsf{Complete}$ \textbf{and} $U\neq\emptyset$}
-        \State \Return \Call{Report}{\textsc{Fail}, $U$}
-        \Comment{\textbf{[KEEP rule; NEW report]}}
-    \ElsIf{$s=\mathsf{Local}$ \textbf{and} $U\neq\emptyset$}
-        \State \Return \Call{Report}{\textsc{Pending}, $U$}
-        \Comment{\textbf{[NEW]}}
-    \ElsIf{$s=\mathsf{Local}$}
-        \State \Return \Call{Report}{\textsc{Local\_Pass}}
-        \Comment{\textbf{[NEW]}}
-    \EndIf
-    \State \Return \Call{Report}{\textsc{Pass}}
-    \Comment{\textbf{[NEW]}}
-    \Statex \textit{On a source violation $d$:}
-    \State \hspace{\algorithmicindent}\Return \Call{Report}{\textsc{Fail}, $d$}
-    \Comment{\textbf{[NEW]}}
-    \Statex \textit{On an analysis failure or timeout $e$:}
-    \State \hspace{\algorithmicindent}\Return \Call{Report}{\textsc{Error}, $e$}
-    \Comment{\textbf{[NEW]}}
-\EndFunction
-\end{algorithmic}
-\end{algorithm}
+```python
+def shared_check(bundle, contract, scope, role, analysis_budget):
+    report = report_factory(bundle, contract, scope)  # [NEW] Source/contract identity.
+    try:
+        with bounded_analysis(analysis_budget):  # [NEW] Bounded analysis.
+            check_mode_syntax_and_definitions(bundle, contract)  # [KEEP]
+            check_task_apis(bundle, contract)  # [MOVE] Into the shared core.
+            unresolved = analyze_types_conditions_and_effects(
+                bundle, contract, scope, role
+            )  # [KEEP]
+            unresolved |= check_uncalled_definitions(bundle, contract)  # [KEEP]
+
+            if scope == "complete" and unresolved:
+                # [KEEP] Rejection rule; [NEW] Structured result.
+                return report("fail", unresolved=unresolved)
+            if scope == "local":
+                status = "pending" if unresolved else "local_pass"
+                return report(status, unresolved=unresolved)  # [NEW]
+            return report("pass")  # [NEW]
+    except ConstraintFailure as error:
+        return report("fail", diagnostics=error.diagnostics)  # [NEW]
+    except AnalysisFailure as error:  # Abstracts checker errors and timeouts.
+        return report("error", reason=error)  # [NEW]
 ```
 
 Only a complete `PASS` can authorize constrained execution. Local checks retain
@@ -282,36 +241,37 @@ query witness availability, and controller convergence remain runtime concerns.
 
 The methods select when to call this one core and how to use its result:
 
-```latex
-\begin{algorithm}[H]
-\caption{Planned callers of the shared checker}
-\begin{algorithmic}[1]
-\Procedure{MethodOne}{instruction}
-    \State Use local reports for recursive generation and repair
-    \Comment{\textbf{[KEEP strategy]}}
-    \State Require a complete \textsc{Pass} before execution
-    \Comment{\textbf{[NEW interface]}}
-\EndProcedure
-\Procedure{MethodTwo}{instruction}
-    \Comment{\textbf{[NEW caller]}}
-    \State Check each complete candidate with \Call{SharedCheck}{\ldots}
-    \State Revise the whole candidate from source diagnostics within budget
-    \State Execute only a complete \textsc{Pass}; stop on checker-internal errors
-\EndProcedure
-\Procedure{BaselineAfterAttempt}{trial}
-    \Comment{\textbf{[NEW caller]}}
-    \State $O \gets \Call{ReadFinalOutput}{trial}$
-    \If{no policy source exists}
-        \State $R \gets \Call{Report}{\textsc{Not\_Available}}$
-    \ElsIf{generation is unfinished or required final artifacts are missing}
-        \State $R \gets \Call{Report}{\textsc{Incomplete}}$
-    \Else
-        \State $R \gets \Call{SharedCheck}{O.bundle,\mathcal{C},\mathsf{Complete},\mathsf{Body},\beta}$
-    \EndIf
-    \State Report $R$ separately from the original physical outcome
-\EndProcedure
-\end{algorithmic}
-\end{algorithm}
+```python
+def method_1(instruction, contract, budget):
+    # [KEEP] Recursive/local repair; [NEW] Common report interface.
+    bundle = recursively_generate_and_repair(instruction, contract, budget)
+    result = shared_check(bundle, contract, "complete", "body", budget)
+    return execute_only_on_complete_pass(bundle, result)
+
+
+def method_2(instruction, contract, budget):  # [NEW] Whole-candidate repair.
+    bundle = generate_complete_candidate(instruction, contract)
+    while budget.allows_check():
+        result = shared_check(bundle, contract, "complete", "body", budget)
+        if result.status == "pass":
+            return checked_execute(bundle)
+        if result.status == "error" or not budget.allows_revision():
+            return record_failure(result)
+        bundle = revise_whole_candidate(bundle, result, contract, budget)
+    return record_budget_exhaustion()
+
+
+def baseline_after_attempt(trial):  # [NEW] Post-hoc caller only.
+    output = read_final_output(trial)
+    if not output.has_policy_source:
+        result = report("not_available")
+    elif not output.finalized or output.required_artifacts_missing:
+        result = report("incomplete")
+    else:
+        result = shared_check(
+            output.bundle, trial.contract, "complete", "body", trial.audit_budget
+        )
+    return report_separately(trial.original_physical_outcome, result)
 ```
 
 Baseline's input is the final policy, complete helper sources, and their final
@@ -404,26 +364,22 @@ when its source artifacts are available.
 
 High-level pseudocode, not an existing repository API:
 
-```latex
-\begin{algorithm}[H]
-\caption{Planned final-output audit after baseline attempts}
-\begin{algorithmic}[1]
-\ForAll{scheduled baseline trials $t$ with a terminal or interrupted record}
-    \State $E \gets \Call{ReadOriginalOutcome}{t}$
-    \State $O \gets \Call{ReadFinalOutputManifest}{t}$
-    \If{no generated policy source is available}
-        \State $R \gets \Call{Report}{\textsc{Not\_Available}, reason}$
-    \ElsIf{$O$ was not finalized or required final sources are missing}
-        \State $R \gets \Call{Report}{\textsc{Incomplete}, reason}$
-    \Else
-        \State $R \gets \Call{SharedCheck}{O.bundle,\mathcal{C}_t,\mathsf{Complete},\mathsf{Body},\beta}$
-    \EndIf
-    \State \Call{SaveCompliance}{$t,R,\mathsf{FinalOutput}$}
-    \State \Call{ReportTrial}{$E,R$}
-    \Comment{No rerun or LLM feedback}
-\EndFor
-\end{algorithmic}
-\end{algorithm}
+```python
+for trial in scheduled_terminal_or_interrupted_trials:
+    outcome = read_original_outcome(trial)
+    output = read_final_output_manifest(trial)
+
+    if not output.has_policy_source:
+        result = report("not_available", reason=output.reason)
+    elif not output.finalized or output.required_sources_missing:
+        result = report("incomplete", reason=output.reason)
+    else:
+        result = shared_check(
+            output.bundle, trial.contract, "complete", "body", trial.audit_budget
+        )
+
+    save_compliance(trial, result, scope="final_output")
+    report_trial(outcome, result)  # No rerun or LLM feedback.
 ```
 
 Give the audit a bounded analysis budget and record its time separately from
