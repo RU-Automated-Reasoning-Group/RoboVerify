@@ -1,6 +1,7 @@
 # Revision 2 discussion
 
-Status: discussion draft. Only item 1 is in scope for now. The reasoning-enabled,
+Status: discussion draft. The requested scope is API/prompt clarity and versioning
+(item 1), plus parallel execution of future experiment batches (item 2). The reasoning-enabled,
 16k-output Stack experiments have completed using the existing prompts; their
 [report](../../../runs/cap-stack-reasoning-comparison/20261018-180533-16k/report.md)
 is the reference evidence for this discussion. This document does not change
@@ -287,8 +288,90 @@ any additional Revision 2 work items remain for follow-up discussion.
 - Should API text be rendered from shared structured metadata, including the
   actual Higher tolerance, rather than maintained as one free-form string?
 
-These questions concern prompt design only. No additional Revision 2 work items
-are specified here.
+These questions concern prompt design only. Item 2 below is the separately
+requested batch-execution change; other revision topics remain for discussion.
+
+## 2. Run future experiment batches in parallel
+
+Requested requirement: future multi-trial experiments should run independent
+trials concurrently instead of executing the whole batch serially. This is a
+planned harness change, not a change to policy generation algorithms. The active
+coordinate-predicate comparison keeps its existing schedule: model batches run
+concurrently, while trials within each model batch remain sequential.
+
+### 2.1 Scheduling and configuration
+
+Provide a batch-level concurrency option, for example `--max-workers N`, with a
+bounded parallel default and `N=1` available for a serial reference or diagnosis.
+The exact default worker count should be resolved and recorded before a batch
+starts, with regard to simulator/rendering resources and provider request limits.
+Do not silently change model, prompt, trial count, or per-trial budgets to fit
+more workers.
+
+Create the complete trial manifest before launching requests. A trial identity
+includes model, method, condition mode, prompt version, trial index, initial-state
+reference/hash, and generation settings. Use a recorded scheduling order that
+balances comparison groups. Completion order must not determine trial identity,
+which trials enter the report, or which failed trials are replaced.
+
+Parallelize **independent trials**. Do not parallelize or reorder Google's
+recursive helper-generation algorithm inside a baseline trial, and do not
+replace method 1's existing preparation/repair flow as part of this change.
+
+### 2.2 Process isolation and output ownership
+
+Use separate worker processes rather than sharing live simulator instances
+between threads. Each worker owns its environment, object handles, random state,
+model session, signal/deadline handling, and recorder. Full initial snapshots
+may be shared as immutable files, but every trial restores its own environment.
+Preserve the Stack settling/replay rule; loading an archived start must not add
+another settling phase.
+
+Assign each trial a distinct output directory before dispatch. Workers must not
+write the same status, stdout, timeline, checkpoint, video, or latest-link path.
+A parent aggregator owns the batch summary and publishes updates atomically.
+Retain the existing per-trial RunLogger/report contract and immutable generated
+source checkpoints. Credentials remain process-local environment inputs; do not
+put secret values in the trial manifest or artifacts.
+
+### 2.3 Budgets, failures, and reproducibility
+
+Keep the existing per-trial generation/execution budgets unchanged. Start a
+trial's wall-clock deadline when its worker begins trial setup, not while the job
+is waiting in the batch queue. Report queue delay and active trial time
+separately. Unstack still has its 60-second end-to-end trial limit. Keep the same
+declared treatment of provider rate limiting and transport retries across groups;
+waiting/retrying inside an active trial consumes its existing deadline.
+
+Concurrency is not permission for unbounded retries. A worker timeout, process
+crash, primitive failure, generation failure, or logging failure must produce an
+explicit outcome or incomplete-trial record. Do not drop it from the scheduled
+trial accounting or silently start a replacement. Resume logic must distinguish
+finished, interrupted, and never-started trials to avoid duplicate paid requests.
+
+Record requested and actual worker counts, dispatch/start/end times, schedule,
+process outcomes, retry counts, and model-call usage. Every trial report must
+include `# of tokens used`: cumulative provider-reported input plus output tokens
+across initial/helper/repair requests, with incomplete usage marked explicitly.
+Reasoning tokens already included in completion usage must not be counted twice.
+
+Scheduling isolation does not guarantee deterministic remote-model responses.
+Compare methods/versions under the same declared concurrency and resource policy,
+and disclose provider contention or rate-limit failures instead of attributing
+them automatically to policy quality.
+
+### 2.4 Validation before adopting the parallel harness
+
+Use scripted model responses and identical snapshots to compare serial and
+parallel scheduling without paid requests. Check that trial identities,
+restored observations, primitive action sequences, verdicts, and source/video
+associations remain correct. Check that logs and checkpoints do not cross trial
+boundaries. Include a deliberately failing worker and an interrupted batch to
+verify accounting, independent progress, and resume behavior.
+
+After these checks, use the parallel harness for subsequent requested batches
+and record its configuration in their reports. This document does not implement
+the scheduler or alter the currently running trials.
 
 ## References
 
