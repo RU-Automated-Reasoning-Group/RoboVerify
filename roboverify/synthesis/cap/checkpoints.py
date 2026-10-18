@@ -31,7 +31,7 @@ class Checkpoints:
             hashlib.sha256(
                 Path(__file__).with_name("validation.py").read_bytes()
             ).hexdigest()
-            if method == "cap_method_1"
+            if method != "cap_google_baseline"
             else None
         )
 
@@ -97,13 +97,13 @@ class Checkpoints:
                 "condition_mode": self.condition_mode,
                 "observation_api_version": OBSERVATION_API_VERSION,
                 "checker_version": (
-                    CHECKER_VERSION if self.method == "cap_method_1" else None
+                    CHECKER_VERSION if self.method != "cap_google_baseline" else None
                 ),
-                "refinement_enabled": self.method == "cap_method_1",
+                "refinement_enabled": self.method != "cap_google_baseline",
                 "checker_sha256": self.checker_hash,
                 "reason": reason,
                 "validation": validation,
-                "validation_enabled": self.method == "cap_method_1",
+                "validation_enabled": self.method != "cap_google_baseline",
                 "execution_eligible": validation in {"valid", "not_run"},
                 "sources": paths,
                 **metadata,

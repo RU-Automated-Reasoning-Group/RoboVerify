@@ -4,6 +4,7 @@ import ast
 import math
 import operator
 
+from .checker import require_check
 from .contracts import (
     ACTIONS,
     BudgetExceeded,
@@ -13,7 +14,7 @@ from .contracts import (
     validate_condition_mode,
 )
 from .timing import timed
-from .validation import definitions, validate
+from .validation import definitions
 
 
 class Returned(Exception):
@@ -48,11 +49,13 @@ class Runtime:
             raise CapError("Module inputs must be object handles")
         self.budget.timings.call(
             "validation",
-            validate,
+            require_check,
             bundle,
             inputs=dict.fromkeys(arguments, OBJECT),
             role=role,
             condition_mode=self.condition_mode,
+            api_names=self.adapter.api_names,
+            logger=self.logger,
         )
         trees, self.functions = definitions(bundle)
         self.global_values = dict(arguments)

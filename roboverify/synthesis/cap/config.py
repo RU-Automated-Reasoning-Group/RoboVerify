@@ -1,5 +1,6 @@
 """Explicit provider and experiment configuration; no credentials in artifacts."""
 
+import math
 import re
 from dataclasses import dataclass, field
 
@@ -60,7 +61,11 @@ class RunConfig:
     condition_mode: str = "dsl_only"
     max_sim_steps: int = 10000
     prompt_version: str = "legacy_v1"
+    baseline_audit: bool = True
+    audit_timeout: float = 10.0
 
     def __post_init__(self):
         validate_condition_mode(self.condition_mode)
         validate_prompt_version(self.prompt_version)
+        if not math.isfinite(self.audit_timeout) or self.audit_timeout <= 0:
+            raise ValueError("Audit timeout must be positive")

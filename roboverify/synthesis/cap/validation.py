@@ -291,6 +291,7 @@ class Checker:
         role="body",
         inputs=None,
         condition_mode="dsl_only",
+        api_names=API_NAMES,
     ):
         self.condition_mode = validate_condition_mode(condition_mode)
         if (
@@ -302,6 +303,14 @@ class Checker:
             )
         self.bundle, self.complete, self.role = bundle, complete, role
         self.trees, self.functions = definitions(bundle)
+        for unit, tree in self.trees.items():
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call) and node.func.id in API_NAMES - set(
+                    api_names
+                ):
+                    raise ConstraintFailure(
+                        [diagnostic(node, "API_UNAVAILABLE", node.func.id, unit)]
+                    )
         self.inputs = inputs or {"b0": OBJECT}
         self.globals = dict(self.inputs)
         self.stack = []
@@ -600,7 +609,13 @@ def merge_env(a, b):
 
 
 def validate(
-    bundle, *, complete=True, role="body", inputs=None, condition_mode="dsl_only"
+    bundle,
+    *,
+    complete=True,
+    role="body",
+    inputs=None,
+    condition_mode="dsl_only",
+    api_names=API_NAMES,
 ):
     return Checker(
         bundle,
@@ -608,16 +623,20 @@ def validate(
         role=role,
         inputs=inputs,
         condition_mode=condition_mode,
+        api_names=api_names,
     ).check()
 
 
-def validate_helper(source, name, known, role, *, condition_mode="dsl_only"):
+def validate_helper(
+    source, name, known, role, *, condition_mode="dsl_only", api_names=API_NAMES
+):
     """Check a helper locally before its caller supplies concrete argument types."""
     checker = Checker(
         Bundle("", known | {name: source}),
         complete=False,
         role=role,
         condition_mode=condition_mode,
+        api_names=api_names,
     )
     fn, checker.unit = checker.functions[name]
     checker.stack = [name]
@@ -627,6 +646,8 @@ def validate_helper(source, name, known, role, *, condition_mode="dsl_only"):
         role,
         in_function=True,
     )
+
+    return list(checker.missing.values())
 
 
 def missing_calls(source, helpers=None, role="body"):

@@ -11,7 +11,9 @@ from dataclasses import asdict
 from pathlib import Path
 
 from .adapter import GenerationOnlyAdapter, RoboVerifyAdapter
+from .audit import audit_run
 from .budget import Budget
+from .checker import AnalysisFailure, DSLContract
 from .checkpoints import Checkpoints
 from .contracts import (
     CHECKER_VERSION,
@@ -75,10 +77,12 @@ def make_method(
     prompt_version="legacy_v1",
     higher_tolerance=0.001,
 ):
-    if name == "cap_method_1":
+    if name in {"cap_method_1", "cap_method_2"}:
         from .cap_method_1 import Method1
+        from .cap_method_2 import Method2
 
-        return Method1(
+        method_class = Method1 if name == "cap_method_1" else Method2
+        return method_class(
             model,
             adapter,
             logger,
@@ -107,6 +111,7 @@ def make_method(
 
 def failure_status(error):
     for kind, status in (
+        (AnalysisFailure, "analysis_failed"),
         (AdapterGap, "adapter_gap"),
         (EnvironmentUnavailable, "environment_unavailable"),
         (BudgetExceeded, "budget_exhausted"),
@@ -139,7 +144,7 @@ def run(
         raise ValueError("Queue wait must be finite and nonnegative")
     validate_condition_mode(config.condition_mode)
     provenance = prompt_provenance(config.prompt_version)
-    if config.method not in {"cap_method_1", "cap_google_baseline"}:
+    if config.method not in {"cap_method_1", "cap_method_2", "cap_google_baseline"}:
         raise ValueError("Unknown CaP method")
     if config.timeout <= 0 or config.max_attempts < 1:
         raise ValueError("Invalid trial budget")
@@ -164,10 +169,18 @@ def run(
         "instruction": instruction,
         "initial_state": str(initial_state) if initial_state else None,
         "trace_index": trace_index,
-        "validation_enabled": config.method == "cap_method_1",
-        "refinement_enabled": config.method == "cap_method_1",
+        "validation_enabled": config.method != "cap_google_baseline",
+        "refinement_enabled": config.method != "cap_google_baseline",
         "observation_api_version": OBSERVATION_API_VERSION,
-        "checker_version": CHECKER_VERSION if config.method == "cap_method_1" else None,
+        "checker_version": (
+            CHECKER_VERSION if config.method != "cap_google_baseline" else None
+        ),
+        "pre_execution_dsl_check": config.method != "cap_google_baseline",
+        "dsl_contract": DSLContract.for_task(
+            config.task, config.condition_mode
+        ).identity(),
+        "posthoc_dsl_check": config.method == "cap_google_baseline"
+        and config.baseline_audit,
         "auxiliary_lmp_modules": [],
         "model_backend": type(backend).__name__ if backend else "HTTPModel",
     }
@@ -213,7 +226,7 @@ def run(
                     prompt_version=config.prompt_version,
                     higher_tolerance=config.higher_tolerance,
                 )
-                if config.method == "cap_method_1":
+                if config.method != "cap_google_baseline":
                     budget.timings.call(
                         "generation_control", method.generator.generate, instruction
                     )
@@ -367,6 +380,12 @@ def run(
             active_checkpoint_id=checkpoints.active,
             artifacts_path=logger.relative(logger.root),
         )
+        if config.method != "cap_google_baseline":
+            outcome["dsl_compliance"] = (
+                "pass"
+                if checkpoints.active
+                else ("fail" if status == "constraint_failed" else "incomplete")
+            )
         outcome["video"] = (
             recorder.video_metadata if recorder else {"status": "not_started"}
         )
@@ -397,4 +416,20 @@ def run(
             status=status,
         )
         run_log.finish(status, exit_reason=reason, **outcome)
-    return {"status": status, "run_dir": str(run_log.run_dir), **outcome}
+    result = {
+        "status": status,
+        "run_dir": str(run_log.run_dir),
+        "reason": reason,
+        **outcome,
+    }
+    if config.method == "cap_google_baseline" and config.baseline_audit:
+        audit = audit_run(run_log.run_dir, timeout=config.audit_timeout)
+        result["dsl_compliance"] = audit["status"]
+        result["audit_seconds"] = audit["elapsed_seconds"]
+    elif config.method != "cap_google_baseline":
+        result["dsl_compliance"] = (
+            "pass"
+            if checkpoints.active
+            else ("fail" if status == "constraint_failed" else "incomplete")
+        )
+    return result

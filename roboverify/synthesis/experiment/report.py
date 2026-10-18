@@ -422,6 +422,8 @@ class RunSummary:
                 "model_backend",
                 "generate_only",
                 "validation_enabled",
+                "pre_execution_dsl_check",
+                "posthoc_dsl_check",
                 "refinement_enabled",
             ):
                 lines.append(f"{key}: {config.get(key)}")
@@ -448,6 +450,11 @@ class RunSummary:
                 "artifacts_path",
             ):
                 lines.append(f"{key}: {self.result.get(key)}")
+            audit = read_json(self.dir / "artifacts/trial_001/dsl_compliance.json")
+            lines.append(f"dsl_compliance: {audit.get('status', self.result.get('dsl_compliance'))}")
+            if audit:
+                lines.append(f"compliance_scope: {audit.get('scope')}")
+                lines.append(f"audit_seconds: {audit.get('elapsed_seconds')}")
             lines.append(f"artifacts: {self.dir / 'artifacts'}")
             return "\n".join(lines[:max_lines])
         fixed = self.header_lines() + self.status_lines() + self.diagnostics_lines()

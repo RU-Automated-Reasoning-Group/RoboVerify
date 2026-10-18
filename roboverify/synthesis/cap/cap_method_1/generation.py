@@ -2,6 +2,7 @@
 
 import ast
 
+from ..checker import require_check, require_helper_check
 from ..contracts import (
     ACTIONS,
     API_NAMES,
@@ -128,22 +129,6 @@ class Generator:
             )
             try:
                 tree = self.budget.timings.call("validation", parse, source, unit)
-                for node in ast.walk(tree):
-                    if (
-                        isinstance(node, ast.Call)
-                        and node.func.id in API_NAMES - self.api_names
-                    ):
-                        raise ConstraintFailure(
-                            [
-                                Diagnostic(
-                                    "API_UNAVAILABLE",
-                                    node.func.id,
-                                    node.lineno,
-                                    node.col_offset,
-                                    unit,
-                                )
-                            ]
-                        )
                 if unit != "policy":
                     definitions(Bundle("", {unit: source}))
                 if role == "condition":
@@ -163,21 +148,25 @@ class Generator:
                 if unit == "policy":
                     self.budget.timings.call(
                         "validation",
-                        validate,
+                        require_check,
                         Bundle(source, helpers),
                         complete=False,
                         role=role,
                         condition_mode=self.condition_mode,
+                        api_names=self.api_names,
+                        logger=self.logger,
                     )
                 else:
                     self.budget.timings.call(
                         "validation",
-                        validate_helper,
+                        require_helper_check,
                         source,
                         unit,
                         helpers,
                         role,
                         condition_mode=self.condition_mode,
+                        api_names=self.api_names,
+                        logger=self.logger,
                     )
                 self.logger.emit(
                     "local_validation_pass", checkpoint_id=cp, parent_event_id=event
@@ -226,11 +215,13 @@ class Generator:
                 if unit == "policy":
                     self.budget.timings.call(
                         "validation",
-                        validate,
+                        require_check,
                         Bundle(source, helpers),
                         complete=True,
                         role=role,
                         condition_mode=self.condition_mode,
+                        api_names=self.api_names,
+                        logger=self.logger,
                     )
                 # Parent-level complete checking uses actual argument types and value flow.
                 self.checkpoints.save(

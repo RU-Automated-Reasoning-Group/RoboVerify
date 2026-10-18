@@ -15,12 +15,18 @@ from synthesis.cap.tasks import TASK_INSTRUCTIONS
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--method", choices=["cap_google_baseline", "cap_method_1"], required=True
+        "--method",
+        choices=["cap_google_baseline", "cap_method_1", "cap_method_2"],
+        required=True,
     )
     parser.add_argument("--condition-mode", choices=CONDITION_MODES, default="dsl_only")
     parser.add_argument(
         "--prompt-version", choices=PROMPT_VERSIONS, default="legacy_v1"
     )
+    parser.add_argument(
+        "--baseline-audit", action=argparse.BooleanOptionalAction, default=True
+    )
+    parser.add_argument("--audit-timeout", type=float, default=10.0)
     parser.add_argument("--task", choices=TASK_INSTRUCTIONS, default="stack")
     parser.add_argument("--num-blocks", type=int, default=3)
     parser.add_argument("--seed", type=int, default=0)
@@ -105,6 +111,8 @@ def main(argv=None):
     )
     config = RunConfig(
         method=args.method,
+        baseline_audit=args.baseline_audit,
+        audit_timeout=args.audit_timeout,
         condition_mode=args.condition_mode,
         prompt_version=args.prompt_version,
         task=args.task,

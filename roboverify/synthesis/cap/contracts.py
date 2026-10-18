@@ -65,7 +65,7 @@ class ObjectHandle:
 
 CONDITION_MODES = ("dsl_only", "coordinate_predicates")
 OBSERVATION_API_VERSION = "positions-v1"
-CHECKER_VERSION = "condition-modes-v1"
+CHECKER_VERSION = "shared-contract-v2"
 
 
 def validate_condition_mode(mode):

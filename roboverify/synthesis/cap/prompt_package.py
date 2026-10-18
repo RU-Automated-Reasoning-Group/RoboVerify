@@ -6,7 +6,7 @@ import math
 from functools import lru_cache
 from pathlib import Path
 
-PROMPT_VERSIONS = ("legacy_v1", "typed_v2")
+PROMPT_VERSIONS = ("legacy_v1", "typed_v2", "typed_v3")
 PROMPT_ROOT = Path(__file__).with_name("prompts")
 
 

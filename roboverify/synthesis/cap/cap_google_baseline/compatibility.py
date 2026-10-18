@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from ..contracts import API_NAMES, api_description
+from ..final_output import FinalOutputRecorder
 from ..prompt_package import package
 
 
@@ -42,10 +43,12 @@ def load_core(model, logger, checkpoints, budget):
     functions, execution_paths = {}, set()
     sources = {}
     policy_source = ""
+    output = FinalOutputRecorder(logger)
 
     def generated(source):
         nonlocal policy_source
         helper = logger.context.get("helper")
+        output.generated(source, helper)
         if helper:
             sources[helper] = source
         else:
@@ -90,6 +93,8 @@ def load_core(model, logger, checkpoints, budget):
         logger.artifact(f"checkpoints/{checkpoint}/executed.py", source)
         filename = str(path)
         execution_paths.add(filename)
+        is_policy = output.ready and source.strip() == policy_source.strip()
+        output.code_sources[filename] = (source, is_policy)
         original_trace = sys.gettrace()
 
         def trace(frame, event, arg):
@@ -113,12 +118,14 @@ def load_core(model, logger, checkpoints, budget):
                 builtins.exec(compile(source, filename, "exec"), gvars, lvars)
         finally:
             sys.settrace(original_trace)
+            if is_policy:
+                output.capture(gvars | lvars)
         for name in names:
             functions[name] = source
 
     globals_["exec"] = observed_exec
     builtins.exec(compile(core_path.read_text(), str(core_path), "exec"), globals_)
-    return SimpleNamespace(**globals_)
+    return SimpleNamespace(**globals_, final_output=output)
 
 
 def module_config(

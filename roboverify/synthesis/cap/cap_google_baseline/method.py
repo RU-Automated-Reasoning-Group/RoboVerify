@@ -37,7 +37,14 @@ class GoogleBaseline:
                     budget.depth(self.depth)
                     event = logger.emit("helper_resolution_start", depth=self.depth)
                     with logger.scoped(parent_event_id=event, depth=self.depth):
-                        return super().create_new_fs_from_code(*args, **kwargs)
+                        result = super().create_new_fs_from_code(*args, **kwargs)
+                        if self.depth == 1:
+                            core.final_output.ready = True
+                            generated = (
+                                result[0] if isinstance(result, tuple) else result
+                            )
+                            core.final_output.capture(variable | generated)
+                        return result
                 finally:
                     self.depth -= 1
 
