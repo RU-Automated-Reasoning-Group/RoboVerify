@@ -100,10 +100,11 @@ substitute an earlier complete or partial candidate and call it the final output
 
 A proposed checker boundary is:
 
-```text
-check_bundle(bundle, contract, scope="local" or "complete", role, input_types)
-    -> CheckReport(status, diagnostics, unresolved, coverage, contract_identity)
-```
+$$
+\operatorname{CheckBundle}(B,\mathcal{C},s,r,\Gamma)
+\longrightarrow
+R=(\mathrm{status},D,U,\mathrm{coverage},\mathrm{identity}).
+$$
 
 For complete scope, `pass` requires completed analysis of the supported source
 bundle with no known violations or unresolved dependencies. Local results must
@@ -132,6 +133,24 @@ each report; a caller must not reuse a pass after changing the checked bundle.
 
 ### 3.1 Current DSL checker: high-level abstraction
 
+The algorithms below use LaTeX `algorithm` and `algpseudocode` notation. The
+fenced blocks preserve copyable LaTeX source for a paper; they are not executable
+Python. Add these packages to the document preamble:
+
+```latex
+\usepackage{amsmath}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+```
+
+Notation: $B$ is a source bundle, $m$ the condition mode,
+$s \in \{\mathsf{Local},\mathsf{Complete}\}$ the scope, $r$ the body/condition
+role, $\Gamma$ the input types, $\mathcal{C}$ the recorded contract, $\beta$ the
+analysis budget, and $U$ unresolved helper obligations. Each named operation
+abstracts a responsibility rather than an AST-level implementation. The
+`On ...` lines denote error handlers, not sequential steps after a return.
+
+
 **Status: implemented.** The abstraction below describes
 [validation.py](../validation.py), its use by the
 [Method-1 generator](../cap_method_1/generation.py), and the
@@ -144,21 +163,26 @@ whether unresolved dependencies may remain during generation; **role** determine
 whether the checked code is a body or a pure condition. The **condition mode**
 selects DSL-only conditions or DSL plus general numeric conditions.
 
-```text
-CURRENT_CHECK(bundle, condition_mode, scope, role, input_types):
-    require a valid mode consistent with the bundle
-    parse sources and enforce the supported syntax and definition shapes
-    analyze the policy and helper calls using input types:
-        check API signatures and object/position/numeric operand types
-        check value dependencies, condition rules, and transitive action effects
-        track missing helper definitions as unresolved obligations
-    check uncalled definitions with generic parameter types
-
-    on a detected violation:
-        raise ConstraintFailure with a source-located diagnostic
-    if scope is COMPLETE and obligations remain:
-        raise ConstraintFailure for unresolved helpers
-    return unresolved obligations
+```latex
+\begin{algorithm}[H]
+\caption{Current DSL checker (implemented)}
+\begin{algorithmic}[1]
+\Require Bundle $B$, mode $m$, scope $s$, role $r$, input types $\Gamma$
+\Ensure Unresolved obligations $U$, or a source-located constraint failure
+\Function{CurrentCheck}{$B,m,s,r,\Gamma$}
+    \State \Call{CheckModeConsistency}{$B,m$}
+    \State \Call{CheckSyntaxAndDefinitions}{$B$}
+    \State $U \gets \Call{AnalyzeTypesConditionsAndEffects}{B,m,s,r,\Gamma}$
+    \State $U \gets U \cup \Call{CheckUncalledDefinitions}{B,m}$
+    \If{$s=\mathsf{Complete}$ \textbf{and} $U\neq\emptyset$}
+        \State \textbf{raise} \Call{ConstraintFailure}{$U$}
+    \EndIf
+    \State \Return $U$
+    \Statex \textit{On a rule violation $d$:}
+    \State \hspace{\algorithmicindent}\textbf{raise} \Call{ConstraintFailure}{$d$}
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
 ```
 
 This abstracts the policy-bundle `validate` path. Local `validate_helper` reuses
@@ -169,17 +193,26 @@ An empty unresolved list from a local check does not authorize execution.
 
 The current caller performs some checks outside that core:
 
-```text
-METHOD_1_PREPARATION:
-    check the generated unit against the task's available APIs
-    check it locally; recursively generate missing helpers and repair as needed
-    check the complete assembled bundle before accepting it
-
-METHOD_1_EXECUTION:
-    recheck the complete bundle, then execute through the checked runtime
-
-GOOGLE_BASELINE:
-    use original generation/binding/execution; no static DSL check or repair
+```latex
+\begin{algorithm}[H]
+\caption{Current checker callers (implemented)}
+\begin{algorithmic}[1]
+\Procedure{MethodOnePreparation}{generated unit, task}
+    \State \Call{CheckTaskAPIs}{generated unit, task}
+    \State $B \gets \Call{RecursiveGenerateCheckAndRepair}{generated unit}$
+    \State \Call{CurrentCheck}{$B,m,\mathsf{Complete},\mathsf{Body},\Gamma$}
+    \State \Return $B$
+\EndProcedure
+\Procedure{MethodOneExecution}{$B$}
+    \State \Call{CurrentCheck}{$B,m,\mathsf{Complete},\mathsf{Body},\Gamma$}
+    \State \Call{CheckedExecute}{$B$}
+\EndProcedure
+\Procedure{GoogleBaseline}{instruction}
+    \State \Call{OriginalGenerateBindExecute}{instruction}
+    \Comment{No static DSL gate or repair}
+\EndProcedure
+\end{algorithmic}
+\end{algorithm}
 ```
 
 The task API check is currently in the generator, not a parameter of `validate`.
@@ -201,23 +234,44 @@ input types, and executable API/checker versions. Prompt wording/version does
 not select different checking rules. Every report identifies the checked bundle,
 contract, scope, diagnostics, unresolved obligations, and analysis coverage.
 
-```text
-SHARED_CHECK(bundle, contract, scope, role, analysis_budget):
-    [NEW] attach bundle/contract identity and run under a bounded analysis budget
-    [KEEP] require mode consistency and supported syntax/definition shapes
-    [MOVE] check all source units against the contract's task API set
-    [KEEP] analyze types, value dependencies, condition rules, and helper effects
-    [KEEP] check uncalled definitions and track unresolved obligations
-
-    on a source violation:
-        [NEW] return CheckReport(FAIL, diagnostic)
-    on an analysis failure or exhausted analysis budget:
-        [NEW] return CheckReport(ERROR, reason)
-    if scope is COMPLETE and obligations remain:
-        [KEEP rule; NEW report] return CheckReport(FAIL, unresolved obligations)
-    if scope is LOCAL:
-        [NEW] return CheckReport(PENDING if obligations remain else LOCAL_PASS)
-    [NEW] return CheckReport(PASS)
+```latex
+\begin{algorithm}[H]
+\caption{Planned shared DSL checker}
+\begin{algorithmic}[1]
+\Require Bundle $B$, contract $\mathcal{C}$, scope $s$, role $r$, budget $\beta$
+\Ensure A report tied to $B$, $\mathcal{C}$, and the analyzed scope
+\Function{SharedCheck}{$B,\mathcal{C},s,r,\beta$}
+    \State \Call{SetAnalysisIdentityAndBudget}{$B,\mathcal{C},s,\beta$}
+    \Comment{\textbf{[NEW]}}
+    \State \Call{CheckModeSyntaxAndDefinitions}{$B,\mathcal{C}$}
+    \Comment{\textbf{[KEEP]}}
+    \State \Call{CheckTaskAPIs}{$B,\mathcal{C}$}
+    \Comment{\textbf{[MOVE]}}
+    \State $U \gets \Call{AnalyzeTypesConditionsAndEffects}{B,\mathcal{C},s,r}$
+    \Comment{\textbf{[KEEP]}}
+    \State $U \gets U \cup \Call{CheckUncalledDefinitions}{B,\mathcal{C}}$
+    \Comment{\textbf{[KEEP]}}
+    \If{$s=\mathsf{Complete}$ \textbf{and} $U\neq\emptyset$}
+        \State \Return \Call{Report}{\textsc{Fail}, $U$}
+        \Comment{\textbf{[KEEP rule; NEW report]}}
+    \ElsIf{$s=\mathsf{Local}$ \textbf{and} $U\neq\emptyset$}
+        \State \Return \Call{Report}{\textsc{Pending}, $U$}
+        \Comment{\textbf{[NEW]}}
+    \ElsIf{$s=\mathsf{Local}$}
+        \State \Return \Call{Report}{\textsc{Local\_Pass}}
+        \Comment{\textbf{[NEW]}}
+    \EndIf
+    \State \Return \Call{Report}{\textsc{Pass}}
+    \Comment{\textbf{[NEW]}}
+    \Statex \textit{On a source violation $d$:}
+    \State \hspace{\algorithmicindent}\Return \Call{Report}{\textsc{Fail}, $d$}
+    \Comment{\textbf{[NEW]}}
+    \Statex \textit{On an analysis failure or timeout $e$:}
+    \State \hspace{\algorithmicindent}\Return \Call{Report}{\textsc{Error}, $e$}
+    \Comment{\textbf{[NEW]}}
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
 ```
 
 Only a complete `PASS` can authorize constrained execution. Local checks retain
@@ -228,24 +282,36 @@ query witness availability, and controller convergence remain runtime concerns.
 
 The methods select when to call this one core and how to use its result:
 
-```text
-[KEEP strategy; NEW common interface] METHOD_1:
-    use local reports for recursive generation/repair
-    require a complete PASS before execution
-
-[NEW caller] METHOD_2:
-    check each complete candidate
-    use source diagnostics to revise the whole candidate until PASS or budget end
-    execute only a complete PASS; do not repair from checker-internal errors
-
-[NEW caller] BASELINE_AFTER_ATTEMPT:
-    output = read the designated final output bundle
-    if no policy source exists: record NOT_AVAILABLE
-    else if generation is unfinished or required final artifacts are missing:
-        record INCOMPLETE
-    else:
-        record SHARED_CHECK(output.bundle, recorded_contract, COMPLETE, BODY, budget)
-    report final-output compliance separately from the original physical outcome
+```latex
+\begin{algorithm}[H]
+\caption{Planned callers of the shared checker}
+\begin{algorithmic}[1]
+\Procedure{MethodOne}{instruction}
+    \State Use local reports for recursive generation and repair
+    \Comment{\textbf{[KEEP strategy]}}
+    \State Require a complete \textsc{Pass} before execution
+    \Comment{\textbf{[NEW interface]}}
+\EndProcedure
+\Procedure{MethodTwo}{instruction}
+    \Comment{\textbf{[NEW caller]}}
+    \State Check each complete candidate with \Call{SharedCheck}{\ldots}
+    \State Revise the whole candidate from source diagnostics within budget
+    \State Execute only a complete \textsc{Pass}; stop on checker-internal errors
+\EndProcedure
+\Procedure{BaselineAfterAttempt}{trial}
+    \Comment{\textbf{[NEW caller]}}
+    \State $O \gets \Call{ReadFinalOutput}{trial}$
+    \If{no policy source exists}
+        \State $R \gets \Call{Report}{\textsc{Not\_Available}}$
+    \ElsIf{generation is unfinished or required final artifacts are missing}
+        \State $R \gets \Call{Report}{\textsc{Incomplete}}$
+    \Else
+        \State $R \gets \Call{SharedCheck}{O.bundle,\mathcal{C},\mathsf{Complete},\mathsf{Body},\beta}$
+    \EndIf
+    \State Report $R$ separately from the original physical outcome
+\EndProcedure
+\end{algorithmic}
+\end{algorithm}
 ```
 
 Baseline's input is the final policy, complete helper sources, and their final
@@ -338,24 +404,26 @@ when its source artifacts are available.
 
 High-level pseudocode, not an existing repository API:
 
-```text
-for each scheduled baseline trial with a terminal or interrupted record:
-    outcome = read_original_trial_outcome(trial)
-    output = read_final_output_manifest(trial)
-
-    if no generated policy source is available:
-        compliance = not_available(reason)
-    elif output.was_not_finalized or output.required_sources_are_missing:
-        compliance = incomplete(reason)
-    else:
-        compliance = check_bundle(
-            output.bundle,
-            contract = trial.recorded_contract,
-            scope = "complete",
-        )
-
-    save_compliance_result(trial, compliance, scope="final_output")
-    report(outcome, compliance)  # No rerun or feedback to the LLM.
+```latex
+\begin{algorithm}[H]
+\caption{Planned final-output audit after baseline attempts}
+\begin{algorithmic}[1]
+\ForAll{scheduled baseline trials $t$ with a terminal or interrupted record}
+    \State $E \gets \Call{ReadOriginalOutcome}{t}$
+    \State $O \gets \Call{ReadFinalOutputManifest}{t}$
+    \If{no generated policy source is available}
+        \State $R \gets \Call{Report}{\textsc{Not\_Available}, reason}$
+    \ElsIf{$O$ was not finalized or required final sources are missing}
+        \State $R \gets \Call{Report}{\textsc{Incomplete}, reason}$
+    \Else
+        \State $R \gets \Call{SharedCheck}{O.bundle,\mathcal{C}_t,\mathsf{Complete},\mathsf{Body},\beta}$
+    \EndIf
+    \State \Call{SaveCompliance}{$t,R,\mathsf{FinalOutput}$}
+    \State \Call{ReportTrial}{$E,R$}
+    \Comment{No rerun or LLM feedback}
+\EndFor
+\end{algorithmic}
+\end{algorithm}
 ```
 
 Give the audit a bounded analysis budget and record its time separately from
