@@ -310,3 +310,21 @@ exactly; Pick converged in 14 steps and Move in 5. Each run returned `goal_faile
 because the short diagnostic does not complete Stack. No live model requests
 were made. Artifacts and the compact parity summary are under
 `runs/cap-revision-1/20261016-213331/`; see [Revision 1](docs/revision_1.md).
+
+A post-Revision-1 DeepSeek batch on 2026-10-18 used
+`deepseek/deepseek-v4.1-flash`, `dsl_only`, five independent policy trials per
+method, and the same saved three-block Stack start. Both methods had **0/5
+physical successes**. Baseline outcomes were three Move-arity failures, one
+helper response truncated at the output-token limit, and one no-witness query
+failure. Four baseline trials completed a Pick before failing. All five method-1
+trials exhausted five local attempts (four repairs each) on Move arity or invalid
+object-reference types, with no physical actions. Baseline used 14 model calls
+and 14,937 reported tokens; method 1 used 25 calls and 21,882 tokens.
+Settings were temperature 0, reasoning disabled, 4096 output tokens, a 180-second
+trial deadline, and 12 model calls maximum per trial. Initial states and
+nonmethod configuration matched; the initial prompt texts differed only by one
+trailing newline retained by the upstream baseline. All ten videos were verified
+against recorded frame/state counts. This is one fixed scene and does not
+evaluate the coordinate-predicate mode or establish benchmark-wide performance.
+The report, exact configuration, prompts/source checkpoints, recordings, videos,
+and audit are under `runs/cap-stack-deepseek-revision1/20261018-172554/`.
