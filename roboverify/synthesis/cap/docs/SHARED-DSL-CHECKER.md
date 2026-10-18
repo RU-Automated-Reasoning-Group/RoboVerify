@@ -1,9 +1,10 @@
 # Shared DSL checker architecture
 
-**Status: architecture proposal.** The current reusable syntax/type/effect
-engine exists in [validation.py](../validation.py) and is used by Method 1.
-The unified contract-aware report interface, baseline post-rollout audit, and
-Method 2 integration described here are planned, not implemented.
+**Status: implemented (2026-10-18).** [checker.py](../checker.py) exposes the
+bounded contract-aware report interface over [validation.py](../validation.py).
+Method 1 and Method 2 share it; [audit.py](../audit.py) checks only the baseline's
+final output after the attempt. [batch.py](../batch.py) owns isolated trial
+processes and can recover post-hoc analysis after worker failures.
 
 This document owns the shared architecture and baseline audit details for
 [Revision 2 section 3](revision_2.md#3-check-baseline-dsl-compliance-after-rollout)
@@ -22,9 +23,9 @@ Sharing a library does not add a pre-execution DSL gate to Google's baseline.
 
 | Method | When the shared checker is called | Analysis input/scope | Use of diagnostics | Execution decision |
 | --- | --- | --- | --- | --- |
-| Google baseline | After the rollout attempt, including failed/interrupted attempts; planned in Revision 2 section 3. | The final output program: policy source, complete helper sources, and their final binding relationships. Incomplete generation is reported separately. | Audit/report only; no LLM feedback or rerun. | Original Google path; post-hoc results do not undo execution or overwrite its physical outcome. |
+| Google baseline | After the rollout attempt, including failed/interrupted attempts; implemented in Revision 2 section 3. | The final output program: policy source, complete helper sources, and their final binding relationships. Incomplete generation is reported separately. | Audit/report only; no LLM feedback or rerun. | Original Google path; post-hoc results do not undo execution or overwrite its physical outcome. |
 | Method 1 | During recursive generation and local repair, then complete validation before execution; implemented. | Current policy/helper plus known dependencies and unresolved obligations; finally the complete bundle. | Repair the current unit, with parent-level checking/refinement as implemented. | Only a complete accepted bundle may execute; a local pass is insufficient. |
-| Method 2 | After initial whole-candidate generation and after every whole-candidate revision; planned. | Complete candidate containing policy and all helper definitions. | Revise the whole candidate using interface-only feedback. | Only a complete accepted bundle may execute. |
+| Method 2 | After initial whole-candidate generation and after every whole-candidate revision; implemented. | Complete candidate containing policy and all helper definitions. | Revise the whole candidate using interface-only feedback. | Only a complete accepted bundle may execute. |
 
 Share syntax restrictions, protected bindings, primitive/predicate/getter
 signatures, object/position/scalar types, condition-mode rules, value-flow and
@@ -59,7 +60,7 @@ flowchart TD
 The baseline audit has no edge back to baseline generation or execution.
 Model calls, repairs, simulator steps, and execution decisions stay outside the
 checker. Existing dynamic adapter checks remain active on all execution paths.
-The diagram's Method 2 and post-rollout audit callers are planned components.
+The diagram's Method 2 and post-rollout audit callers are implemented.
 
 ## 2. Shared contract and analysis scope
 
@@ -98,7 +99,7 @@ substitute an earlier complete or partial candidate and call it the final output
 
 ## 3. Checker interface and result semantics
 
-A proposed checker boundary is:
+The high-level checker boundary is:
 
 ```python
 report = check_bundle(bundle, contract, scope, role, input_types)
@@ -137,7 +138,8 @@ operations represent high-level responsibilities, not callable repository APIs
 or a complete implementation. Error handling and reports are schematic; AST
 traversal and type-propagation details are intentionally omitted.
 
-**Status: implemented.** The abstraction below describes
+**Historical comparison: before the shared-interface revision.** The abstraction
+below describes the original engine in
 [validation.py](../validation.py), its use by the
 [Method-1 generator](../cap_method_1/generation.py), and the
 [checked runtime](../runtime.py). It omits AST traversal, type-environment
@@ -294,15 +296,16 @@ def google_baseline(instruction):
     return original_generate_bind_execute(instruction)  # No static DSL gate.
 ```
 
-The task API check is currently in the generator, not a parameter of `validate`.
+Before this revision, the task API check lived in the generator, not in `validate`.
 Baseline adapter/runtime argument checks remain active despite the absence of
-this static checker. Method 2 and the baseline post-rollout checker are not yet
-implemented. The current checker already supports both condition modes and
+a pre-execution static gate. Method 2 and baseline post-rollout checking are now
+implemented through the shared entry point. The original engine already supported
+both condition modes and
 checks dependencies beyond the lines reached by a particular rollout.
 
-### 3.2 Planned revised checker: high-level abstraction
+### 3.2 Revised shared checker: high-level abstraction
 
-**Status: planned, not implemented.** `[KEEP]` retains existing checking rules;
+**Status: implemented.** `[KEEP]` retains existing checking rules;
 `[MOVE]` relocates a check into the common entry point; `[NEW]` introduces a
 shared interface or caller. These labels describe architectural changes, not
 new permitted robot actions or a broader Python language. The surrounding
@@ -389,7 +392,7 @@ Baseline receives no pre-execution gate, LLM feedback, or automatic rerun.
 
 ### 3.3 Summary of changes
 
-| Area | Current implementation | Planned revision | Change |
+| Area | Before shared-interface revision | Implemented revision | Change |
 | --- | --- | --- | --- |
 | DSL syntax, types, condition purity, and dependency rules | Implemented in the reusable validation engine; both condition modes supported. | Reuse the same accepted language and rules across methods. | KEEP |
 | Task API availability | Checked by Method 1's generator; the core `validate` entry has no task API parameter. | Include the allowed task API set in the shared contract and check it in the core. | MOVE |
@@ -400,7 +403,7 @@ Baseline receives no pre-execution gate, LLM feedback, or automatic rerun.
 | Proof and runtime scope | Static compliance does not prove physical success, termination, or convergence. | Retain that boundary; do not add formal-verification or rollout feedback to repairs. | KEEP |
 
 These are documentation abstractions of current behavior and the agreed plan;
-this section does not implement the revised checker.
+the revised interface is implemented in [checker.py](../checker.py).
 
 ## 4. Baseline final output bundle
 
@@ -467,7 +470,7 @@ would miss exactly the failed trials this requirement covers. Parent-side
 assessment also permits inspection after a worker deadline, crash, or interruption
 when its source artifacts are available.
 
-High-level pseudocode, not an existing repository API:
+High-level pseudocode; see `audit_run` for the concrete artifact-processing API:
 
 ```python
 for trial in scheduled_terminal_or_interrupted_trials:
@@ -537,13 +540,13 @@ execution; attach new audit artifacts rather than rewriting immutable history.
 [validation.py](../validation.py) is already independent of Method 1's model
 client, logger, and interpreter, making it the natural shared core. It currently
 returns unresolved calls for partial validation or raises `ConstraintFailure`;
-it is not yet the structured multi-method audit interface described here.
+[checker.py](../checker.py) now provides the structured report interface around it.
 
 | Existing component | Reuse or required change |
 | --- | --- |
 | `parse`, `definitions`, `Checker`, `validate` in validation.py | Reuse syntax, type/value-flow, dependency, and effect analysis. Method 2 can use complete validation without a second rules implementation. Preserve current diagnostic rule IDs where semantics stay the same. |
 | `validate_helper`, partial validation, and `missing_calls` | Retain Method 1's local-generation support. Unknown local parameter types and unresolved helpers are obligations, not an executable whole-program pass. Method 2 need not invoke recursive discovery to use the complete checker. |
-| Task API checks in `cap_method_1/generation.py` | Move/expose the `API_UNAVAILABLE` check in the shared entry point, parameterized by the task's allowed API names. Currently `validate` itself has no `api_names` parameter, so calling it alone does not reproduce every generator-level check. |
+| Task API checks in `cap_method_1/generation.py` | Move/expose the `API_UNAVAILABLE` check in the shared entry point, parameterized by the task's allowed API names. `validate` and `validate_helper` now accept `api_names`; the shared contract supplies the task vocabulary. |
 | `Bundle`, `Diagnostic`, and version identifiers in contracts.py | Reuse source/type/diagnostic data. Add an analysis-result wrapper and contract identity if needed; preserve source unit and line/column locations, with checkpoint/binding locations attached by wrappers. |
 | `Runtime.execute` in runtime.py | Reuse for Methods 1 and 2; keep its complete pre-execution validation and runtime checks. It is not a baseline audit mechanism and must not replace Google's execution path. |
 | Baseline recorded sources and checkpoints | Read/export an explicit final-output bundle and its binding relationships. Record incomplete generation or missing final artifacts; do not reconstruct the complete execution history. |
@@ -562,6 +565,32 @@ provenance is reusable; add an explicit final-output manifest if current
 checkpoints do not unambiguously identify it. The reader may not repair, rerun,
 or alter the generated program. No namespace event-history reconstruction is
 required for this metric.
+
+### Implemented source/report mapping
+
+`check_bundle(bundle, contract, scope=..., role=..., focus=..., timeout=...)`
+returns a `CheckReport`; `require_check` adapts it to Method 1/runtime exceptions.
+`require_helper_check` preserves focused generic helper checking. Analysis has a
+10-second default cap and preserves any earlier enclosing trial deadline.
+Internal errors never become LLM repair feedback. `shared-contract-v2` identifies
+the revised checker; observation semantics remain `positions-v1`.
+
+The baseline compatibility layer exports an immutable final-output snapshot and
+an atomic `final_output.json` pointer without changing the pinned Google core.
+It captures final function source/binding relationships, not chronological
+history. The auditor verifies source hashes and alpha-renames captured function
+bindings for static analysis, retaining original sources and the normalization
+map. This normalized source is never executed; diagnostic locations are labeled
+as belonging to `normalized_source_and_helpers`. Unrepresentable bindings are
+`unsupported`; missing/incomplete output cannot pass.
+
+`dsl_compliance.json` stores the separate final-output assessment. The runner
+checks after cleanup; the parent reuses that artifact or performs the check after
+a failed worker. The recorded executable contract and checker source hash must
+match the auditing implementation; an incompatible old artifact produces an
+explicit error rather than silent reinterpretation. No model requests or
+simulator steps occur in audit. `typed_v3` adds Method-2 templates while keeping
+`legacy_v1` and `typed_v2` immutable and preserving typed_v2 API wording.
 
 ## 8. Validation requirements
 

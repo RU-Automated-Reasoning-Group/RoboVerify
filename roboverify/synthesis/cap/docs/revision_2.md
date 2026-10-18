@@ -1,6 +1,6 @@
 # Revision 2 discussion
 
-Status: section 1 implemented. Other revision items retain their stated status.
+Status: sections 1–4 implemented (2026-10-18); live experiment results are reported separately.
 The requested scope is API/prompt clarity and versioning
 (item 1), parallel execution of future experiment batches (item 2), post-rollout
 DSL compliance checking for the baseline (item 3), and Method 2 with a shared
@@ -285,7 +285,7 @@ allowed condition language, checker behavior, controller, or terminal evaluator.
 Both prompt versions must describe the same runtime contract for a selected
 condition mode. The baseline still uses prompt-only constraints and the pinned
 upstream algorithm; adding version selection must not add a DSL checker or
-repair loop to that method's execution path. The separately planned post-rollout
+repair loop to that method's execution path. The separate post-rollout
 assessment in item 3 does not gate or repair execution.
 
 Resolve a version once per trial, reject unknown versions, and propagate it to
@@ -451,15 +451,15 @@ requested batch-execution change; other revision topics remain for discussion.
 
 ## 2. Run future experiment batches in parallel
 
-Requested requirement: future multi-trial experiments should run independent
-trials concurrently instead of executing the whole batch serially. This is a
-planned harness change, not a change to policy generation algorithms. The active
-coordinate-predicate comparison keeps its existing schedule: model batches run
-concurrently, while trials within each model batch remain sequential.
+**Status: implemented.** [run_cap_batch](../../entry/run_cap_batch.py) runs
+independent trials in isolated subprocesses with bounded concurrency (default
+2 workers, configurable with `--max-workers`). The parent owns the immutable
+manifest, scheduling state, atomic summary/report, and per-trial outcome accounting.
+Trials retain the existing generation/execution algorithms and resource limits.
 
 ### 2.1 Scheduling and configuration
 
-Provide a batch-level concurrency option, for example `--max-workers N`, with a
+The batch CLI provides `--max-workers N`, with a
 bounded parallel default and `N=1` available for a serial reference or diagnosis.
 The exact default worker count should be resolved and recorded before a batch
 starts, with regard to simulator/rendering resources and provider request limits.
@@ -498,9 +498,9 @@ Implementation update: the shared runner now has a 600-second wall-clock safety
 cap (Unstack remains 60 seconds), an explicit policy simulation-step budget,
 first-exhausted-budget reporting, exclusive phase timings, and separate queue
 waiting metadata. The requested Batch C rerun uses a two-process artifact-backed
-scheduler with a recorded randomized dispatch order. A general configurable
-parallel batch CLI remains planned; the existing baseline algorithm and prompts
-are preserved. See [resource budgets and timing](../README.md#resource-budgets-and-timing).
+scheduler with a recorded randomized dispatch order. The general parallel batch
+CLI is now implemented; the pinned Google algorithm and legacy prompts remain
+unchanged. See [resource budgets and timing](../README.md#resource-budgets-and-timing).
 
 
 Keep the existing per-trial generation/execution budgets unchanged. Start a
@@ -536,17 +536,25 @@ associations remain correct. Check that logs and checkpoints do not cross trial
 boundaries. Include a deliberately failing worker and an interrupted batch to
 verify accounting, independent progress, and resume behavior.
 
-After these checks, use the parallel harness for subsequent requested batches
-and record its configuration in their reports. This plan does not itself implement a general batch CLI. The timing/budget
-support and the isolated-process Batch C rerun described above are implemented;
-future reusable scheduling work remains separate. The five-trial 600-second Batch C baseline rerun
-completed at 3/5; the [budget/timing record](../README.md#resource-budgets-and-timing)
-and linked run artifacts distinguish this pilot from the general scheduler plan.
+The scheduler persists an immutable trial manifest and snapshot hash, records
+requested/peak worker counts and queue/dispatch/start/end times, and isolates
+all trial directories and latest links. `--resume` dispatches only never-started
+jobs; completed and interrupted jobs are not automatically rerun. A batch lock
+prevents concurrent parent schedulers. Failed workers retain their denominator
+entry and partial artifacts, and the parent can run the baseline audit even if
+the worker did not finish normally.
 
+The 87-test CaP suite passes, including serial/parallel fixture parity, deliberate
+worker failure, and resume tests. A real-MuJoCo scripted preflight used all six
+method/mode combinations and three workers: exact start states and all 19 actions
+matched, all six videos matched 20 recorded states, and all final DSL checks
+passed. Its `goal_failed` outcomes are expected for a partial Pick/Move script,
+not Stack solutions. No paid model generation was used in this preflight;
+artifacts are in `runs/cap-revision2-preflight/20261018-214704/`.
 
 ## 3. Check baseline DSL compliance after rollout
 
-**Status: planned, not implemented.** After each baseline attempt, check the
+**Status: implemented.** After each baseline attempt, check the
 framework's **final output program**: the final policy, complete helper sources,
 and their final binding relationships. Use the recorded task contract and
 `condition_mode`. This metric is final-output DSL compliance, not compliance of
@@ -580,11 +588,12 @@ handling, and unchanged baseline model calls/actions. See the architecture
 
 ## 4. Method 2: whole-candidate refinement with a shared DSL checker
 
-**Status: proposed, not implemented.** This section relocates and develops the
+**Status: implemented.** This section relocates and develops the
 Method 2 implementation plan previously in
 [CAP-INTEGRATION section 2.7](CAP-INTEGRATION.md#27-plan-2-use-llm-to-refine-until-all-code-used-dsl).
 Section 2.7 now points here so the implementation plan has one maintained home.
-This documentation change does not implement Method 2 or the baseline audit.
+Implementation: [cap_method_2](../cap_method_2/method.py), [shared checker](../checker.py),
+and [post-hoc final-output audit](../audit.py).
 
 ### 4.1 Generation and refinement unit
 
@@ -643,7 +652,7 @@ changed dependency from checking. The initial candidate counts as attempt one.
 
 Only a complete accepted candidate runs, using the same checked interpreter,
 trusted adapter, physical primitives, and terminal evaluation as Method 1.
-Propose `cap_method_2` as the method identifier; it is not currently a CLI choice.
+`cap_method_2` is available in the single-trial and batch CLIs.
 Reuse the saved initial-state protocol, budgets, observations, recording, and
 reporting. Runtime validation rechecks the exact bundle about to execute under
 the same contract. A failed rollout is reported, with no automatic
@@ -668,8 +677,9 @@ Use versioned Method-2 policy and whole-candidate-repair templates. Its repair
 output must include the executable policy entry and all required definitions;
 Method 1's helper-only output instruction is inappropriate here. Preserve the
 already published `legacy_v1` and `typed_v2` packages from section 1: adding
-Method-2 templates should use a new immutable package version/manifest, rather
-than silently editing either package. Keep the shared API text matched across
+Method-2 templates uses the new immutable `typed_v3` package, rather
+than editing either package. `typed_v3` preserves all shared API text and existing
+Method-1/baseline templates from `typed_v2`, and adds Method-2 templates. Keep the shared API text matched across
 methods for any future comparison; record any new template/package identities.
 
 Record each candidate, parent checkpoint, complete diagnostics/unresolved calls,
@@ -717,6 +727,13 @@ Method 2. The architecture document's
 describe extracting task API checks from the generator, adding a structured
 analysis report, and reading an explicit final-output bundle for the baseline.
 No second set of DSL acceptance rules is needed for Method 2.
+
+The public source-only interface is `checker.check_bundle`; `DSLContract`
+records task APIs, mode, input types and executable versions. Check reports
+distinguish complete pass, local pass/pending, source failure, and analysis error.
+Method 1 and the checked runtime use the same core; task API availability now
+belongs to that core. Baseline audit artifacts remain separate from its original
+physical result and pre-execution `validation=not_run` checkpoints.
 
 ### 4.5 Implementation sequence and discussion decisions
 

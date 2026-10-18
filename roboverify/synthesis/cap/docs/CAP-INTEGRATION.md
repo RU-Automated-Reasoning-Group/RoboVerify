@@ -7,8 +7,9 @@ environment interfaces involved.
 **Implementation update (2026-10-15):** `cap_google_baseline` and `cap_method_1`
 now have code, shared text-model transport, logging/checkpoints, and a tower-task
 adapter/runner. See [README.md](../README.md) for commands, the exact Python subset,
-and validation limits. Plan 2, the optional Program compiler prototype, Goal
-adapters, and optional runtime query-LMP configuration remain unimplemented.
+and validation limits. Method 2 and the shared checker/parallel batch harness were implemented in
+Revision 2 (2026-10-18). The optional Program compiler prototype, Goal adapters,
+and optional runtime query-LMP configuration remain unimplemented.
 The shared DSL is described in [DSL.md](DSL.md). The high-level design below also
 describes those extension points; it is not a claim of six-task physical success.
 
@@ -675,7 +676,7 @@ evaluation: passing these checks establishes interface compliance only.
 
 ### 2.7 Plan 2: Use LLM to refine until all code used DSL
 
-**Status: proposed, not implemented.** The Method 2 implementation plan has moved
+**Status: implemented (Revision 2).** The Method 2 design and implementation details have moved
 to [Revision 2 section 4](revision_2.md#4-method-2-whole-candidate-refinement-with-a-shared-dsl-checker).
 That section retains whole-candidate generation/checking/refinement and develops
 the shared-checker boundary for the Google baseline audit, Method 1, and Method 2.

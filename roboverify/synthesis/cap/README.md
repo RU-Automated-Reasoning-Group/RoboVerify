@@ -1,17 +1,20 @@
 # CaP methods on RoboVerify
 
-Two implementations share text model transport, DSL environment bindings,
+Three implementations share text model transport, DSL environment bindings,
 immutable code checkpoints, recording, and independent trial evaluation:
 
 - `cap_google_baseline`: the pinned Google `LMP`/`LMPFGen` definitions, with
-  environment/model compatibility and observational logging hooks. No new DSL
-  validator or compliance-refinement loop runs on this path.
+  environment/model compatibility and observational logging hooks. No pre-execution DSL
+  gate or compliance-refinement loop runs on this path; final output is checked
+  independently after the attempt.
 - `cap_method_1`: deterministic subset validation, recursive helper generation,
   bounded local repair, and an explicit checked interpreter.
+- `cap_method_2`: complete policy/helper generation and whole-candidate static
+  repair, using the same checker/interpreter as Method 1.
 
 See [CAP-INTEGRATION.md](docs/CAP-INTEGRATION.md) for the design and
 [vendor provenance](vendor/google_cap/README.md) for the baseline's exact source
-and compatibility differences. Plan 2 is documented but not implemented.
+and compatibility differences. Method 2 and the final-output baseline audit are implemented.
 
 Observation boundaries and flowcharts with labeled data edges:
 
@@ -24,7 +27,7 @@ methods. Baseline modes are prompt-only; method-1 modes are checked:
 - [Method 1 configuration](docs/Method1_Configuration.md).
 - [Revision 1 implementation and validation](docs/revision_1.md).
 - [Revision 2 plan: prompts, versions, and parallel batches](docs/revision_2.md).
-- [Shared DSL checker architecture](docs/SHARED-DSL-CHECKER.md) (planned integration).
+- [Shared DSL checker architecture](docs/SHARED-DSL-CHECKER.md).
 
 ## Implemented scope
 
@@ -94,9 +97,11 @@ version are retained in config/checkpoints and the bounded run report.
 
 ## Prompt versions
 
-Both methods accept `--prompt-version legacy_v1|typed_v2`, independently of
+The runner accepts `--prompt-version legacy_v1|typed_v2|typed_v3`, independently of
 `--condition-mode`. The default is **legacy_v1**, preserving the previous
 policy/helper/repair text and method-specific whitespace/context assembly.
+Method 2 requires `typed_v3`, which retains typed_v2 shared API and existing
+method templates and adds whole-candidate generation/repair templates.
 **typed_v2** adds typed parameter/return descriptions, precise primitive and
 predicate semantics, configured Higher tolerance, and interface examples.
 Policy requests require an execution entry; helper requests require only the
@@ -109,7 +114,7 @@ For example, an offline generation diagnostic using the existing scripted inputs
 ```
 
 The versioned resources are [legacy_v1.json](prompts/legacy_v1.json) and
-[typed_v2.json](prompts/typed_v2.json). Add a new version for future prompt changes;
+[typed_v2.json](prompts/typed_v2.json), and [typed_v3.json](prompts/typed_v3.json). Add a new version for future prompt changes;
 keep existing versions fixed for reproducible comparisons. Package bytes are
 frozen on first load in each process. The existing contracts.py constants and
 legacy template files are preserved and checked against legacy_v1.
@@ -128,6 +133,56 @@ both condition modes retain their behavior. Offline tests check old prompt bytes
 role-specific repairs, retries, and fixture action parity across versions.
 No live performance improvement is established. See
 [Revision 2 section 1](docs/revision_2.md#1-make-api-types-and-semantics-explicit-in-the-prompt).
+
+## Shared checker, final-output audit, and Method 2
+
+`checker.check_bundle` returns scoped, source-located compliance reports under an
+explicit `DSLContract`. Method 1 retains local recursive repair; Method 2 checks
+and revises the complete source module, without per-helper generation requests.
+Both require a complete pass before execution. Controller and observation APIs
+are unchanged, and both condition modes remain available.
+
+Baseline executes through Google's unchanged core. The compatibility layer
+records `final_output.json` and immutable output snapshots. After the attempt,
+`audit.audit_run` writes `dsl_compliance.json` independently of physical success;
+the bounded report reads it. Final source/binding normalization is analysis-only.
+Incomplete generation is `incomplete`, absent source is `not_available`, and
+unrepresentable final bindings are `unsupported`; none counts as a pass.
+`--no-baseline-audit` disables postprocessing for diagnostics, without changing
+model calls or actions. `--audit-timeout` defaults to 10 seconds outside the
+active trial wall cap. The original result/checkpoint files are not rewritten.
+
+## Parallel batches
+
+Provide a JSON file with `run_config` and `model_config` fields accepted by
+[config.py](config.py); credentials remain in the environment. Set
+`run_config.prompt_version` to `typed_v3` to compare all three methods. For example:
+
+```bash
+.venv/bin/python -m synthesis.entry.run_cap_batch --config experiment.json --initial-state saved/initial_state.npz --trials 5 --max-workers 3 --condition-modes dsl_only coordinate_predicates --schedule-seed 20261018 --output-dir runs/cap-comparison/my-batch
+.venv/bin/python -m synthesis.entry.run_cap_batch --output-dir runs/cap-comparison/my-batch --resume
+```
+
+The first command schedules 30 trials (three methods, two modes, five trials).
+The parent creates an immutable manifest/hash and copies the initial snapshot,
+then dispatches balanced randomized trial groups to isolated subprocesses.
+Each job owns its environment, recorder, logs, and latest link. The parent owns
+atomic `schedule.json`, `summary.json`, `report.md`, and worker-count metadata.
+Queue time is separate from active trial time. Reports include per-trial tokens,
+physical outcome, DSL status, calls, timings, and failure reasons.
+
+Resume runs only pending jobs; completed, failed, and interrupted jobs are never
+silently replaced. An existing live worker or another active scheduler prevents
+duplicate dispatch. Worker failures remain in the report denominator. The parent
+can audit saved baseline output after a worker crash without rerunning generation.
+Scripted responses can be supplied with `--responses-file` for offline diagnostics.
+
+Revision 2 validation: 87 CaP tests passed. A six-combination real-MuJoCo scripted
+preflight with three workers preserved exact initial states and all 19 controller
+actions, and all six videos matched the recorded 20 states. Every DSL check
+passed; `goal_failed` is expected for the partial script. The preflight artifacts
+are under `runs/cap-revision2-preflight/20261018-214704/`; live experiment results
+are reported separately.
 
 ## Model providers and observation modality
 
@@ -225,9 +280,9 @@ primitive nonconvergence and ordinary runtime/model failures.
 The shared runner accepts `queue_wait_seconds` and `batch_context` from a batch
 scheduler. Queue delay is recorded separately and does not consume the active
 trial deadline. Independent processes own their simulator and signal handlers;
-parallel output directories must remain trial-specific. No generic parallel
-batch CLI is added here; the Batch C rerun retains its reproducible scheduler
-under the run artifacts.
+parallel output directories remain trial-specific. The reusable batch CLI is
+`synthesis.entry.run_cap_batch`; the earlier Batch C scheduler remains preserved
+under its run artifacts.
 
 `timings.json`, `result.json`, and the bounded report expose exclusive phase
 seconds: `model_policy`, `model_helper`, `model_repair`, `transport_backoff`,
