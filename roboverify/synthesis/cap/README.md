@@ -23,6 +23,7 @@ methods. Baseline modes are prompt-only; method-1 modes are checked:
 
 - [Method 1 configuration](docs/Method1_Configuration.md).
 - [Revision 1 implementation and validation](docs/revision_1.md).
+- [Revision 2 discussion: API prompt clarity](docs/revision_2.md).
 
 ## Implemented scope
 
