@@ -172,6 +172,45 @@ Use `--api-key-env VARIABLE_NAME` when a local server requires authentication.
 Selecting a model without the required API parameter support is a configuration
 failure, not grounds to silently alter the experiment.
 
+## Resource budgets and timing
+
+CaP now defaults to a **600-second wall-clock safety cap** (`--timeout`).
+Unstack retains its 60-second end-to-end cap. Trial effort is also bounded by
+model calls (`--max-model-calls`), provider-reported cumulative tokens
+(`--max-tokens`), helper/call depth (`--max-depth`), execution/query ticks
+(`--max-steps`), and policy simulation-step calls (`--max-sim-steps`, default
+10000). Existing per-primitive controller limits remain unchanged.
+These resource limits can stop a trial well before its wall deadline. Reports
+record the first exhausted budget in `budget_exhausted_by`, separately from
+primitive nonconvergence and ordinary runtime/model failures.
+
+The shared runner accepts `queue_wait_seconds` and `batch_context` from a batch
+scheduler. Queue delay is recorded separately and does not consume the active
+trial deadline. Independent processes own their simulator and signal handlers;
+parallel output directories must remain trial-specific. No generic parallel
+batch CLI is added here; the Batch C rerun retains its reproducible scheduler
+under the run artifacts.
+
+`timings.json`, `result.json`, and the bounded report expose exclusive phase
+seconds: `model_policy`, `model_helper`, `model_repair`, `transport_backoff`,
+`validation`, `generation_control`, `execution`, `simulation`, `recording`,
+`rendering`, `video_finalize`, `logging_io`, `setup`, `evaluation`, `cleanup`,
+and residual `overhead`, where applicable. Nested phases are not double counted;
+for example, simulation and logging are removed from the execution subtotal.
+Model-request time includes network/provider waiting and response decoding; it
+is not pure model inference time. Failed attempts and retry backoff are timed.
+Validation and repair-request time remain distinct. Simulation means policy
+`env.step` calls; fresh-scene settling belongs to setup.
+
+`active_wall_seconds` covers measured work through environment cleanup, before
+final result/timing serialization. Cleanup can extend beyond an expired active
+trial deadline and is reported rather than treated as successful execution.
+Saved-snapshot restoration and observation semantics are unchanged. The pinned
+Google core and all model-facing prompt text remain unchanged by instrumentation.
+The 65-test CaP suite covers independent budget exhaustion, failed requests,
+nested exclusive timing, queue accounting, simulation-step limits, and Unstack's
+retained cap.
+
 ## Offline generation diagnostic
 
 This command makes no network requests and requires no simulator. It tests code
@@ -410,3 +449,31 @@ conditions: they may only parameterize actions. Revision 2 remained documentatio
 only during these runs, and all checked executable/prompt sources matched the
 prior B/C code. Its proposed trial-level parallel scheduler was not applied to
 this batch.
+
+A Batch C DSL-only Google-baseline rerun on 2026-10-18 used the **600-second
+wall-clock safety cap**, unchanged GPT-6.1-sol/reasoning/16k settings and the
+original fixed three-block start. Five fresh trials ran in two isolated processes
+with dispatch order `[4, 5, 1, 3, 2]` from a recorded seed. The original 12-call,
+50,000-reported-token, depth-12, and 10,000-execution-tick limits were retained;
+the explicit 10,000-policy-simulation-step cap was nonbinding.
+
+The result was **3/5 successful**, with two Move-convergence failures and no
+resource or wall-clock exhaustion. The five trials used 28 model calls and
+42,272 reported tokens. Successful active durations were 138.94, 187.46, and
+134.00 seconds. The 187.46-second trial spent 185.15 seconds in model requests
+and 0.18 seconds in simulation; it also waited 217.83 seconds in the batch queue,
+which was recorded separately and excluded from its trial deadline. On these
+observed traces, successful completion counts by 180/300/600 seconds were
+2/5, 3/5, and 3/5; these thresholds are not independent rerun experiments.
+
+All five saved videos matched trajectory state counts, phase totals matched
+active wall time, token totals matched returned usage, and initial observations
+and first-policy prompts matched the earlier Batch C baseline. The pinned Google
+core and prompt text were unchanged. The code passed 65 CaP tests and a five-job
+scripted parallel-fixture check before live requests. Reports, queue/timing
+records, the reproducible process scheduler, snapshots, and audit are under
+`runs/cap-stack-gpt61sol-budget/20261018-192834-dsl-600s/`.
+Only the Batch C DSL-only baseline result was rerun: the updated table retains
+all other A/B/C and coordinate-mode results at their original settings. Its new
+3/5 cell must be marked 600 seconds (previously 1/5 at 180 seconds); differences
+between fresh samples cannot be attributed entirely to the longer timeout.

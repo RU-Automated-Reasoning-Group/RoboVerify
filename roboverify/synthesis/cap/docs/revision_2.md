@@ -336,6 +336,15 @@ put secret values in the trial manifest or artifacts.
 
 ### 2.3 Budgets, failures, and reproducibility
 
+Implementation update: the shared runner now has a 600-second wall-clock safety
+cap (Unstack remains 60 seconds), an explicit policy simulation-step budget,
+first-exhausted-budget reporting, exclusive phase timings, and separate queue
+waiting metadata. The requested Batch C rerun uses a two-process artifact-backed
+scheduler with a recorded randomized dispatch order. A general configurable
+parallel batch CLI remains planned; the existing baseline algorithm and prompts
+are preserved. See [resource budgets and timing](../README.md#resource-budgets-and-timing).
+
+
 Keep the existing per-trial generation/execution budgets unchanged. Start a
 trial's wall-clock deadline when its worker begins trial setup, not while the job
 is waiting in the batch queue. Report queue delay and active trial time
@@ -370,8 +379,11 @@ boundaries. Include a deliberately failing worker and an interrupted batch to
 verify accounting, independent progress, and resume behavior.
 
 After these checks, use the parallel harness for subsequent requested batches
-and record its configuration in their reports. This document does not implement
-the scheduler or alter the currently running trials.
+and record its configuration in their reports. This plan does not itself implement a general batch CLI. The timing/budget
+support and the isolated-process Batch C rerun described above are implemented;
+future reusable scheduling work remains separate. The five-trial 600-second Batch C baseline rerun
+completed at 3/5; the [budget/timing record](../README.md#resource-budgets-and-timing)
+and linked run artifacts distinguish this pilot from the general scheduler plan.
 
 ## References
 
