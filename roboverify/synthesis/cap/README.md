@@ -329,3 +329,44 @@ against recorded frame/state counts. This is one fixed scene and does not
 evaluate the coordinate-predicate mode or establish benchmark-wide performance.
 The report, exact configuration, prompts/source checkpoints, recordings, videos,
 and audit are under `runs/cap-stack-deepseek-revision1/20261018-172554/`.
+
+A matched reasoning-enabled comparison on 2026-10-18 used **16,384 output tokens
+per request**, `dsl_only`, and five fresh trials per method/model from the same
+three-block Stack snapshot:
+
+| Model | Method | Physical successes | Model calls | Reported tokens |
+| --- | --- | --- | --- | --- |
+| `openai/gpt-6.1-sol` | Google baseline | 1/5 | 30 | 40,567 |
+| `openai/gpt-6.1-sol` | Method 1 | 5/5 | 6 | 8,072 |
+| `deepseek/deepseek-v4.1-flash` | Google baseline | 1/5 | 5 | 63,755 |
+| `deepseek/deepseek-v4.1-flash` | Method 1 | 2/5 | 7 | 82,434 |
+
+GPT baseline failures were three 180-second trial deadlines and one Pick
+nonconvergence; method 1 completed all five with one static repair in total.
+DeepSeek baseline failures were two invalid object-reference errors, one response
+truncated at 16k, and one Move nonconvergence. DeepSeek method 1 had two Move
+nonconvergences and one response truncated at 16k, with two repairs across its
+five trials. Token totals include returned usage only; three GPT baseline
+requests had no returned response at the trial deadline.
+
+Both models used reasoning enabled, temperature 0, a 50-second request timeout,
+one transport retry, a 180-second trial deadline, at most 12 model calls and
+50,000 reported tokens per trial, and up to five local method-1 attempts.
+The two model batches ran concurrently; each batch alternated methods
+sequentially. Initial observation states and nonmodel configuration matched.
+Prompt texts matched apart from the existing trailing-newline difference between
+baseline and method 1. Seventeen saved videos passed frame/state-count checks;
+three deadline-interrupted GPT baseline videos failed to finalize and are marked
+unavailable. All failures remain in the denominator.
+
+The GPT endpoint required reasoning, so its initial reasoning-disabled request
+is retained as a separate setup diagnostic. Earlier 4k-output batches were
+interrupted at the user's request and marked superseded; their partial outcomes
+are excluded here. Revision 2 documentation was drafted during the runs, but
+executable and model-facing prompt sources remained unchanged from `d7bcbb0`.
+This is one fixed scene, not a benchmark-wide estimate or evidence isolating a
+single cause of the method difference. The combined report, detailed trial
+links, audits, source hashes, and recordings are under
+`runs/cap-stack-reasoning-comparison/20261018-180533-16k/`; individual batches are
+under the matching `20261018-180533-reasoning-16k` directories in
+`runs/cap-stack-gpt61sol-revision1/` and `runs/cap-stack-deepseek-revision1/`.
