@@ -14,6 +14,14 @@ them. These are CaP execution extensions, not new symbolic `Term` atoms or WP
 rules. See [configuration](Method1_Configuration.md) and
 [validation evidence](revision_1.md).
 
+**Planned baseline output check:** [Revision 2 section 3](revision_2.md#3-check-baseline-dsl-compliance-after-rollout)
+uses the [shared DSL checker](SHARED-DSL-CHECKER.md) after the attempt to assess
+only the final output program (policy, complete helper sources, and final binding
+relationships). This adds no pre-execution gate or repair to Google's baseline.
+Final-output compliance and physical success are separate results; interrupted
+or incomplete output cannot pass. Historical execution auditing is optional and
+is not part of this metric. This check remains planned, not implemented.
+
 See [CAP-INTEGRATION.md](CAP-INTEGRATION.md) for the original Google CaP and
 proposed RoboVerify pseudocode, highlighted changes, and environment interfaces.
 

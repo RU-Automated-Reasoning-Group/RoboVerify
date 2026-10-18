@@ -546,33 +546,36 @@ and linked run artifacts distinguish this pilot from the general scheduler plan.
 
 ## 3. Check baseline DSL compliance after rollout
 
-**Status: planned, not implemented.** Assess every baseline trial after its
-rollout attempt using the shared DSL checker, under the recorded task contract
-and `condition_mode`. Include failed/interrupted attempts and generation failures.
+**Status: planned, not implemented.** After each baseline attempt, check the
+framework's **final output program**: the final policy, complete helper sources,
+and their final binding relationships. Use the recorded task contract and
+`condition_mode`. This metric is final-output DSL compliance, not compliance of
+the entire generation/execution history.
 
 Keep Google's generation, helper binding, and execution path unchanged. The
-audit is reporting only: no pre-execution gate, diagnostic feedback to the LLM,
-checker-guided repair, or automatic rerun. Existing dynamic adapter checks remain
-active. Preserve the original physical outcome and all scheduled trials.
+check is reporting only: no pre-execution gate, diagnostic feedback to the LLM,
+checker-guided repair, or automatic rerun. Keep physical success and DSL
+compliance separate, and retain every scheduled trial in the report.
 
 The design is specified in [Shared DSL checker architecture](SHARED-DSL-CHECKER.md):
 
-- [Shared rules and interface](SHARED-DSL-CHECKER.md#2-shared-contract-and-analysis-scope)
-  apply the same condition/type/effect contract as the constrained methods.
-- [Source and binding history](SHARED-DSL-CHECKER.md#4-baseline-source-and-binding-history)
-  preserves earlier helper versions and distinguishes definition binding from
-  invocation; checking only the final helper dictionary is insufficient.
+- [Shared rules](SHARED-DSL-CHECKER.md#2-shared-contract-and-analysis-scope) apply
+  the same syntax/type/effect and condition contract as the constrained methods.
+- [Final output bundle](SHARED-DSL-CHECKER.md#4-baseline-final-output-bundle)
+  defines the checked program. Superseded versions outside that bundle do not
+  affect this verdict. Full history reconstruction is optional diagnosis only.
 - [Audit lifecycle](SHARED-DSL-CHECKER.md#5-audit-lifecycle-and-failure-handling)
-  runs from saved artifacts with a separate bounded analysis budget, including
-  when the trial worker fails.
-- [Reporting](SHARED-DSL-CHECKER.md#6-reporting-and-provenance) records compliance,
-  diagnostics, coverage, versions/checkpoints, and audit duration independently
-  of physical success. Missing source or incomplete coverage cannot become a
-  pass. Keep the existing `# of tokens used` column; the audit uses no LLM tokens.
+  uses saved artifacts and a separate bounded analysis budget. A complete final
+  output is checked even if rollout failed; unfinished generation or missing
+  required final sources is `incomplete`, and absent policy source is
+  `not_available`. Neither is a pass; do not substitute an earlier candidate.
+- [Reporting](SHARED-DSL-CHECKER.md#6-reporting-and-provenance) records
+  `compliance_scope=final_output`, output completeness, diagnostics, contract and
+  source identities, and analysis duration. Keep `# of tokens used`; this check
+  makes no model calls.
 
-Acceptance requires complete outcome accounting, correct handling of historical
-bindings, and unchanged baseline model calls/actions when auditing is enabled.
-Detailed cases are in the architecture document's
+Acceptance requires correct final-output selection, explicit incomplete-output
+handling, and unchanged baseline model calls/actions. See the architecture
 [validation requirements](SHARED-DSL-CHECKER.md#8-validation-requirements).
 
 ## 4. Method 2: whole-candidate refinement with a shared DSL checker
@@ -701,7 +704,7 @@ that edge in this configuration.
 ### 4.3 Can all three methods share one underlying checker?
 
 Yes. Use the [shared checker architecture](SHARED-DSL-CHECKER.md) for the contract,
-analysis engine, scope/result semantics, and baseline history reconstruction.
+analysis engine, scope/result semantics, and baseline final-output selection.
 Method 1 checks locally and then completely; Method 2 checks each complete
 candidate; the baseline calls the same core only through its post-rollout audit.
 Generation, repair granularity, and execution decisions remain method-specific.
@@ -712,8 +715,8 @@ Reuse [validation.py](../validation.py) and [Runtime.execute](../runtime.py) for
 Method 2. The architecture document's
 [implementation boundaries](SHARED-DSL-CHECKER.md#7-existing-code-and-implementation-boundaries)
 describe extracting task API checks from the generator, adding a structured
-analysis report, and building a separate baseline history reader. No second
-set of DSL acceptance rules is needed for Method 2.
+analysis report, and reading an explicit final-output bundle for the baseline.
+No second set of DSL acceptance rules is needed for Method 2.
 
 ### 4.5 Implementation sequence and discussion decisions
 
@@ -721,7 +724,7 @@ set of DSL acceptance rules is needed for Method 2.
    including task API availability, without changing Method 1's accepted subset.
    Compare rule IDs/results on existing positive and negative fixtures; keep the
    current interface available while callers migrate.
-2. Implement section 3's artifact-only baseline audit around that core. Confirm
+2. Implement section 3's final-output baseline check around that core. Confirm
    that calls, generated source, physical actions, and original success verdicts
    do not change when auditing is enabled.
 3. Implement the Method-2 generator and whole-candidate repair loop, versioned
@@ -729,7 +732,7 @@ set of DSL acceptance rules is needed for Method 2.
    of rejected candidates and no per-helper repair loop in this method.
 4. Exercise missing helpers, action effects hidden in condition helpers, both
    modes, unavailable task APIs, unused definitions, dependency cycles, and
-   earlier baseline helper versions. With identical complete bundles/contracts,
+   incomplete final outputs. With identical complete bundles/contracts,
    all three callers must obtain the same core compliance verdict. For scripted
    accepted bundles, Methods 1 and 2 must produce identical adapter actions.
 5. Run matched model experiments only as a separately requested batch. Record

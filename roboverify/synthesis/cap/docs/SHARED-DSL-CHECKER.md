@@ -22,7 +22,7 @@ Sharing a library does not add a pre-execution DSL gate to Google's baseline.
 
 | Method | When the shared checker is called | Analysis input/scope | Use of diagnostics | Execution decision |
 | --- | --- | --- | --- | --- |
-| Google baseline | After the rollout attempt, including failed/interrupted attempts; planned in Revision 2 section 3. | Reconstructed source/binding history, including earlier helper versions that were bound/executed; latest candidate if no executable bundle existed. | Audit/report only; no LLM feedback or rerun. | Original Google path; post-hoc results do not undo execution or overwrite its physical outcome. |
+| Google baseline | After the rollout attempt, including failed/interrupted attempts; planned in Revision 2 section 3. | The final output program: policy source, complete helper sources, and their final binding relationships. Incomplete generation is reported separately. | Audit/report only; no LLM feedback or rerun. | Original Google path; post-hoc results do not undo execution or overwrite its physical outcome. |
 | Method 1 | During recursive generation and local repair, then complete validation before execution; implemented. | Current policy/helper plus known dependencies and unresolved obligations; finally the complete bundle. | Repair the current unit, with parent-level checking/refinement as implemented. | Only a complete accepted bundle may execute; a local pass is insufficient. |
 | Method 2 | After initial whole-candidate generation and after every whole-candidate revision; planned. | Complete candidate containing policy and all helper definitions. | Revise the whole candidate using interface-only feedback. | Only a complete accepted bundle may execute. |
 
@@ -49,9 +49,9 @@ flowchart TD
     C -->|"Whole-candidate diagnostics and verdict"| M2
     M1 -->|"Complete accepted bundle"| X["Checked interpreter and shared adapter"]
     M2 -->|"Complete accepted bundle"| X
-    B["Original Google baseline execution"] -->|"Source checkpoints, bindings, calls and outcome"| H["Baseline history reconstruction"]
-    H -->|"Versioned source scopes and coverage"| A["Post-rollout audit caller"]
-    A -->|"Reconstructed analysis bundles"| C
+    B["Original Google baseline execution"] -->|"Final output sources, final bindings and output status"| H["Final output bundle reader"]
+    H -->|"Final bundle or incomplete/unavailable output"| A["Post-rollout audit caller"]
+    A -->|"Final complete bundle and recorded contract"| C
     C -->|"Diagnostics, verdicts and analysis limits"| A
     A -->|"Compliance and coverage alongside original outcome"| R["Trial report"]
 ```
@@ -84,18 +84,17 @@ requires ObjectHandle inputs. Apply the runtime/API contract recorded for the
 trial; do not silently interpret an old artifact under a different condition
 mode or a later incompatible contract.
 
-The analysis input includes the policy, inline/generated helpers, dependency
-versions, and the source checkpoints actually bound or executed. Baseline helper
-binding can execute top-level statements before the nominal policy call. A
-check of only the last policy.py, only the executed trace, or only the last helper
-version is therefore insufficient. Reconstruct the executed bundles and assess
-any earlier bound/executed versions as well. A later compliant definition must
-not hide a violation in code that already ran.
+The baseline analysis input is the final output program, including the policy,
+inline/generated helper sources, and the final binding relationships needed to
+interpret that output. Check all code in this bundle, including unexecuted
+branches and unused definitions. Previously superseded source artifacts are
+outside this metric unless their definitions remain part of the final bundle.
 
-If no executable bundle was reached, inspect the latest available candidate and
-label the scope `candidate_only`. Unresolved dependencies in a complete candidate
-are diagnostics; missing artifacts that prevent reconstruction must be reported
-as an analysis limitation, never a passing result.
+The question is whether the framework's final output complies with the DSL,
+not whether every operation during generation/execution complied. A complete
+final output can be assessed even if its rollout failed. If generation stopped
+before a final program was formed, report incomplete output; do not silently
+substitute an earlier complete or partial candidate and call it the final output.
 
 ## 3. Checker interface and result semantics
 
@@ -113,8 +112,9 @@ gets `fail`; checker failure/budget exhaustion gets `error`. The current checker
 can fail at the first violation; collecting more diagnostics is optional and
 must not be mistaken for changing which programs are accepted.
 
-The baseline audit wrapper adds artifact-level outcomes such as `not_available`
-or `unsupported` when source history/analysis coverage cannot be reconstructed.
+The baseline audit wrapper adds `incomplete` for an unfinished/missing final
+bundle, `not_available` when no policy source exists, and `unsupported` when the
+available final representation cannot be analyzed completely.
 A construct explicitly forbidden by the declared subset is a violation (`fail`),
 not an excuse to mark the candidate compliant. Arbitrary Python outside that
 subset does not gain support merely because Google's executor can run it.
@@ -130,50 +130,50 @@ bundle and contract should produce the same core verdict regardless of which
 method supplied them. A source/version identity and coverage record accompany
 each report; a caller must not reuse a pass after changing the checked bundle.
 
-## 4. Baseline source and binding history
+## 4. Baseline final output bundle
 
-The baseline reconstruction layer must also distinguish definition binding from
-function invocation. During Google's recursive generation, a helper may be
-bound before its child definitions exist; that transient unresolved name alone
-is not proof of a violation in the eventual complete program. Check statements
-that execute during binding against that moment's namespace, and check function
-calls against the bindings actually available when invoked. Preserve earlier
-source versions for syntax/effect assessment. If the artifacts cannot establish
-which dependency version was used, report incomplete coverage instead of
-inventing a complete bundle or granting a pass.
+The agreed scope is **final-output DSL compliance**. Select the final program
+produced by the framework, not merely the last file written and not the union
+of every historical checkpoint. The output includes:
 
-### Example: why the last helper version is insufficient
+- The final policy source, including inline definitions and executable entry.
+- The complete helper sources associated with that output and the final
+  name/dependency bindings required to interpret them.
+- Source hashes, output checkpoint/manifest identity, task/condition mode, and
+  checker/API contract versions used for the assessment.
 
-This is an illustrative binding history, not a claim that a particular saved
-trial followed this exact sequence. Assume `condition_mode=dsl_only`.
+Do not merge mutually exclusive helper versions or discard code from the final
+output to make it pass. A helper source containing extra top-level statements
+must retain those statements for source compliance checking. Final bindings may
+need to preserve a dependency still referenced by a final helper; “final” is a
+coherent program representation, not a blind last-file-per-name concatenation.
+This requires a final-output manifest/reader, not a full chronological execution
+history or replay system. Reading/exporting it must not execute generated code.
 
-| Time | Recorded event | Source or behavior | Audit implication |
-| --- | --- | --- | --- |
-| t1 | Bind `ready` version A | `def ready(b): return get_block_position(b)[2] > 0.1` | Its condition implementation uses a numeric comparison forbidden in this mode. |
-| t2 | Invoke version A as a branch condition | `if ready(b0): ...` | The noncompliant condition was actually used; record A and its source location. |
-| t3 | Rebind the name `ready` to version B | `def ready(b): return Higher(b, b)` | This later definition is compliant under the same mode. |
-| t4 | Finish the attempt | A final helper dictionary contains only B. | Checking only B would miss the earlier violation. |
+The baseline has no DSL-guided whole-policy repair loop. Its final program is
+normally the policy together with the helper definitions completed by recursive
+generation. Preserve that generation/binding behavior; any added output manifest
+is observational. Identify output completeness explicitly, including when a
+trial fails before helper generation finishes. The latest checkpoint alone is
+not proof that a final complete output exists.
 
-A later compliant definition does not erase earlier executed source. Keep both
-versions and their binding/invocation events. For calls inside helpers, recover
-the dependency bindings actually visible to that function, not merely the most
-recent definition with the same name in a global log. Python function globals
-and later namespace changes matter; a timestamp and helper name alone may be
-insufficient to establish what ran. If existing artifacts do not capture enough
-information, report incomplete coverage and plan additional observational logging;
-do not claim reconstruction is already guaranteed by today's checkpoints.
+### Example: final-output compliance versus execution-history compliance
 
-There is a second distinction: binding a function definition normally does not
-execute its body. A parent helper can temporarily refer to a not-yet-generated
-child during recursive generation; that alone is not an unresolved call during
-execution. In contrast, top-level statements in a helper response can run during
-binding. Analyze those statements in their actual binding-time scope.
+Suppose `ready` version A uses a coordinate comparison in `dsl_only`, is called,
+and is later replaced by version B using `Higher`. This is an illustrative
+scenario, not a claim about a particular saved trial.
 
-Recorded source still receives the declared static subset checks, including
-unexecuted branches; execution history identifies the applicable versions and
-scopes rather than restricting compliance analysis to reached statements only.
-Preserve binding-time and invocation-time findings separately so the report
-does not confuse a source violation with evidence that a particular operation ran.
+| Question | Assessment |
+| --- | --- |
+| Does the final output comply with the DSL? | Check the final policy and helper bundle. If B is the final definition, A has no remaining reference in that bundle, and all final code complies, this metric can pass. |
+| Did the trial ever use noncompliant code? | An optional history audit would retain the earlier call to A and report that violation separately. |
+
+The first question defines the required baseline metric. Historical findings
+must not override it or be silently merged into `dsl_compliance`. Preserve
+existing execution logs for diagnosis, but full source/binding history
+reconstruction is optional and outside this implementation requirement. A final
+output pass does not certify that every earlier action was compliant or that the
+saved physical result came from replaying only the final program.
 
 ## 5. Audit lifecycle and failure handling
 
@@ -184,8 +184,10 @@ pre-execution checking and repair.
 
 Assess every scheduled outcome: normal completion, failed physical goal,
 runtime exception, primitive nonconvergence, budget exhaustion, interruption,
-and generation failure. Inspect available source or record why none is
-available. Failed trials remain in the reporting denominator.
+and generation failure. Determine whether a final complete output is available,
+incomplete, or absent.
+A physical failure alone does not make an already formed program incomplete.
+Failed trials remain in the reporting denominator.
 
 Prefer an artifact-based postprocessing stage owned by the parent runner or
 reporting workflow. A checker called only at the bottom of a successful rollout
@@ -198,20 +200,20 @@ High-level pseudocode, not an existing repository API:
 ```text
 for each scheduled baseline trial with a terminal or interrupted record:
     outcome = read_original_trial_outcome(trial)
-    sources = reconstruct_recorded_source_bundles(trial)
+    output = read_final_output_manifest(trial)
 
     if no generated policy source is available:
         compliance = not_available(reason)
+    elif output.was_not_finalized or output.required_sources_are_missing:
+        compliance = incomplete(reason)
     else:
-        compliance = check_recorded_bundles(
-            sources,
-            condition_mode = trial.config.condition_mode,
-            api_contract = trial.recorded_contract,
-            include_transitive_helpers = true,
-            include_all_bound_or_executed_versions = true,
+        compliance = check_bundle(
+            output.bundle,
+            contract = trial.recorded_contract,
+            scope = "complete",
         )
 
-    save_compliance_result(trial, compliance)
+    save_compliance_result(trial, compliance, scope="final_output")
     report(outcome, compliance)  # No rerun or feedback to the LLM.
 ```
 
@@ -226,20 +228,25 @@ paid generation or physical actions.
 
 | Result | Meaning |
 | --- | --- |
-| `pass` | All required source bundles were reconstructed and checked under the recorded mode, with no contract violations. |
-| `fail` | A definite violation was found, with rule IDs and source/checkpoint locations. |
+| `pass` | The complete final output bundle was checked under the recorded contract, with no violations or unresolved obligations. |
+| `fail` | A definite violation was found in the final output, with rule IDs and source/checkpoint locations. |
+| `incomplete` | Generation did not form a final complete output, or required final-output artifacts are missing; record the reason. This is not a pass. |
 | `unsupported` | Analysis cannot decide compliance for some construct or incomplete scope; this is not a pass. Syntax explicitly forbidden by the contract is a failure, not merely unsupported. |
 | `not_available` | No generated policy source is available to inspect. Preserve the reason, such as a failed model request. |
 | `error` | The audit itself failed or exceeded its analysis budget. |
 
-Record analysis coverage and missing artifacts alongside the result. A definite
-violation may establish `fail` even if other source could not be analyzed, but
-`pass` requires complete coverage of the declared scope. Preserve all diagnostics
-and distinguish an executed-bundle audit from candidate-only assessment.
+Record `compliance_scope=final_output`, output completeness, analysis coverage,
+and missing artifacts. A finalized bundle containing a known violation can fail
+even if other analysis is inconclusive, but pass requires complete coverage.
+A partial candidate may retain optional diagnostics labeled `partial_candidate`;
+those do not turn an incomplete final output into a pass or replace its status.
+Unresolved calls in a candidate designated as the final output are checker
+violations; unfinished helper generation is an incomplete-output outcome.
 
 Each trial report should retain the original execution/physical-success result
-and add DSL compliance, configured condition mode, analyzed checkpoint IDs,
-checker/contract version, diagnostics, and audit duration. Keep the existing
+and add final-output DSL compliance, output completeness, configured condition
+mode, final bundle/checkpoint IDs and source hashes, checker/contract version,
+diagnostics, and audit duration. Keep the existing
 `# of tokens used` column: this audit uses no additional LLM tokens.
 
 A physically successful baseline can have `dsl_compliance=fail`; a physically
@@ -269,31 +276,33 @@ it is not yet the structured multi-method audit interface described here.
 | Task API checks in `cap_method_1/generation.py` | Move/expose the `API_UNAVAILABLE` check in the shared entry point, parameterized by the task's allowed API names. Currently `validate` itself has no `api_names` parameter, so calling it alone does not reproduce every generator-level check. |
 | `Bundle`, `Diagnostic`, and version identifiers in contracts.py | Reuse source/type/diagnostic data. Add an analysis-result wrapper and contract identity if needed; preserve source unit and line/column locations, with checkpoint/binding locations attached by wrappers. |
 | `Runtime.execute` in runtime.py | Reuse for Methods 1 and 2; keep its complete pre-execution validation and runtime checks. It is not a baseline audit mechanism and must not replace Google's execution path. |
-| Baseline recorded sources and checkpoints | Build a separate artifact reader that reconstructs binding versions and source coverage. Do not flatten all historical helpers into one last-definition dictionary or combine mutually exclusive versions into a fake program. |
+| Baseline recorded sources and checkpoints | Read/export an explicit final-output bundle and its binding relationships. Record incomplete generation or missing final artifacts; do not reconstruct the complete execution history. |
 | Prompt packages and logging | Reuse configuration, request/source provenance, and immutable checkpoints. Method-specific feedback formatting may differ, but the underlying compliance rules must remain identical. |
 
 Start by exposing task API availability through the shared checker entry point,
 then migrate Method 1 without changing its accepted language. Implement the
-baseline artifact/history reader as a separate layer. Method 2 then reuses
+baseline final-output artifact reader as a separate layer. Method 2 then reuses
 complete validation and the checked runtime, with its whole-candidate repair
 loop remaining in its own generator. Retain current fail-fast diagnostics;
 aggregating additional errors is an optional follow-up.
 
-The reconstruction input must identify source units, immutable source hashes,
-checkpoint IDs, bindings and dependencies, and whether code was merely generated,
-bound, or invoked. Existing source/request provenance is reusable, but does not
-by itself establish full namespace-history coverage. Audit artifacts must retain
-this coverage assessment alongside checker/contract versions and diagnostics.
+The final-output reader identifies source units, hashes, final binding/dependency
+relationships, and output checkpoint/completeness. Existing source/request
+provenance is reusable; add an explicit final-output manifest if current
+checkpoints do not unambiguously identify it. The reader may not repair, rerun,
+or alter the generated program. No namespace event-history reconstruction is
+required for this metric.
 
 ## 8. Validation requirements
 
-- A baseline numeric branch in `dsl_only` still executes on the original path,
-  then receives a post-hoc failure; the same contract-valid numeric branch passes
-  in `coordinate_predicates`.
+- A numeric branch in the final baseline output is assessed after the attempt:
+  it fails in `dsl_only` and passes in `coordinate_predicates` when otherwise
+  contract-valid. The audit does not change whether the original path executes it.
 - Coordinate reads used only for action parameters pass in both modes. Mixed
   DSL/numeric predicates, counters, and nested pure helpers pass in extended mode.
 - API arity/type violations and actions hidden inside condition helpers are
-  detected, including violations in an unexecuted branch or earlier bound helper.
+  detected, including violations in unexecuted branches or helpers retained in
+  the final output.
 - Physically successful, goal-failed, primitive-failed, exception, timeout, and
   interrupted trials all receive audit records. Malformed/partial generated
   source and absent source are handled explicitly.
@@ -303,11 +312,13 @@ this coverage assessment alongside checker/contract versions and diagnostics.
   all three callers; prompt versions do not alter the accepted language.
 - Local checks with unknown inputs or missing dependencies cannot authorize
   execution. An unavailable task API is rejected by every complete-check caller.
-- A noncompliant helper version followed by a compliant replacement retains the
-  earlier finding; a transient unbound child during definition-only binding is
-  distinguished from an unresolved invocation.
-- Missing namespace/dependency history produces an explicit coverage limitation,
-  never a pass or an invented reconstructed program.
+- A superseded noncompliant helper absent from the final bundle does not fail
+  final-output compliance; a noncompliant definition retained in that bundle does.
+- Completed final output is checked even after primitive failure or rollout
+  timeout. Interrupted helper generation yields `incomplete`; absent policy
+  source yields `not_available`. Neither can be reported as a pass.
+- Missing required final sources/bindings never produce a fabricated bundle or
+  a pass. Missing historical execution events alone do not block final checking.
 - Checker exceptions and analysis-budget exhaustion are separate from source
   violations; retrying an audit reuses artifacts without model calls or motion.
 - Accepted scripted bundles produce identical primitive actions through Methods
