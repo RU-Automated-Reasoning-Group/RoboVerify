@@ -570,3 +570,50 @@ Only the Batch C DSL-only baseline result was rerun: the updated table retains
 all other A/B/C and coordinate-mode results at their original settings. Its new
 3/5 cell must be marked 600 seconds (previously 1/5 at 180 seconds); differences
 between fresh samples cannot be attributed entirely to the longer timeout.
+
+## Revision 2 DeepSeek comparison
+
+A Revision 2 comparison on 2026-10-18 used `deepseek/deepseek-v4.1-flash`,
+reasoning enabled, **16,384 output tokens per request**, and `typed_v3` across
+three methods and both condition modes. Five fresh policy requests per group
+produced 30 trials on the same saved three-block Stack scene, with three
+isolated workers and a recorded balanced randomized dispatch order.
+
+| Method | Condition mode | Physical successes | Complete DSL passes | Reported tokens |
+| --- | --- | --- | --- | --- |
+| `cap_google_baseline` | `coordinate_predicates` | 1/5 | 2/5 | 83,672 |
+| `cap_google_baseline` | `dsl_only` | 0/5 | 2/5 | 80,402 |
+| `cap_method_1` | `coordinate_predicates` | 2/5 | 2/5 | 90,779 |
+| `cap_method_1` | `dsl_only` | 1/5 | 3/5 | 79,975 |
+| `cap_method_2` | `coordinate_predicates` | 0/5 | 0/5 | 91,330 |
+| `cap_method_2` | `dsl_only` | 1/5 | 1/5 | 89,576 |
+
+All trials used temperature 0, a 600-second active wall cap, 12-call and
+50,000-reported-token trial budgets, 10,000 execution/query ticks, 10,000 policy
+simulation steps, depth 12, and up to five Method-1 local or Method-2 whole-candidate
+attempts. Request timeout was 50 seconds with one transport retry available.
+No trial exhausted a shared resource/wall budget; per-response truncation and
+per-primitive exhaustion are separate outcomes.
+
+There were **five physical successes, twenty response-length failures with no
+returned code content, four Move nonconvergences, and one Release
+nonconvergence**. The failed primitives each used their unchanged 50-step budget;
+Move residuals were approximately 0.033 m and the Release residual was 0.00398 m.
+These residuals alone do not uniquely establish the physical cause.
+
+The ten complete programs passed the DSL contract. Other DSL outcomes were
+14 incomplete constrained generations and six unavailable baseline outputs.
+All 30 trials made exactly one policy request: no helper-generation, repair,
+or transport-retry calls occurred. Thus this live sample does not isolate a
+benefit of either repair strategy; those mechanics were exercised in scripted
+regression tests. This is a single-scene pilot, not a benchmark-wide estimate.
+
+Total usage was **515,734 reported input/output tokens**, including 457,078
+reported reasoning tokens counted once. Full initial simulator snapshots,
+model settings, request/prompt hashes, token totals, exclusive timing totals,
+and all 30 videos were audited. Every video matched its trajectory state count.
+
+See the [full report](../../runs/cap-revision2-deepseek/20261018-215345/report.md),
+[failure analysis](../../runs/cap-revision2-deepseek/20261018-215345/analysis.md),
+and [policy/check/video index](../../runs/cap-revision2-deepseek/20261018-215345/artifacts.md).
+Every trial row includes `# of tokens used`; no usage is missing in this batch.
