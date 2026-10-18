@@ -2,8 +2,9 @@
 
 Status: section 1 implemented. Other revision items retain their stated status.
 The requested scope is API/prompt clarity and versioning
-(item 1), parallel execution of future experiment batches (item 2), and Method 2
-with a shared checker design (item 4). The reasoning-enabled,
+(item 1), parallel execution of future experiment batches (item 2), post-rollout
+DSL compliance checking for the baseline (item 3), and Method 2 with a shared
+checker design (item 4). The reasoning-enabled,
 16k-output Stack experiments have completed using the existing prompts; their
 [report](../../../runs/cap-stack-reasoning-comparison/20261018-180533-16k/report.md)
 is the reference evidence for this discussion. Section 1 now provides a selectable
@@ -542,6 +543,38 @@ future reusable scheduling work remains separate. The five-trial 600-second Batc
 completed at 3/5; the [budget/timing record](../README.md#resource-budgets-and-timing)
 and linked run artifacts distinguish this pilot from the general scheduler plan.
 
+
+## 3. Check baseline DSL compliance after rollout
+
+**Status: planned, not implemented.** Assess every baseline trial after its
+rollout attempt using the shared DSL checker, under the recorded task contract
+and `condition_mode`. Include failed/interrupted attempts and generation failures.
+
+Keep Google's generation, helper binding, and execution path unchanged. The
+audit is reporting only: no pre-execution gate, diagnostic feedback to the LLM,
+checker-guided repair, or automatic rerun. Existing dynamic adapter checks remain
+active. Preserve the original physical outcome and all scheduled trials.
+
+The design is specified in [Shared DSL checker architecture](SHARED-DSL-CHECKER.md):
+
+- [Shared rules and interface](SHARED-DSL-CHECKER.md#2-shared-contract-and-analysis-scope)
+  apply the same condition/type/effect contract as the constrained methods.
+- [Source and binding history](SHARED-DSL-CHECKER.md#4-baseline-source-and-binding-history)
+  preserves earlier helper versions and distinguishes definition binding from
+  invocation; checking only the final helper dictionary is insufficient.
+- [Audit lifecycle](SHARED-DSL-CHECKER.md#5-audit-lifecycle-and-failure-handling)
+  runs from saved artifacts with a separate bounded analysis budget, including
+  when the trial worker fails.
+- [Reporting](SHARED-DSL-CHECKER.md#6-reporting-and-provenance) records compliance,
+  diagnostics, coverage, versions/checkpoints, and audit duration independently
+  of physical success. Missing source or incomplete coverage cannot become a
+  pass. Keep the existing `# of tokens used` column; the audit uses no LLM tokens.
+
+Acceptance requires complete outcome accounting, correct handling of historical
+bindings, and unchanged baseline model calls/actions when auditing is enabled.
+Detailed cases are in the architecture document's
+[validation requirements](SHARED-DSL-CHECKER.md#8-validation-requirements).
+
 ## 4. Method 2: whole-candidate refinement with a shared DSL checker
 
 **Status: proposed, not implemented.** This section relocates and develops the
@@ -667,81 +700,20 @@ that edge in this configuration.
 
 ### 4.3 Can all three methods share one underlying checker?
 
-**Yes: share the contract and deterministic analysis engine, while keeping
-checking schedules, repair strategies, and execution decisions in their own
-method wrappers.** Baseline would use it only for section 3's post-rollout audit.
-Sharing a library does not add a pre-execution DSL gate to Google's baseline.
-
-| Method | When the shared checker is called | Analysis input/scope | Use of diagnostics | Execution decision |
-| --- | --- | --- | --- | --- |
-| Google baseline | After the rollout attempt, including failed/interrupted attempts; planned in section 3. | Reconstructed source/binding history, including earlier helper versions that were bound/executed; latest candidate if no executable bundle existed. | Audit/report only; no LLM feedback or rerun. | Original Google path; post-hoc results do not undo execution or overwrite its physical outcome. |
-| Method 1 | During recursive generation and local repair, then complete validation before execution; implemented. | Current policy/helper plus known dependencies and unresolved obligations; finally the complete bundle. | Repair the current unit, with parent-level checking/refinement as implemented. | Only a complete accepted bundle may execute; a local pass is insufficient. |
-| Method 2 | After initial whole-candidate generation and after every whole-candidate revision; planned. | Complete candidate containing policy and all helper definitions. | Revise the whole candidate using interface-only feedback. | Only a complete accepted bundle may execute. |
-
-Share syntax restrictions, protected bindings, primitive/predicate/getter
-signatures, object/position/scalar types, condition-mode rules, value-flow and
-transitive effect checks, dependency obligations, and task API availability.
-Keep dynamic adapter/controller checks active: static analysis does not know
-whether a particular `get` has a witness or a physical Move will converge.
-Numeric computation may also fail dynamically, for example on division by zero.
-No model call, simulator step, repair, or execution belongs inside the checker.
-
-`prompt_version` must not select different checker rules. Select rules using the
-recorded executable contract/checker version, task API set, input bindings, and
-condition mode. This preserves a fair comparison of generation/repair strategies
-under the same accepted language. Changes to checker behavior require their own
-version and regression evidence, separate from prompt wording changes.
+Yes. Use the [shared checker architecture](SHARED-DSL-CHECKER.md) for the contract,
+analysis engine, scope/result semantics, and baseline history reconstruction.
+Method 1 checks locally and then completely; Method 2 checks each complete
+candidate; the baseline calls the same core only through its post-rollout audit.
+Generation, repair granularity, and execution decisions remain method-specific.
 
 ### 4.4 Existing reusable code and required refactoring
 
-[validation.py](../validation.py) is already independent of Method 1's model
-client, logger, and interpreter, making it the natural shared core. It currently
-returns unresolved calls for partial validation or raises `ConstraintFailure`;
-it is not yet the structured multi-method audit interface described here.
-
-| Existing component | Reuse or required change |
-| --- | --- |
-| `parse`, `definitions`, `Checker`, `validate` in validation.py | Reuse syntax, type/value-flow, dependency, and effect analysis. Method 2 can use complete validation without a second rules implementation. Preserve current diagnostic rule IDs where semantics stay the same. |
-| `validate_helper`, partial validation, and `missing_calls` | Retain Method 1's local-generation support. Unknown local parameter types and unresolved helpers are obligations, not an executable whole-program pass. Method 2 need not invoke recursive discovery to use the complete checker. |
-| Task API checks in `cap_method_1/generation.py` | Move/expose the `API_UNAVAILABLE` check in the shared entry point, parameterized by the task's allowed API names. Currently `validate` itself has no `api_names` parameter, so calling it alone does not reproduce every generator-level check. |
-| `Bundle`, `Diagnostic`, and version identifiers in contracts.py | Reuse source/type/diagnostic data. Add an analysis-result wrapper and contract identity if needed; preserve source unit and line/column locations, with checkpoint/binding locations attached by wrappers. |
-| `Runtime.execute` in runtime.py | Reuse for Methods 1 and 2; keep its complete pre-execution validation and runtime checks. It is not a baseline audit mechanism and must not replace Google's execution path. |
-| Baseline recorded sources and checkpoints | Build a separate artifact reader that reconstructs binding versions and source coverage. Do not flatten all historical helpers into one last-definition dictionary or combine mutually exclusive versions into a fake program. |
-| Prompt packages and logging | Reuse configuration, request/source provenance, and immutable checkpoints. Method-specific feedback formatting may differ, but the underlying compliance rules must remain identical. |
-
-The baseline reconstruction layer must also distinguish definition binding from
-function invocation. During Google's recursive generation, a helper may be
-bound before its child definitions exist; that transient unresolved name alone
-is not proof of a violation in the eventual complete program. Check statements
-that execute during binding against that moment's namespace, and check function
-calls against the bindings actually available when invoked. Preserve earlier
-source versions for syntax/effect assessment. If the artifacts cannot establish
-which dependency version was used, report incomplete coverage instead of
-inventing a complete bundle or granting a pass.
-
-A proposed checker boundary is:
-
-```text
-check_bundle(bundle, contract, scope="local" or "complete", role, input_types)
-    -> CheckReport(status, diagnostics, unresolved, coverage, contract_identity)
-```
-
-For complete scope, `pass` requires completed analysis of the supported source
-bundle with no known violations or unresolved dependencies. Local results must
-be labeled `local_pass`/`pending`, never a complete-program pass. Invalid source
-gets `fail`; checker failure/budget exhaustion gets `error`. The current checker
-can fail at the first violation; collecting more diagnostics is optional and
-must not be mistaken for changing which programs are accepted.
-
-The baseline audit wrapper adds artifact-level outcomes such as `not_available`
-or `unsupported` when source history/analysis coverage cannot be reconstructed.
-A construct explicitly forbidden by the declared subset is a violation (`fail`),
-not an excuse to mark the candidate compliant. Arbitrary Python outside that
-subset does not gain support merely because Google's executor can run it.
-A generic helper checked with unknown inputs is not proven valid for every
-possible argument; preserve the distinction between local/generic checks and
-checking actual call-site types. Record the analysis scope rather than claiming
-formal task verification or sound analysis of unrestricted Python.
+Reuse [validation.py](../validation.py) and [Runtime.execute](../runtime.py) for
+Method 2. The architecture document's
+[implementation boundaries](SHARED-DSL-CHECKER.md#7-existing-code-and-implementation-boundaries)
+describe extracting task API checks from the generator, adding a structured
+analysis report, and building a separate baseline history reader. No second
+set of DSL acceptance rules is needed for Method 2.
 
 ### 4.5 Implementation sequence and discussion decisions
 
@@ -764,13 +736,13 @@ formal task verification or sound analysis of unrestricted Python.
    repair granularity and total resources; keep physical success and DSL
    compliance separate, including generation and audit failures.
 
-Recommended decision for discussion: **one shared checker core, three thin
-method-specific callers, and one separate baseline history-reconstruction
-layer**. Start with existing fail-fast diagnostics and the current supported
-subset. Richer diagnostic aggregation and broader Python coverage can be
-separate changes; neither is necessary to define Method 2.
+The shared layers and their detailed validation cases are maintained in
+[Shared DSL checker architecture](SHARED-DSL-CHECKER.md); this section owns
+Method 2's whole-candidate generation and repair plan.
 
 ## References
+
+- [Shared DSL checker architecture](SHARED-DSL-CHECKER.md).
 
 - [Current API text and mode rules](../contracts.py).
 - [Runtime operand validation and queries](../adapter.py).
