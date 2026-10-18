@@ -16,18 +16,44 @@ The prompt should also state outputs, effects, coordinate frame/units, and the
 important failure cases for each API. This is a prompt-clarity change; it does
 not add new primitives or change the two condition modes.
 
-### Motivation from the current interface
+### Motivation and API_DESCRIPTION edit summary
 
-[contracts.py](../contracts.py) already states that Move has four arguments and
-uses three object references plus an offset vector. Nevertheless, observed
-trial failures include six-argument Move calls and passing a position or a
-numeric coordinate where an object handle is required. These are distinct
-mistakes: correcting argument count alone does not correct operand types.
+The completed experiments distinguish interface errors (Move arity, handle versus
+coordinate types, and absent `get` witnesses), helper-generation/composition
+problems, and physical controller failures. The
+[coordinate-mode comparison](../../../runs/cap-stack-coordinate-comparison/20261018-184618-reasoning-16k/report.md)
+and its [baseline condition execution audit](../../../runs/cap-stack-coordinate-comparison/20261018-184618-reasoning-16k/baseline_condition_execution_audit.json)
+also show why coordinate access and coordinate conditions must be described
+separately: the four successful coordinate-mode GPT baseline policies still used
+DSL loop guards; their position reads parameterized actions. This does not
+establish that numeric guards caused their improvement.
 
-This observation motivates clearer typing and examples; it does not establish
-that prompt changes will eliminate those failures. Controller nonconvergence,
-generation limits, and task correctness require separate analysis after the
-current experiments. No conclusion about their causes is made here.
+The [600-second baseline rerun](../../../runs/cap-stack-gpt61sol-budget/20261018-192834-dsl-600s/report.md)
+completed 3/5 trials; the other two failed Move convergence without exhausting a
+trial budget. Prompt clarity can address misunderstandings about primitive
+targets and effects. It cannot establish the cause of every controller failure
+or guarantee convergence. Generation latency and truncation remain separate
+measurements, even if shorter helper chains reduce their incidence.
+
+The following is the proposed **`typed_v2` edit checklist**, not a change to the
+legacy prompt or to executable API semantics. Entries marked as contract clarity
+are supported by the implementation; they are not all observed failure causes.
+
+| API_DESCRIPTION area | Current gap / experiment evidence | Proposed wording or structural edit |
+| --- | --- | --- |
+| Types and input bindings | The opening sentence about opaque handles has not prevented numeric/Position3 operands being passed to Move. | Define ObjectHandle, Position3, Offset3, Scalar, Bool, and None; type every parameter and return. Explain that `b0` is the supplied block handle, other handles come from queries, and type names are documentation notation, not constructors. |
+| `Pick(block)` | Its signature omits its action sequence; generated action helpers have introduced unintended repeated Picks. | Describe approach at current gripper height, open, descend, close; no automatic lift or transport. State that opening can release a carried block, so a movement-only helper must not silently re-grasp. |
+| `Move(x_ref, y_ref, z_ref, offset)` inputs | Six-argument calls and scalar/Position3 references were observed. | Label each reference ObjectHandle; require exactly four positional arguments and one finite three-element offset list/tuple. Give one valid call and clearly labeled wrong-arity/type examples. |
+| Move target and effects | The current target equation does not explicitly identify the gripper as the controlled point or specify sampling time. | State the world-frame gripper target equation, sample all references once at invocation, and command the gripper closed. Distinguish an offset from an absolute target and the gripper position from the carried block's centre; do not assume their offset is zero. |
+| `Release(reference, height_offset)` | The brief sentence omits XY preservation and leaves placement versus retreat ambiguous. | Type both inputs; open at the current location, then retreat to invocation-time `Z(reference) + height_offset`, preserving pre-opening XY. It does not lower a block onto a support before opening. |
+| Primitive returns and failures | `-> None` does not explain controller failure, and trial timeout can be confused with the primitive limit. | Successful calls return None. Nonconvergence raises a runtime failure; current Move stops at at most 50 simulation steps with a 2 mm 3D position tolerance. One simulation step is one `env.step(action)`, not one wall-clock second. The 600-second trial cap does not extend this primitive limit. Convergence does not certify grasp, collision freedom, or task success. |
+| Position getters | Snapshot semantics are already present; the distinction from action reference operands needs emphasis. | Preserve read-only, no-physics-step semantics, world metres, block centres, literal indices 0/1/2, and re-reading after motion. Explicitly say the returned triple cannot replace a block handle. Do not expose raw state, invented perception APIs, or a coordinate-bearing table handle. |
+| `ON`, `ON_star`, `eq` | Signatures lack per-input types; informal “above/on” can be mistaken for support/contact or equal coordinates. | State two handle inputs and Bool output. Explain identity, reflexive ON_star with its XY/height tests, and irreflexive relational ON with no intermediate block. Neither geometric relation alone certifies physical support. |
+| `Higher`, `Scattered`, `ON_star_zero` | Higher mentions only the default tolerance; “0.10 m XY separation” leaves the distance rule ambiguous. | Render the resolved Higher tolerance; specify Scattered's per-axis OR rule, not Euclidean distance; describe frozen entry geometry and advertise ON_star_zero only when the task exposes it. |
+| `exists`, `forall`, `get` | A generated helper treated a missing `get` witness as a returned None. | Type lambda bindings and returns; quantify over physical blocks, allow repeated bindings unless explicitly excluded, and explain that `get` chooses the first satisfying handle and raises if absent. Show a mode-valid `exists` guard when existence is uncertain, not a None test after `get`. |
+| Condition and action helper effects | “Helpers may compose the APIs” does not explain how to preserve a requested action's scope. | Keep conditions and query lambdas action-free. Make helper inputs, return type, and intended effects explicit; a movement-only helper should implement movement, not add Pick/Release. State these as generation guidance, without introducing new runtime effect categories. |
+| Condition modes and Python subset | Coordinates are allowed for action parameters in both modes; extended mode must not be described as requiring numeric provenance. | Keep mode rules in a separate versioned block: DSL-only conditions versus DSL and/or numeric compositions, including counters/constants, in extended mode. List supported operators/syntax consistently with the checker. Formula notation is descriptive, not permission to import libraries or call unavailable builtins. |
+| Output instructions | The shared text says to emit top-level invocations even when inserted into a helper prompt requesting only a definition. | Move output-shape instructions out of the common API reference: policy emits executable top-level statements; helper emits only the requested definition; repair follows the source unit's role. Apply this only to typed_v2, retaining legacy bytes. |
 
 ### 1.1 Introduce a small type glossary
 
@@ -79,7 +105,12 @@ At invocation:
 The host reads reference coordinates when the Move starts and drives the gripper
 toward that target with the gripper closed. It does not continuously shift the
 target as a reference block moves during that primitive. Reading coordinates in
-policy code does not change this object-relative action contract.
+policy code does not change this object-relative action contract. The target is
+for the **gripper**, not directly for the carried block centre. If an action
+helper reasons about a desired block-centre target, it must account for the
+measured gripper-to-block offset; an assumption of zero offset is not part of
+the API. Coordinate arithmetic for this purpose is allowed in both modes. Do
+not promise that a measured offset stays rigid under slipping or contact.
 
 Release opens the gripper at its current location, then retreats to
 `Z(reference at invocation) + height_offset`, preserving the pre-opening XY
@@ -87,8 +118,11 @@ target. It does not perform a complete placement sequence. These meanings come
 from [move_relative, pick, and release](../../api/control.py), rather than
 inferring semantics from the API names.
 
-Each primitive uses the existing shared controller and step limit. A
-nonconverged primitive raises an execution failure through the adapter. A
+Each primitive uses the existing shared controller and step limit. Currently,
+each instruction has at most 50 simulation steps; Pick's stages share that
+budget. Move's stopping test is a 3D position error of at most 0.002 m. This is
+independent of the trial's wall-clock cap and total simulation-step budget.
+A nonconverged primitive raises an execution failure through the adapter. A
 successful return is `None`; convergence alone is not proof of grasp, collision
 freedom, or task completion. This information should be stated once in a short
 shared effects/returns paragraph, rather than repeated at length for every API.
@@ -241,7 +275,8 @@ allowed condition language, checker behavior, controller, or terminal evaluator.
 Both prompt versions must describe the same runtime contract for a selected
 condition mode. The baseline still uses prompt-only constraints and the pinned
 upstream algorithm; adding version selection must not add a DSL checker or
-repair loop to that method.
+repair loop to that method's execution path. The separately planned post-rollout
+assessment in item 3 does not gate or repair execution.
 
 Resolve a version once per trial, reject unknown versions, and propagate it to
 all policy/helper/repair requests. Avoid mixing legacy policy generation with a
@@ -278,6 +313,74 @@ introduced by richer descriptions. If later experiments isolate individual
 prompt components, define explicit immutable variants and record their manifests
 rather than editing a shared template between runs. The particular variants and
 any additional Revision 2 work items remain for follow-up discussion.
+
+### 1.8 Changes elsewhere in contracts.py and its callers
+
+The actual file is [contracts.py](../contracts.py). Implementing item 1 requires
+more than replacing `API_DESCRIPTION`, because the file also combines prompt
+selection, condition text, task exposure, and runtime types. Keep prompt
+provenance separate from executable contract versions.
+
+| Component | Planned treatment for item 1 | Reason / boundary |
+| --- | --- | --- |
+| `API_DESCRIPTION` constant | Preserve the existing value as part of legacy_v1; add the typed_v2 description in an immutable prompt package. | Old experiment prompts must remain reproducible byte-for-byte; do not edit the legacy constant in place. |
+| `CONDITION_RULES` | Freeze legacy text and provide version-selected wording if revised, with the same two modes and semantics. Explicitly allow mixed DSL/numeric conditions and unrestricted numeric origins in extended mode. | This is wording/versioning, not a new restriction on counters or a change to the checker. |
+| `api_description(...)` | Accept the resolved prompt version and, for typed_v2, resolved semantic parameters such as Higher tolerance; render the matching package and mode. | Current arguments are only `names` and `condition_mode`, so version/config propagation needs an actual implementation change. Legacy assembly remains exact. |
+| Task filtering in `api_description` / `task_api_names` | Preserve current exposure; render typed_v2 entries by API name. Keep the legacy filtering path for replay. | Current filtering removes lines starting with `ON_star_zero`; a multiline typed entry would otherwise leave orphaned descriptions or unavailable examples. No new task APIs are added. |
+| Prompt-version identifiers and validation | Add a supported-version registry/validator, either here or in the prompt package; resolve once per trial. | Reject unknown versions and prevent policy/helper/repair requests from mixing versions. A separate module may keep contracts.py simulator-independent and small. |
+| Optional structured API metadata | May add parameter/return/effect descriptions for rendering and consistency checks, using existing checker/adapter semantics as the reference. | This is optional organization; replacing the checker or adapter type system is not required for a prompt edit. Avoid adding simulator imports just to render documentation. |
+| `ObjectHandle`, `Position3`, API name sets, and `validate_condition_mode` | Preserve their runtime behavior. Offset3/Scalar remain explanatory names. | Prompt clarification requires no new observation fields, constructors, primitives, or predicate implementation. |
+| `OBSERVATION_API_VERSION`, `CHECKER_VERSION` | Keep unchanged for a prompt-only implementation; record prompt_version and prompt hashes separately. | A changed description does not mean the observation API or checker changed. Any later checker change is separately versioned. |
+| `Bundle`, `Diagnostic`, exceptions including `PrimitiveFailure` | No semantic change required. Link prompt provenance through existing checkpoints/run artifacts; adding a Bundle provenance field is optional. | Richer controller-failure diagnostics would be a separate adapter/logging change; rewriting an exception class does not fix nonconvergence. |
+
+Required integration work outside this file is version selection in
+[RunConfig](../config.py) and the [CLI](../../entry/run_cap.py), propagation through
+[runner](../runner.py), [Method-1 prompt assembly](../cap_method_1/generation.py),
+and [baseline module_config](../cap_google_baseline/compatibility.py), plus
+recording the selected package/hash in configuration and checkpoint artifacts.
+The resolved Higher tolerance must reach every typed_v2 request, including
+helper and repair requests. Keep Google's pinned core unchanged.
+
+### 1.9 Helper templates and validation priorities
+
+The common API reference currently ends with “Emit top-level statements that
+invoke the policy”; it is also interpolated into the
+[helper template](../cap_method_1/prompts/helper.txt), which asks for exactly a
+function definition. The baseline similarly appends the same API text after its
+helper-definition instruction. This is a concrete prompt conflict to remove in
+typed_v2; it is not evidence that this sentence alone caused any particular
+failed trial. Put execution-entry instructions in policy templates, and make
+[repair output](../cap_method_1/prompts/repair.txt) depend on whether the repaired
+unit is a policy or a helper.
+
+For helper generation, request the exact name/signature, a body matching the
+requested action or pure-condition role, and dependencies that terminate in
+available APIs. Discourage self/mutual delegation cycles and unnecessary helper
+layers; prefer implementing a small requested operation directly when possible.
+Do not claim this prevents Google's recursive discovery from generating unused
+or duplicate helpers: that discovery behavior stays unchanged. Any future
+addition of caller context must be an explicit versioned template/input change
+and must not silently alter Google's core helper-resolution algorithm.
+
+Validate the proposed package in this order:
+
+1. Check legacy prompt reconstruction byte-for-byte for both methods and all
+   request roles. Check typed_v2 mode/task filtering and configured tolerances,
+   including multiline entries and examples; helper prompts must not request
+   top-level robot execution.
+2. Check positive and negative API snippets against existing signatures and
+   Method-1 validation. Include handle/Position3 distinctions, four-argument Move,
+   `exists`-guarded selection, and coordinate arithmetic used solely for action
+   offsets in both modes. Mathematical reference formulas must not advertise
+   unavailable Python calls such as a builtin that is absent from the namespace.
+3. Compare immutable prompt versions under matched modes, snapshots, models,
+   resource limits, and scheduling. Report interface errors, helper names and
+   dependency depth, generated versus actually executed condition helpers,
+   unintended primitive sequences, truncations, calls/tokens, phase timings,
+   primitive convergence, and physical outcomes separately. Use item 3's audit
+   when available; until then, label manual source/trace inspection as such.
+
+No live rerun or prompt implementation is performed by this documentation edit.
 
 ### Discussion points within item 1
 
