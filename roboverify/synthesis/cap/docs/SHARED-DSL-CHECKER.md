@@ -130,6 +130,147 @@ bundle and contract should produce the same core verdict regardless of which
 method supplied them. A source/version identity and coverage record accompany
 each report; a caller must not reuse a pass after changing the checked bundle.
 
+### 3.1 Current DSL checker: high-level abstraction
+
+**Status: implemented.** The abstraction below describes
+[validation.py](../validation.py), its use by the
+[Method-1 generator](../cap_method_1/generation.py), and the
+[checked runtime](../runtime.py). It omits AST traversal, type-environment
+merging, and individual syntax rules. Names below denote conceptual operations,
+not callable repository functions.
+
+A **bundle** contains policy source and helper definitions. **Scope** determines
+whether unresolved dependencies may remain during generation; **role** determines
+whether the checked code is a body or a pure condition. The **condition mode**
+selects DSL-only conditions or DSL plus general numeric conditions.
+
+```text
+CURRENT_CHECK(bundle, condition_mode, scope, role, input_types):
+    require a valid mode consistent with the bundle
+    parse sources and enforce the supported syntax and definition shapes
+    analyze the policy and helper calls using input types:
+        check API signatures and object/position/numeric operand types
+        check value dependencies, condition rules, and transitive action effects
+        track missing helper definitions as unresolved obligations
+    check uncalled definitions with generic parameter types
+
+    on a detected violation:
+        raise ConstraintFailure with a source-located diagnostic
+    if scope is COMPLETE and obligations remain:
+        raise ConstraintFailure for unresolved helpers
+    return unresolved obligations
+```
+
+This abstracts the policy-bundle `validate` path. Local `validate_helper` reuses
+the analysis for one helper with unknown parameter types and returns normally
+on a local pass; it does not return a structured whole-program report.
+Generic checks are not a proof that a helper accepts every possible input.
+An empty unresolved list from a local check does not authorize execution.
+
+The current caller performs some checks outside that core:
+
+```text
+METHOD_1_PREPARATION:
+    check the generated unit against the task's available APIs
+    check it locally; recursively generate missing helpers and repair as needed
+    check the complete assembled bundle before accepting it
+
+METHOD_1_EXECUTION:
+    recheck the complete bundle, then execute through the checked runtime
+
+GOOGLE_BASELINE:
+    use original generation/binding/execution; no static DSL check or repair
+```
+
+The task API check is currently in the generator, not a parameter of `validate`.
+Baseline adapter/runtime argument checks remain active despite the absence of
+this static checker. Method 2 and the baseline post-rollout checker are not yet
+implemented. The current checker already supports both condition modes and
+checks dependencies beyond the lines reached by a particular rollout.
+
+### 3.2 Planned revised checker: high-level abstraction
+
+**Status: planned, not implemented.** `[KEEP]` retains existing checking rules;
+`[MOVE]` relocates a check into the common entry point; `[NEW]` introduces a
+shared interface or caller. These labels describe architectural changes, not
+new permitted robot actions or a broader Python language. The surrounding
+sections specify the shared architecture and result semantics.
+
+The revised **contract** explicitly identifies the task API set, condition mode,
+input types, and executable API/checker versions. Prompt wording/version does
+not select different checking rules. Every report identifies the checked bundle,
+contract, scope, diagnostics, unresolved obligations, and analysis coverage.
+
+```text
+SHARED_CHECK(bundle, contract, scope, role, analysis_budget):
+    [NEW] attach bundle/contract identity and run under a bounded analysis budget
+    [KEEP] require mode consistency and supported syntax/definition shapes
+    [MOVE] check all source units against the contract's task API set
+    [KEEP] analyze types, value dependencies, condition rules, and helper effects
+    [KEEP] check uncalled definitions and track unresolved obligations
+
+    on a source violation:
+        [NEW] return CheckReport(FAIL, diagnostic)
+    on an analysis failure or exhausted analysis budget:
+        [NEW] return CheckReport(ERROR, reason)
+    if scope is COMPLETE and obligations remain:
+        [KEEP rule; NEW report] return CheckReport(FAIL, unresolved obligations)
+    if scope is LOCAL:
+        [NEW] return CheckReport(PENDING if obligations remain else LOCAL_PASS)
+    [NEW] return CheckReport(PASS)
+```
+
+Only a complete `PASS` can authorize constrained execution. Local checks retain
+unknown/generic types until caller-level analysis can resolve them. The existing
+fail-fast behavior may remain; collecting every possible diagnostic is not a
+requirement of the shared architecture. Finite-value checks during execution,
+query witness availability, and controller convergence remain runtime concerns.
+
+The methods select when to call this one core and how to use its result:
+
+```text
+[KEEP strategy; NEW common interface] METHOD_1:
+    use local reports for recursive generation/repair
+    require a complete PASS before execution
+
+[NEW caller] METHOD_2:
+    check each complete candidate
+    use source diagnostics to revise the whole candidate until PASS or budget end
+    execute only a complete PASS; do not repair from checker-internal errors
+
+[NEW caller] BASELINE_AFTER_ATTEMPT:
+    output = read the designated final output bundle
+    if no policy source exists: record NOT_AVAILABLE
+    else if generation is unfinished or required final artifacts are missing:
+        record INCOMPLETE
+    else:
+        record SHARED_CHECK(output.bundle, recorded_contract, COMPLETE, BODY, budget)
+    report final-output compliance separately from the original physical outcome
+```
+
+Baseline's input is the final policy, complete helper sources, and their final
+binding relationships. The reader must not execute or repair source, replace
+an unfinished output with an earlier candidate, or merge superseded versions
+into the final program. Superseded source outside that bundle does not affect
+this verdict. Complete output is checked even when its rollout failed; missing
+or unfinished output cannot pass. Historical execution auditing is optional.
+Baseline receives no pre-execution gate, LLM feedback, or automatic rerun.
+
+### 3.3 Summary of changes
+
+| Area | Current implementation | Planned revision | Change |
+| --- | --- | --- | --- |
+| DSL syntax, types, condition purity, and dependency rules | Implemented in the reusable validation engine; both condition modes supported. | Reuse the same accepted language and rules across methods. | KEEP |
+| Task API availability | Checked by Method 1's generator; the core `validate` entry has no task API parameter. | Include the allowed task API set in the shared contract and check it in the core. | MOVE |
+| Interface and result | Mode/scope/role/input arguments; unresolved calls or exceptions, with source diagnostics. | Explicit contract and structured reports, including scope/coverage, contract/source identity, and analysis-error classification. | NEW interface; existing analysis reused |
+| Method 1 | Recursive helper generation/local repair plus complete checks before execution. | Use the common report interface while preserving the generation/repair strategy. | ADAPT caller |
+| Method 2 | Not implemented. | Complete-candidate checks followed by whole-candidate revision. | NEW caller |
+| Baseline | No static DSL check; original Google execution and dynamic adapter checks. | Add only post-attempt checking of the final output, with incomplete/unavailable output states. | NEW caller; execution unchanged |
+| Proof and runtime scope | Static compliance does not prove physical success, termination, or convergence. | Retain that boundary; do not add formal-verification or rollout feedback to repairs. | KEEP |
+
+These are documentation abstractions of current behavior and the agreed plan;
+this section does not implement the revised checker.
+
 ## 4. Baseline final output bundle
 
 The agreed scope is **final-output DSL compliance**. Select the final program
