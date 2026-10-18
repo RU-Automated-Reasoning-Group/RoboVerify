@@ -675,45 +675,11 @@ evaluation: passing these checks establishes interface compliance only.
 
 ### 2.7 Plan 2: Use LLM to refine until all code used DSL
 
-**Status: proposed, not implemented.** Generate a candidate containing the policy
-and its helper definitions, then use the same deterministic DSL checker as Plan 1
-to inspect the complete bundle. Report violations with source locations and let
-the LLM revise related conditions, variables, calls, and helper definitions
-together. Unlike Plan 1's local recursive repair, the repair unit is the whole
-candidate. Line locations guide edits; checking follows cross-line and
-cross-function dependencies.
-
-```python
-def prepare_policy_plan2(instruction, api_spec, budget):
-    candidate = generate_policy_and_helpers(instruction, api_spec, budget)
-
-    for attempt in range(MAX_ATTEMPTS):
-        budget.check_remaining()
-        report = check_complete_program(candidate, api_spec)
-
-        if report.valid:
-            return candidate
-        if attempt + 1 == MAX_ATTEMPTS:
-            break
-
-        candidate = revise_policy_and_helpers(
-            candidate,
-            diagnostics=report.diagnostics,
-            allowed_api=api_spec,
-            budget=budget,
-        )
-
-    raise ConstraintFailure("Policy repair budget exhausted")
-```
-
-The checker reports missing helper definitions as unresolved obligations, not as
-proof of forbidden API use; a candidate cannot pass until they are resolved.
-Every revision is checked again in full before execution. Feedback is limited
-to syntax and DSL interface compliance, with no rollout-success or verifier
-feedback. Only accepted code runs through the shared adapter in Section 4.4,
-followed by independent task evaluation. Any configured runtime LMP output must
-pass the same checks before it runs. Record all model calls and exhausted
-attempts; neither convergence nor task success is guaranteed.
+**Status: proposed, not implemented.** The Method 2 implementation plan has moved
+to [Revision 2 section 4](revision_2.md#4-method-2-whole-candidate-refinement-with-a-shared-dsl-checker).
+That section retains whole-candidate generation/checking/refinement and develops
+the shared-checker boundary for the Google baseline audit, Method 1, and Method 2.
+This heading remains as a stable reference for existing links.
 
 ### 2.8 Plan 1 logging, checkpoints, and video
 

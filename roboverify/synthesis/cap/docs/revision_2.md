@@ -2,7 +2,8 @@
 
 Status: section 1 implemented. Other revision items retain their stated status.
 The requested scope is API/prompt clarity and versioning
-(item 1), plus parallel execution of future experiment batches (item 2). The reasoning-enabled,
+(item 1), parallel execution of future experiment batches (item 2), and Method 2
+with a shared checker design (item 4). The reasoning-enabled,
 16k-output Stack experiments have completed using the existing prompts; their
 [report](../../../runs/cap-stack-reasoning-comparison/20261018-180533-16k/report.md)
 is the reference evidence for this discussion. Section 1 now provides a selectable
@@ -540,6 +541,234 @@ support and the isolated-process Batch C rerun described above are implemented;
 future reusable scheduling work remains separate. The five-trial 600-second Batch C baseline rerun
 completed at 3/5; the [budget/timing record](../README.md#resource-budgets-and-timing)
 and linked run artifacts distinguish this pilot from the general scheduler plan.
+
+## 4. Method 2: whole-candidate refinement with a shared DSL checker
+
+**Status: proposed, not implemented.** This section relocates and develops the
+Method 2 implementation plan previously in
+[CAP-INTEGRATION section 2.7](CAP-INTEGRATION.md#27-plan-2-use-llm-to-refine-until-all-code-used-dsl).
+Section 2.7 now points here so the implementation plan has one maintained home.
+This documentation change does not implement Method 2 or the baseline audit.
+
+### 4.1 Generation and refinement unit
+
+Generate a candidate containing the policy and all its helper definitions, then
+use the same deterministic DSL checker as Method 1 to inspect the complete
+bundle. Report violations with source locations and let the LLM revise related
+conditions, variables, calls, and helper definitions together. Unlike Method 1's
+local recursive repair, **the repair unit is the whole candidate**. Line
+locations guide edits; checking follows cross-line and cross-function
+dependencies. A checker diagnostic is not a request to edit only one line.
+
+For the initial implementation, request a single source module containing
+plain top-level helper definitions and executable policy statements. Represent
+it as the existing `Bundle(source=..., helpers={})`; inline definitions are
+already supported by the checker/interpreter. This avoids introducing a new
+response format. A later multi-file representation may use the same Bundle
+contract, but every repair must still return a coherent complete candidate.
+
+Missing helper definitions are unresolved obligations, not automatically
+forbidden API calls. Method 2 asks the next whole-candidate revision to supply
+those definitions; it does not run Method 1's recursive helper-repair procedure.
+An unresolved candidate cannot execute. No generated definition or top-level
+statement is bound by Python execution while generating or checking candidates.
+
+High-level pseudocode; the report interface below is proposed, not an existing
+function signature:
+
+```text
+prepare_method2(instruction, contract, prompt_package, budget, max_attempts):
+    candidate = generate_policy_and_helpers(instruction, contract, prompt_package)
+    for attempt in range(max_attempts):
+        budget.check_remaining()
+        save_candidate(candidate, attempt)
+        report = check_bundle(candidate, contract, scope="complete")
+        save_check_report(report)
+        if report.status == "pass":
+            return candidate
+        if report.status == "error":
+            stop_with_analysis_failure(report)
+        if attempt + 1 == max_attempts:
+            break
+        candidate = revise_complete_candidate(
+            candidate, report.diagnostics, report.unresolved,
+            contract, prompt_package, budget,
+        )
+    stop_with_constraint_failure()
+```
+
+All generation, revision, and checking consume declared shared budgets. An
+analysis timeout or internal checker error is recorded explicitly, not converted
+into an apparent source-code error for the LLM to repair. Each revised candidate
+is checked again in full; no accepted helper from a previous attempt exempts a
+changed dependency from checking. The initial candidate counts as attempt one.
+
+### 4.2 Execution boundary, modes, and logging
+
+Only a complete accepted candidate runs, using the same checked interpreter,
+trusted adapter, physical primitives, and terminal evaluation as Method 1.
+Propose `cap_method_2` as the method identifier; it is not currently a CLI choice.
+Reuse the saved initial-state protocol, budgets, observations, recording, and
+reporting. Runtime validation rechecks the exact bundle about to execute under
+the same contract. A failed rollout is reported, with no automatic
+rollout-guided policy revision in this method.
+
+Both `dsl_only` and `coordinate_predicates` apply unchanged. Both modes allow
+position getters for action parameters. Extended mode additionally permits DSL
+and/or numeric conditions, including counters and constants with no numeric
+origin restriction. All conditions and selection lambdas remain action-free.
+A complete checker pass means compliance with the declared language/API, not
+termination, controller convergence, physical safety, or task success.
+
+Feedback to the model is limited to syntax, interface/type/effect diagnostics,
+and unresolved dependencies. Do not provide rollout outcomes, simulator state,
+formal-verification failures, or optimization feedback as repair signals.
+The standard runner currently has no auxiliary runtime query LMPs. If that
+extension is later enabled, each new runtime-generated bundle must pass the
+same complete check before execution; this is not required for the initial
+Method 2 implementation.
+
+Use versioned Method-2 policy and whole-candidate-repair templates. Its repair
+output must include the executable policy entry and all required definitions;
+Method 1's helper-only output instruction is inappropriate here. Preserve the
+already published `legacy_v1` and `typed_v2` packages from section 1: adding
+Method-2 templates should use a new immutable package version/manifest, rather
+than silently editing either package. Keep the shared API text matched across
+methods for any future comparison; record any new template/package identities.
+
+Record each candidate, parent checkpoint, complete diagnostics/unresolved calls,
+request/version/hash, attempt index, and final execution bundle. Report calls,
+`# of tokens used`, generation/checking/execution times, physical outcome, and
+budget exhaustion separately. `max_attempts` has a different scope from Method
+1's per-unit attempts; equal attempt counts alone are not equal generation
+budgets. Match total call/token/execution limits and scheduling in comparisons,
+and disclose any remaining differences. Neither refinement convergence nor
+physical task success is guaranteed.
+
+```mermaid
+flowchart TD
+    I["Instruction + API contract + mode + prompt version"] -->|"Text generation inputs"| G["Generate complete candidate"]
+    G -->|"Policy source + all helper definitions"| C["Shared DSL checker: complete scope"]
+    C -->|"Diagnostics + unresolved dependencies + source locations"| R["LLM revises whole candidate within budget"]
+    R -->|"Replacement complete source bundle"| C
+    C -->|"Accepted source bundle + contract identity"| X["Checked interpreter + shared adapter"]
+    X -->|"Primitive commands"| E["Simulator"]
+    E -->|"Current positions and predicate inputs, host-side"| X
+    E -->|"Terminal state"| V["Independent task evaluation"]
+    C -->|"Checker error or exhausted attempt/check budget"| F["Record failure"]
+    X -->|"Execution failure or exhausted runtime budget"| F
+    V -->|"Physical result + costs + artifacts"| O["Trial report"]
+    F -->|"Failure reason + costs + partial artifacts"| O
+```
+
+The refinement edge is taken only for a nonpassing candidate with actionable
+source diagnostics and remaining budget. Simulator/evaluator results never feed
+that edge in this configuration.
+
+### 4.3 Can all three methods share one underlying checker?
+
+**Yes: share the contract and deterministic analysis engine, while keeping
+checking schedules, repair strategies, and execution decisions in their own
+method wrappers.** Baseline would use it only for section 3's post-rollout audit.
+Sharing a library does not add a pre-execution DSL gate to Google's baseline.
+
+| Method | When the shared checker is called | Analysis input/scope | Use of diagnostics | Execution decision |
+| --- | --- | --- | --- | --- |
+| Google baseline | After the rollout attempt, including failed/interrupted attempts; planned in section 3. | Reconstructed source/binding history, including earlier helper versions that were bound/executed; latest candidate if no executable bundle existed. | Audit/report only; no LLM feedback or rerun. | Original Google path; post-hoc results do not undo execution or overwrite its physical outcome. |
+| Method 1 | During recursive generation and local repair, then complete validation before execution; implemented. | Current policy/helper plus known dependencies and unresolved obligations; finally the complete bundle. | Repair the current unit, with parent-level checking/refinement as implemented. | Only a complete accepted bundle may execute; a local pass is insufficient. |
+| Method 2 | After initial whole-candidate generation and after every whole-candidate revision; planned. | Complete candidate containing policy and all helper definitions. | Revise the whole candidate using interface-only feedback. | Only a complete accepted bundle may execute. |
+
+Share syntax restrictions, protected bindings, primitive/predicate/getter
+signatures, object/position/scalar types, condition-mode rules, value-flow and
+transitive effect checks, dependency obligations, and task API availability.
+Keep dynamic adapter/controller checks active: static analysis does not know
+whether a particular `get` has a witness or a physical Move will converge.
+Numeric computation may also fail dynamically, for example on division by zero.
+No model call, simulator step, repair, or execution belongs inside the checker.
+
+`prompt_version` must not select different checker rules. Select rules using the
+recorded executable contract/checker version, task API set, input bindings, and
+condition mode. This preserves a fair comparison of generation/repair strategies
+under the same accepted language. Changes to checker behavior require their own
+version and regression evidence, separate from prompt wording changes.
+
+### 4.4 Existing reusable code and required refactoring
+
+[validation.py](../validation.py) is already independent of Method 1's model
+client, logger, and interpreter, making it the natural shared core. It currently
+returns unresolved calls for partial validation or raises `ConstraintFailure`;
+it is not yet the structured multi-method audit interface described here.
+
+| Existing component | Reuse or required change |
+| --- | --- |
+| `parse`, `definitions`, `Checker`, `validate` in validation.py | Reuse syntax, type/value-flow, dependency, and effect analysis. Method 2 can use complete validation without a second rules implementation. Preserve current diagnostic rule IDs where semantics stay the same. |
+| `validate_helper`, partial validation, and `missing_calls` | Retain Method 1's local-generation support. Unknown local parameter types and unresolved helpers are obligations, not an executable whole-program pass. Method 2 need not invoke recursive discovery to use the complete checker. |
+| Task API checks in `cap_method_1/generation.py` | Move/expose the `API_UNAVAILABLE` check in the shared entry point, parameterized by the task's allowed API names. Currently `validate` itself has no `api_names` parameter, so calling it alone does not reproduce every generator-level check. |
+| `Bundle`, `Diagnostic`, and version identifiers in contracts.py | Reuse source/type/diagnostic data. Add an analysis-result wrapper and contract identity if needed; preserve source unit and line/column locations, with checkpoint/binding locations attached by wrappers. |
+| `Runtime.execute` in runtime.py | Reuse for Methods 1 and 2; keep its complete pre-execution validation and runtime checks. It is not a baseline audit mechanism and must not replace Google's execution path. |
+| Baseline recorded sources and checkpoints | Build a separate artifact reader that reconstructs binding versions and source coverage. Do not flatten all historical helpers into one last-definition dictionary or combine mutually exclusive versions into a fake program. |
+| Prompt packages and logging | Reuse configuration, request/source provenance, and immutable checkpoints. Method-specific feedback formatting may differ, but the underlying compliance rules must remain identical. |
+
+The baseline reconstruction layer must also distinguish definition binding from
+function invocation. During Google's recursive generation, a helper may be
+bound before its child definitions exist; that transient unresolved name alone
+is not proof of a violation in the eventual complete program. Check statements
+that execute during binding against that moment's namespace, and check function
+calls against the bindings actually available when invoked. Preserve earlier
+source versions for syntax/effect assessment. If the artifacts cannot establish
+which dependency version was used, report incomplete coverage instead of
+inventing a complete bundle or granting a pass.
+
+A proposed checker boundary is:
+
+```text
+check_bundle(bundle, contract, scope="local" or "complete", role, input_types)
+    -> CheckReport(status, diagnostics, unresolved, coverage, contract_identity)
+```
+
+For complete scope, `pass` requires completed analysis of the supported source
+bundle with no known violations or unresolved dependencies. Local results must
+be labeled `local_pass`/`pending`, never a complete-program pass. Invalid source
+gets `fail`; checker failure/budget exhaustion gets `error`. The current checker
+can fail at the first violation; collecting more diagnostics is optional and
+must not be mistaken for changing which programs are accepted.
+
+The baseline audit wrapper adds artifact-level outcomes such as `not_available`
+or `unsupported` when source history/analysis coverage cannot be reconstructed.
+A construct explicitly forbidden by the declared subset is a violation (`fail`),
+not an excuse to mark the candidate compliant. Arbitrary Python outside that
+subset does not gain support merely because Google's executor can run it.
+A generic helper checked with unknown inputs is not proven valid for every
+possible argument; preserve the distinction between local/generic checks and
+checking actual call-site types. Record the analysis scope rather than claiming
+formal task verification or sound analysis of unrestricted Python.
+
+### 4.5 Implementation sequence and discussion decisions
+
+1. Extract a contract-aware checker entry point from existing validation code,
+   including task API availability, without changing Method 1's accepted subset.
+   Compare rule IDs/results on existing positive and negative fixtures; keep the
+   current interface available while callers migrate.
+2. Implement section 3's artifact-only baseline audit around that core. Confirm
+   that calls, generated source, physical actions, and original success verdicts
+   do not change when auditing is enabled.
+3. Implement the Method-2 generator and whole-candidate repair loop, versioned
+   templates, method dispatch, and reuse of the checked runtime. No execution
+   of rejected candidates and no per-helper repair loop in this method.
+4. Exercise missing helpers, action effects hidden in condition helpers, both
+   modes, unavailable task APIs, unused definitions, dependency cycles, and
+   earlier baseline helper versions. With identical complete bundles/contracts,
+   all three callers must obtain the same core compliance verdict. For scripted
+   accepted bundles, Methods 1 and 2 must produce identical adapter actions.
+5. Run matched model experiments only as a separately requested batch. Record
+   repair granularity and total resources; keep physical success and DSL
+   compliance separate, including generation and audit failures.
+
+Recommended decision for discussion: **one shared checker core, three thin
+method-specific callers, and one separate baseline history-reconstruction
+layer**. Start with existing fail-fast diagnostics and the current supported
+subset. Richer diagnostic aggregation and broader Python coverage can be
+separate changes; neither is necessary to define Method 2.
 
 ## References
 
