@@ -12,6 +12,7 @@ from ..contracts import (
     api_description,
     validate_condition_mode,
 )
+from ..timing import timed
 from ..validation import definitions, missing_calls, parse, validate, validate_helper
 
 PROMPTS = Path(__file__).with_name("prompts")
@@ -50,6 +51,7 @@ class Generator:
         self.max_attempts = max_attempts
         self.api_names = api_names
 
+    @timed("generation_control")
     def generate(self, instruction, context="b0 is the input block."):
         source = self.model.complete(
             prompt(
@@ -67,6 +69,7 @@ class Generator:
         )
         return bundle
 
+    @timed("generation_control")
     def prepare(
         self,
         source,
@@ -96,7 +99,7 @@ class Generator:
                 "validation_start", checkpoint_id=cp, helper=unit, role=role
             )
             try:
-                tree = parse(source, unit)
+                tree = self.budget.timings.call("validation", parse, source, unit)
                 for node in ast.walk(tree):
                     if (
                         isinstance(node, ast.Call)
@@ -130,15 +133,23 @@ class Generator:
                                 ]
                             )
                 if unit == "policy":
-                    validate(
+                    self.budget.timings.call(
+                        "validation",
+                        validate,
                         Bundle(source, helpers),
                         complete=False,
                         role=role,
                         condition_mode=self.condition_mode,
                     )
                 else:
-                    validate_helper(
-                        source, unit, helpers, role, condition_mode=self.condition_mode
+                    self.budget.timings.call(
+                        "validation",
+                        validate_helper,
+                        source,
+                        unit,
+                        helpers,
+                        role,
+                        condition_mode=self.condition_mode,
                     )
                 self.logger.emit(
                     "local_validation_pass", checkpoint_id=cp, parent_event_id=event
@@ -182,7 +193,9 @@ class Generator:
                     helpers.update(child.helpers)
                     helpers[call.name] = child.source
                 if unit == "policy":
-                    validate(
+                    self.budget.timings.call(
+                        "validation",
+                        validate,
                         Bundle(source, helpers),
                         complete=True,
                         role=role,

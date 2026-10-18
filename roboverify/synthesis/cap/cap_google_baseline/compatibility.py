@@ -108,7 +108,8 @@ def load_core(model, logger, checkpoints, budget):
 
         try:
             sys.settrace(trace)
-            builtins.exec(compile(source, filename, "exec"), gvars, lvars)
+            with budget.timings.measure("execution"):
+                builtins.exec(compile(source, filename, "exec"), gvars, lvars)
         finally:
             sys.settrace(original_trace)
         for name in names:

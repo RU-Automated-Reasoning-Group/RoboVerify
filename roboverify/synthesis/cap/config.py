@@ -47,7 +47,7 @@ class RunConfig:
     task: str = "stack"
     num_blocks: int = 3
     seed: int = 0
-    timeout: float = 60.0
+    timeout: float = 600.0
     max_attempts: int = 3
     max_model_calls: int = 30
     max_steps: int = 10000
@@ -57,6 +57,7 @@ class RunConfig:
     save_video: bool = True
     output_root: str = "runs"
     condition_mode: str = "dsl_only"
+    max_sim_steps: int = 10000
 
     def __post_init__(self):
         validate_condition_mode(self.condition_mode)

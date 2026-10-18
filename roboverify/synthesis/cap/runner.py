@@ -1,6 +1,7 @@
 """Shared single-trial runner; all outcomes and artifacts use RunLogger."""
 
 import hashlib
+import math
 import signal
 import time
 import traceback
@@ -41,7 +42,7 @@ def deadline(budget):
     started = time.monotonic()
 
     def expired(signum, frame):
-        raise BudgetExceeded("Wall-clock trial deadline exhausted")
+        budget.exhaust("wall_clock", "Wall-clock trial deadline exhausted")
 
     remaining = budget.remaining()
     signal.signal(signal.SIGALRM, expired)
@@ -117,9 +118,13 @@ def run(
     generate_only=False,
     environment_factory=None,
     capture_stdout=True,
+    queue_wait_seconds=0.0,
+    batch_context=None,
 ):
     from synthesis.experiment.run_logger import RunLogger
 
+    if not math.isfinite(queue_wait_seconds) or queue_wait_seconds < 0:
+        raise ValueError("Queue wait must be finite and nonnegative")
     validate_condition_mode(config.condition_mode)
     if config.method not in {"cap_method_1", "cap_google_baseline"}:
         raise ValueError("Unknown CaP method")
@@ -132,10 +137,14 @@ def run(
         config.max_steps,
         config.max_depth,
         config.max_tokens,
+        max_sim_steps=config.max_sim_steps,
     )
     instruction = instruction or TASK_INSTRUCTIONS.get(config.task)
     resolved = asdict(config) | {
         "timeout": timeout,
+        "budget_policy": "resource-limits-with-wall-clock-safety-cap-v1",
+        "queue_wait_seconds": queue_wait_seconds,
+        "batch_context": dict(batch_context or {}),
         "model": asdict(model_config),
         "generate_only": generate_only,
         "instruction": instruction,
@@ -155,7 +164,7 @@ def run(
         slug=f"{config.method}-{config.task}-{uuid.uuid4().hex[:8]}",
         capture_stdout=capture_stdout,
     )
-    logger = CapLogger(run_log.run_dir, run=run_log)
+    logger = CapLogger(run_log.run_dir, run=run_log, timings=budget.timings)
     checkpoints = Checkpoints(
         logger, method=config.method, condition_mode=config.condition_mode
     )
@@ -185,10 +194,12 @@ def run(
                     condition_mode=config.condition_mode,
                 )
                 if config.method == "cap_method_1":
-                    method.generator.generate(instruction)
+                    budget.timings.call(
+                        "generation_control", method.generator.generate, instruction
+                    )
                 else:
                     method.policy._cfg["debug_mode"] = True
-                    method(instruction)
+                    budget.timings.call("generation_control", method, instruction)
                 status = "generated"
                 outcome["success"] = None
             else:
@@ -219,47 +230,52 @@ def run(
                         trace_index=trace_index,
                     )
                 with using_higher_tolerance(config.higher_tolerance):
-                    env = (
-                        environment_factory(config, snapshot)
-                        if environment_factory
-                        else prepare_environment(config, snapshot)
-                    )
-                    adapter = RoboVerifyAdapter(env, logger, budget, task=config.task)
-                    entry = adapter.entry_observation
-                    from synthesis.api.control import (
-                        DEFAULT_CONTROL,
-                        DEFAULT_PICK_CONTROL,
-                    )
+                    with budget.timings.measure("setup"):
+                        env = (
+                            environment_factory(config, snapshot)
+                            if environment_factory
+                            else prepare_environment(config, snapshot)
+                        )
+                        adapter = RoboVerifyAdapter(
+                            env, logger, budget, task=config.task
+                        )
+                        entry = adapter.entry_observation
+                        from synthesis.api.control import (
+                            DEFAULT_CONTROL,
+                            DEFAULT_PICK_CONTROL,
+                        )
 
-                    logger.artifact(
-                        "adapter_config.json",
-                        {
-                            "controller": asdict(DEFAULT_CONTROL),
-                            "pick_controller": asdict(DEFAULT_PICK_CONTROL),
-                            "primitive_step_limit": 50,
-                            "higher_tolerance": config.higher_tolerance,
-                            "predicate_domain": "physical_blocks",
-                            "entry_geometry": "frozen_trial_start",
-                            "api_names": sorted(adapter.api_names),
-                            "object_handles": {
-                                handle.token: physical_id
-                                for handle, physical_id in adapter.ids.items()
+                        logger.artifact(
+                            "adapter_config.json",
+                            {
+                                "controller": asdict(DEFAULT_CONTROL),
+                                "pick_controller": asdict(DEFAULT_PICK_CONTROL),
+                                "primitive_step_limit": 50,
+                                "higher_tolerance": config.higher_tolerance,
+                                "predicate_domain": "physical_blocks",
+                                "entry_geometry": "frozen_trial_start",
+                                "api_names": sorted(adapter.api_names),
+                                "object_handles": {
+                                    handle.token: physical_id
+                                    for handle, physical_id in adapter.ids.items()
+                                },
+                                "initialization": (
+                                    "snapshot" if snapshot else "fresh_scene"
+                                ),
+                                "settling_steps": (
+                                    0 if snapshot or config.task != "stack" else 50
+                                ),
                             },
-                            "initialization": "snapshot" if snapshot else "fresh_scene",
-                            "settling_steps": (
-                                0 if snapshot or config.task != "stack" else 50
-                            ),
-                        },
-                    )
-                    validate_start(env, config.task, entry)
-                    recorder = Recorder(
-                        env,
-                        logger,
-                        budget,
-                        video=config.save_video,
-                        seed=config.seed,
-                        task=config.task,
-                    )
+                        )
+                        validate_start(env, config.task, entry)
+                        recorder = Recorder(
+                            env,
+                            logger,
+                            budget,
+                            video=config.save_video,
+                            seed=config.seed,
+                            task=config.task,
+                        )
                     method = make_method(
                         config.method,
                         model,
@@ -271,8 +287,12 @@ def run(
                         condition_mode=config.condition_mode,
                     )
                     with recorder:
-                        method(instruction)
-                    outcome.update(evaluate_terminal(env, config.task, entry))
+                        budget.timings.call("generation_control", method, instruction)
+                    outcome.update(
+                        budget.timings.call(
+                            "evaluation", evaluate_terminal, env, config.task, entry
+                        )
+                    )
                     # Physical success is the primary metric; DSL agreement is
                     # retained independently rather than silently changing it.
                     outcome["success"] = outcome["environment_success"]
@@ -289,7 +309,11 @@ def run(
         if env is not None and entry is not None:
             try:
                 with using_higher_tolerance(config.higher_tolerance):
-                    outcome.update(evaluate_terminal(env, config.task, entry))
+                    outcome.update(
+                        budget.timings.call(
+                            "evaluation", evaluate_terminal, env, config.task, entry
+                        )
+                    )
             except Exception as evaluation_error:
                 logger.emit("evaluation_failure", error=str(evaluation_error))
         outcome["success"] = (
@@ -300,7 +324,7 @@ def run(
     finally:
         if env is not None:
             try:
-                env.close()
+                budget.timings.call("cleanup", env.close)
             except Exception as exc:
                 logger.emit("close_failure", error=str(exc))
         outcome.update(
@@ -312,12 +336,30 @@ def run(
             known_tokens=budget.tokens,
             unknown_usage_calls=budget.unknown_usage_calls,
             execution_ticks=budget.steps,
+            simulation_steps=budget.simulation_steps,
+            max_observed_depth=budget.max_observed_depth,
+            budget_exhausted_by=budget.exhausted_by,
+            queue_wait_seconds=queue_wait_seconds,
             checkpoint_id=checkpoints.previous,
             active_checkpoint_id=checkpoints.active,
             artifacts_path=logger.relative(logger.root),
         )
         outcome["video"] = (
             recorder.video_metadata if recorder else {"status": "not_started"}
+        )
+        outcome.update(budget.timings.snapshot())
+        logger.artifact(
+            "timings.json",
+            {
+                key: outcome[key]
+                for key in (
+                    "active_wall_seconds",
+                    "queue_wait_seconds",
+                    "phase_seconds",
+                    "phase_accounting",
+                    "budget_exhausted_by",
+                )
+            },
         )
         logger.emit("trial_result", status=status, **outcome)
         logger.close()

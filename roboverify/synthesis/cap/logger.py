@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .contracts import ObjectHandle
+from .timing import timed
 
 
 def json_value(value):
@@ -20,7 +21,10 @@ def json_value(value):
 
 
 class CapLogger:
-    def __init__(self, run_dir, *, run=None, trial_id="trial_001", console=True):
+    def __init__(
+        self, run_dir, *, run=None, trial_id="trial_001", console=True, timings=None
+    ):
+        self.timings = timings
         self.run_dir = Path(run_dir).resolve()
         self.root = self.run_dir / "artifacts" / trial_id
         self.root.mkdir(parents=True, exist_ok=True)
@@ -36,6 +40,7 @@ class CapLogger:
     def relative(self, path):
         return str(Path(path).resolve().relative_to(self.run_dir))
 
+    @timed("logging_io")
     def text(self, text):
         text = text.rstrip() + "\n"
         if self.run is not None and self.run._saved_fds is not None:
@@ -48,6 +53,7 @@ class CapLogger:
             if self.console:
                 print(text, end="", flush=True)
 
+    @timed("logging_io")
     def emit(self, kind, **fields):
         self.sequence += 1
         event = dict(self.context)
@@ -85,6 +91,7 @@ class CapLogger:
         finally:
             self.context = old
 
+    @timed("logging_io")
     def artifact(self, relative, value, *, print_content=False):
         path = self.root / relative
         if not path.resolve().is_relative_to(self.root.resolve()):
@@ -111,6 +118,7 @@ class CapLogger:
         self.emit("artifact", path=relative, status=status, **metadata)
         return relative
 
+    @timed("logging_io")
     def close(self):
         if self.timeline.closed:
             return

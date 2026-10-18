@@ -6,6 +6,7 @@ import time
 
 from .contracts import BudgetExceeded
 from .logger import json_value
+from .timing import timed
 
 
 class Recorder:
@@ -34,6 +35,7 @@ class Recorder:
                     self.directory / "video.mp4", "missing", reason=str(exc)
                 )
 
+    @timed("recording")
     def state(self):
         from synthesis.cfg.reset import capture, inner_env
 
@@ -45,7 +47,8 @@ class Recorder:
         )
         if self.video is not None and not self.video.error:
             try:
-                self.video.append(inner.render(mode="rgb_array"))
+                with self.budget.timings.measure("rendering"):
+                    self.video.append(inner.render(mode="rgb_array"))
                 if self.video.error:
                     self.logger.emit("video_error", error=self.video.error)
                     return
@@ -63,6 +66,7 @@ class Recorder:
                 self.video.error = str(exc)
                 self.logger.emit("video_error", error=str(exc))
 
+    @timed("recording")
     def __enter__(self):
         try:
             self.state()
@@ -73,11 +77,13 @@ class Recorder:
             self.__exit__(*sys.exc_info())
             raise
 
+    @timed("recording")
     def step(self, action):
         import numpy as np
 
         self.budget.tick()
-        result = self.original_step(action)
+        self.budget.simulation_step()
+        result = self.budget.timings.call("simulation", self.original_step, action)
         self.actions.append(np.array(action, copy=True))
         self.state()
         row = self.logger.context | {
@@ -93,6 +99,7 @@ class Recorder:
         self.logger.emit("sim_step", **row)
         return result
 
+    @timed("recording")
     def save(self, path, status):
         from synthesis.cfg.demos import DemoTrace
         from synthesis.cfg.recordings import save_traces
@@ -115,6 +122,7 @@ class Recorder:
         save_traces(path, [trace])
         self.logger.register(path)
 
+    @timed("recording")
     def __exit__(self, exc_type, exc, tb):
         self.env.step = self.original_step
         try:
@@ -133,13 +141,15 @@ class Recorder:
                     self.video.error = (
                         self.video.error or "Trial deadline exhausted during recording"
                     )
-                metadata = self.video.close()
+                metadata = self.budget.timings.call("video_finalize", self.video.close)
                 self.video_metadata = metadata
                 self.logger.emit("video_end", metadata=metadata)
                 self.logger.register(
                     self.video.path,
                     "completed" if not self.video.error else "failed",
-                    **{k: v for k, v in metadata.items() if k not in {"path", "status"}}
+                    **{
+                        k: v for k, v in metadata.items() if k not in {"path", "status"}
+                    },
                 )
                 encoder = self.video.path.with_suffix(".encoder.log")
                 if encoder.exists():

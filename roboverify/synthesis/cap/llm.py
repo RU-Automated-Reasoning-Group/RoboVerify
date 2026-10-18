@@ -8,6 +8,7 @@ import urllib.request
 from dataclasses import dataclass, field
 
 from .contracts import CapError
+from .timing import timed
 
 
 class ModelError(CapError):
@@ -132,6 +133,7 @@ class LoggedModel:
         self.backend, self.logger, self.budget = backend, logger, budget
         self.retries = retries
 
+    @timed("generation_control")
     def complete(self, prompt, *, purpose, **context):
         for retry in range(self.retries + 1):
             self.budget.model_call()
@@ -148,23 +150,38 @@ class LoggedModel:
             )
             start = time.monotonic()
             try:
-                response = self.backend.generate(prompt, self.budget.remaining())
+                role = purpose
+                if purpose == "google_generation":
+                    role = "helper" if self.logger.context.get("helper") else "policy"
+                response = self.budget.timings.call(
+                    "model_" + role,
+                    self.backend.generate,
+                    prompt,
+                    self.budget.remaining(),
+                )
+                request_elapsed = time.monotonic() - start
             except TransportError as exc:
                 self.logger.emit(
                     "generation_error",
                     call_id=call,
                     error=str(exc),
+                    elapsed=time.monotonic() - start,
                     parent_event_id=event,
                 )
                 if not exc.retryable or retry == self.retries:
                     raise
-                time.sleep(min(2**retry, self.budget.remaining()))
+                self.budget.timings.call(
+                    "transport_backoff",
+                    time.sleep,
+                    min(2**retry, self.budget.remaining()),
+                )
                 continue
             except Exception as exc:
                 self.logger.emit(
                     "generation_error",
                     call_id=call,
                     error=str(exc),
+                    elapsed=time.monotonic() - start,
                     parent_event_id=event,
                 )
                 raise
@@ -178,7 +195,7 @@ class LoggedModel:
                         call_id=call,
                         purpose=purpose,
                         parent_event_id=event,
-                        elapsed=time.monotonic() - start,
+                        elapsed=request_elapsed,
                         usage=response.usage,
                         finish_reason=response.finish_reason,
                     )

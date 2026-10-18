@@ -54,12 +54,18 @@ def main(argv=None):
     parser.add_argument(
         "--extra-body", type=Path, help="Provider-specific JSON request options"
     )
-    parser.add_argument("--timeout", type=float, default=60)
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=600,
+        help="Wall-clock safety cap in seconds; Unstack remains capped at 60",
+    )
     parser.add_argument("--request-timeout", type=float, default=45)
     parser.add_argument("--transport-retries", type=int, default=2)
     parser.add_argument("--max-attempts", type=int, default=3)
     parser.add_argument("--max-model-calls", type=int, default=30)
     parser.add_argument("--max-steps", type=int, default=10000)
+    parser.add_argument("--max-sim-steps", type=int, default=10000)
     parser.add_argument("--max-depth", type=int, default=12)
     parser.add_argument("--max-tokens", type=int, default=100000)
     parser.add_argument("--higher-tolerance", type=float, default=0.001)
@@ -103,6 +109,7 @@ def main(argv=None):
         max_attempts=args.max_attempts,
         max_model_calls=args.max_model_calls,
         max_steps=args.max_steps,
+        max_sim_steps=args.max_sim_steps,
         max_depth=args.max_depth,
         max_tokens=args.max_tokens,
         higher_tolerance=args.higher_tolerance,

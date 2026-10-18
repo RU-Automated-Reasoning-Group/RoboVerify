@@ -12,6 +12,7 @@ from .contracts import (
     Position3,
     validate_condition_mode,
 )
+from .timing import timed
 from .validation import definitions, validate
 
 
@@ -38,13 +39,16 @@ class Runtime:
         self.condition_depth = 0
         self.unit = "policy"
 
+    @timed("execution")
     def execute(self, bundle, arguments=None, *, role="body", return_name=None):
         from .validation import OBJECT
 
         arguments = arguments or {"b0": self.adapter.b0}
         if any(not isinstance(v, ObjectHandle) for v in arguments.values()):
             raise CapError("Module inputs must be object handles")
-        validate(
+        self.budget.timings.call(
+            "validation",
+            validate,
             bundle,
             inputs=dict.fromkeys(arguments, OBJECT),
             role=role,
