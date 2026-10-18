@@ -164,6 +164,111 @@ def current_check(bundle, condition_mode, scope, role, input_types):
     return unresolved
 ```
 
+**Where is the actual DSL filter?** `current_check` and
+`analyze_types_conditions_and_effects` above are explanatory names, not functions
+in the repository. The public entry is `validate(...)` in
+[validation.py](../validation.py), which constructs a `Checker` and calls
+`Checker.check()`. DSL compliance is enforced by several cooperating functions:
+
+| Abstract responsibility | Actual implementation | What it checks |
+| --- | --- | --- |
+| Syntax and definition filtering | `parse()` and `definitions()` | Allowed AST syntax, protected/forbidden names, direct calls, legal definition shapes, and duplicate helper names. |
+| Type, condition-mode, and API filtering | **`Checker.expr()`** | Expression types, API arity/operand types, numeric versus identity comparisons, query lambdas, and generated helper calls. |
+| Condition validity | `Checker.condition()` | A condition must return Bool and must not depend on physical actions. |
+| Following values through a program | `Checker.block()` | Assignments, branches, loop-carried values, returns, and accumulated action effects. It invokes `expr()` and `condition()`. |
+| Whole-bundle completeness | `Checker.check()` | Analyze the policy, also check uncalled definitions with generic types, and reject unresolved helpers in complete scope. |
+
+The central expression filter can be abstracted as follows. `mode`, `scope`,
+`functions`, and `active_helpers` are checker context; `env` maps variables to
+abstract values `Value(kind, actions)`, not simulator observations. An abstract
+value records a type and whether it depends on physical actions. The conceptual
+operations below omit AST case details while preserving the main decisions in
+`Checker.expr()`:
+
+```python
+def expr(node, env, role="body"):
+    if is_literal_name_vector_position_read_or_arithmetic(node):
+        # Check supported operand types; preserve dependency action flags.
+        return infer_basic_expression(node, env, role)
+
+    if is_boolean_combination(node):
+        for operand in operands(node):
+            condition(operand, env)
+        return Value("bool", actions=False)
+
+    if is_comparison(node):
+        values = [expr(x, env, role="condition") for x in operands(node)]
+        reject_if_any_action_dependency(values)
+        if mode == "dsl_only":
+            require_object_identity_comparisons(node, values)  # Only == / !=.
+        else:
+            require_identity_or_numeric_comparisons(node, values)
+        return Value("bool", actions=False)
+
+    name = require_direct_call(node)
+    if name in QUERIES:  # exists / forall / get
+        query = require_valid_query_lambda(node)
+        query_env = bind_parameters_as_object_handles(query, env)
+        condition(query.body, query_env)
+        return Value("object" if name == "get" else "bool", actions=False)
+
+    args = [expr(arg, env, role) for arg in arguments(node)]
+    if name in API_NAMES:  # Primitives, DSL predicates, and position getters.
+        require_api_arity_and_operand_types(name, args)
+        acting = name in ACTIONS or any(arg.actions for arg in args)
+        if role == "condition" and acting:
+            reject("ACTION_IN_CONDITION")
+        return Value(api_return_kind(name), actions=acting)
+
+    if name in env:
+        reject("DYNAMIC_CALL")  # A variable value is not a callable API/helper.
+    if name not in functions:
+        if scope == "complete":
+            reject("UNRESOLVED_HELPER")
+        record_missing_helper(name, required_role=role)
+        return UNKNOWN  # A generation obligation, not an accepted API.
+
+    if name in active_helpers:
+        reject("DEPENDENCY_CYCLE")
+    require_helper_arity(functions[name], args)
+    local_env = bind_helper_parameters(functions[name], args)
+    with analyzing_helper(name):  # Track recursion and diagnostic source unit.
+        returns, body_actions = analyze_helper_body(functions[name], local_env, role)
+    result = merge_return_types_and_action_effects(returns, body_actions)
+    if role == "condition" and result.actions:
+        reject("ACTION_IN_CONDITION")
+    return result
+
+
+def condition(node, env):  # Abstraction of Checker.condition().
+    value = expr(node, env, role="condition")
+    require_type(value, "bool")
+    if value.actions:
+        reject("ACTION_IN_CONDITION")
+    return value
+```
+
+`require_type` represents `Checker.expect`: unknown types may be deferred during
+local checks, but complete call-site checking must resolve required types.
+`reject` represents `Checker.fail`, which raises `ConstraintFailure` with a
+rule ID and source location. Repeated missing-helper uses retain the stricter
+condition role when applicable. A helper body is analyzed with argument-derived
+types and its definition's global environment; possible implicit None returns
+and actions in the body contribute to its result summary.
+
+The API signature checks above use the existing classifications in
+[contracts.py](../contracts.py). For example, Move requires three object handles
+and one three-element numeric vector; predicates take two handles and return
+Bool; position getters return Position3. Merely recognizing the name `Move` is
+not enough to pass the filter. Task-specific API availability is still checked
+separately in the current Method-1 generator, as described below.
+
+For `ready = helper(b0); if ready: ...`, `block()` stores the abstract result of
+`helper` in `env["ready"]`. A helper that performs Pick and returns True carries
+an action flag, so `condition()` rejects its later use as a guard. These checks
+inspect source/types/effects; they do not call Pick, read coordinates, or ask an
+LLM whether the code is compliant.
+
 This abstracts the policy-bundle `validate` path. Local `validate_helper` reuses
 the analysis for one helper with unknown parameter types and returns normally
 on a local pass; it does not return a structured whole-program report.
