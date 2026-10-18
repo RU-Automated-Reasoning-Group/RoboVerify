@@ -1,16 +1,24 @@
 # Revision 2 discussion
 
-Status: discussion draft. The requested scope is API/prompt clarity and versioning
+Status: section 1 implemented. Other revision items retain their stated status.
+The requested scope is API/prompt clarity and versioning
 (item 1), plus parallel execution of future experiment batches (item 2). The reasoning-enabled,
 16k-output Stack experiments have completed using the existing prompts; their
 [report](../../../runs/cap-stack-reasoning-comparison/20261018-180533-16k/report.md)
-is the reference evidence for this discussion. This document does not change
-`API_DESCRIPTION`, runtime interfaces, condition rules, or experimental settings.
+is the reference evidence for this discussion. Section 1 now provides a selectable
+`typed_v2` prompt package while preserving legacy prompts, runtime interfaces,
+condition semantics, and historical experimental results.
 Further revision items remain for follow-up discussion.
 
 ## 1. Make API types and semantics explicit in the prompt
 
-The proposed direction is to describe **each input's type and meaning**, rather
+Implementation status (2026-10-18): section 1 is implemented as the opt-in
+`typed_v2` prompt package, with `legacy_v1` retained as the default. The sections
+below specify its design; optional schema unification and live prompt comparisons
+remain future work. Runtime interfaces, condition languages, and controller
+behavior are unchanged.
+
+The implemented direction is to describe **each input's type and meaning**, rather
 than rely on the opening sentence that all object operands are opaque handles.
 The prompt should also state outputs, effects, coordinate frame/units, and the
 important failure cases for each API. This is a prompt-clarity change; it does
@@ -35,11 +43,11 @@ targets and effects. It cannot establish the cause of every controller failure
 or guarantee convergence. Generation latency and truncation remain separate
 measurements, even if shorter helper chains reduce their incidence.
 
-The following is the proposed **`typed_v2` edit checklist**, not a change to the
-legacy prompt or to executable API semantics. Entries marked as contract clarity
-are supported by the implementation; they are not all observed failure causes.
+The following **`typed_v2` edit checklist** is implemented without changing the
+legacy prompt or executable API semantics. Some entries clarify existing
+contracts; they are not all observed failure causes.
 
-| API_DESCRIPTION area | Current gap / experiment evidence | Proposed wording or structural edit |
+| API_DESCRIPTION area | Current gap / experiment evidence | Implemented wording or structural edit |
 | --- | --- | --- |
 | Types and input bindings | The opening sentence about opaque handles has not prevented numeric/Position3 operands being passed to Move. | Define ObjectHandle, Position3, Offset3, Scalar, Bool, and None; type every parameter and return. Explain that `b0` is the supplied block handle, other handles come from queries, and type names are documentation notation, not constructors. |
 | `Pick(block)` | Its signature omits its action sequence; generated action helpers have introduced unintended repeated Picks. | Describe approach at current gripper height, open, descend, close; no automatic lift or transport. State that opening can release a carried block, so a movement-only helper must not silently re-grasp. |
@@ -241,7 +249,7 @@ one, and select the prompt version through configuration for later paper
 comparisons and controlled variant experiments. Do not overwrite the old prompt
 and rely on manually checking out historical commits to reproduce it.
 
-Proposed interface, not yet implemented:
+Implemented configuration interface:
 
 ```text
 RunConfig.prompt_version = "legacy_v1" | "typed_v2"
@@ -251,8 +259,8 @@ Compatibility default: legacy_v1
 
 | Version | Contents | Status |
 | --- | --- | --- |
-| `legacy_v1` | The current post-Revision-1 API description, mode rules, and policy/helper/repair templates used by the completed 16k experiments. | Preserve exactly as the reference prompt package. Those runs predate an explicit prompt_version field. |
-| `typed_v2` | The revised type glossary, per-input meanings, primitive/predicate descriptions, and whichever interface examples are agreed within item 1. | Discussion draft; not implemented or evaluated. |
+| `legacy_v1` | The post-Revision-1 API description, mode rules, and policy/helper/repair templates used by the completed 16k experiments. | Frozen and selectable; default. Those runs predate an explicit prompt_version field. |
+| `typed_v2` | Typed inputs/returns, precise primitive/predicate/query semantics, short positive/negative interface examples, and role-specific output rules. | Implemented and covered by offline regression tests; live performance has not been evaluated. |
 
 Freeze all model-facing components, not only `API_DESCRIPTION`: shared API text,
 condition-mode rule text, policy and helper templates for both methods, and the
@@ -280,10 +288,13 @@ assessment in item 3 does not gate or repair execution.
 
 Resolve a version once per trial, reject unknown versions, and propagate it to
 all policy/helper/repair requests. Avoid mixing legacy policy generation with a
-new helper or repair template within the same trial. An immutable prompt package
-could live under a versioned prompt-resource directory, with the existing
-compatibility/generation layers selecting it; the exact storage layout remains
-an implementation choice.
+new helper or repair template within the same trial. The packages live in
+[prompts/legacy_v1.json](../prompts/legacy_v1.json) and
+[prompts/typed_v2.json](../prompts/typed_v2.json). The
+[prompt package loader](../prompt_package.py) reads and freezes package bytes
+per process, renders task-filtered entries, and supplies the package hash.
+The legacy constants/template files remain compatibility references covered by
+tests; prompt assembly selects the frozen package.
 
 Record at least the following in configuration and generation artifacts:
 
@@ -316,24 +327,24 @@ any additional Revision 2 work items remain for follow-up discussion.
 
 ### 1.8 Changes elsewhere in contracts.py and its callers
 
-The actual file is [contracts.py](../contracts.py). Implementing item 1 requires
+The actual file is [contracts.py](../contracts.py). Item 1 requires
 more than replacing `API_DESCRIPTION`, because the file also combines prompt
 selection, condition text, task exposure, and runtime types. Keep prompt
 provenance separate from executable contract versions.
 
-| Component | Planned treatment for item 1 | Reason / boundary |
+| Component | Implemented treatment (optional items noted) | Reason / boundary |
 | --- | --- | --- |
 | `API_DESCRIPTION` constant | Preserve the existing value as part of legacy_v1; add the typed_v2 description in an immutable prompt package. | Old experiment prompts must remain reproducible byte-for-byte; do not edit the legacy constant in place. |
 | `CONDITION_RULES` | Freeze legacy text and provide version-selected wording if revised, with the same two modes and semantics. Explicitly allow mixed DSL/numeric conditions and unrestricted numeric origins in extended mode. | This is wording/versioning, not a new restriction on counters or a change to the checker. |
-| `api_description(...)` | Accept the resolved prompt version and, for typed_v2, resolved semantic parameters such as Higher tolerance; render the matching package and mode. | Current arguments are only `names` and `condition_mode`, so version/config propagation needs an actual implementation change. Legacy assembly remains exact. |
-| Task filtering in `api_description` / `task_api_names` | Preserve current exposure; render typed_v2 entries by API name. Keep the legacy filtering path for replay. | Current filtering removes lines starting with `ON_star_zero`; a multiline typed entry would otherwise leave orphaned descriptions or unavailable examples. No new task APIs are added. |
+| `api_description(...)` | Accept the resolved prompt version and, for typed_v2, resolved semantic parameters such as Higher tolerance; render the matching package and mode. | The new keyword arguments are `prompt_version` and `higher_tolerance`; existing positional callers retain legacy behavior. |
+| Task filtering in `api_description` / `task_api_names` | Preserve current exposure; render typed_v2 entries by API name. Keep the legacy filtering path for replay. | Legacy filtering removes lines starting with `ON_star_zero`; a multiline typed entry would otherwise leave orphaned descriptions or unavailable examples. No new task APIs are added. |
 | Prompt-version identifiers and validation | Add a supported-version registry/validator, either here or in the prompt package; resolve once per trial. | Reject unknown versions and prevent policy/helper/repair requests from mixing versions. A separate module may keep contracts.py simulator-independent and small. |
 | Optional structured API metadata | May add parameter/return/effect descriptions for rendering and consistency checks, using existing checker/adapter semantics as the reference. | This is optional organization; replacing the checker or adapter type system is not required for a prompt edit. Avoid adding simulator imports just to render documentation. |
 | `ObjectHandle`, `Position3`, API name sets, and `validate_condition_mode` | Preserve their runtime behavior. Offset3/Scalar remain explanatory names. | Prompt clarification requires no new observation fields, constructors, primitives, or predicate implementation. |
 | `OBSERVATION_API_VERSION`, `CHECKER_VERSION` | Keep unchanged for a prompt-only implementation; record prompt_version and prompt hashes separately. | A changed description does not mean the observation API or checker changed. Any later checker change is separately versioned. |
 | `Bundle`, `Diagnostic`, exceptions including `PrimitiveFailure` | No semantic change required. Link prompt provenance through existing checkpoints/run artifacts; adding a Bundle provenance field is optional. | Richer controller-failure diagnostics would be a separate adapter/logging change; rewriting an exception class does not fix nonconvergence. |
 
-Required integration work outside this file is version selection in
+The implementation also adds version selection in
 [RunConfig](../config.py) and the [CLI](../../entry/run_cap.py), propagation through
 [runner](../runner.py), [Method-1 prompt assembly](../cap_method_1/generation.py),
 and [baseline module_config](../cap_google_baseline/compatibility.py), plus
@@ -343,15 +354,35 @@ helper and repair requests. Keep Google's pinned core unchanged.
 
 ### 1.9 Helper templates and validation priorities
 
-The common API reference currently ends with “Emit top-level statements that
+The preserved legacy API reference ends with “Emit top-level statements that
 invoke the policy”; it is also interpolated into the
 [helper template](../cap_method_1/prompts/helper.txt), which asks for exactly a
 function definition. The baseline similarly appends the same API text after its
-helper-definition instruction. This is a concrete prompt conflict to remove in
+helper-definition instruction. This concrete prompt conflict is removed in
 typed_v2; it is not evidence that this sentence alone caused any particular
 failed trial. Put execution-entry instructions in policy templates, and make
 [repair output](../cap_method_1/prompts/repair.txt) depend on whether the repaired
 unit is a policy or a helper.
+
+The approved and implemented policy output instruction is:
+
+```text
+Output executable policy code. You may use top-level statements directly.
+If you define a policy entry function, invoke it at the top level.
+```
+
+The approved and implemented helper output instruction is:
+
+```text
+Output only the requested function definition.
+Do not include top-level calls or other executable statements outside the function.
+The caller is responsible for invoking this helper.
+```
+
+Method-1 repair chooses between these instructions by source unit (`policy` or
+the helper's name), independently of the action/condition role. In particular,
+repairing an action helper must not turn it into an executable policy entry.
+The shared typed API text contains neither entry-point instruction.
 
 For helper generation, request the exact name/signature, a body matching the
 requested action or pure-condition role, and dependencies that terminate in
@@ -362,7 +393,7 @@ or duplicate helpers: that discovery behavior stays unchanged. Any future
 addition of caller context must be an explicit versioned template/input change
 and must not silently alter Google's core helper-resolution algorithm.
 
-Validate the proposed package in this order:
+Validation and subsequent experiment requirements:
 
 1. Check legacy prompt reconstruction byte-for-byte for both methods and all
    request roles. Check typed_v2 mode/task filtering and configured tolerances,
@@ -380,9 +411,31 @@ Validate the proposed package in this order:
    primitive convergence, and physical outcomes separately. Use item 3's audit
    when available; until then, label manual source/trace inspection as such.
 
-No live rerun or prompt implementation is performed by this documentation edit.
+The implementation records `prompt_version` and `prompt_package_sha256` in run
+configuration/results and source checkpoints, and saves `prompt_package.json`.
+Each model request, including failed/retried attempts, retains its exact text,
+request payload, and `prompt_metadata.json` with prompt/request hashes and role.
+The request hash uses sorted-key compact ASCII JSON encoded as UTF-8; the package
+hash covers the resource file bytes. Configured values such as Higher tolerance
+enter assembled prompt hashes, while the package hash identifies the templates.
 
-### Discussion points within item 1
+Each checkpoint source lists `generation_matches` linking it to model-call IDs,
+request metadata, and returned-source hashes. Matching ignores outer whitespace
+to accommodate upstream `.strip()`; source files retain their own exact hashes.
+If multiple calls returned the same text, all matches are retained, without
+claiming a unique generating call. Empty or externally supplied sources may
+have no generation match. The checkpoint parent/source history is preserved.
+
+Offline checks cover the pre-change legacy prompt fingerprints across methods,
+modes, tasks and request roles; recursive helper and role-specific repair
+propagation; task exposure and nondefault Higher tolerance; transport retry
+hashes; and exact fixture action parity across both versions/methods/modes.
+All 74 CaP tests passed. Twenty saved initial GPT Batch C requests (both methods
+and both condition modes) were also reconstructed byte-for-byte under legacy_v1.
+No paid model experiment is part of this implementation; whether typed_v2
+improves generation or physical success remains to be measured.
+
+### Possible follow-up ablations within item 1
 
 - How much geometric detail should the compact prompt include versus reference
   documentation, particularly the exact ON/ON_star/Scattered formulas?

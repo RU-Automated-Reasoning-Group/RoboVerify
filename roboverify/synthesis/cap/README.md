@@ -91,6 +91,43 @@ Use `--generate-only --responses-file ...` for an offline generation diagnostic.
 Mode, observation API version, validation configuration, and method-1 checker
 version are retained in config/checkpoints and the bounded run report.
 
+## Prompt versions
+
+Both methods accept `--prompt-version legacy_v1|typed_v2`, independently of
+`--condition-mode`. The default is **legacy_v1**, preserving the previous
+policy/helper/repair text and method-specific whitespace/context assembly.
+**typed_v2** adds typed parameter/return descriptions, precise primitive and
+predicate semantics, configured Higher tolerance, and interface examples.
+Policy requests require an execution entry; helper requests require only the
+requested definition; Method-1 repairs follow the source unit's role.
+
+For example, an offline generation diagnostic using the existing scripted inputs:
+
+```bash
+.venv/bin/python -m synthesis.entry.run_cap --method cap_method_1 --prompt-version typed_v2 --condition-mode coordinate_predicates --generate-only --responses-file synthesis/cap/examples/generation_only.json
+```
+
+The versioned resources are [legacy_v1.json](prompts/legacy_v1.json) and
+[typed_v2.json](prompts/typed_v2.json). Add a new version for future prompt changes;
+keep existing versions fixed for reproducible comparisons. Package bytes are
+frozen on first load in each process. The existing contracts.py constants and
+legacy template files are preserved and checked against legacy_v1.
+
+Config, results, checkpoints, and the bounded report record `prompt_version` and
+`prompt_package_sha256`; trial artifacts retain a copy of `prompt_package.json`.
+Every request retains `prompt.txt`, `request.json`, and `prompt_metadata.json`
+with exact prompt and canonical request hashes, role, call ID, and retry index.
+Checkpoint source `generation_matches` link matching returned code to those
+requests (outer whitespace ignored; all matches retained if ambiguous).
+Prompt provenance is separate from observation/checker versions.
+
+This changes model-facing text and provenance only. The Google core, baseline's
+prompt-only constraints, Method-1 checker/interpreter, physical primitives, and
+both condition modes retain their behavior. Offline tests check old prompt bytes,
+role-specific repairs, retries, and fixture action parity across versions.
+No live performance improvement is established. See
+[Revision 2 section 1](docs/revision_2.md#1-make-api-types-and-semantics-explicit-in-the-prompt).
+
 ## Model providers and observation modality
 
 Both methods use a **text-only LLM**. Prompts contain instructions, the API
