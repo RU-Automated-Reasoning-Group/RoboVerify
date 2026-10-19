@@ -690,3 +690,5 @@ Batch configuration can include `"recovery_variants": [false, true]` alongside `
 and `model_config`. With three methods, one condition mode, and five trials this schedules
 30 trials. Recovery attempts stay inside their original trial and all usage is accumulated.
 See [configuration, budgets, evidence, and logging](docs/revision_4_failure_recover.md#implementation-and-validation).
+
+The [Revision 4 Haiku comparison](docs/revision_4_recovery_report.md) records 30 corrected live trials, per-trial costs and seven recovery rounds. All 118 CaP tests pass.

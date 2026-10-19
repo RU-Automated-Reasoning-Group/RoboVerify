@@ -573,3 +573,17 @@ Output replacement Python policy code only, including its top-level invocation.
 - Artifact audit found that `earlier_failures` shared the orchestrator's mutable history list. Appending the latest failure after serializing the selection artifact also mutated the in-memory feedback subsequently sent to the model. The latest failure therefore appeared both in detailed evidence and in earlier history; the prepared and delivered payloads differed.
 - Fix: copy the earlier summaries when constructing feedback. Regression tests check the exact delivered prompt, require zero earlier failures for the first recovery request and three for the fourth, and compare prepared/delivered feedback objects for equality.
 - A complete fresh comparison is required after this correction; no individual failed or successful trial is selectively replaced.
+
+## Completed Haiku 5.5 comparison
+
+- [Full results and interpretation](revision_4_recovery_report.md): 30 corrected Stack trials, five per method/recovery setting, `dsl_only`, medium reasoning, 16k response cap, three parallel workers.
+
+| Method | Recovery off | Recovery on: first attempt | Recovery on: final |
+| --- | ---: | ---: | ---: |
+| Baseline | 1/5 | 2/5 | 5/5 |
+| Method 1 | 3/5 | 3/5 | 5/5 |
+| Method 2 | 2/5 | 5/5 | 5/5 |
+
+- Five initially failed trials were repaired, requiring seven recovery rounds in total. Method 2 used no recovery in this sample; its between-group difference comes from independent initial generations.
+- All 37 rollouts restore the same full snapshot. Exact feedback/history, request usage, trajectories and video frame mappings pass artifact audit; all 30 final source audits pass. The corrected build passes all 118 CaP tests.
+- Corrected usage: 348,076 tokens, 47 calls. The CAP-RECOVERY-1 diagnostic batch remains separate; its outcomes and additional usage are disclosed in the report.
