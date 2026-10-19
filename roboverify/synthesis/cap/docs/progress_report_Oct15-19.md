@@ -237,6 +237,7 @@ def method_2(task, contract):
 | B: DeepSeek v4.1 Flash | On | 16,384 | 180 s | 1/5 | 2/5 | 0/5 | 2/5 |
 | C: GPT-6.1-sol | On | 16,384 | 180 s | 1/5 | 5/5 | 4/5 | 5/5 |
 | C baseline rerun | On | 16,384 | 600 s | 3/5 | Not rerun | Not rerun | Not rerun |
+| D: Haiku 5.5 supplement | On, medium | 16,384 | 600 s | 0/5 | 1/5 | 0/5 | 0/5 |
 
 | Batch / mode | Baseline reported tokens | Method 1 reported tokens | Main failures |
 | --- | ---: | ---: | --- |
@@ -246,12 +247,24 @@ def method_2(task, contract):
 | B / coordinate | 75,190 | 75,019 | Baseline: 3 object-reference errors, 1 deadline, 1 Move failure. Method 1: 2 truncations, 1 Move failure |
 | C / coordinate | 33,394 | 9,422 | Baseline: 1 Pick failure. Method 1: all succeeded, with 2 static repairs |
 | C / DSL, 600 s rerun | 42,272 | — | 2 Move failures; no resource/wall exhaustion |
+| D / DSL | 53,011 | 17,101 | Baseline: 1 invalid object reference, 1 helper-arity error, 2 execution/query-budget exhaustions, 1 Pick failure. Method 1: 4 Move failures |
+| D / coordinate | 56,395 | 19,316 | Baseline: 1 goal failure, 1 Pick failure, 2 execution/query-budget exhaustions, 1 no-witness query. Method 1: 3 Move failures, 1 Release failure, 1 goal failure |
 
 - **Wall-clock finding:** one successful 600-second rerun took 187.46 seconds, including 185.15 seconds in model requests and 0.18 seconds in simulation.
   - Queue wait was 217.83 seconds and excluded from the active trial deadline.
   - Within this rerun’s recorded traces, 2/5 completed successfully by 180 seconds and 3/5 by 300/600 seconds. These are thresholds on the same traces, not additional experiments.
   - The earlier 1/5 and fresh 3/5 results differ in generated samples and scheduling; the entire change cannot be attributed to timeout alone.
 - **Sources:** [Batch A](../../../runs/cap-stack-deepseek-revision1/20261018-172554/report.md), [B/C DSL](../../../runs/cap-stack-reasoning-comparison/20261018-180533-16k/report.md), [B/C coordinate](../../../runs/cap-stack-coordinate-comparison/20261018-184618-reasoning-16k/report.md), [600-second rerun](../../../runs/cap-stack-gpt61sol-budget/20261018-192834-dsl-600s/report.md).
+
+- **Haiku legacy-prompt supplement (October 19):** 20 fresh trials, two methods, two modes, five trials per group, using `legacy_v1` with three parallel workers.
+  - The model configuration, task instruction, saved three-block initial state, and all per-trial resource limits match the typed_v3 Haiku batch in Section 3.3. Initial policy prompts match the historical Section 3.2 prompts byte-for-byte.
+  - This uses the current implementation, including corrected final-output binding capture, rather than a historical code rollback. The four-group dispatch schedule differs from the earlier six-group batch; the samples were collected at different times.
+  - **Physical result: 1/20 successes**, from Method 1 DSL-only trial 2. The corresponding Baseline/Method 1 subset of the earlier typed_v3 batch had **12/20 successes**. These are matched-input pilot results, not a general estimate of the prompt effect.
+  - **DSL results: 18 pass, 2 fail.** Both failures were Baseline DSL-only trials and also failed during execution: trial 1 used an invalid object reference; trial 4 called a helper with the wrong arity. All ten Method 1 outputs passed the complete check.
+  - **Failure totals:** 7 Move, 2 Pick, and 1 Release nonconvergence; 4 execution/query tick-budget exhaustions; 2 programs completed without satisfying the goal; 1 invalid object reference; 1 helper-arity error; 1 no-witness query. There were no response-length failures, transport retries, or wall-clock exhaustions.
+  - **Usage:** 145,823 reported input/output tokens, including 72,996 reasoning tokens counted once; 58 requests comprising 20 policy generations, 37 baseline helper generations, and 1 Method 1 repair. Every response returned usage; reported cost was $0.046990.
+  - **Validation:** all 20 full initial snapshots, request/prompt hashes, token totals, phase sums, and video frame/state counts passed the artifact audit. No failed trial was replaced.
+  - **Artifacts:** [per-trial results and tokens](../../../runs/cap-haiku55-legacy-supplement/20261019-153234/report.md), [comparison and failure analysis](../../../runs/cap-haiku55-legacy-supplement/20261019-153234/analysis.md), [source/check/video index](../../../runs/cap-haiku55-legacy-supplement/20261019-153234/artifacts.md), and [reproducible audit](../../../runs/cap-haiku55-legacy-supplement/20261019-153234/audit_experiment.py).
 
 ### 3.3 Revision 2: three methods and both modes
 
@@ -317,6 +330,7 @@ Reported token usage:
 - **Hypothesis:** prompting alone may produce final programs outside the specified DSL, even when execution succeeds.
 - **Finding:** no physically successful, genuinely DSL-violating final output has been confirmed in the reviewed experiments.
   - All **six successful Revision 2 baseline trials** have saved DSL `pass` results.
+  - The Haiku legacy supplement has no successful baseline trials. It does contain two baseline outputs with checker failures corroborated by runtime errors: [DSL trial 1](../../../runs/cap-haiku55-legacy-supplement/20261019-153234/trials/cap_google_baseline-dsl_only-001/report.txt) used an invalid object reference, and [DSL trial 4](../../../runs/cap-haiku55-legacy-supplement/20261019-153234/trials/cap_google_baseline-dsl_only-004/report.txt) called a helper with the wrong arity. These show that prompt-only output can violate the contract, but neither is a successful-but-noncompliant policy.
   - Older artifacts contain unsupported generated helpers, but some were overwritten. Superseded source is not a final-output violation unless the definition remains in the final bundle.
   - Older runs lack the complete final-binding captures introduced in Revision 2; source-only retrospective checks do not replace those missing records.
 - **Checker limitation discovered during this review:** four successful GPT coordinate policy sources are rejected by the current checker’s generic helper pass with `Expected object, got mixed`.
@@ -324,7 +338,7 @@ Reported token usage:
   - Generic unknown helper arguments combined with a loop-carried object variable become `mixed` during the additional definition analysis.
   - Record these as checker-rejected historical sources with a likely conservative-analysis limitation, not confirmed forbidden-primitive or forbidden-condition examples.
   - This review did not change the checker or historical outcomes; a focused regression and correction remain follow-up work.
-- **Motivation supported by current evidence:** Methods 1 and 2 enforce the implemented contract before execution; the original baseline has no such gate. The experiment does not establish a nonzero rate of successful-but-noncompliant final outputs.
+- **Motivation supported by current evidence:** Methods 1 and 2 enforce the implemented contract before execution; the original baseline has no such gate, and the legacy supplement contains two runtime-corroborated contract violations. No successful-but-noncompliant final output has been confirmed.
   - Scripted tests demonstrate that baseline `dsl_only` can execute a forbidden numeric condition. That is a mechanism test, not a naturally generated successful Stack counterexample.
 
 | Successful Revision 2 baseline trial | Mode | Saved compliance | Trial directory |
@@ -365,7 +379,7 @@ Reported token usage:
 ### 4.3 Limits on claims
 
 - Five generations on one fixed scene do not establish benchmark-wide performance or a general ranking of the methods.
-- Typed prompts were implemented, but no controlled legacy-versus-typed live ablation was completed. Cross-revision differences do not isolate prompt effects.
+- The Haiku supplement compares legacy and typed prompts with matched model settings, task instruction, initial state, and per-trial resource limits. The small samples were collected in separately scheduled batches; they do not establish a general prompt-effect estimate.
 - DeepSeek/Haiku reasoning settings and temperature handling differ; their results do not isolate a single model property.
 - Static DSL compliance, task postcondition satisfaction, and formal symbolic/geometric verification are distinct measurements.
 - Existing RoboVerify proof results and the current CaP experiments do not yet constitute a matched generalization comparison.
