@@ -1,20 +1,20 @@
 # Revision 3: shared DSL checker correctness
 
-- **Status:** planned; both implementation defects remain open.
+- **Status:** implemented and tested on October 19, 2026; checker version `shared-contract-v3`. Both reported defects are fixed.
 - **Goal:** make the shared checker consistently enforce the existing condition rules without rejecting valid helper compositions.
 - **Scope:** loop type/effect propagation and generic helper type analysis. The two condition modes, primitive semantics, prompts, and generation workflows retain their current meaning.
 - **References:** [shared checker architecture and rule table](SHARED-DSL-CHECKER.md), [audit results](../../../runs/cap-checker-rule-audit/20261019-161447/results.json), and [audit reproducer](../../../runs/cap-checker-rule-audit/20261019-161447/audit_rules.py).
 
 ## 1. Findings and impact
 
-| Issue | Current behavior | Required behavior | Affected components |
+| Issue | Behavior before Revision 3 | Implemented correction | Affected components |
 | --- | --- | --- | --- |
-| CAP-CHECK-1: loop-carried action provenance | A condition can depend on an action-producing helper through values carried across several loop iterations, while complete checking still passes | Propagate types and action effects across all possible loop iterations; reject the prohibited condition dependency | Shared checker, Method 1/2 execution gate, baseline post-hoc assessment |
-| CAP-CHECK-2: generic helper type merging | A valid object-valued loop passes concrete call-site analysis but fails the additional generic helper pass with `Expected object, got mixed` | Preserve compatible argument/type constraints and accept valid object-handle flows | Shared checker, Method 1/2 generation and execution checks, baseline post-hoc assessment |
+| CAP-CHECK-1: loop-carried action provenance | A condition could depend on an action-producing helper through values carried across several loop iterations while complete checking passed | Bounded fixed-point propagation detects the prohibited dependency before execution | Shared checker, Method 1/2 execution gate, baseline post-hoc assessment |
+| CAP-CHECK-2: generic helper type merging | A valid object-valued loop passed concrete call-site analysis but failed the additional generic helper pass with `Expected object, got mixed` | Constrained generic parameters preserve compatible types across aliases, returns, comparisons, and loop joins | Shared checker, Method 1/2 generation and execution checks, baseline post-hoc assessment |
 
 - The baseline deliberately has no pre-execution DSL gate. Fixing its shared audit does not add repair or prevent baseline execution.
 - The audit checked all 13 table examples in both modes: all 26 combinations matched the documented static and runtime behavior.
-- All 41 existing tests in `test_condition_modes`, `test_methods`, `test_revision2`, and `test_prompt_versions` passed. These tests did not cover the two boundary cases.
+- Before implementation, all 41 existing tests in `test_condition_modes`, `test_methods`, `test_revision2`, and `test_prompt_versions` passed. These tests did not cover the two boundary cases.
 - The checks used scripted responses and recording-only adapters, with no live model calls or physical simulator runs. Historical experiment results remain unchanged.
 
 ## 2. CAP-CHECK-1: propagate loop types and effects to a stable result
@@ -44,24 +44,25 @@ while not done:
 - On the third iteration, `a` contains a Boolean produced by `dirty`, which executes `Pick`.
 - The existing transitive-effect rule rejects a condition that depends on an action-producing helper, even when the result is stored in a variable first.
   - Direct `flag = dirty(b0)` followed by `if flag` is already rejected.
-  - The reproducer is incorrectly accepted in both modes and completes through both Method 1 and Method 2 with three recorded Pick calls.
+  - Before Revision 3, the reproducer was incorrectly accepted in both modes and completed through both Method 1 and Method 2 with three recorded Pick calls.
+  - With Revision 3, both methods reject it with `ACTION_IN_CONDITION` before any action.
   - The Pick calls occur in the loop body, not during evaluation of `if a`. This is a gap in tracking the origin of stored values, not evidence that the direct runtime action-in-condition guard is bypassed.
 
-### Cause
+### Original cause
 
 - [Checker.block](../validation.py) checks the loop body once, merges entry/body environments, and checks the body once more.
 - It does not propagate type/effect information until the loop environment stabilizes; effects moving through several variables can arrive after the analyzed iterations.
 - [Runtime.condition](../runtime.py) requires a Boolean and blocks actions invoked while evaluating a condition, but stored runtime values do not retain action-provenance metadata.
 
-### Planned change
+### Implemented change
 
-- Replace the two-pass loop approximation with bounded fixed-point analysis of the loop environment.
-  - Merge the entry state with states that can return to the loop head.
-  - Propagate value types and action effects together until no information changes.
-  - Recheck the guard and body under the stabilized environment.
-  - Account for zero iterations, nested loops, branch joins, and `break`/`continue` paths without dropping effects.
-- Keep analysis within the shared checker deadline/resource bounds. Exhausted or incomplete analysis must produce an explicit non-pass result, never execution permission.
-- Preserve the distinction between executing an action in the body and using an action-derived value as a condition. Retain the existing transitive-effect contract.
+- `Checker.loop_flow` computes a fixed point over loop-head environments and generic type constraints.
+  - Entry states represent zero iterations; only normal fallthrough and `continue` states feed the next iteration.
+  - `break` states exit the loop and bypass its `else`; return states propagate to the caller.
+  - Nested loops and branch joins retain separate control-flow outcomes. Unreachable source is still checked but cannot overwrite real exit states.
+- `Value` joins retain all type alternatives and action effects. Effects from evaluated helper arguments remain attached to the call result even when the helper ignores that argument.
+- Analysis retains the existing shared deadline and adds a deterministic limit of 100,000 analysis operations. Exhaustion returns an analysis `error`, not a source violation, execution approval, or model-repair request.
+- The transitive-effect contract is unchanged; runtime action APIs and condition modes are unchanged.
 
 ### Acceptance criteria
 
@@ -86,24 +87,24 @@ policy(b0)
 ```
 
 - With `base: ObjectHandle`, `top` is an object handle initially and after every loop iteration.
-- Concrete call-site analysis passes, but complete checking rejects this program in both modes with `TYPE: Expected object, got mixed`.
+- Before Revision 3, concrete call-site analysis passed, but complete checking rejected this program in both modes with `TYPE: Expected object, got mixed`.
+- With Revision 3, complete checking accepts the program in both modes.
 - This is a type-analysis false rejection. The example does not claim termination or task success.
 
-### Cause
+### Original cause
 
 - After analyzing concrete calls, [Checker.check](../validation.py) checks every definition again with unknown parameter types, including definitions already checked at their call sites.
 - [merge_values](../validation.py) merges `unknown` and `object` into `mixed` without preserving the parameter constraints established by object-only operations.
 - The generic pass then treats this merged value as incompatible with an object argument.
 
-### Planned change
+### Implemented change
 
-- Represent unresolved parameter types separately from genuinely incompatible concrete types.
-- Preserve constraints induced by API operations and helper calls during generic analysis and loop joins.
-  - An object-only operation constrains its argument to an object handle.
-  - Compatible unresolved and concrete types must not become a spurious conflict.
-  - Real object/number conflicts must still fail.
-- Reconcile generic checks with concrete call-site specialization while retaining checks on unused definitions.
-- Do not fix the issue by accepting every unknown/mixed value or skipping checks for uncalled helpers. Unresolved obligations must not authorize complete-program execution.
+- Generic parameters use distinct type variables with domains over the supported types, rather than indistinguishable anonymous unknown values.
+- `Checker.constrain` narrows compatible domains and links parameters when an operation requires a common type.
+  - Aliases, helper returns, comparisons, and loop joins retain the same variable identities and constraints.
+  - Concrete object/number conflicts still fail; a compatible generic/object merge no longer becomes a spurious conflict.
+- Concrete call-site specialization and generic checking of every definition are both retained, including unused definitions.
+- Missing local helper calls remain separate obligations. Complete checks still reject unresolved helpers and incompatible actual arguments.
 
 ### Acceptance criteria
 
@@ -112,17 +113,31 @@ policy(b0)
 - Reject callers passing numbers or positions where object handles are required, including incompatible calls to the same helper.
 - Continue rejecting forbidden syntax, action effects, and numeric conditions in DSL-only mode inside unused definitions.
 
-## 4. Implementation and validation plan
+## 4. Implementation and validation
 
-| Step | Work | Validation |
+| Step | Completed work | Validation |
 | --- | --- | --- |
-| 1 | Turn both audit reproducers into regression tests | Confirm each test distinguishes the current defect from the expected behavior |
-| 2 | Correct generic type constraints and loop joins | Valid object-valued helper cases pass; incompatible concrete types still fail |
-| 3 | Implement stable loop type/effect propagation | Delayed action dependencies fail; pure loops pass; bounded analysis never silently succeeds |
-| 4 | Check integration across all callers | Method 1/2 gate execution consistently; baseline receives the same core verdict post-hoc without behavioral changes |
-| 5 | Run the existing CaP suite and focused boundary tests | Preserve condition-mode semantics, prompt-version behavior, helper repair, and artifact capture |
-| 6 | Document the revised checker identity and limits | Record the implementation version/source hash and any remaining unsupported cases |
+| 1 | Added both audit reproducers as regression tests | Confirm each test distinguishes the current defect from the expected behavior |
+| 2 | Corrected generic type constraints and loop joins | Valid object-valued helper cases pass; incompatible concrete types still fail |
+| 3 | Implemented stable loop type/effect propagation | Delayed action dependencies fail; pure loops pass; bounded analysis never silently succeeds |
+| 4 | Checked integration across all callers | Method 1/2 gate execution consistently; baseline receives the same core verdict post-hoc without behavioral changes |
+| 5 | Ran the full CaP suite and focused boundary tests | Preserve condition-mode semantics, prompt-version behavior, helper repair, and artifact capture |
+| 6 | Recorded `shared-contract-v3`, source hashes, and analysis limits | Record the implementation version/source hash and any remaining unsupported cases |
 
 - Relevant files: [validation.py](../validation.py), [checker.py](../checker.py), [runtime.py](../runtime.py), [condition-mode tests](../test_condition_modes.py), and [shared-method/audit tests](../test_revision2.py).
 - Preserve original source, calls, rollouts, and audit verdicts from completed experiments. Any retrospective assessment with the revised checker must be explicitly versioned and stored separately.
 - Do not claim that the fixes change historical success rates without a separately identified evaluation. Static contract compliance remains distinct from physical success and formal task verification.
+
+## 5. Completed validation and remaining scope
+
+- **106 CaP unittest tests passed**, including **18 new Revision 3 tests** in [test_revision3.py](../test_revision3.py).
+  - Coverage includes longer loop-carried dependencies, nested loops, branch joins, `break`/`continue`, loop `else`, helper return/argument effects, valid object/position helpers, incompatible callers, unused definitions, and analysis exhaustion.
+  - Method 1 and Method 2 reject delayed effects before actions and accept valid object-valued loops in both modes.
+  - Baseline still executes without a DSL gate; post-hoc checking detects the delayed effect without changing actions or model calls.
+- All **26 rule-table example/mode combinations** retain their expected static/runtime behavior.
+- All **four previously rejected successful GPT coordinate policy sources** pass source-only checking under the revised contract.
+  - These are saved-source checks, not reconstructions of complete historical baseline binding bundles.
+  - Original compliance artifacts, model requests, physical outcomes, and trajectories were preserved; no paid model or physical benchmark rerun was performed.
+- Validation artifacts: [suite output and audit summary](../../../runs/cap-revision3-validation/20261019-195250/README.md), [rule checks](../../../runs/cap-revision3-validation/20261019-195250/rule_audit.json), and [historical source rechecks](../../../runs/cap-revision3-validation/20261019-195250/historical_source_rechecks.json).
+- The analysis remains conservative and bounded. These fixes do not establish completeness for arbitrary Python, termination, physical safety, or task correctness.
+- Revisions [4](revision_4_failure_recover.md), [5](revision_5_add_tasks.md), and [6](revision_6_add_demonstration.md) remain unimplemented; they are outside this change.

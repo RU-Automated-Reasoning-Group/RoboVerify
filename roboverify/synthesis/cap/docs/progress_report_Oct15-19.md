@@ -333,11 +333,11 @@ Reported token usage:
   - The Haiku legacy supplement has no successful baseline trials. It does contain two baseline outputs with checker failures corroborated by runtime errors: [DSL trial 1](../../../runs/cap-haiku55-legacy-supplement/20261019-153234/trials/cap_google_baseline-dsl_only-001/report.txt) used an invalid object reference, and [DSL trial 4](../../../runs/cap-haiku55-legacy-supplement/20261019-153234/trials/cap_google_baseline-dsl_only-004/report.txt) called a helper with the wrong arity. These show that prompt-only output can violate the contract, but neither is a successful-but-noncompliant policy.
   - Older artifacts contain unsupported generated helpers, but some were overwritten. Superseded source is not a final-output violation unless the definition remains in the final bundle.
   - Older runs lack the complete final-binding captures introduced in Revision 2; source-only retrospective checks do not replace those missing records.
-- **Checker limitation discovered during this review:** four successful GPT coordinate policy sources are rejected by the current checker’s generic helper pass with `Expected object, got mixed`.
+- **Checker limitation discovered during this review:** four successful GPT coordinate policy sources were rejected by the Revision 2 checker’s generic helper pass with `Expected object, got mixed`.
   - Their concrete `b0: ObjectHandle` call-site analysis passes.
   - Generic unknown helper arguments combined with a loop-carried object variable become `mixed` during the additional definition analysis.
   - Record these as checker-rejected historical sources with a likely conservative-analysis limitation, not confirmed forbidden-primitive or forbidden-condition examples.
-  - This review did not change the checker or historical outcomes; a focused regression and correction remain follow-up work.
+  - Revision 3 subsequently fixed this false rejection. All four saved policy sources now pass separate source-only rechecks; historical outcomes and audit artifacts are unchanged. See [Revision 3](revision_3.md).
 - **Motivation supported by current evidence:** Methods 1 and 2 enforce the implemented contract **before** execution; the original baseline has no such gate, and the legacy supplement contains two runtime-corroborated contract violations. No successful-but-noncompliant final output has been confirmed.
   - Scripted tests demonstrate that baseline `dsl_only` can execute a forbidden numeric condition. That is a mechanism test, not a naturally generated successful Stack counterexample.
 
@@ -449,7 +449,7 @@ Reported token usage:
 
 - **Evaluation design:** define policy quality through held-out task success, DSL compliance, robustness across instances, and resource use; fix the baseline configurations and task suite before the next comparison.
 - **Demonstrations:** coordinate the generator interface and dataset availability with Yuning; prioritize Stack integration first.
-- **Checker reliability:** isolate the generic-helper type-merge limitation before using historical checker rejections as evidence of language violations.
+- **Checker reliability:** Revision 3 fixes the generic-helper type merge and loop-carried effect gaps, with 106 passing tests. Keep historical checker versions distinct when interpreting compliance results.
 - **Failure diagnosis:** inspect failed primitive targets and trajectories before changing controllers or budgets; preserve shared primitive semantics in comparisons.
 - **Optional framework reuse:** evaluate an adapter for Yuanlin’s Logic or CaPX after agreeing on source/binding export. Do not mix such an integration or black-box parameter optimization into an existing result table without a separately recorded configuration.
 

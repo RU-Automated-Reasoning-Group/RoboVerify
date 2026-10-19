@@ -33,6 +33,12 @@ methods. Baseline modes are prompt-only; method-1 modes are checked:
 - [Revision 5: task expansion plan](docs/revision_5_add_tasks.md).
 - [Revision 6: demonstration input plan](docs/revision_6_add_demonstration.md).
 
+Revision 3 fixes loop-carried effect propagation and generic helper type merging
+in the shared checker (`shared-contract-v3`). All 106 CaP tests pass, including
+18 new regressions. Baseline execution is unchanged; its audit uses the revised
+contract for new runs. See [implementation and validation](docs/revision_3.md).
+Recovery, task expansion, and demonstration input remain deferred plans.
+
 ## Implemented scope
 
 The adapter connects Stack, Unstack, Reverse, and ReStack to the existing

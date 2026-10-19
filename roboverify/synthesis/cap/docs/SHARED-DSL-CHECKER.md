@@ -74,9 +74,10 @@ value flow, including assignments, arguments, and return values; inspect all
 branches rather than only statements reached in the observed execution.
 
 The following requirements apply to branch, loop, and selection conditions.
-They describe the intended contract; the known implementation gaps in
+The two implementation gaps identified in
 [CAP-CHECK-1](#cap-check-1-loop-carried-action-provenance) and
-[CAP-CHECK-2](#cap-check-2-generic-helper-type-merging) qualify current enforcement.
+[CAP-CHECK-2](#cap-check-2-generic-helper-type-merging) were fixed by
+[Revision 3](revision_3.md), under checker version `shared-contract-v3`.
 Methods 1 and 2 check before execution; baseline checking remains post-hoc.
 Examples assume `x` and `b0` are bound object handles and `count` is numeric;
 `...` denotes an omitted policy body.
@@ -591,8 +592,10 @@ required for this metric.
 returns a `CheckReport`; `require_check` adapts it to Method 1/runtime exceptions.
 `require_helper_check` preserves focused generic helper checking. Analysis has a
 10-second default cap and preserves any earlier enclosing trial deadline.
-Internal errors never become LLM repair feedback. `shared-contract-v2` identifies
-the revised checker; observation semantics remain `positions-v1`.
+Internal errors never become LLM repair feedback. `shared-contract-v3` identifies
+the revised checker; observation semantics remain `positions-v1`. The checker
+also bounds analysis to 100,000 operations; exhaustion is an analysis error,
+not an execution permit or a source-repair diagnostic.
 
 The baseline compatibility layer exports an immutable final-output snapshot and
 an atomic `final_output.json` pointer without changing the pinned Google core.
@@ -628,18 +631,18 @@ or declaring a source violation. One Haiku baseline trial required this
 correction; its original audit, sources, physical outcome, and model requests
 are retained. Regression coverage verifies shadowed helper versions referenced
 inside lambdas in both condition modes and conservative handling of legacy data.
-The full 88-test CaP suite passes.
+The 88-test CaP suite passed after that capture correction.
 
-The implementation plan for the two open checker defects is in
-[Revision 3](revision_3.md).
+The implementation and validation of the two checker fixes are recorded in
+[Revision 3](revision_3.md). The descriptions below retain the original reproducers.
 
 ### CAP-CHECK-1: loop-carried action provenance
 
-**Implementation defect, open.** `Checker.block` analyzes a while body once,
-merges the entry/body environments, and checks the body once more. It does not
-iterate type/effect propagation until the loop environment stabilizes. Action
-provenance can therefore reach a condition only on a later iteration and escape
-the static check. The runtime checks the Boolean value and blocks actions called
+**Implementation defect, fixed by Revision 3 (2026-10-19).** The previous
+`Checker.block` analyzed a while body once, merged the entry/body environments,
+and checked the body once more. It did not propagate types/effects until the
+loop environment stabilized, so action provenance could reach a condition on
+a later iteration and escape the static check. The runtime checks the Boolean value and blocks actions called
 during condition evaluation, but does not retain provenance on stored values.
 
 ```python
@@ -664,21 +667,24 @@ while not done:
 
 - Expected under the existing transitive-effect rule: reject because, on the
   third iteration, `a` comes from the action-producing `dirty` helper.
-- Observed: complete check passes in both modes. Both Method 1 and Method 2
-  execute all three iterations with a recording-only adapter.
+- Before the fix: complete checking passed in both modes, and both checked
+  methods executed all three iterations with a recording-only adapter.
+- After the fix: fixed-point analysis rejects the dependency before actions in
+  both modes and methods, preserving separate break/continue/return paths.
 - The Pick calls occur in the loop body, not during evaluation of `if a`.
   The defect concerns the documented restriction on action-derived values;
   direct calls to acting helpers from conditions are still rejected.
 - A direct `flag = dirty(b0); if flag: ...` is rejected as expected. Loop analysis
-  needs stable propagation of types and effects, with bounded explicit failure
-  if analysis cannot finish. This review does not change the implementation.
+  now uses stable propagation of types and effects, with bounded explicit failure
+  if analysis cannot finish. Evaluated helper-argument effects are retained too.
 
 ### CAP-CHECK-2: generic helper type merging
 
-**Implementation defect, open.** After checking concrete calls, `Checker.check`
-checks every function again with unknown argument types. For a loop-carried
-object initialized from a parameter, `merge_values` can combine `unknown` and
-`object` into `mixed`, causing a spurious type error.
+**Implementation defect, fixed by Revision 3 (2026-10-19).** After checking
+concrete calls, the previous `Checker.check` checked every function again with
+anonymous unknown argument types. For a loop-carried object initialized from a
+parameter, `merge_values` combined `unknown` and `object` into `mixed`, causing a
+spurious type error.
 
 ```python
 def policy(base):
@@ -693,11 +699,13 @@ policy(b0)
 
 - Concrete call-site analysis passes with `base: ObjectHandle`; `top` remains an
   object handle on every iteration. Termination is not claimed by this example.
-- Complete checking fails in both modes with `TYPE: Expected object, got mixed`
-  during the additional generic pass.
-- This is a false rejection, not a numeric-condition violation. Generic analysis
-  needs to preserve compatible type constraints rather than treating an unknown
-  parameter and a proven object as conflicting concrete types.
+- Before the fix, complete checking failed in both modes with
+  `TYPE: Expected object, got mixed` during the additional generic pass.
+- After the fix, constrained generic parameters retain their types through
+  aliases, helper returns, comparisons, and joins; the reproducer passes.
+- This was a false rejection, not a numeric-condition violation. Generic analysis
+  now preserves compatible constraints while still rejecting genuine concrete
+  type conflicts and checking unused definitions.
 
 ### Rule-table audit evidence
 
@@ -707,8 +715,12 @@ policy(b0)
   passed. Those tests did not cover the two boundary cases above.
 - Reproducers, diagnostics, and method-integration outcomes are saved in
   [the rule audit](../../../runs/cap-checker-rule-audit/20261019-161447/README.md).
-- No production code or historical experiment verdict was changed. These findings
-  do not establish whether either defect affected a particular historical run.
+- The original audit did not change production code or historical experiment
+  verdicts. Revision 3 subsequently fixed both defects: 106 CaP tests pass,
+  including 18 new regressions; all 26 table cases retain their expected behavior.
+  Four historical GPT sources now pass separate source-only checks; original
+  experiment verdicts and artifacts remain unchanged. See the
+  [Revision 3 validation](../../../runs/cap-revision3-validation/20261019-195250/README.md).
 
 ## 8. Validation requirements
 
