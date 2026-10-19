@@ -141,3 +141,11 @@ policy(b0)
 - Validation artifacts: [suite output and audit summary](../../../runs/cap-revision3-validation/20261019-195250/README.md), [rule checks](../../../runs/cap-revision3-validation/20261019-195250/rule_audit.json), and [historical source rechecks](../../../runs/cap-revision3-validation/20261019-195250/historical_source_rechecks.json).
 - The analysis remains conservative and bounded. These fixes do not establish completeness for arbitrary Python, termination, physical safety, or task correctness.
 - Revisions [4](revision_4_failure_recover.md), [5](revision_5_add_tasks.md), and [6](revision_6_add_demonstration.md) remain unimplemented; they are outside this change.
+
+## 6. Policy debugging and rollout protocol
+
+- Failed trajectories are evidence for debugging the current policy: they describe its observations, actions, and failure, and can inform a revised candidate.
+- Every complete policy rollout starts from an initial state. When comparing a policy with its revised version on the same scene, restore that trial's saved initial simulator snapshot and invoke the policy from its entry point.
+- The failure state or an intermediate trajectory state is not the starting point for evaluating the revised policy. Recreating a scene from a seed alone does not replace restoring its saved full state.
+- For evaluation across multiple scenes, use each scene's own initial snapshot and keep those snapshots matched across policy versions. Preserve separate attempt records and resource usage.
+- Revision 3 implements static checker corrections only. It does not feed failure trajectories into generation or launch policy reruns; the debugging mechanism is part of the unimplemented [Revision 4 discussion](revision_4_failure_recover.md).
