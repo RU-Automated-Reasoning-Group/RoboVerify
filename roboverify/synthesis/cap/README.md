@@ -617,3 +617,53 @@ See the [full report](../../runs/cap-revision2-deepseek/20261018-215345/report.m
 [failure analysis](../../runs/cap-revision2-deepseek/20261018-215345/analysis.md),
 and [policy/check/video index](../../runs/cap-revision2-deepseek/20261018-215345/artifacts.md).
 Every trial row includes `# of tokens used`; no usage is missing in this batch.
+
+## Haiku 5.5 follow-up comparison
+
+A follow-up comparison on **2026-10-19 UTC** used
+`anthropic/claude-haiku-5.5`, reasoning enabled with explicit **medium effort**,
+and the same **16,384-token output cap**. All 30 trials reused the DeepSeek
+batch's exact full initial snapshot, instruction, typed_v3 prompt package,
+three-worker dispatch order, and per-trial resource limits. Temperature was
+omitted because the Haiku route did not advertise support; DeepSeek used 0.
+This is a model/configuration comparison, not a model-only controlled ablation.
+
+| Method | Condition mode | Haiku physical success | Prior DeepSeek success | Haiku tokens |
+| --- | --- | --- | --- | --- |
+| `cap_google_baseline` | `coordinate_predicates` | 3/5 | 1/5 | 39,115 |
+| `cap_google_baseline` | `dsl_only` | 2/5 | 0/5 | 48,577 |
+| `cap_method_1` | `coordinate_predicates` | 5/5 | 2/5 | 30,239 |
+| `cap_method_1` | `dsl_only` | 2/5 | 1/5 | 28,259 |
+| `cap_method_2` | `coordinate_predicates` | 4/5 | 0/5 | 46,873 |
+| `cap_method_2` | `dsl_only` | 3/5 | 1/5 | 62,668 |
+
+Haiku produced **19 physical successes**, with **six Move failures, two Pick
+failures, two Release failures, and one no-witness get failure**. There were no
+output-limit failures. The 39 model calls comprised 30 policy generations,
+seven baseline helper generations, and two whole-candidate repairs. Method 2
+DSL-only trials 2 and 4 each repaired `Expected position, got vector` and then
+completed Stack. No failed trial was replaced or rerun.
+
+Total usage was **255,731 input/output tokens**, including 128,723 reported
+reasoning tokens counted once. All 39 responses provided usage and cost; the
+provider-reported total cost was **$0.080496**. Initial policy prompts matched
+the corresponding DeepSeek requests byte-for-byte. All 30 full initial
+simulator snapshots, request hashes, token totals, timing sums, and videos were
+validated; video frames matched recorded states.
+
+Final DSL results are **29 pass and one unsupported**. Baseline coordinate trial
+3 exposed CAP-AUDIT-1: the old recorder omitted a global helper dependency inside
+a query lambda, causing a false unresolved-helper diagnostic. The physical
+no-witness failure is unchanged. The original audit is retained, and the
+corrected audit reports insufficient captured binding information, not a definite
+source violation. Capture now includes nested code-object globals; regression
+tests cover both complete new captures and incomplete legacy captures. No paid
+request or physical rollout was repeated for the correction. All 88 CaP tests
+pass after this reporting fix.
+
+These are five fresh policy samples per method/mode on one fixed scene.
+They do not establish general performance on other scenes or tasks.
+
+See the [full report](../../runs/cap-revision2-haiku55/20261019-021933/report.md),
+[analysis](../../runs/cap-revision2-haiku55/20261019-021933/analysis.md), and
+[source/check/video index](../../runs/cap-revision2-haiku55/20261019-021933/artifacts.md).
