@@ -1,30 +1,30 @@
 # Progress report: October 15–19, 2026
 
-- Build a Code-as-Policies baseline for comparison with RoboVerify, using the same robot primitives and predicates.
-- Preserve Google CaP’s implementation and express the DSL restrictions through prompting.
-- Add two checker-guided variants to enforce the restrictions: recursive helper checking and whole-program checking.
-- Implement reproducible experiments and investigate generation and execution failures.
+- Developed a Code-as-Policies baseline for comparison with RoboVerify, using the same robot primitives and predicates.
+- Preserved Google CaP’s implementation to measure how reliably prompting alone produces DSL-compliant policies.
+- Implemented two checker-guided variants to enforce the DSL contract: recursive helper checking and whole-program checking.
+- Built reproducible experiments and analyzed generation and execution failures.
 - Next steps: extend task coverage and give CaP access to the same demonstrations used by RoboVerify.
 
-## 1. Original assignment and motivation
+## 1. Research goal and motivation
 
-- **Big goal:** construct a CaP baseline for Yuning’s synthesis/verification approach.
+- **Big goal:** evaluate how synthesis and verification affect policy quality by comparing RoboVerify with CaP under a shared primitive and predicate interface.
   - Compare the quality of generated policies on the shared benchmarks.
   - Restrict CaP to the primitives and predicates available to RoboVerify, such as Pick/Move/Release and the shared block relations.
-  - Yuanlin’s implementation and black-box parameter search were suggested as potentially reusable components; no integration with that search is claimed here.
-- **Why retain the original Google baseline?**
+  - Yuanlin’s implementation and black-box parameter search are potential components for a future CaP variant; they are not integrated into the current experiments.
+- **Google CaP as the reference baseline:**
   - Measure what the original generation/execution workflow produces when the restriction is expressed through prompting.
   - Preserve the pinned Google `LMP -> LMPFGen -> exec_safe` behavior instead of silently adding checker-guided repair to this reference.
   - Measure physical success and final-output DSL compliance separately.
-- **Why implement Methods 1 and 2?**
-  - They are two ways to construct the explicitly restricted CaP baseline requested by the advisor.
+- **Explicit DSL enforcement through Methods 1 and 2:**
+  - These variants enforce the same DSL contract at different stages of program generation, allowing a comparison of local and whole-program checking and repair.
   - Method 1 checks and repairs recursively generated units; Method 2 checks and repairs complete candidates.
   - Their motivation is enforcement of the implemented DSL contract. The present results do not establish that prompting usually violates the DSL.
 - **Primary comparison and additional condition setting:**
-  - `dsl_only` is the primary setting aligned with the original predicate restriction.
+  - `dsl_only` is the primary setting for comparing approaches within the shared predicate vocabulary.
   - `coordinate_predicates` expands the condition language and is reported as a separate experimental factor.
   - The final research comparison remains RoboVerify versus CaP under comparable task inputs, primitive semantics, predicates, and evaluation conditions.
-  - No new matched RoboVerify-versus-CaP performance comparison was completed in this window.
+  - A matched RoboVerify-versus-CaP performance evaluation remains to be completed.
 
 ## 2. Implementation and generation workflows
 
@@ -257,7 +257,7 @@ def method_2(task, contract):
 | Experiment / validation | Observed result | Treatment |
 | --- | --- | --- |
 | GPT reasoning-disabled setup request | Endpoint rejected the request: reasoning mandatory | Setup diagnostic; not a completed five-trial comparison |
-| GPT reasoning-on, 4k partial batch | Finished baseline trial failed its wall deadline; finished Method 1 trial succeeded | Superseded by the requested 16k rerun; exclude from main tables |
+| GPT reasoning-on, 4k partial batch | Finished baseline trial failed its wall deadline; finished Method 1 trial succeeded | Superseded by the 16k rerun; excluded from main tables |
 | DeepSeek reasoning-on, 4k partial batch | Four finished trials per method, all truncated with no code | Superseded; exclude from main tables |
 | Revision 1 real-MuJoCo parity | Four method/mode combinations had identical initial states, coordinate reads, and 19 physical actions | Partial Pick/Move diagnostic; expected `goal_failed`, not Stack success |
 | Resource-accounting validation | 65 CaP tests and a five-job scripted scheduler check | Infrastructure validation, not model performance |
@@ -274,7 +274,7 @@ def method_2(task, contract):
 
 ### 4.1 What the baseline evidence actually shows
 
-- **Hypothesis:** prompting alone may produce final programs outside the requested DSL, even when execution succeeds.
+- **Hypothesis:** prompting alone may produce final programs outside the specified DSL, even when execution succeeds.
 - **Finding:** no physically successful, genuinely DSL-violating final output has been confirmed in the reviewed experiments.
   - All **six successful Revision 2 baseline trials** have saved DSL `pass` results.
   - Older artifacts contain unsupported generated helpers, but some were overwritten. Superseded source is not a final-output violation unless the definition remains in the final bundle.
@@ -328,9 +328,9 @@ def method_2(task, contract):
 - Typed prompts were implemented, but no controlled legacy-versus-typed live ablation was completed. Cross-revision differences do not isolate prompt effects.
 - DeepSeek/Haiku reasoning settings and temperature handling differ; their results do not isolate a single model property.
 - Static DSL compliance, task postcondition satisfaction, and formal symbolic/geometric verification are distinct measurements.
-- The existing RoboVerify proof results are background evidence; this reporting window does not supply a matched CaP/RoboVerify generalization comparison.
+- Existing RoboVerify proof results and the current CaP experiments do not yet constitute a matched generalization comparison.
 
-## 5. Next steps and advisor decisions
+## 5. Next experiments and research directions
 
 ### 5.1 Expand to the remaining five tasks
 
@@ -368,9 +368,9 @@ def method_2(task, contract):
   - Additional factor: DSL-only versus expanded numeric conditions, reported separately.
   - Preserve prompt versions for a later controlled prompt ablation.
 
-### 5.3 Immediate decisions and follow-up work
+### 5.3 Experimental priorities
 
-- **Advisor alignment:** confirm the primary baseline configuration, evaluation tasks, and what “better policies” should measure: held-out success, contract compliance, robustness across instances, and resource use.
+- **Evaluation design:** define policy quality through held-out task success, DSL compliance, robustness across instances, and resource use; fix the baseline configurations and task suite before the next comparison.
 - **Demonstrations:** coordinate the generator interface and dataset availability with Yuning; prioritize Stack integration first.
 - **Checker reliability:** isolate the generic-helper type-merge limitation before using historical checker rejections as evidence of language violations.
 - **Failure diagnosis:** inspect failed primitive targets and trajectories before changing controllers or budgets; preserve shared primitive semantics in comparisons.
