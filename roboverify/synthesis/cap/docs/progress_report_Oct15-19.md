@@ -406,7 +406,30 @@ def method_2(task, contract):
   - Additional factor: DSL-only versus expanded numeric conditions, reported separately.
   - Preserve prompt versions for a later controlled prompt ablation.
 
-### 5.3 Experimental priorities
+### 5.3 Initial observations: synthesis input versus execution input
+
+| Information | Baseline | Method 1 | Method 2 |
+| --- | --- | --- | --- |
+| Task instruction | Yes | Yes | Yes |
+| API descriptions and condition-mode rules | Yes | Yes | Yes |
+| Context: “b0 is the input block” | Yes | Yes | Yes |
+| Initial gripper/block coordinates | No | No | No |
+| Initial scene image or predicate values | No | No | No |
+| Generated program can query the environment during execution | Yes | Yes | Yes |
+
+- The first five rows describe information supplied to the LLM during synthesis; the last row describes the generated program’s runtime access. This applies to both condition modes.
+- **Demonstration starts and evaluation starts are distinct.**
+  - RoboVerify receives initial observations as part of its demonstration trajectories and restores demonstration or segment starts when evaluating synthesis candidates.
+  - A new evaluation scene can place blocks at different initial locations. Demonstration access does not imply that the synthesizer has seen that new scene.
+  - Fresh Stack resets sample block positions within the shared workspace and separation constraints; different scene seeds can produce different layouts. Restoring a saved snapshot instead reproduces its recorded state.
+- **Current experiments:** the reported comparison batches restore the same saved three-block scene across trials. These trials vary generated policies, not initial layouts.
+- **Generalization experiment:** synthesize from a fixed demonstration set, freeze each resulting policy, and evaluate it on multiple held-out initial states shared across approaches.
+  - Both RoboVerify and CaP policies can query the current environment while executing; success on unseen layouts must still be measured.
+  - Supplying the held-out scene’s initial observation to the LLM, or rerunning synthesis for each test scene, would define a separate scene-conditioned experiment.
+  - Keep demonstration input and evaluation-scene input independently configurable rather than treating them as the same information source.
+- Implementation references: [RoboVerify demonstration loading](../../entry/synthesize_cfg.py), [segment restoration](../../cfg/reset.py), [CaP environment initialization](../tasks.py), and [Stack reset sampling](../../environment/stack_reset.py).
+
+### 5.4 Experimental priorities
 
 - **Evaluation design:** define policy quality through held-out task success, DSL compliance, robustness across instances, and resource use; fix the baseline configurations and task suite before the next comparison.
 - **Demonstrations:** coordinate the generator interface and dataset availability with Yuning; prioritize Stack integration first.
