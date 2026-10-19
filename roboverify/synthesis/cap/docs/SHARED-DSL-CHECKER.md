@@ -630,6 +630,9 @@ are retained. Regression coverage verifies shadowed helper versions referenced
 inside lambdas in both condition modes and conservative handling of legacy data.
 The full 88-test CaP suite passes.
 
+The implementation plan for the two open checker defects is in
+[Revision 3](revision_3.md).
+
 ### CAP-CHECK-1: loop-carried action provenance
 
 **Implementation defect, open.** `Checker.block` analyzes a while body once,
