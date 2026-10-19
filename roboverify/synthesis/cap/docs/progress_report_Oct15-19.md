@@ -8,7 +8,7 @@
 
 ## 1. Original assignment and motivation
 
-- **Advisor’s assignment:** construct a CaP baseline for Yuning’s synthesis/verification approach.
+- **Big goal:** construct a CaP baseline for Yuning’s synthesis/verification approach.
   - Compare the quality of generated policies on the shared benchmarks.
   - Restrict CaP to the primitives and predicates available to RoboVerify, such as Pick/Move/Release and the shared block relations.
   - Yuanlin’s implementation and black-box parameter search were suggested as potentially reusable components; no integration with that search is claimed here.
