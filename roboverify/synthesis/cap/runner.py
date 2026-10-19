@@ -124,7 +124,7 @@ def failure_status(error):
     return "failed"
 
 
-def run(
+def run_once(
     config,
     model_config,
     *,
@@ -137,6 +137,8 @@ def run(
     capture_stdout=True,
     queue_wait_seconds=0.0,
     batch_context=None,
+    shared_budget=None,
+    recovery_feedback=None,
 ):
     from synthesis.experiment.run_logger import RunLogger
 
@@ -149,7 +151,12 @@ def run(
     if config.timeout <= 0 or config.max_attempts < 1:
         raise ValueError("Invalid trial budget")
     timeout = min(config.timeout, 60) if config.task == "unstack" else config.timeout
-    budget = Budget(
+    budget_class = Budget
+    if shared_budget is not None:
+        from .recovery import RoundBudget
+
+        budget_class = RoundBudget
+    budget = budget_class(
         timeout,
         config.max_model_calls,
         config.max_steps,
@@ -157,6 +164,10 @@ def run(
         config.max_tokens,
         max_sim_steps=config.max_sim_steps,
     )
+    if shared_budget is not None:
+        budget.parent = shared_budget
+        budget.context_tokens = config.recovery.context_tokens
+        budget.output_tokens = model_config.max_output_tokens
     instruction = instruction or TASK_INSTRUCTIONS.get(config.task)
     resolved = asdict(config) | {
         **provenance,
@@ -192,6 +203,9 @@ def run(
         capture_stdout=capture_stdout,
     )
     logger = CapLogger(run_log.run_dir, run=run_log, timings=budget.timings)
+    logger.context.update(recovery_round=(batch_context or {}).get("recovery_round", 0))
+    if recovery_feedback is not None:
+        logger.artifact("recovery_feedback.json", recovery_feedback)
     checkpoints = Checkpoints(
         logger,
         method=config.method,
@@ -204,6 +218,7 @@ def run(
         logger,
         budget,
         model_config.transport_retries,
+        recovery_feedback=recovery_feedback,
     )
     env, recorder, entry = None, None, None
     outcome = {"success": False, "environment_success": None, "dsl_postcondition": None}
@@ -273,6 +288,11 @@ def run(
                             env, logger, budget, task=config.task
                         )
                         entry = adapter.entry_observation
+                        if snapshot is not None:
+                            from .recovery import verify_restoration
+
+                            verify_restoration(env, snapshot, logger)
+
                         from synthesis.api.control import (
                             DEFAULT_CONTROL,
                             DEFAULT_PICK_CONTROL,
@@ -423,7 +443,15 @@ def run(
         **outcome,
     }
     if config.method == "cap_google_baseline" and config.baseline_audit:
-        audit = audit_run(run_log.run_dir, timeout=config.audit_timeout)
+        audit_timeout = config.audit_timeout
+        if shared_budget is not None:
+            try:
+                audit_timeout = min(audit_timeout, budget.remaining())
+            except BudgetExceeded:
+                result["dsl_compliance"] = "not_available"
+                result["audit_skipped_reason"] = "attempt_or_trial_time_exhausted"
+                return result
+        audit = audit_run(run_log.run_dir, timeout=audit_timeout)
         result["dsl_compliance"] = audit["status"]
         result["audit_seconds"] = audit["elapsed_seconds"]
     elif config.method != "cap_google_baseline":
@@ -433,3 +461,11 @@ def run(
             else ("fail" if status == "constraint_failed" else "incomplete")
         )
     return result
+
+
+def run(config, model_config, **kwargs):
+    if config.recovery.enabled and not kwargs.get("generate_only", False):
+        from .recovery import run_recovery
+
+        return run_recovery(config, model_config, **kwargs)
+    return run_once(config, model_config, **kwargs)

@@ -130,13 +130,25 @@ class ScriptedModel:
 
 
 class LoggedModel:
-    def __init__(self, backend, logger, budget, retries=0):
+    def __init__(self, backend, logger, budget, retries=0, recovery_feedback=None):
         self.backend, self.logger, self.budget = backend, logger, budget
         self.retries = retries
+        self.recovery_feedback = recovery_feedback
 
     @timed("generation_control")
     def complete(self, prompt, *, purpose, **context):
+        is_policy = purpose == "policy" or (
+            purpose == "google_generation" and not self.logger.context.get("helper")
+        )
+        if self.recovery_feedback is not None and is_policy:
+            from .recovery import recovery_prompt
+
+            prompt = recovery_prompt(prompt, self.recovery_feedback)
         for retry in range(self.retries + 1):
+            if hasattr(self.budget, "reserve_request"):
+                reservation = self.budget.reserve_request(prompt)
+                self.logger.emit("request_reservation", **reservation)
+
             self.budget.model_call()
             call = f"call_{self.budget.calls:04d}"
             path = f"lmp/{call}"
@@ -144,6 +156,8 @@ class LoggedModel:
             role = purpose
             if purpose == "google_generation":
                 role = "helper" if self.logger.context.get("helper") else "policy"
+            if self.recovery_feedback is not None and is_policy:
+                role = "recovery_policy"
             provenance = {
                 **self.logger.prompt_provenance,
                 "call_id": call,
@@ -182,6 +196,8 @@ class LoggedModel:
                 )
                 request_elapsed = time.monotonic() - start
             except TransportError as exc:
+                if hasattr(self.budget, "abandon_request"):
+                    self.budget.abandon_request()
                 self.logger.emit(
                     "generation_error",
                     call_id=call,
@@ -223,6 +239,15 @@ class LoggedModel:
                 ),
             )
             self.budget.account_tokens(response.usage.get("total_tokens"))
+            if hasattr(self.budget, "reserve_request"):
+                self.logger.emit(
+                    "request_reconciliation",
+                    reservation=reservation,
+                    actual_tokens=response.usage.get("total_tokens"),
+                    charged_tokens=self.budget.charged_tokens,
+                    cumulative_charged_tokens=self.budget.parent.charged_tokens,
+                )
+
             self.budget.remaining()
             if (
                 response.finish_reason in {"length", "incomplete", "content_filter"}

@@ -89,10 +89,15 @@ class RoboVerifyAdapter:
             ):
                 raise CapError("Invalid query binder count")
             self.query_depth += 1
+            candidate_results = []
+            evaluated_count = 0
             try:
                 for objects in itertools.product(self.handles, repeat=arity):
                     self.budget.tick()
                     value = query(*objects)
+                    evaluated_count += 1
+                    if len(candidate_results) < 16:
+                        candidate_results.append({"objects": objects, "result": value})
                     if type(value) is not bool:
                         raise CapError("Query condition must return a Boolean")
                     if (name in {"exists", "get"} and value) or (
@@ -104,6 +109,14 @@ class RoboVerifyAdapter:
                         )
                         return result
                 if name == "get":
+                    self.logger.emit(
+                        "query_failure",
+                        query=name,
+                        reason="no_witness",
+                        candidates=candidate_results,
+                        evaluated_count=evaluated_count,
+                        omitted_candidates=evaluated_count - len(candidate_results),
+                    )
                     raise CapError("No object satisfies get condition")
                 result = name == "forall"
                 self.logger.emit("query_result", query=name, result=result)
@@ -151,8 +164,22 @@ class RoboVerifyAdapter:
         else:
             instruction = ReleaseByName(*aliases, target_z=finite(args[1]))
         event = self.logger.emit("primitive_start", primitive=name, arguments=args)
-        with self.logger.scoped(primitive=name, primitive_event_id=event):
-            instruction.eval(self.env, self.trajectory)
+        previous_observer = getattr(self.env, "_cap_control_event", None)
+
+        def observe_control(**fields):
+            self.logger.emit(
+                "controller_phase", primitive=name, primitive_event_id=event, **fields
+            )
+
+        self.env._cap_control_event = observe_control
+        try:
+            with self.logger.scoped(primitive=name, primitive_event_id=event):
+                instruction.eval(self.env, self.trajectory)
+        finally:
+            if previous_observer is None:
+                del self.env._cap_control_event
+            else:
+                self.env._cap_control_event = previous_observer
         result = instruction.last_control_result
         self.logger.emit(
             "primitive_end",
@@ -161,6 +188,7 @@ class RoboVerifyAdapter:
             converged=bool(result and result.converged),
             steps=result.steps if result else 0,
             position_error=result.position_error if result else None,
+            controller_phase=result.phase if result else None,
         )
         if not result or not result.converged:
             raise PrimitiveFailure(

@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from math import isfinite
 
 import numpy as np
-
 from synthesis.util.actions import bound_delta_action
 
 
@@ -97,6 +96,10 @@ class PrimitiveController:
         if target.shape != (3,) or not np.all(np.isfinite(target)):
             raise ValueError("Motion target must contain three finite coordinates")
 
+        observer = getattr(self.env, "_cap_control_event", None)
+        if observer is not None:
+            observer(phase=phase, target=target.tolist(), steps=self.steps)
+
         def error():
             delta = target - self.observation[:3]
             return abs(delta[2]) if vertical_only else np.linalg.norm(delta)
@@ -118,6 +121,10 @@ class PrimitiveController:
         )
 
     def gripper(self, *, opened):
+        observer = getattr(self.env, "_cap_control_event", None)
+        if observer is not None:
+            observer(phase="open" if opened else "close", target=None, steps=self.steps)
+
         # One complementary test avoids a gap where neither predicate holds.
         def is_open():
             return float(np.sum(self.observation[3:5])) > (

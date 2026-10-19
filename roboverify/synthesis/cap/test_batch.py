@@ -117,6 +117,33 @@ class BatchTests(unittest.TestCase):
             self.assertEqual(row["status"], "interrupted")
             self.assertFalse((root / "trials" / first / "worker_result.json").exists())
 
+    def test_recovery_comparison_keeps_six_groups_and_all_attempt_usage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "batch"
+            create_batch(
+                root,
+                RunConfig(num_blocks=1, save_video=False, prompt_version="typed_v3"),
+                ModelConfig(),
+                modes=("dsl_only",),
+                trials=1,
+                max_workers=3,
+                recovery_variants=(False, True),
+                fixture=True,
+                responses=["x=get(lambda x: not ON_star(x,x))", "pass"],
+            )
+            with contextlib.redirect_stdout(io.StringIO()):
+                summary = execute_batch(root)
+            self.assertEqual(summary["finished"], 6)
+            for row in summary["trials"]:
+                self.assertEqual(row["success"], row["recovery_enabled"])
+                self.assertEqual(
+                    row["model_calls"], 2 if row["recovery_enabled"] else 1
+                )
+                self.assertEqual(row["recovery_rounds"], int(row["recovery_enabled"]))
+            report = (root / "report.md").read_text()
+            self.assertIn("First-attempt success", report)
+            self.assertIn("# of tokens used", report)
+
     def test_modified_manifest_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "batch"

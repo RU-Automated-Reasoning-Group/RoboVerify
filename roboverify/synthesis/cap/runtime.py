@@ -60,6 +60,7 @@ class Runtime:
         trees, self.functions = definitions(bundle)
         self.global_values = dict(arguments)
         self.condition_depth = int(role == "condition")
+        self.logger.emit("policy_rollout_start", checkpoint_id=bundle.checkpoint_id)
         self.logger.emit("execution_start", checkpoint_id=bundle.checkpoint_id)
         self.block(trees["policy"].body, self.global_values)
         result = self.global_values.get(return_name) if return_name else None

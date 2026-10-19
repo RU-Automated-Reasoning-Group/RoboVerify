@@ -94,6 +94,8 @@ def load_core(model, logger, checkpoints, budget):
         filename = str(path)
         execution_paths.add(filename)
         is_policy = output.ready and source.strip() == policy_source.strip()
+        if is_policy:
+            logger.emit("policy_rollout_start", source_path=logger.relative(path))
         output.code_sources[filename] = (source, is_policy)
         original_trace = sys.gettrace()
 

@@ -44,6 +44,31 @@ class ModelConfig:
 
 
 @dataclass
+class RecoveryConfig:
+    enabled: bool = False
+    max_rounds: int = 4
+    on_dsl_noncompliance: bool = False
+    feedback_tokens: int = 8192
+    round_tokens: int = 100000
+    round_calls: int = 16
+    round_timeout: float = 600.0
+    total_tokens: int = 450000
+    total_calls: int = 76
+    total_steps: int = 50000
+    total_sim_steps: int = 50000
+    total_timeout: float = 3000.0
+    context_tokens: int = 200000
+
+    def __post_init__(self):
+        if not 0 <= self.max_rounds <= 4:
+            raise ValueError("Recovery permits zero to four additional rounds")
+        for name, value in vars(self).items():
+            if name not in {"enabled", "on_dsl_noncompliance", "max_rounds"}:
+                if not math.isfinite(value) or value <= 0:
+                    raise ValueError(f"Recovery {name} must be positive")
+
+
+@dataclass
 class RunConfig:
     method: str = "cap_method_1"
     task: str = "stack"
@@ -61,10 +86,13 @@ class RunConfig:
     condition_mode: str = "dsl_only"
     max_sim_steps: int = 10000
     prompt_version: str = "legacy_v1"
+    recovery: RecoveryConfig = field(default_factory=RecoveryConfig)
     baseline_audit: bool = True
     audit_timeout: float = 10.0
 
     def __post_init__(self):
+        if isinstance(self.recovery, dict):
+            self.recovery = RecoveryConfig(**self.recovery)
         validate_condition_mode(self.condition_mode)
         validate_prompt_version(self.prompt_version)
         if not math.isfinite(self.audit_timeout) or self.audit_timeout <= 0:

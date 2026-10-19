@@ -1,9 +1,9 @@
 # Revision 4: configurable shared failure recovery
 
-- **Status:** core behavior agreed; detailed design and recommended budgets recorded below. Not implemented.
+- **Status:** implemented as `cap-recovery-v1`; configurable shared recovery, deterministic text feedback, exact initial-state replay, per-round/cumulative budgets, and recovery-aware batch reports are available.
 - **Goal:** use failed execution trajectories to debug the current policy through a shared interface usable by Baseline, Method 1, and Method 2.
 - **Agreed direction:** recovery is configurable for all three methods, with up to four recovery rounds and five total rollouts. Any policy rollout that fails to achieve the task postcondition triggers recovery evaluation, regardless of its failure category. Each revised policy starts from the saved initial state; history accumulates, and repeated candidates may run again with explicit logging.
-- **Current behavior:** primitives raise on nonconvergence; Method 1/2 repairs use static DSL diagnostics only. No runtime failure feedback is currently injected into synthesis.
+- **Current behavior:** runtime/task failures can trigger a new synthesis request in all three methods. Method 1/2 retain static checking and repair; Baseline retains its original execution path and post-hoc audit. Recovery defaults off.
 
 ## 1. Shared API and configuration
 
@@ -31,7 +31,7 @@
 | Recovery prompt/schema version | Reproduce feedback and future ablations | Version the schema, selector, and templates |
 
 
-The conceptual interface is framework-independent; these functions are not implemented:
+The conceptual interface is framework-independent; the concrete implementation is in [recovery.py](../recovery.py):
 
 ```python
 record = collect_failure(task, executed_bundle, rollout_artifacts, environment_snapshot)
@@ -60,7 +60,7 @@ revised_candidate = method.synthesize(request)
 
 ### 2.1 Environment and recorded-state evidence
 
-| Information | Source | Proposed use | Current availability / required work |
+| Information | Source | Proposed use | Availability at the design review / required implementation |
 | --- | --- | --- | --- |
 | Saved initial full simulator state and object bindings | Recorder/snapshot machinery | Restore the same start for each revised candidate | Already recorded; keep full simulator internals host-side |
 | Initial, pre-action, post-action, and failure gripper/block XYZ | Environment observations or saved trajectory states | Explain how the scene changed; provide compact debugging keyframes | Already available in trajectories; add deterministic selection and serialization |
@@ -76,7 +76,7 @@ revised_candidate = method.synthesize(request)
 
 ### 2.2 Code, controller results, and logs
 
-| Information | Source | Proposed use | Current availability / required work |
+| Information | Source | Proposed use | Availability at the design review / required implementation |
 | --- | --- | --- | --- |
 | Executed policy, helpers, actual bindings, checkpoint IDs and hashes | Checkpoints, final-output capture, execution source paths | Identify the code that actually failed | Mostly available; use execution-time source identity, not only the last generated helper text |
 | Exception type/message and failure location | Runner traceback and timeline | Locate the failing statement and distinguish failure classes | Already recorded; normalize source unit, helper/call stack, and line mapping |
@@ -123,7 +123,7 @@ flowchart LR
     CODE["Executed policy + helper bindings"] -->|"source/checkpoint IDs + actual definitions"| ALIGN
     HISTORY["Earlier failed attempts"] -->|"candidate IDs + short failure/change summaries"| SELECT
     TASK["Task + API / condition-mode contract"] -->|"goal, allowed operations, runtime bindings"| PACK
-    subgraph SHARED["Shared feedback module - proposed"]
+    subgraph SHARED["Shared feedback module"]
         direction TB
         GATE{"Failed rollout or enabled DSL trigger + recovery enabled + budget remaining?"}
         GATE -->|"yes: collect this failed attempt"| COLLECT["Load evidence"]
@@ -142,7 +142,7 @@ flowchart LR
     class GATE,COLLECT,ALIGN,SELECT,SERIALIZE,PACK feedback
 ```
 
-High-level pseudocode (proposed interface; not implemented):
+High-level pseudocode (the implementation keeps these responsibilities separate):
 
 ```python
 def shared_feedback(attempt, task, contract, config, budget):
@@ -264,13 +264,13 @@ def select_relevant_evidence(evidence, profile, token_limit, earlier_failures,
 - The outer module separately checks the complete request, including API/source context and reserved output capacity. A feedback-only fit does not guarantee that the full request fits.
 - Save selected/omitted event IDs, keyframe indices, selector/profile version, token-counting method, and the serialized feedback alongside the attempt.
 - An LLM-based selector could be a later configurable ablation, such as `rules` versus `llm`; it is not part of the first implementation plan.
-- This section specifies a design, not implemented code. Recovery remains unimplemented.
+- These diagrams describe the implemented recovery flow; the source references and validation evidence are listed below.
 
 ## 5. Injection into the synthesis stage
 
 - The diagrams extend the three workflows in the [progress report](progress_report_Oct15-19.md#2-implementation-and-generation-workflows).
   - Dashed boxes separate synthesis and execution. The single shared feedback block is expanded in [Section 4](#4-shared-feedback-module).
-  - Blue blocks show the proposed shared feedback module and per-attempt restoration. These additions are not implemented.
+  - Blue blocks show the shared feedback module and per-attempt restoration.
   - The environment loop returns observations to the executing program. The recovery loop sends a text summary back to synthesis only after a failed attempt.
   - The shared feedback module applies the enable/disable, shared failure-trigger and remaining-budget checks internally. It returns either a recovery payload or a stop decision.
   - Every path from a newly prepared candidate to execution passes through restoration of the trial's initial snapshot and creation of a fresh execution context.
@@ -429,9 +429,9 @@ flowchart LR
 
 - Core behavior is settled: all unsuccessful rollouts trigger recovery evaluation; all three methods use configurable recovery; four recovery rounds are allowed; history accumulates; repeated candidates may execute; essential evidence must be attributable; logging covers every attempt.
 - Finalize the concrete configuration/schema names, deterministic keyframe and predicate-summary rules, and per-method source/binding adapters.
-- The recommended budget values below are a starting configuration, not implemented defaults or a guarantee that every trial can use every allowance.
+- The budget values below are the comparison configuration. Recovery defaults are implemented; initial-attempt limits remain configurable through RunConfig. Multiple limits may bind before every allowance is consumed.
 - Shared feedback remains a deterministic evidence/schema layer; each method's own synthesis stage revises its candidate.
-- No recovery code, new observation APIs, or recovery experiments are implemented by this document.
+- Recovery is implemented; no new policy observation API is added. See the implementation and validation section below.
 
 ## 8. Recommended layered budgets
 
@@ -521,7 +521,7 @@ Output replacement Python policy code only, including its top-level invocation.
 
 - Keep failed runtime attempts separate from static-check repair messages and transport retries in artifacts and token accounting.
 - The first version should use deterministic structured summaries; adding an LLM summarizer would introduce another request/cost and should be separately configured.
-- The prompt is a draft, not an implemented template or a promise that the revised program will succeed. It accumulates bounded earlier-failure summaries rather than replaying all prior messages.
+- `recovery_prompt` implements this structure as a versioned supplement to the frozen initial prompt. It accumulates bounded earlier-failure summaries rather than replaying all prior messages.
 
 ## 10. Coverage of observed failures
 
@@ -548,8 +548,21 @@ Output replacement Python policy code only, including its top-level invocation.
 - Neither no-witness case has a dedicated structured failed-query event. The relevant information is distributed across source and predicate/trace events.
 - Baseline helper bindings matter: the earlier Haiku no-witness trial executed a generated helper that differed from the inline definition. Using only the visible final policy text can misdiagnose it.
 - The Revision 2 query-lambda capture defect and the checker defects fixed in Revision 3 are framework issues, not additional physical trial-failure categories. Do not ask an LLM to repair correct policy code based on a known false diagnostic.
-- **Conclusion:** text-only is an appropriate initial channel for representing the observed failures. The current artifacts provide most evidence, but structured packaging and the identified instrumentation gaps still require implementation. This establishes diagnostic coverage by failure class, not complete root-cause identification or successful recovery; no recovery trials have been run.
+- **Conclusion:** text-only is an appropriate initial channel for representing the observed failures. The historical artifacts provided most evidence; this revision adds structured packaging and the identified instrumentation. The historical review establishes diagnostic coverage by failure class, not complete root-cause identification or measured model recovery effectiveness.
 
 ## Existing implementation references
 
 - [Environment/primitive adapter](../adapter.py), [trajectory recorder](../recording.py), [source checkpoints](../checkpoints.py), [baseline final-output capture](../final_output.py), [failure handling and evaluation](../runner.py), [controller result](../../api/control.py).
+
+## Implementation and validation
+
+- [RecoveryConfig](../config.py) exposes all switches and limits. Single-run CLI: `--recovery` / `--no-recovery`; `--recovery-config path.json` supplies budget/profile overrides. The batch JSON accepts `recovery_variants: [false, true]` to schedule both settings for every method/trial/mode.
+- [recovery.py](../recovery.py) provides `run_recovery`, `collect_failure`, `select_relevant_evidence`, `recovery_prompt`, and `RoundBudget`. Each round uses a fresh method/adapter and an independent immutable attempt directory. The parent run indexes every result and feedback artifact.
+- Configuration retains existing initial-attempt limits from `RunConfig`; the comparison uses 50,000 tokens / 12 calls / 600 seconds initially. Recovery defaults follow Section 8. Unstack's entire trial remains limited to 60 seconds.
+- Required evidence includes the latest outcome, actual source/binding mapping, initial/pre-operation/terminal XYZ, last operation and source location, and bounded derived goal clauses. Optional recent events are selected deterministically. All older failures are summarized; full artifacts remain available. Essential missing attribution or oversized required feedback produces an explicit stop.
+- The first implementation uses a conservative UTF-8 byte bound for feedback/request token reservation, not a provider-specific tokenizer. This can stop earlier than a tokenizer-based estimate; actual returned usage is reconciled, and missing/failed usage retains its reservation. Full source/API context and the reserved response cap also count toward the request/context limit.
+- Controller callbacks record actual phase targets before motion, preserving controller behavior. Failed `get` records up to 16 candidate evaluations and an omitted count. Goal clauses use the same predicate semantics and configured tolerance. No grasp/collision inference is presented as an observed fact.
+- Recovery-on requires normal completion and agreement of the physical goal and shared logical postcondition for Stack/Unstack. Recovery-off preserves the previous physical-success metric. Both values remain separately visible; the comparison must check for disagreements.
+- Preparation failure consumes its started round and stops with `preparation_failure_no_rollout`; there is no automatic trajectory-based recovery without an executed policy. Static repair and transport retry remain separate within an attempt.
+- Validation: 116 CaP tests passed before the added six-group batch regression; the subsequent 35-test recovery/batch/controller run passed, including MuJoCo controller tests. The scripted [six-group physical preflight](../../../runs/cap-recovery-preflight/20261019-223951/report.md) forces a no-witness failure, then successfully completes Stack from the exact initial snapshot in all three recovery-enabled methods. Recovery-disabled counterparts stop at the forced failure. These scripted checks are not model success-rate measurements.
+- Each parent run saves `rounds/<index>/result.json`, `identity.json`, and `feedback.json`, plus per-attempt checkpoints, prompts, usage, trajectory and video. Batch reports include recovery setting, first-attempt/final success, recovery rounds, calls and total tokens. Repeated candidates are recorded and remain executable.

@@ -29,7 +29,7 @@ methods. Baseline modes are prompt-only; method-1 modes are checked:
 - [Revision 2 plan: prompts, versions, and parallel batches](docs/revision_2.md).
 - [Shared DSL checker architecture](docs/SHARED-DSL-CHECKER.md).
 - [Revision 3: checker correctness](docs/revision_3.md).
-- [Revision 4: failure recovery discussion](docs/revision_4_failure_recover.md).
+- [Revision 4: shared failure recovery](docs/revision_4_failure_recover.md).
 - [Revision 5: task expansion plan](docs/revision_5_add_tasks.md).
 - [Revision 6: demonstration input plan](docs/revision_6_add_demonstration.md).
 
@@ -37,7 +37,7 @@ Revision 3 fixes loop-carried effect propagation and generic helper type merging
 in the shared checker (`shared-contract-v3`). All 106 CaP tests pass, including
 18 new regressions. Baseline execution is unchanged; its audit uses the revised
 contract for new runs. See [implementation and validation](docs/revision_3.md).
-Recovery, task expansion, and demonstration input remain deferred plans.
+Configurable shared failure recovery is implemented as `cap-recovery-v1`; task expansion and demonstration input remain deferred plans.
 
 ## Implemented scope
 
@@ -677,3 +677,16 @@ They do not establish general performance on other scenes or tasks.
 See the [full report](../../runs/cap-revision2-haiku55/20261019-021933/report.md),
 [analysis](../../runs/cap-revision2-haiku55/20261019-021933/analysis.md), and
 [source/check/video index](../../runs/cap-revision2-haiku55/20261019-021933/artifacts.md).
+
+## Configurable failure recovery
+
+All three methods support `--recovery` (default off) and optional `--recovery-config path.json`.
+Every revised candidate starts from the same full initial snapshot, with a fresh execution context.
+Up to four recovery rounds follow the initial rollout. The shared deterministic feedback module
+adds current failure evidence and short summaries of earlier failures to a versioned prompt
+supplement. Baseline remains free of a pre-execution DSL gate.
+
+Batch configuration can include `"recovery_variants": [false, true]` alongside `run_config`
+and `model_config`. With three methods, one condition mode, and five trials this schedules
+30 trials. Recovery attempts stay inside their original trial and all usage is accumulated.
+See [configuration, budgets, evidence, and logging](docs/revision_4_failure_recover.md#implementation-and-validation).

@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from synthesis.cap.config import ModelConfig, RunConfig
+from synthesis.cap.config import ModelConfig, RecoveryConfig, RunConfig
 from synthesis.cap.contracts import CONDITION_MODES
 from synthesis.cap.llm import ScriptedModel
 from synthesis.cap.prompt_package import PROMPT_VERSIONS
@@ -27,6 +27,12 @@ def main(argv=None):
         "--baseline-audit", action=argparse.BooleanOptionalAction, default=True
     )
     parser.add_argument("--audit-timeout", type=float, default=10.0)
+    parser.add_argument(
+        "--recovery", action=argparse.BooleanOptionalAction, default=None
+    )
+    parser.add_argument(
+        "--recovery-config", type=Path, help="JSON RecoveryConfig overrides"
+    )
     parser.add_argument("--task", choices=TASK_INSTRUCTIONS, default="stack")
     parser.add_argument("--num-blocks", type=int, default=3)
     parser.add_argument("--seed", type=int, default=0)
@@ -109,7 +115,13 @@ def main(argv=None):
         transport_retries=args.transport_retries,
         extra_body=json.loads(args.extra_body.read_text()) if args.extra_body else {},
     )
+    recovery = (
+        json.loads(args.recovery_config.read_text()) if args.recovery_config else {}
+    )
+    if args.recovery is not None:
+        recovery["enabled"] = args.recovery
     config = RunConfig(
+        recovery=RecoveryConfig(**recovery),
         method=args.method,
         baseline_audit=args.baseline_audit,
         audit_timeout=args.audit_timeout,

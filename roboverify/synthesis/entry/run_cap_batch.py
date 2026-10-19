@@ -41,6 +41,7 @@ def main(argv=None):
             methods=args.methods,
             modes=args.condition_modes,
             trials=args.trials,
+            recovery_variants=spec.get("recovery_variants"),
             max_workers=args.max_workers,
             schedule_seed=args.schedule_seed,
             responses=(
