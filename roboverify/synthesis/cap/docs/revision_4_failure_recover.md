@@ -85,7 +85,7 @@ revised_candidate = method.synthesize(request)
 - Prefer deterministic keyframe/event selection over sending entire logs. Keep the failure point and its preceding operation; report any truncation or missing fields.
 - Use stable diagnostic object labels with a recorded mapping across attempts. Diagnostic labels do not automatically become new policy-visible variables or APIs.
 - Controller residuals, terminal success, and failure trajectories are additional synthesis-time feedback. They do not become new runtime observation APIs, and the enabled/disabled comparison must record this information difference.
-- The exact feedback profile, including whether to expose goal-clause explanations and controller diagnostics, remains a discussion item.
+- The evidence review in Section 9 supports text-only feedback as the first version. Field selection, controller/goal detail, and token limits still need to be finalized; missing structured fields must be instrumented before claiming complete feedback coverage.
 
 ## 4. Injection into the synthesis stage
 
@@ -140,6 +140,90 @@ flowchart LR
 - How many recovery rounds and how much total model/execution budget should be allocated?
 - Whether baseline post-hoc DSL failure is itself a recovery trigger is separate from execution-failure recovery; preserve the disabled original baseline and label any enabled variant explicitly.
 - No recovery code, new observation APIs, or recovery experiments are implemented by this document.
+
+## 7. Token budgets for recovery
+
+- **Per-response output cap:** keep the current experiment setting of 16,384 initially. Injecting failure evidence increases input tokens, not this output allowance; it is not by itself a reason to raise the output cap.
+- **Input/context budget:** explicitly budget the task/API text, policy/helper source, and feedback together, with room reserved for the output within the selected model route's context window.
+  - Proposed initial feedback allowance: about 2,000–4,000 tokens, separate from required policy/API source. Measure actual request sizes before selecting the final value.
+  - Reduce repeated history and sampled trajectory detail first. Do not silently remove the failure point, essential helper definitions, mode rules, or reset requirement.
+- **Total trial tokens:** the completed comparison batches used 50,000 reported input/output tokens across all calls. Additional recovery, helper, and static-repair requests consume this same accounting unless a new explicit budget is configured.
+  - For illustration, three policy requests with 8k input and 16k output allowances can require about 72k tokens before helper/static-repair calls. A 50k trial cap does not guarantee that allocation.
+  - Recovery therefore needs an explicit trial-level allowance/reservation, alongside model-call and execution limits. The exact total and round limit remain undecided.
+  - Current accounting checks returned usage after a response, so it can detect a token-budget overrun only after consumption. Proposed recovery scheduling should reserve estimated input/output costs before dispatch and still record actual usage and any discrepancy.
+- Output truncation due to reasoning consuming the response allowance is a separate generation issue. Increasing input feedback does not solve it, and there may be no policy to debug.
+- Compare recovery-on/off with declared common limits where possible; report actual usage and first-attempt success as well as success within the recovery budget. Separate the effect of feedback from the effect of additional computation in later controls.
+
+## 8. Proposed recovery prompt
+
+- Use a versioned recovery template with a common evidence section and method-specific output/preparation instructions.
+- Preserve the API contract and condition mode. Recovery feedback does not authorize extra primitives, numeric guards in DSL-only mode, or new observation APIs.
+- Request a complete candidate invoked from its entry point. For Baseline and Method 1, retain their helper-resolution workflows; Method 2 must include every helper in its whole-candidate output.
+- Keep observed facts separate from inferred explanations. Do not tell the model that nonconvergence proves a collision, bad grasp, or framework bug.
+
+```text
+Revise the current policy to complete the task using the supplied API.
+
+TASK AND CONTRACT
+{task_instruction}
+{versioned_api_description_and_condition_mode_rules}
+{allowed_runtime_bindings}
+
+CURRENT EXECUTABLE POLICY
+{policy_source_and_helper_sources}
+{execution_time_binding_and_source_mapping}
+
+OBSERVED FAILURE
+{failure_category_exception_and_source_location}
+{recent_primitive_calls_arguments_fixed_targets_and_results}
+{relevant_query_guard_and_progress_evidence}
+{initial_pre_failure_and_failure_or_terminal_state_keyframes}
+{terminal_goal_result_and_available_clause_evidence}
+{missing_or_truncated_evidence}
+
+ROLLOUT PROTOCOL
+The failed trajectory is debugging evidence only.
+The revised policy will run from its entry point after restoring the saved
+initial state. It will not resume from the failure state.
+Diagnostic object labels are not new executable variable bindings.
+
+REVISION REQUEST
+Address the failure while preserving the complete task and API contract.
+Do not assume an unobserved cause is established fact.
+Output replacement Python policy code only, including its top-level invocation.
+{method_specific_helper_and_output_requirements}
+```
+
+- Keep failed runtime attempts separate from static-check repair messages and transport retries in artifacts and token accounting.
+- The first version should use deterministic structured summaries; adding an LLM summarizer would introduce another request/cost and should be separately configured.
+- The prompt is a draft, not an implemented template or a promise that the revised program will succeed.
+
+## 9. Coverage of observed failures
+
+- Reviewed the two typed_v3 Revision 2 batches (60 trials) and the later legacy_v1 Haiku supplement (20 trials).
+  - Typed batches: 36 failures = 20 generation truncations + 15 primitive failures + 1 no-witness query.
+  - Legacy supplement: 19 failures, adding execution/query-budget, goal, object-reference, and helper-arity failures.
+  - Combined: 55 failures, of which 35 occurred after generation during execution/task evaluation. These heterogeneous batches are a failure inventory, not a pooled success-rate comparison.
+- Sources: [DeepSeek typed report](../../../runs/cap-revision2-deepseek/20261018-215345/report.md), [Haiku typed report](../../../runs/cap-revision2-haiku55/20261019-021933/report.md), [Haiku legacy supplement](../../../runs/cap-haiku55-legacy-supplement/20261019-153234/report.md), and [per-trial evidence review](../../../runs/cap-recovery-evidence-review/20261019-211731/README.md).
+
+| Observed failure | DeepSeek typed | Haiku typed | Haiku legacy | Text evidence and coverage |
+| --- | ---: | ---: | ---: | --- |
+| Generation output limit / empty code | 20 | 0 | 0 | Response finish reason and usage identify the failure. No executed policy or failure trajectory to debug; use a separate generation-retry/configuration path |
+| Move nonconvergence | 4 | 6 | 7 | Existing arguments, positions, step counts and residuals support diagnosis; explicitly record the invocation-time target and controller phase |
+| Pick nonconvergence | 0 | 2 | 2 | Existing trajectories and residuals support diagnosis; add phase/target details and do not infer successful grasp from proximity |
+| Release nonconvergence | 1 | 2 | 1 | Existing trajectories and residuals support diagnosis; include retreat target, phase, and relevant before/after positions |
+| No-witness get | 0 | 1 | 1 | Existing source/predicate events identify the failure; add structured failed-query and bounded candidate-evaluation evidence |
+| Execution/query tick budget | 0 | 0 | 4 | Existing traces and exhausted-budget field identify it; summarize repeated statements/queries and physical progress. Recovery requires remaining overall budget |
+| Normal completion with goal failure | 0 | 0 | 2 | Both terminal success and DSL-postcondition flags are false; provide final state and goal-clause evidence, not an invented exception location |
+| Invalid object reference | 0 | 0 | 1 | Exception, code, actual bindings and argument values/types support diagnosis; distinguish None/numeric values from stale handles |
+| Helper arity | 0 | 0 | 1 | Exception, actual helper definition/binding and call-site arguments support diagnosis |
+
+- All 35 execution/task failures have recorded trajectories and source-location events. Exception failures have tracebacks; the two goal failures correctly do not.
+- All 25 primitive-failure records contain convergence, step count and position error. Explicit fixed targets and controller phase are absent from the current primitive-end events and need reliable capture/association.
+- Neither no-witness case has a dedicated structured failed-query event. The relevant information is distributed across source and predicate/trace events.
+- Baseline helper bindings matter: the earlier Haiku no-witness trial executed a generated helper that differed from the inline definition. Using only the visible final policy text can misdiagnose it.
+- The Revision 2 query-lambda capture defect and the checker defects fixed in Revision 3 are framework issues, not additional physical trial-failure categories. Do not ask an LLM to repair correct policy code based on a known false diagnostic.
+- **Conclusion:** text-only is an appropriate initial channel for representing the observed failures. The current artifacts provide most evidence, but structured packaging and the identified instrumentation gaps still require implementation. This establishes diagnostic coverage by failure class, not complete root-cause identification or successful recovery; no recovery trials have been run.
 
 ## Existing implementation references
 
