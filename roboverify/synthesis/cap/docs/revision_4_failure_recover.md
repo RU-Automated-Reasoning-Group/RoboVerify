@@ -1,8 +1,8 @@
 # Revision 4: configurable shared failure recovery
 
-- **Status:** design under discussion; not implemented.
+- **Status:** core behavior agreed; detailed design and recommended budgets recorded below. Not implemented.
 - **Goal:** use failed execution trajectories to debug the current policy through a shared interface usable by Baseline, Method 1, and Method 2.
-- **Agreed direction:** recovery is configurable, with enable/disable settings. Every revised policy rolls out from an initial state; failed trajectories provide debugging evidence, not a continuation state.
+- **Agreed direction:** recovery is configurable for all three methods, with up to four recovery rounds and five total rollouts. Any policy rollout that fails to achieve the task postcondition triggers recovery evaluation, regardless of its failure category. Each revised policy starts from the saved initial state; history accumulates, and repeated candidates may run again with explicit logging.
 - **Current behavior:** primitives raise on nonconvergence; Method 1/2 repairs use static DSL diagnostics only. No runtime failure feedback is currently injected into synthesis.
 
 ## 1. Shared API and configuration
@@ -14,18 +14,22 @@
   - The common orchestrator manages recovery rounds, initial-state restoration, and attempt records.
 - **Disabled:** preserve current generation, prompts, execution, and evaluation behavior.
 - **Enabled:** identify the variant explicitly, for example `Google baseline + recovery`, and retain the original baseline as the disabled reference.
-  - Sharing recovery does not imply adding a pre-execution DSL gate to the Google baseline.
+  - Baseline uses the same configurable recovery mechanism and task-failure trigger as the other methods. Sharing recovery does not add a pre-execution DSL gate to the Google baseline.
   - Method 1/2 continue using their existing static checks before execution.
-- Proposed configuration concepts; names and limits remain to be finalized:
+- Configuration decisions and recommended defaults; names are conceptual until implementation:
 
-| Setting | Purpose | Design status |
+| Setting | Purpose | Decision / recommendation |
 | --- | --- | --- |
-| Recovery enabled | Switch the feature on/off for any of the three methods | Agreed; recommend default off |
-| Maximum recovery rounds | Bound how many revised candidates can be evaluated | Proposed; value undecided |
-| Feedback profile and token limit | Control what evidence reaches synthesis and its size | Text-only selected for the first version; exact fields/limits remain to be finalized |
-| Recoverable failure classes | Select execution failures eligible for debugging | Proposed; classes undecided |
-| Shared effort limits | Account for generation, static repair, recovery, reset, and rollouts | Proposed; cumulative trial limits must remain explicit |
-| Recovery prompt/schema version | Preserve reproducibility and future ablations | Proposed |
+| `recovery.enabled` | Enable/disable recovery independently for any method | Agreed; recommend default off |
+| `recovery.max_rounds` | Additional candidate-revision rounds | **4**, giving at most **5 rollouts** including the initial attempt |
+| Task-failure trigger | Failed rollout/postcondition outcome | All causes; no failure-category allowlist |
+| `recovery.on_dsl_noncompliance` | Optional additional trigger when a post-hoc audit fails despite task success | Configurable separately from task failure; recommend default off. The same option is available across method adapters; baseline remains free of a pre-execution gate |
+| Feedback profile and limit | Latest failure plus accumulated older summaries | Text-only, deterministic rules; recommend an 8,192-token feedback cap |
+| History policy | Preserve earlier failed attempts | Latest failure in detail; all earlier failures as short summaries |
+| Duplicate-candidate policy | Permit another rollout of unchanged code | Allow; record exact and normalized identity matches and the previous matching attempt |
+| Per-round and trial budgets | Bound each recovery and total effort | Use both layers; recommended values in Section 8 |
+| Recovery prompt/schema version | Reproduce feedback and future ablations | Version the schema, selector, and templates |
+
 
 The conceptual interface is framework-independent; these functions are not implemented:
 
@@ -38,6 +42,19 @@ revised_candidate = method.synthesize(request)
 
 - Raw collection and model-visible feedback are separate layers. Collecting a field for host debugging does not automatically authorize adding it to the prompt or policy API.
 - Missing fields must be explicit. Different logging capabilities must not be interpreted as different observed outcomes.
+
+### 1.1 Trigger semantics
+
+- For every attempted policy rollout, evaluate the task postcondition at its terminal/failure state. If the rollout does not achieve the task postcondition, recovery is triggered whenever enabled, irrespective of the exception or failure label.
+  - This includes primitive nonconvergence, no-witness queries, goal failure, invalid arguments, helper-call errors, per-rollout resource exhaustion, and previously unseen execution failures.
+  - Failure categories select evidence; they do not determine whether an unsuccessful rollout is eligible.
+- Preserve the existing requirement for normal policy completion: a transiently successful state or an exception after reaching a goal is not silently relabeled as a successful complete rollout.
+- Use the shared task evaluator, not an LLM judgment. Record the logical postcondition and physical environment criterion separately; where both define the task, require their agreement with success.
+  - Represent an unavailable evaluation as `unknown`, not a fabricated false predicate value. The attempt is unsuccessful and enters recovery evaluation if reliable debugging evidence and the initial snapshot remain available.
+- Triggering recovery does not guarantee another model call. Disabled recovery, four consumed recovery rounds, an exhausted overall budget, or unavailable essential source/reset evidence can still stop the process with a recorded reason.
+- Baseline uses the same rules and master switch as Method 1/2. A post-hoc DSL audit can additionally trigger baseline recovery through the separate configurable option above; it does not change execution into a checked interpreter.
+- Generation/transport failures before a policy rollout have no failed execution trajectory. Keep their handling separate; any such failures inside an already started recovery round consume its call/token/time allowance and are recorded as preparation failures.
+
 
 ## 2. Information to collect
 
@@ -67,7 +84,7 @@ revised_candidate = method.synthesize(request)
 | Selection/condition expression and query result | Query/condition events, source mapping | Explain no-witness selection or unexpected control flow | Successful query results exist; failed `get` needs an explicit structured failure record and bounded candidate evidence |
 | Loop/branch progress and recent action sequence | Runtime events / baseline Python trace | Explain repeated states, nontermination, and premature completion | Richer branch/assignment events exist in checked methods; define a comparable common summary for baseline |
 | Model calls, tokens, runtime ticks, simulation steps, wall time, exhausted resource | Budget/timing records | Distinguish a policy failure from a hard effort limit | Already recorded; recovery attempts need cumulative and per-attempt accounting |
-| Static DSL diagnostics and contract identity | Shared checker records | Keep source compliance separate from physical failure | Already available; Method 1/2 retain their existing static repair flow; baseline audit feedback is a separate design decision |
+| Static DSL diagnostics and contract identity | Shared checker records | Keep source compliance separate from physical failure | Already available; Method 1/2 retain static repair. Post-hoc DSL-triggered recovery is an additional configurable option, including for baseline |
 
 - Environment data describes what happened physically; logs connect those observations to code, decisions, and resource use. Controller outcomes originate in execution and are accessed through structured logs.
 - Preserve observed facts separately from explanations inferred by a debugger or LLM. A failure label such as Move nonconvergence does not establish its root cause.
@@ -81,7 +98,11 @@ revised_candidate = method.synthesize(request)
   - Recent primitive calls with arguments, targets where recorded, convergence, step counts, and residual error.
   - Initial state, the state before the failed operation, and the failure/terminal state, restricted to gripper/block positions and selected DSL relations.
   - Relevant query/guard evidence and terminal goal result, where available.
+  - Short summaries of all earlier failed attempts, with their candidate IDs, observed failure, and attempted changes.
   - Remaining recovery budget and the instruction to produce a complete policy that starts from the saved initial state.
+- Accumulate history across rounds: retain the latest failed attempt's necessary evidence in detail and a short summary of every older failure. Do not append all previous full prompts or trajectories.
+  - Each summary contains attempt/candidate identity, failure outcome, relevant attempted changes, and whether the same candidate/failure has appeared before.
+  - Preserve the full older artifacts even when only their summaries enter the prompt. Count every included summary within the feedback token limit.
 - Prefer deterministic keyframe/event selection over sending entire logs. Keep the failure point and its preceding operation; report any truncation or missing fields.
 - Use stable diagnostic object labels with a recorded mapping across attempts. Diagnostic labels do not automatically become new policy-visible variables or APIs.
 - Controller residuals, terminal success, and failure trajectories are additional synthesis-time feedback. They do not become new runtime observation APIs, and the enabled/disabled comparison must record this information difference.
@@ -90,20 +111,21 @@ revised_candidate = method.synthesize(request)
 ## 4. Shared feedback module
 
 - This module is shared by all three methods. It returns either a recovery payload or an explicit stop decision.
-- It applies recovery configuration and budget checks, aligns failed-execution evidence, and builds bounded text-only feedback.
+- It applies the shared failure trigger and configuration/budget checks, aligns failed-execution evidence, and builds bounded text-only feedback with accumulated history.
 - It does not generate policy code, execute a policy, or restore the environment. The method adapter handles synthesis, and the rollout controller restores the initial snapshot before execution.
 
 ```mermaid
 flowchart LR
     RESULT["Attempt outcome"] -->|"success/failure + attempt ID"| GATE
-    CFG["Recovery configuration + remaining budget"] -->|"enabled, eligible classes, rounds/resources"| GATE
+    CFG["Recovery configuration + remaining budget"] -->|"enabled, failure triggers, rounds/resources"| GATE
     ENV["Recorded environment states"] -->|"initial, pre-action, failure/terminal snapshots"| COLLECT
     LOG["Execution logs + controller results"] -->|"errors, actions, queries, progress, costs"| COLLECT
     CODE["Executed policy + helper bindings"] -->|"source/checkpoint IDs + actual definitions"| ALIGN
+    HISTORY["Earlier failed attempts"] -->|"candidate IDs + short failure/change summaries"| SELECT
     TASK["Task + API / condition-mode contract"] -->|"goal, allowed operations, runtime bindings"| PACK
     subgraph SHARED["Shared feedback module - proposed"]
         direction TB
-        GATE{"Eligible failure + enabled + budget remaining?"}
+        GATE{"Failed rollout or enabled DSL trigger + recovery enabled + budget remaining?"}
         GATE -->|"yes: collect this failed attempt"| COLLECT["Load evidence"]
         COLLECT -->|"states + events + failure details"| ALIGN["Align code, objects, events and states"]
         ALIGN -->|"structured failure record + provenance"| SELECT["Select relevant actions, queries and keyframes"]
@@ -112,7 +134,7 @@ flowchart LR
     end
     CFG -->|"feedback profile + token allowance"| SELECT
     CODE -->|"current executable source bundle"| PACK
-    GATE -->|"no: success / disabled / ineligible / exhausted"| STOP["Stop decision + reason"]
+    GATE -->|"no: no trigger / disabled / exhausted"| STOP["Stop decision + reason"]
     SERIALIZE -->|"essential evidence cannot fit the allowed budget"| STOP
     PACK -->|"policy + feedback + contract + reset instruction"| OUTPUT["Recovery payload to method adapter"]
     style SHARED fill:none,stroke:#2563eb,stroke-width:1.5px,stroke-dasharray:6 4
@@ -132,12 +154,14 @@ def shared_feedback(attempt, task, contract, config, budget):
     states = load_recorded_states(attempt)
     logs = load_execution_logs(attempt)
     program = load_executed_policy_and_bindings(attempt)
+    history = load_earlier_failed_attempts(attempt.trial_id)
     evidence = align_evidence(states, logs, program)
 
     selected = select_relevant_evidence(
         evidence,
         profile=config.feedback_profile,
         token_limit=config.feedback_token_limit,
+        earlier_failures=history,
         preserve_failure_context=True,
         mark_missing_information=True,
     )
@@ -159,12 +183,12 @@ def shared_feedback(attempt, task, contract, config, budget):
     return record_result(attempt, Ready(payload))
 ```
 
-- `assess_recovery` stops on success, disabled recovery, an ineligible failure, or exhausted round/resource limits.
+- `assess_recovery` applies the common task-failure trigger and optional DSL trigger, and stops when no trigger applies, recovery is disabled, four recovery rounds are consumed, or overall resources are exhausted.
 - `record_result` preserves either the feedback payload or the stop reason. Generation, initial-state restoration, and policy execution remain outside this module.
 
 | Module step | Responsibility |
 | --- | --- |
-| Eligibility gate | Respect enable/disable, recoverable failures, maximum rounds, and remaining resources |
+| Recovery gate | Apply the common failure trigger, enable/disable switch, maximum rounds, and remaining resources |
 | Load and align evidence | Associate recorded states, source/helper bindings, action calls, and failure locations using explicit IDs |
 | Select evidence | Retain the failure point and relevant preceding actions/queries; bound trajectory/history size and mark missing information |
 | Serialize feedback | Produce the same versioned text schema for all methods; preserve observed facts and provenance without inventing a root cause |
@@ -194,7 +218,9 @@ def shared_feedback(attempt, task, contract, config, budget):
 | Execution/query budget | Exhausted resource; repeated code/query locations and counts; recent state/progress summary | Representative earlier iterations and additional action history |
 | Goal failure | Terminal state; goal result and available unsatisfied clauses; last relevant actions | Earlier states showing when the missing goal relation was lost or never established |
 | Argument type/arity failure | Failed call, actual argument values/types, expected signature, actual helper binding, exception/source location | Immediate assignments and calls that produced the invalid arguments |
+| Other/unclassified rollout failure | Shared task result, available exception, actual source/bindings, last reliable state, and missing-field markers | Recent action/query history and reproducible state differences |
 
+- Unknown failure categories use the generic fallback profile above. They still trigger recovery evaluation when the rollout is unsuccessful; classification is not an allowlist.
 - Required fields that were not recorded must be explicitly marked unavailable. Do not reconstruct them by guessing or infer a physical root cause from the error label.
   - The profile should distinguish fields whose absence prevents reliable attribution from fields that can remain explicitly unknown.
   - If essential attribution cannot be established, return a stop reason instead of silently using an unrelated helper or state.
@@ -206,20 +232,21 @@ def shared_feedback(attempt, task, contract, config, budget):
 High-level selection pseudocode:
 
 ```python
-def select_relevant_evidence(evidence, profile, token_limit,
+def select_relevant_evidence(evidence, profile, token_limit, earlier_failures,
                              preserve_failure_context=True,
                              mark_missing_information=True):
     failure_type = classify_observed_failure(evidence)
     required = select_failure_context(failure_type, evidence, profile)
     optional = select_supporting_context(failure_type, evidence, profile)
     required = label_missing_fields(required)
+    summaries = summarize_earlier_failures(earlier_failures, profile)
 
     if not essential_attribution_available(required, profile):
         return CannotSelect("Essential failure/source evidence unavailable")
 
-    selected = required
+    selected = combine_latest_evidence_and_history(required, summaries)
     if serialized_tokens(selected, profile) > token_limit:
-        return CannotSelect("Required failure context exceeds feedback budget")
+        return CannotSelect("Required failure context/history exceeds feedback budget")
 
     omitted = []
     for item in deterministic_priority_order(optional, profile):
@@ -232,7 +259,7 @@ def select_relevant_evidence(evidence, profile, token_limit,
     return finalize_with_omission_metadata(selected, omitted, token_limit, profile)
 ```
 
-- Budget fitting reduces optional material first. Never silently truncate required facts to make a prompt fit.
+- Budget fitting reduces optional material first. Keep a bounded summary for every earlier failure and never silently truncate required facts. If required context and history cannot fit, record a feedback-budget stop.
 - Omission metadata identifies what was excluded, how much was sampled, and why. Its token cost is part of the feedback limit; finalization may remove lower-priority optional evidence to make room for a bounded omission summary.
 - The outer module separately checks the complete request, including API/source context and reserved output capacity. A feedback-only fit does not guarantee that the full request fits.
 - Save selected/omitted event IDs, keyframe indices, selector/profile version, token-counting method, and the serialized feedback alongside the attempt.
@@ -245,9 +272,9 @@ def select_relevant_evidence(evidence, profile, token_limit,
   - Dashed boxes separate synthesis and execution. The single shared feedback block is expanded in [Section 4](#4-shared-feedback-module).
   - Blue blocks show the proposed shared feedback module and per-attempt restoration. These additions are not implemented.
   - The environment loop returns observations to the executing program. The recovery loop sends a text summary back to synthesis only after a failed attempt.
-  - The shared feedback module applies the enable/disable, failure-eligibility, and remaining-budget checks internally. It returns either a recovery payload or a stop decision.
+  - The shared feedback module applies the enable/disable, shared failure-trigger and remaining-budget checks internally. It returns either a recovery payload or a stop decision.
   - Every path from a newly prepared candidate to execution passes through restoration of the trial's initial snapshot and creation of a fresh execution context.
-- Output truncation without a policy and checker-internal errors do not enter this trajectory-based recovery loop. Their handling remains separate.
+- Pre-rollout output truncation without a policy and checker-internal errors remain distinct preparation failures; they do not fabricate an executed trajectory. All unsuccessful attempted rollouts, including new error categories, use the shared task-failure trigger.
 
 ### 5.1 Google baseline with configurable recovery
 
@@ -273,15 +300,15 @@ flowchart LR
     S0["Saved initial state for this scene"] -->|"same full snapshot for every attempt"| RESET
     R -->|"outcome + policy/log/state references"| FEEDBACK
     FEEDBACK["Shared feedback module - Section 4"]
-    FEEDBACK -->|"stop: success / disabled / ineligible / exhausted"| FIN["Final result + retained attempt records"]
+    FEEDBACK -->|"stop: no trigger / disabled / exhausted"| FIN["Final result + retained attempt records"]
     FEEDBACK -->|"root-policy recovery request + failed source + text evidence"| G
     classDef recovery fill:#eff6ff,stroke:#2563eb,color:#0f172a
     class RESET,FEEDBACK recovery
 ```
 
 - Recovery feedback enters the policy LMP as a new root-policy request, followed by Google's recursive helper generation.
-- Clear stale executable bindings/history between attempts; include the failed source and its actual helper bindings explicitly as debugging evidence.
-- The shared DSL checker remains a separate post-hoc audit for each attempt. Its verdict is not a pre-execution gate or an automatic recovery trigger in this design.
+- Clear stale executable globals/helper caches and implicit LMP execution history between attempts. Preserve the explicit accumulated failure summaries, and include the latest failed source and its actual helper bindings as debugging evidence.
+- The shared DSL checker remains a separate post-hoc audit for each attempt. Its verdict is never a pre-execution gate; it can be an additional recovery trigger when `recovery.on_dsl_noncompliance` is enabled.
 - With recovery disabled, the attempt ends after ordinary execution/evaluation and its separate audit.
 
 ### 5.2 Method 1 with configurable recovery
@@ -313,7 +340,7 @@ flowchart LR
     S0["Saved initial state for this scene"] -->|"same full snapshot for every attempt"| RESET
     OUT -->|"outcome + policy/log/state references"| FEEDBACK
     FEEDBACK["Shared feedback module - Section 4"]
-    FEEDBACK -->|"stop: success / disabled / ineligible / exhausted"| FIN["Final result + retained attempt records"]
+    FEEDBACK -->|"stop: no trigger / disabled / exhausted"| FIN["Final result + retained attempt records"]
     FEEDBACK -->|"root-policy recovery request + failed source + text evidence"| G
     classDef recovery fill:#eff6ff,stroke:#2563eb,color:#0f172a
     class RESET,FEEDBACK recovery
@@ -349,7 +376,7 @@ flowchart LR
     S0["Saved initial state for this scene"] -->|"same full snapshot for every attempt"| RESET
     OUT -->|"outcome + policy/log/state references"| FEEDBACK
     FEEDBACK["Shared feedback module - Section 4"]
-    FEEDBACK -->|"stop: success / disabled / ineligible / exhausted"| FIN["Final result + retained attempt records"]
+    FEEDBACK -->|"stop: no trigger / disabled / exhausted"| FIN["Final result + retained attempt records"]
     FEEDBACK -->|"whole-candidate recovery request + failed source + text evidence"| G
     classDef recovery fill:#eff6ff,stroke:#2563eb,color:#0f172a
     class RESET,FEEDBACK recovery
@@ -363,38 +390,90 @@ flowchart LR
 - Use an explicit recovery request role/template rather than overwriting frozen initial-generation or static-repair templates.
 - The three method adapters share evidence selection, text schema, reset protocol, and recovery accounting; their generation/checking strategies remain distinct.
 
-## 6. Rollout protocol and reporting
+## 6. Rollout protocol, history, and logging
 
 - Failed trajectories are debugging input, not continuation states for a revised policy.
-- Every complete policy rollout starts from an initial state. Each revised candidate is invoked from its entry point after restoring the same trial's full initial simulator snapshot.
-- For multiple scenes, restore each scene's own initial snapshot for every policy version. Recreating a scene from its seed does not replace exact snapshot restoration.
-- Retain each candidate, feedback payload, prompt, source bindings, trajectory, compliance verdict, physical result, and resource cost under a separate attempt identity.
-  - The current recorder uses `rollout_001`; multi-attempt naming and lifecycle handling require implementation to avoid overwriting artifacts.
-  - Report first-attempt success and success within the recovery budget separately. Recovery attempts are not additional independent trials and failed attempts are not discarded.
-- A hard overall trial-budget exhaustion stops recovery. Recovering from a per-rollout limit requires explicitly allocated remaining trial resources, not an automatic fresh budget.
-- Transport failures and checker-internal errors should not automatically become policy-repair evidence; eligibility and handling remain to be specified.
+- Every complete policy rollout starts from an initial state. Invoke each candidate from its entry point after restoring the same trial's full initial simulator snapshot and fresh execution context.
+- For multiple scenes, restore each scene's own initial snapshot for every candidate. Recreating a scene from its seed does not replace exact restoration.
+- Number the initial attempt as round 0 and recovery rounds as 1–4. At most five policy rollouts are allowed.
+  - Every started recovery round consumes one of the four rounds, even if candidate preparation fails before rollout. Record that no rollout occurred; do not invent a failure trajectory.
+  - Helper generation and static repairs within a round consume that round's and the trial's budgets. They are not extra recovery rounds or independent trials.
+- Accumulate the latest failure's detailed evidence and older failed-attempt summaries. Preserve full artifacts for every attempt.
+- Repeated candidates may execute again from the initial snapshot. Do not reject, skip, or stop solely because the candidate matches an earlier version.
+  - Record source/binding hashes, normalized candidate identity, the earlier matching attempt, and whether the new outcome repeats or differs.
+  - Repetition consumes the normal round and rollout budgets.
+- A hard overall trial-budget exhaustion stops further recovery. Reaching a per-rollout limit ends that attempt, but a recovery may proceed if round and overall resources remain.
+- Report first-attempt success and success within four recovery rounds separately. Retain failed attempts and actual total cost; recovery rollouts are not additional independent trials.
 
-## 7. Discussion items before implementation
+### 6.1 Recovery-aware logger
 
-- Which failure classes should trigger the first version: primitive nonconvergence, no-witness queries, normal completion with goal failure, and/or nontermination?
-- Text-only feedback is selected. Finalize the structured field set, keyframe selection, and level of predicate/goal diagnostics after the required instrumentation is specified.
-- Should a shared debugger propose a full replacement policy, or should each method's existing generator interpret the common feedback? The current proposal uses method adapters and a shared evidence/schema layer.
-- How many recovery rounds and how much total model/execution budget should be allocated?
-- Whether baseline post-hoc DSL failure is itself a recovery trigger is separate from execution-failure recovery; preserve the disabled original baseline and label any enabled variant explicitly.
+| Event / artifact | Required information |
+| --- | --- |
+| Recovery decision | Trial/attempt ID, enabled flags, postcondition/environment outcome, termination status, trigger, remaining rounds/budgets, continue/stop reason |
+| Recovery round start/end | Round index, parent failed attempt, preparation/rollout status, timestamps and exclusive phase durations |
+| Failure evidence | Error/category, actual source/helper bindings, action/query IDs, relevant state indices, fixed targets/controller phase, missing fields |
+| Evidence selection | Selector/profile version, selected/omitted event IDs and keyframes, history summaries, token-counting method and size |
+| Feedback and model request | Exact serialized feedback, accumulated-history IDs, prompt/schema version and hashes, request role, model settings and usage |
+| Candidate identity | Source and binding hashes, normalized identity, parent candidate, changes, duplicate flag and earlier matching attempt |
+| Initial-state restoration | Reference snapshot hash, restored-state comparison, object-binding mapping and rollout ID |
+| Rollout result | Normal completion or exception, task postcondition, physical goal result, separate DSL compliance, trajectory/video/source references |
+| Resource accounting | Per-request, per-round and cumulative calls/tokens/ticks/simulation steps/time; reservations, actual usage, missing usage and exhaustion reason |
+| Final result | Number of rounds/rollouts, first-attempt success, final recovery outcome, total resources, and complete artifact index |
+
+- Use unique per-round/per-rollout artifact paths. The current fixed `rollout_001` layout must be extended so new attempts cannot overwrite earlier data.
+- Keep static repair, runtime recovery, and transport retry roles distinguishable. Count provider-reported reasoning tokens once inside completion usage.
+- Preserve failed evaluations as `unknown` when appropriate, with their evaluator error; never convert missing evidence into a claim that a specific predicate was false.
+- `recovery.enabled=false` retains current policy-generation/execution behavior. Logging the disabled setting must not add a feedback request or change its prompt.
+
+## 7. Remaining implementation details
+
+- Core behavior is settled: all unsuccessful rollouts trigger recovery evaluation; all three methods use configurable recovery; four recovery rounds are allowed; history accumulates; repeated candidates may execute; essential evidence must be attributable; logging covers every attempt.
+- Finalize the concrete configuration/schema names, deterministic keyframe and predicate-summary rules, and per-method source/binding adapters.
+- The recommended budget values below are a starting configuration, not implemented defaults or a guarantee that every trial can use every allowance.
+- Shared feedback remains a deterministic evidence/schema layer; each method's own synthesis stage revises its candidate.
 - No recovery code, new observation APIs, or recovery experiments are implemented by this document.
 
-## 8. Token budgets for recovery
+## 8. Recommended layered budgets
 
-- **Per-response output cap:** keep the current experiment setting of 16,384 initially. Injecting failure evidence increases input tokens, not this output allowance; it is not by itself a reason to raise the output cap.
-- **Input/context budget:** explicitly budget the task/API text, policy/helper source, and feedback together, with room reserved for the output within the selected model route's context window.
-  - Proposed initial feedback allowance: about 2,000–4,000 tokens, separate from required policy/API source. Measure actual request sizes before selecting the final value.
-  - Reduce repeated history and sampled trajectory detail first. Do not silently remove the failure point, essential helper definitions, mode rules, or reset requirement.
-- **Total trial tokens:** the completed comparison batches used 50,000 reported input/output tokens across all calls. Additional recovery, helper, and static-repair requests consume this same accounting unless a new explicit budget is configured.
-  - For illustration, three policy requests with 8k input and 16k output allowances can require about 72k tokens before helper/static-repair calls. A 50k trial cap does not guarantee that allocation.
-  - Recovery therefore needs an explicit trial-level allowance/reservation, alongside model-call and execution limits. The exact total and round limit remain undecided.
-  - Current accounting checks returned usage after a response, so it can detect a token-budget overrun only after consumption. Proposed recovery scheduling should reserve estimated input/output costs before dispatch and still record actual usage and any discrepancy.
-- Output truncation due to reasoning consuming the response allowance is a separate generation issue. Increasing input feedback does not solve it, and there may be no policy to debug.
-- Compare recovery-on/off with declared common limits where possible; report actual usage and first-attempt success as well as success within the recovery budget. Separate the effect of feedback from the effect of additional computation in later controls.
+Use **per-request, per-round, and whole-trial limits together**. A per-recovery limit prevents one round from consuming all resources; cumulative limits prevent recovery from repeatedly resetting the trial allowance.
+
+### 8.1 Recommended initial configuration
+
+| Resource | Initial attempt, round 0 | Each recovery round, rounds 1–4 | Whole recovery-enabled trial |
+| --- | ---: | ---: | ---: |
+| Policy rollouts | At most 1 | At most 1 | **At most 5** |
+| Response output tokens, including reasoning | 16,384 per request | **16,384 per request** | Account for every response; no separate reasoning-token addition |
+| Feedback tokens, excluding task/API/current source | None | **8,192** including accumulated history | Each prompt's input contributes to cumulative usage |
+| Reported input + output tokens | **50,000** | **100,000** | **450,000** |
+| Model calls, including helper/static-repair/transport attempts | **12** | **16** | **76** |
+| Execution/query ticks | **10,000 per rollout** | **10,000 per rollout** | **50,000** |
+| Policy simulation steps | **10,000 per rollout** | **10,000 per rollout** | **50,000** |
+| Active time, including preparation, execution and finalization | **600 s** | **600 s** | **3,000 s (50 min maximum)** |
+| Helper/dependency depth | **12** | **12** | Per invocation; not cumulative |
+
+- These are recommendations for Stack and tasks without a stricter existing cap. **Unstack retains its 60-second end-to-end cap for the entire trial, including all recovery rounds.** Recovery never multiplies that limit.
+- The initial attempt retains the earlier experiment's effort limits, allowing first-attempt comparisons with recovery disabled. The cumulative caps are 50k + 4×100k tokens, 12 + 4×16 calls, and 5×600 seconds; actual usage can be much lower.
+- Every request/operation must fit both the current round and the remaining overall limits. Exhausting a round does not erase its usage from the trial ledger.
+- The round count is an upper bound: success, insufficient evidence, or an exhausted hard trial budget can stop earlier. Multiple limits can bind; 16 calls are not promised if the round's token/time limit is reached first.
+- Keep the per-primitive 50-step control limit and existing controller tolerances unchanged. The policy simulation-step allowance is a different quantity.
+
+### 8.2 Feedback accumulation and input limits
+
+- Increase the earlier 4k feedback proposal to **8k** so history can accumulate without crowding out the latest failure:
+  - Up to **6,144 tokens** for the latest failure's required/relevant evidence.
+  - Up to **512 tokens per earlier failure**, at most three earlier failures in the fourth recovery request: **1,536 tokens** total.
+  - Reserve approximately **512 tokens** for identifiers, missing/omission markers, and history structure.
+- These partitions are recommended selection targets. The 8,192-token total remains the cap; required context that cannot fit must produce an explicit feedback-budget stop rather than silent deletion.
+- Task/API text and the current executable source bundle are counted separately when checking the full request. Do not duplicate all older source bundles or complete trajectories; retain summaries, IDs, and full host-side artifacts.
+- Check total input plus reserved output against the selected model route's context window. Use an appropriate tokenizer/provider count when available; record any conservative estimate and reconcile it with returned usage.
+
+### 8.3 Why retain the 16k response cap?
+
+- Accumulated failure evidence primarily increases **input** tokens. It is not itself a reason to increase each response's output cap.
+- The Haiku typed and legacy batches had no response-length failures at 16k. Start with that observed setting and make the output cap configurable; increase it in a separately recorded experiment if recovery responses actually truncate.
+- DeepSeek's reasoning-only truncations are a separate generation issue, not evidence that longer trajectory feedback will help.
+- Before dispatch, reserve estimated input and permitted output costs against both round and trial budgets. Existing accounting observes usage after the response; recovery implementation must add pre-dispatch allocation and log any estimation/actual-usage discrepancy.
+- Recovery-on/off experiments should report first-attempt results, recovery success, all budget limits and actual cumulative cost. Later controls can compare feedback-based recovery with additional independent generations under matched total effort.
 
 ## 9. Proposed recovery prompt
 
@@ -423,6 +502,10 @@ OBSERVED FAILURE
 {terminal_goal_result_and_available_clause_evidence}
 {missing_or_truncated_evidence}
 
+EARLIER FAILED ATTEMPTS
+{short_summary_of_each_earlier_failed_attempt}
+{candidate_changes_and_duplicate_candidate_history}
+
 ROLLOUT PROTOCOL
 The failed trajectory is debugging evidence only.
 The revised policy will run from its entry point after restoring the saved
@@ -438,7 +521,7 @@ Output replacement Python policy code only, including its top-level invocation.
 
 - Keep failed runtime attempts separate from static-check repair messages and transport retries in artifacts and token accounting.
 - The first version should use deterministic structured summaries; adding an LLM summarizer would introduce another request/cost and should be separately configured.
-- The prompt is a draft, not an implemented template or a promise that the revised program will succeed.
+- The prompt is a draft, not an implemented template or a promise that the revised program will succeed. It accumulates bounded earlier-failure summaries rather than replaying all prior messages.
 
 ## 10. Coverage of observed failures
 
