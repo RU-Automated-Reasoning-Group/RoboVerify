@@ -77,18 +77,18 @@ The following requirements apply to branch, loop, and selection conditions.
 
 | Requirement / permitted operation | `dsl_only` | `coordinate_predicates` |
 | --- | --- | --- |
-| DSL predicates allowed in conditions | **Yes** | **Yes** |
-| Object identity comparisons allowed in conditions | **Yes** | **Yes** |
-| Boolean combinations of permitted conditions allowed | **Yes** | **Yes** |
-| Quantifiers over permitted conditions allowed | **Yes** | **Yes** |
-| Pure helpers composing permitted conditions allowed | **Yes** | **Yes** |
-| Coordinate comparisons allowed in conditions | No | **Yes** |
-| Counter and constant comparisons allowed in conditions | No | **Yes** |
-| General numeric comparisons without coordinate inputs allowed | No | **Yes** |
-| Mixed DSL and numeric conditions allowed | No | **Yes** |
-| Coordinate reads and arithmetic allowed for action parameters | **Yes** | **Yes** |
-| Condition restrictions checked through assignments and helper calls | **Yes** | **Yes** |
-| Conditions required to return Boolean values | **Yes** | **Yes** |
+| DSL predicates allowed in conditions | Yes | Yes |
+| Object identity comparisons allowed in conditions | Yes | Yes |
+| Boolean combinations of permitted conditions allowed | Yes | Yes |
+| Quantifiers over permitted conditions allowed | Yes | Yes |
+| Pure helpers composing permitted conditions allowed | Yes | Yes |
+| Coordinate comparisons allowed in conditions | **No** | **Yes** |
+| Counter and constant comparisons allowed in conditions | **No** | **Yes** |
+| General numeric comparisons without coordinate inputs allowed | **No** | **Yes** |
+| Mixed DSL and numeric conditions allowed | **No** | **Yes** |
+| Coordinate reads and arithmetic allowed for action parameters | Yes | Yes |
+| Condition restrictions checked through assignments and helper calls | Yes | Yes |
+| Conditions required to return Boolean values | Yes | Yes |
 | Physical actions allowed inside conditions or their helpers | No | No |
 
 Conditions must return Boolean values and remain free of physical-action side
