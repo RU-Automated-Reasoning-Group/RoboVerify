@@ -137,9 +137,12 @@ def shared_feedback(attempt, task, contract, config, budget):
     selected = select_relevant_evidence(
         evidence,
         profile=config.feedback_profile,
+        token_limit=config.feedback_token_limit,
         preserve_failure_context=True,
         mark_missing_information=True,
     )
+    if not selected.ready:
+        return record_result(attempt, Stop(selected.reason))
     feedback_text = serialize_text(selected)
     payload = RecoveryPayload(
         task=task,
@@ -172,6 +175,69 @@ def shared_feedback(attempt, task, contract, config, budget):
 - The module keeps full reset snapshots host-side and passes only the selected textual representation to synthesis.
 - The serializer is deterministic in the first design. No additional LLM summarization request is introduced.
 - The simplified shared block in Section 5 represents this entire module, including its internal eligibility decision. Section 5 retains each method's distinct synthesis/checking workflow.
+
+### 4.1 Deterministic evidence selection
+
+- **First-version decision:** `select_relevant_evidence` uses deterministic program rules, not an LLM.
+  - Rules depend on the failure category and the evidence schema, not on a particular trial ID or a hand-written solution to its task.
+  - The LLM receives the selected evidence and revises the policy; evidence selection adds no separate model request.
+  - Given the same artifacts, selector/profile version, tokenizer, and limits, selection should produce the same ordered output.
+- Divide the evidence into **required** failure context and **optional** supporting context.
+  - Required context preserves the observed failure, its source/operation identity, and the facts necessary to interpret it. Goal failure has no exception location, so retain its terminal state and goal result instead.
+  - Optional context provides earlier actions, additional relevant relations, and sampled intermediate trajectory states.
+  - Source excerpts and references should point to the actual executable bundle already included in the payload rather than duplicating all code in the feedback.
+
+| Failure category | Required context | Optional supporting context |
+| --- | --- | --- |
+| Primitive nonconvergence | Failed primitive and arguments; invocation-time target and phase where available; pre/post positions; convergence, steps and residual; source location | Earlier approach actions and sampled positions within the failed motion |
+| No-witness get | Failed query; actual referenced helper definition/binding; no-match outcome and available candidate/predicate evidence; state at the query | Earlier successful selections and state changes relevant to the same objects |
+| Execution/query budget | Exhausted resource; repeated code/query locations and counts; recent state/progress summary | Representative earlier iterations and additional action history |
+| Goal failure | Terminal state; goal result and available unsatisfied clauses; last relevant actions | Earlier states showing when the missing goal relation was lost or never established |
+| Argument type/arity failure | Failed call, actual argument values/types, expected signature, actual helper binding, exception/source location | Immediate assignments and calls that produced the invalid arguments |
+
+- Required fields that were not recorded must be explicitly marked unavailable. Do not reconstruct them by guessing or infer a physical root cause from the error label.
+  - The profile should distinguish fields whose absence prevents reliable attribution from fields that can remain explicitly unknown.
+  - If essential attribution cannot be established, return a stop reason instead of silently using an unrelated helper or state.
+- Use stable priority tiers for optional evidence, followed by deterministic tie-breaking such as distance from the failure event and event ID.
+  - Prefer nearby, relevant evidence over long unrelated history.
+  - Represent repetition using counts and representative events; sample motion states using a fixed rule.
+  - Keep the rule/profile and sampling parameters versioned and shared across all three methods.
+
+High-level selection pseudocode:
+
+```python
+def select_relevant_evidence(evidence, profile, token_limit,
+                             preserve_failure_context=True,
+                             mark_missing_information=True):
+    failure_type = classify_observed_failure(evidence)
+    required = select_failure_context(failure_type, evidence, profile)
+    optional = select_supporting_context(failure_type, evidence, profile)
+    required = label_missing_fields(required)
+
+    if not essential_attribution_available(required, profile):
+        return CannotSelect("Essential failure/source evidence unavailable")
+
+    selected = required
+    if serialized_tokens(selected, profile) > token_limit:
+        return CannotSelect("Required failure context exceeds feedback budget")
+
+    omitted = []
+    for item in deterministic_priority_order(optional, profile):
+        candidate = append_evidence(selected, item)
+        if fits_with_omission_metadata(candidate, omitted, token_limit, profile):
+            selected = candidate
+        else:
+            omitted.append(evidence_reference(item))
+
+    return finalize_with_omission_metadata(selected, omitted, token_limit, profile)
+```
+
+- Budget fitting reduces optional material first. Never silently truncate required facts to make a prompt fit.
+- Omission metadata identifies what was excluded, how much was sampled, and why. Its token cost is part of the feedback limit; finalization may remove lower-priority optional evidence to make room for a bounded omission summary.
+- The outer module separately checks the complete request, including API/source context and reserved output capacity. A feedback-only fit does not guarantee that the full request fits.
+- Save selected/omitted event IDs, keyframe indices, selector/profile version, token-counting method, and the serialized feedback alongside the attempt.
+- An LLM-based selector could be a later configurable ablation, such as `rules` versus `llm`; it is not part of the first implementation plan.
+- This section specifies a design, not implemented code. Recovery remains unimplemented.
 
 ## 5. Injection into the synthesis stage
 
