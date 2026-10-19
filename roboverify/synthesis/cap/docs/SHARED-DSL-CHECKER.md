@@ -73,10 +73,23 @@ protected API bindings, and condition purity. Analyze helper dependencies and
 value flow, including assignments, arguments, and return values; inspect all
 branches rather than only statements reached in the observed execution.
 
-| Configured mode | Shared condition requirements |
-| --- | --- |
-| `dsl_only` | Branch, loop, and selection conditions use DSL predicates, identity, Boolean logic, quantifiers, and pure compositions of them. Coordinate reads may compute action parameters, but numeric conditions are violations even through helpers or intermediate variables. |
-| `coordinate_predicates` | Conditions may additionally use pure coordinate predicates and general numeric comparisons, including counters and constants. Numbers need not originate from coordinates. Existing DSL predicates and their combinations with numeric predicates remain allowed. |
+The following requirements apply to branch, loop, and selection conditions.
+
+| Requirement / permitted operation | `dsl_only` | `coordinate_predicates` |
+| --- | --- | --- |
+| DSL predicates allowed in conditions | **Yes** | **Yes** |
+| Object identity comparisons allowed in conditions | **Yes** | **Yes** |
+| Boolean combinations of permitted conditions allowed | **Yes** | **Yes** |
+| Quantifiers over permitted conditions allowed | **Yes** | **Yes** |
+| Pure helpers composing permitted conditions allowed | **Yes** | **Yes** |
+| Coordinate comparisons allowed in conditions | No | **Yes** |
+| Counter and constant comparisons allowed in conditions | No | **Yes** |
+| General numeric comparisons without coordinate inputs allowed | No | **Yes** |
+| Mixed DSL and numeric conditions allowed | No | **Yes** |
+| Coordinate reads and arithmetic allowed for action parameters | **Yes** | **Yes** |
+| Condition restrictions checked through assignments and helper calls | **Yes** | **Yes** |
+| Conditions required to return Boolean values | **Yes** | **Yes** |
+| Physical actions allowed inside conditions or their helpers | No | No |
 
 Conditions must return Boolean values and remain free of physical-action side
 effects in both modes. Both retain the shared primitive interfaces: allowing
