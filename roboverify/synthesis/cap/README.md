@@ -28,6 +28,10 @@ methods. Baseline modes are prompt-only; method-1 modes are checked:
 - [Revision 1 implementation and validation](docs/revision_1.md).
 - [Revision 2 plan: prompts, versions, and parallel batches](docs/revision_2.md).
 - [Shared DSL checker architecture](docs/SHARED-DSL-CHECKER.md).
+- [Revision 3: checker correctness](docs/revision_3.md).
+- [Revision 4: failure recovery discussion](docs/revision_4_failure_recover.md).
+- [Revision 5: task expansion plan](docs/revision_5_add_tasks.md).
+- [Revision 6: demonstration input plan](docs/revision_6_add_demonstration.md).
 
 ## Implemented scope
 
