@@ -439,6 +439,25 @@ Reported token usage:
 - **Failure diagnosis:** inspect failed primitive targets and trajectories before changing controllers or budgets; preserve shared primitive semantics in comparisons.
 - **Optional framework reuse:** evaluate an adapter for Yuanlin’s Logic or CaPX after agreeing on source/binding export. Do not mix such an integration or black-box parameter optimization into an existing result table without a separately recorded configuration.
 
+### 5.5 Failure analysis: framework defects versus limitations
+
+- Analyze failed trials to distinguish flaws in our framework from limitations of the current methods, interfaces, models, and execution budgets.
+  - Inspect the generated policy and actual helper bindings, checker diagnostics, observation queries, primitive targets, and execution traces.
+  - Identify the earliest failure and separate its underlying cause from downstream symptoms.
+
+| Possible cause | Evidence to examine | Follow-up |
+| --- | --- | --- |
+| Framework defect | Incorrect API adaptation, state restoration, binding capture, checker verdicts, or evaluation/reporting | Construct a minimal reproducer, correct the implementation, and add a regression test |
+| Supported-language or interface limitation | A useful policy cannot be expressed or analyzed by the current DSL/interface | Document the boundary and assess whether an extension is justified |
+| Generated-policy error | Incorrect object selection, missing existence conditions, unsuitable action parameters, or nonterminating control flow | Determine whether clearer prompts, demonstrations, or additional reasoning/feedback could address it |
+| Model or resource limitation | Response truncation, request failures, or exhaustion of a declared search/execution budget | Measure the limiting resource and test any revised setting in a separate experiment |
+| Primitive or physical-model limitation | Valid API calls fail during grasping, motion, release, or contact | Reproduce the target and trajectory to distinguish controller limitations from inappropriate policy commands |
+| Unresolved cause | Available artifacts do not establish a root cause | Record the uncertainty and the diagnostic experiment needed to resolve it |
+
+- Do not infer a root cause from the failure label alone: Move nonconvergence is not automatically a controller defect, and checker rejection is not automatically a policy violation.
+- Report both the observed outcome and the investigated cause, with supporting trial paths and confidence in the diagnosis.
+- Preserve original experimental results. Any implementation correction or changed configuration should be evaluated in a separately identified rerun.
+
 ## Appendix A. Code changes and validation milestones
 
 | Date, Eastern | Commits | Coherent change |
