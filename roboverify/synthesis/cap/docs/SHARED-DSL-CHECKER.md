@@ -74,6 +74,10 @@ value flow, including assignments, arguments, and return values; inspect all
 branches rather than only statements reached in the observed execution.
 
 The following requirements apply to branch, loop, and selection conditions.
+They describe the intended contract; the known implementation gaps in
+[CAP-CHECK-1](#cap-check-1-loop-carried-action-provenance) and
+[CAP-CHECK-2](#cap-check-2-generic-helper-type-merging) qualify current enforcement.
+Methods 1 and 2 check before execution; baseline checking remains post-hoc.
 Examples assume `x` and `b0` are bound object handles and `count` is numeric;
 `...` denotes an omitted policy body.
 
@@ -625,6 +629,83 @@ correction; its original audit, sources, physical outcome, and model requests
 are retained. Regression coverage verifies shadowed helper versions referenced
 inside lambdas in both condition modes and conservative handling of legacy data.
 The full 88-test CaP suite passes.
+
+### CAP-CHECK-1: loop-carried action provenance
+
+**Implementation defect, open.** `Checker.block` analyzes a while body once,
+merges the entry/body environments, and checks the body once more. It does not
+iterate type/effect propagation until the loop environment stabilizes. Action
+provenance can therefore reach a condition only on a later iteration and escape
+the static check. The runtime checks the Boolean value and blocks actions called
+during condition evaluation, but does not retain provenance on stored values.
+
+```python
+def dirty(x):
+    Pick(x)
+    return True
+
+a = True
+b = True
+done = False
+stage1 = False
+stage2 = False
+while not done:
+    if a:
+        pass
+    a = b
+    b = dirty(b0)
+    done = stage2
+    stage2 = stage1
+    stage1 = True
+```
+
+- Expected under the existing transitive-effect rule: reject because, on the
+  third iteration, `a` comes from the action-producing `dirty` helper.
+- Observed: complete check passes in both modes. Both Method 1 and Method 2
+  execute all three iterations with a recording-only adapter.
+- The Pick calls occur in the loop body, not during evaluation of `if a`.
+  The defect concerns the documented restriction on action-derived values;
+  direct calls to acting helpers from conditions are still rejected.
+- A direct `flag = dirty(b0); if flag: ...` is rejected as expected. Loop analysis
+  needs stable propagation of types and effects, with bounded explicit failure
+  if analysis cannot finish. This review does not change the implementation.
+
+### CAP-CHECK-2: generic helper type merging
+
+**Implementation defect, open.** After checking concrete calls, `Checker.check`
+checks every function again with unknown argument types. For a loop-carried
+object initialized from a parameter, `merge_values` can combine `unknown` and
+`object` into `mixed`, causing a spurious type error.
+
+```python
+def policy(base):
+    top = base
+    while exists(lambda x: not ON_star(x, base)):
+        if eq(top, base):
+            pass
+        top = get(lambda x: not ON_star(x, base))
+
+policy(b0)
+```
+
+- Concrete call-site analysis passes with `base: ObjectHandle`; `top` remains an
+  object handle on every iteration. Termination is not claimed by this example.
+- Complete checking fails in both modes with `TYPE: Expected object, got mixed`
+  during the additional generic pass.
+- This is a false rejection, not a numeric-condition violation. Generic analysis
+  needs to preserve compatible type constraints rather than treating an unknown
+  parameter and a proven object as conflicting concrete types.
+
+### Rule-table audit evidence
+
+- All 13 table examples were checked statically and executed or rejected using
+  a recording-only adapter in both modes: all 26 combinations matched the table.
+- All 41 existing condition-mode, method, Revision 2, and prompt-version tests
+  passed. Those tests did not cover the two boundary cases above.
+- Reproducers, diagnostics, and method-integration outcomes are saved in
+  [the rule audit](../../../runs/cap-checker-rule-audit/20261019-161447/README.md).
+- No production code or historical experiment verdict was changed. These findings
+  do not establish whether either defect affected a particular historical run.
 
 ## 8. Validation requirements
 
