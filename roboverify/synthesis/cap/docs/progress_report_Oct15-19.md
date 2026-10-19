@@ -233,22 +233,22 @@ def method_2(task, contract):
 
 | Batch / model | Reasoning | Response cap | Active wall cap | Baseline DSL | Method 1 DSL | Baseline coordinate | Method 1 coordinate |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| A: DeepSeek v4.1 Flash | Off | 4,096 | 180 s | 0/5 | 0/5 | Not tested | Not tested |
-| B: DeepSeek v4.1 Flash | On | 16,384 | 180 s | 1/5 | 2/5 | 0/5 | 2/5 |
-| C: GPT-6.1-sol | On | 16,384 | 180 s | 1/5 | 5/5 | 4/5 | 5/5 |
-| C baseline rerun | On | 16,384 | 600 s | 3/5 | Not rerun | Not rerun | Not rerun |
-| D: Haiku 5.5 supplement | On, medium | 16,384 | 600 s | 0/5 | 1/5 | 0/5 | 0/5 |
+| [A: DeepSeek v4.1 Flash](../../../runs/cap-stack-deepseek-revision1/20261018-172554/report.md) | Off | 4,096 | 180 s | 0/5 | 0/5 | Not tested | Not tested |
+| B: DeepSeek v4.1 Flash<br>[DSL report](../../../runs/cap-stack-deepseek-revision1/20261018-180533-reasoning-16k/report.md) · [Coordinate report](../../../runs/cap-stack-deepseek-revision1/20261018-184618-coordinate-reasoning-16k/report.md) | On | 16,384 | 180 s | 1/5 | 2/5 | 0/5 | 2/5 |
+| C: GPT-6.1-sol<br>[DSL report](../../../runs/cap-stack-gpt61sol-revision1/20261018-180533-reasoning-16k/report.md) · [Coordinate report](../../../runs/cap-stack-gpt61sol-revision1/20261018-184618-coordinate-reasoning-16k/report.md) | On | 16,384 | 180 s | 1/5 | 5/5 | 4/5 | 5/5 |
+| [C baseline rerun](../../../runs/cap-stack-gpt61sol-budget/20261018-192834-dsl-600s/report.md) | On | 16,384 | 600 s | 3/5 | Not rerun | Not rerun | Not rerun |
+| [D: Haiku 5.5 supplement](../../../runs/cap-haiku55-legacy-supplement/20261019-153234/report.md) | On, medium | 16,384 | 600 s | 0/5 | 1/5 | 0/5 | 0/5 |
 
 | Batch / mode | Baseline reported tokens | Method 1 reported tokens | Main failures |
 | --- | ---: | ---: | --- |
-| A / DSL | 14,937 | 21,882 | Baseline: 3 Move-arity errors, 1 truncated helper, 1 no-witness query. Method 1: all 5 exhausted local attempts on arity/object-reference errors before actions |
-| B / DSL | 63,755 | 82,434 | Baseline: 2 object-reference errors, 1 truncation, 1 Move failure. Method 1: 2 Move failures, 1 truncation |
-| C / DSL | 40,567, incomplete usage | 8,072 | Baseline: 3 wall deadlines, 1 Pick failure. Method 1: all succeeded, with 1 static repair |
-| B / coordinate | 75,190 | 75,019 | Baseline: 3 object-reference errors, 1 deadline, 1 Move failure. Method 1: 2 truncations, 1 Move failure |
-| C / coordinate | 33,394 | 9,422 | Baseline: 1 Pick failure. Method 1: all succeeded, with 2 static repairs |
-| C / DSL, 600 s rerun | 42,272 | — | 2 Move failures; no resource/wall exhaustion |
-| D / DSL | 53,011 | 17,101 | Baseline: 1 invalid object reference, 1 helper-arity error, 2 execution/query-budget exhaustions, 1 Pick failure. Method 1: 4 Move failures |
-| D / coordinate | 56,395 | 19,316 | Baseline: 1 goal failure, 1 Pick failure, 2 execution/query-budget exhaustions, 1 no-witness query. Method 1: 3 Move failures, 1 Release failure, 1 goal failure |
+| [A / DSL](../../../runs/cap-stack-deepseek-revision1/20261018-172554/report.md) | 14,937 | 21,882 | Baseline: 3 Move-arity errors, 1 truncated helper, 1 no-witness query. Method 1: all 5 exhausted local attempts on arity/object-reference errors before actions |
+| [B / DSL](../../../runs/cap-stack-deepseek-revision1/20261018-180533-reasoning-16k/report.md) | 63,755 | 82,434 | Baseline: 2 object-reference errors, 1 truncation, 1 Move failure. Method 1: 2 Move failures, 1 truncation |
+| [C / DSL](../../../runs/cap-stack-gpt61sol-revision1/20261018-180533-reasoning-16k/report.md) | 40,567, incomplete usage | 8,072 | Baseline: 3 wall deadlines, 1 Pick failure. Method 1: all succeeded, with 1 static repair |
+| [B / coordinate](../../../runs/cap-stack-deepseek-revision1/20261018-184618-coordinate-reasoning-16k/report.md) | 75,190 | 75,019 | Baseline: 3 object-reference errors, 1 deadline, 1 Move failure. Method 1: 2 truncations, 1 Move failure |
+| [C / coordinate](../../../runs/cap-stack-gpt61sol-revision1/20261018-184618-coordinate-reasoning-16k/report.md) | 33,394 | 9,422 | Baseline: 1 Pick failure. Method 1: all succeeded, with 2 static repairs |
+| [C / DSL, 600 s rerun](../../../runs/cap-stack-gpt61sol-budget/20261018-192834-dsl-600s/report.md) | 42,272 | — | 2 Move failures; no resource/wall exhaustion |
+| [D / DSL](../../../runs/cap-haiku55-legacy-supplement/20261019-153234/report.md) | 53,011 | 17,101 | Baseline: 1 invalid object reference, 1 helper-arity error, 2 execution/query-budget exhaustions, 1 Pick failure. Method 1: 4 Move failures |
+| [D / coordinate](../../../runs/cap-haiku55-legacy-supplement/20261019-153234/report.md) | 56,395 | 19,316 | Baseline: 1 goal failure, 1 Pick failure, 2 execution/query-budget exhaustions, 1 no-witness query. Method 1: 3 Move failures, 1 Release failure, 1 goal failure |
 
 - **Wall-clock finding:** one successful 600-second rerun took 187.46 seconds, including 185.15 seconds in model requests and 0.18 seconds in simulation.
   - Queue wait was 217.83 seconds and excluded from the active trial deadline.
@@ -275,17 +275,17 @@ def method_2(task, contract):
 
 | Model | Baseline DSL | Method 1 DSL | Method 2 DSL | Baseline coordinate | Method 1 coordinate | Method 2 coordinate | Total successes |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| DeepSeek v4.1 Flash | 0/5 | 1/5 | 1/5 | 1/5 | 2/5 | 0/5 | **5/30** |
-| Haiku 5.5 | 2/5 | 2/5 | 3/5 | 3/5 | 5/5 | 4/5 | **19/30** |
+| [DeepSeek v4.1 Flash](../../../runs/cap-revision2-deepseek/20261018-215345/report.md) | 0/5 | 1/5 | 1/5 | 1/5 | 2/5 | 0/5 | **5/30** |
+| [Haiku 5.5](../../../runs/cap-revision2-haiku55/20261019-021933/report.md) | 2/5 | 2/5 | 3/5 | 3/5 | 5/5 | 4/5 | **19/30** |
 
 Reported token usage:
 
 | Model | Baseline DSL | Method 1 DSL | Method 2 DSL | Baseline coordinate | Method 1 coordinate | Method 2 coordinate | Total tokens |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| DeepSeek v4.1 Flash | 80,402 | 79,975 | 89,576 | 83,672 | 90,779 | 91,330 | **515,734** |
-| Haiku 5.5 | 48,577 | 28,259 | 62,668 | 39,115 | 30,239 | 46,873 | **255,731** |
+| [DeepSeek v4.1 Flash](../../../runs/cap-revision2-deepseek/20261018-215345/report.md) | 80,402 | 79,975 | 89,576 | 83,672 | 90,779 | 91,330 | **515,734** |
+| [Haiku 5.5](../../../runs/cap-revision2-haiku55/20261019-021933/report.md) | 48,577 | 28,259 | 62,668 | 39,115 | 30,239 | 46,873 | **255,731** |
 
-| Measurement | DeepSeek | Haiku |
+| Measurement | [DeepSeek](../../../runs/cap-revision2-deepseek/20261018-215345/report.md) | [Haiku](../../../runs/cap-revision2-haiku55/20261019-021933/report.md) |
 | --- | --- | --- |
 | Response-length failures with no returned code | 20 | 0 |
 | Primitive failures | 4 Move, 1 Release | 6 Move, 2 Pick, 2 Release |
@@ -309,13 +309,13 @@ Reported token usage:
 
 | Experiment / validation | Observed result | Treatment |
 | --- | --- | --- |
-| GPT reasoning-disabled setup request | Endpoint rejected the request: reasoning mandatory | Setup diagnostic; not a completed five-trial comparison |
-| GPT reasoning-on, 4k partial batch | Finished baseline trial failed its wall deadline; finished Method 1 trial succeeded | Superseded by the 16k rerun; excluded from main tables |
-| DeepSeek reasoning-on, 4k partial batch | Four finished trials per method, all truncated with no code | Superseded; exclude from main tables |
-| Revision 1 real-MuJoCo parity | Four method/mode combinations had identical initial states, coordinate reads, and 19 physical actions | Partial Pick/Move diagnostic; expected `goal_failed`, not Stack success |
-| Resource-accounting validation | 65 CaP tests and a five-job scripted scheduler check | Infrastructure validation, not model performance |
+| [GPT reasoning-disabled setup request](../../../runs/cap-stack-gpt61sol-revision1/20261018-180040/report.md) | Endpoint rejected the request: reasoning mandatory | Setup diagnostic; not a completed five-trial comparison |
+| [GPT reasoning-on, 4k partial batch](../../../runs/cap-stack-gpt61sol-revision1/20261018-180040-reasoning/report.md) | Finished baseline trial failed its wall deadline; finished Method 1 trial succeeded | Superseded by the 16k rerun; excluded from main tables |
+| [DeepSeek reasoning-on, 4k partial batch](../../../runs/cap-stack-deepseek-revision1/20261018-180205-reasoning/report.md) | Four finished trials per method, all truncated with no code | Superseded; exclude from main tables |
+| Revision 1 real-MuJoCo parity<br>Baseline: [DSL](../../../runs/cap-revision-1/20261016-213331/cap_google_baseline-dsl_only-report.txt) · [coordinate](../../../runs/cap-revision-1/20261016-213331/cap_google_baseline-coordinate_predicates-report.txt)<br>Method 1: [DSL](../../../runs/cap-revision-1/20261016-213331/cap_method_1-dsl_only-report.txt) · [coordinate](../../../runs/cap-revision-1/20261016-213331/cap_method_1-coordinate_predicates-report.txt) | Four method/mode combinations had identical initial states, coordinate reads, and 19 physical actions | Partial Pick/Move diagnostic; expected `goal_failed`, not Stack success |
+| Resource-accounting validation<br>[Five-job scheduler report](../../../runs/cap-stack-gpt61sol-budget/20261018-192834-dsl-600s/scripted-parallel-preflight/report.md) | 65 CaP tests and a five-job scripted scheduler check | Infrastructure validation, not model performance |
 | Typed prompt validation | 74 CaP tests; 20 saved initial GPT requests reproduced with legacy text | Prompt/version compatibility validation |
-| Revision 2 preflight | Six method/mode combinations matched starts/actions; six videos matched states | Partial Pick/Move diagnostic, not Stack success |
+| [Revision 2 preflight](../../../runs/cap-revision2-preflight/20261018-214704/report.md) | Six method/mode combinations matched starts/actions; six videos matched states | Partial Pick/Move diagnostic, not Stack success |
 | Revision 2 implementation | 87 CaP tests passed | Checker, methods, audit, and scheduler validation |
 | After query-lambda capture correction | 88 CaP tests passed | Includes new and incomplete-legacy capture regression coverage |
 
