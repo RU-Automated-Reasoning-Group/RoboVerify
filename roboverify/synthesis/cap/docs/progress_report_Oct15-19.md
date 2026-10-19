@@ -260,15 +260,17 @@ def method_2(task, contract):
 - DeepSeek: reasoning enabled, temperature 0. Haiku: reasoning enabled with explicit medium effort; temperature omitted because the route did not advertise support.
   - This compares model/configuration choices, not model identity alone.
 
-| Method | Mode | DeepSeek success | Haiku success | DeepSeek tokens | Haiku tokens |
-| --- | --- | ---: | ---: | ---: | ---: |
-| Baseline | DSL | 0/5 | 2/5 | 80,402 | 48,577 |
-| Baseline | Coordinate | 1/5 | 3/5 | 83,672 | 39,115 |
-| Method 1 | DSL | 1/5 | 2/5 | 79,975 | 28,259 |
-| Method 1 | Coordinate | 2/5 | 5/5 | 90,779 | 30,239 |
-| Method 2 | DSL | 1/5 | 3/5 | 89,576 | 62,668 |
-| Method 2 | Coordinate | 0/5 | 4/5 | 91,330 | 46,873 |
-| **Total within each batch** | | **5/30** | **19/30** | **515,734** | **255,731** |
+| Model | Baseline DSL | Method 1 DSL | Method 2 DSL | Baseline coordinate | Method 1 coordinate | Method 2 coordinate | Total successes |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| DeepSeek v4.1 Flash | 0/5 | 1/5 | 1/5 | 1/5 | 2/5 | 0/5 | **5/30** |
+| Haiku 5.5 | 2/5 | 2/5 | 3/5 | 3/5 | 5/5 | 4/5 | **19/30** |
+
+Reported token usage:
+
+| Model | Baseline DSL | Method 1 DSL | Method 2 DSL | Baseline coordinate | Method 1 coordinate | Method 2 coordinate | Total tokens |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| DeepSeek v4.1 Flash | 80,402 | 79,975 | 89,576 | 83,672 | 90,779 | 91,330 | **515,734** |
+| Haiku 5.5 | 48,577 | 28,259 | 62,668 | 39,115 | 30,239 | 46,873 | **255,731** |
 
 | Measurement | DeepSeek | Haiku |
 | --- | --- | --- |
