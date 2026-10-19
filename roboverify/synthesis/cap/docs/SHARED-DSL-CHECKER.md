@@ -74,22 +74,24 @@ value flow, including assignments, arguments, and return values; inspect all
 branches rather than only statements reached in the observed execution.
 
 The following requirements apply to branch, loop, and selection conditions.
+Examples assume `x` and `b0` are bound object handles and `count` is numeric;
+`...` denotes an omitted policy body.
 
 | Requirement / permitted operation | `dsl_only` | `coordinate_predicates` |
 | --- | --- | --- |
-| DSL predicates allowed in conditions | Yes | Yes |
-| Object identity comparisons allowed in conditions | Yes | Yes |
-| Boolean combinations of permitted conditions allowed | Yes | Yes |
-| Quantifiers over permitted conditions allowed | Yes | Yes |
-| Pure helpers composing permitted conditions allowed | Yes | Yes |
-| Coordinate comparisons allowed in conditions | **No** | **Yes** |
-| Counter and constant comparisons allowed in conditions | **No** | **Yes** |
-| General numeric comparisons without coordinate inputs allowed | **No** | **Yes** |
-| Mixed DSL and numeric conditions allowed | **No** | **Yes** |
-| Coordinate reads and arithmetic allowed for action parameters | Yes | Yes |
-| Condition restrictions checked through assignments and helper calls | Yes | Yes |
-| Conditions required to return Boolean values | Yes | Yes |
-| Physical actions allowed inside conditions or their helpers | No | No |
+| DSL predicates allowed in conditions<br>Example: `if ON_star(x, b0): ...` | Yes | Yes |
+| Object identity comparisons allowed in conditions<br>Example: `if x == b0: ...` | Yes | Yes |
+| Boolean combinations of permitted conditions allowed<br>Example: `if ON_star(x, b0) and not eq(x, b0): ...` | Yes | Yes |
+| Quantifiers over permitted conditions allowed<br>Example: `while exists(lambda x: not ON_star(x, b0)): ...` | Yes | Yes |
+| Pure helpers composing permitted conditions allowed<br>Example: `def ready(x): return ON_star(x, b0)`<br>`if ready(x): ...` | Yes | Yes |
+| Coordinate comparisons allowed in conditions<br>Example: `if get_block_position(x)[2] > 0.5: ...` | **No** | **Yes** |
+| Counter and constant comparisons allowed in conditions<br>Example: `while count < 10: ...` | **No** | **Yes** |
+| General numeric comparisons without coordinate inputs allowed<br>Example: `def below(a, b): return a < b`<br>`if below(2, 3): ...` | **No** | **Yes** |
+| Mixed DSL and numeric conditions allowed<br>Example: `if ON_star(x, b0) and get_block_position(x)[2] > 0.5: ...` | **No** | **Yes** |
+| Coordinate reads and arithmetic allowed for action parameters<br>Example: `p = get_block_position(x)`<br>`Move(x, x, x, [0.0, 0.0, 0.5 - p[2]])` | Yes | Yes |
+| Condition restrictions checked through assignments and helper calls<br>Example: `def high(x): return get_block_position(x)[2] > 0.5`<br>`flag = high(x)`<br>`if flag: ...`<br>Rejected in DSL-only; allowed in coordinate mode. | Yes | Yes |
+| Conditions required to return Boolean values<br>Rejected example: `exists(lambda x: 1)` | Yes | Yes |
+| Physical actions allowed inside conditions or their helpers<br>Rejected example: `def ready(x): Pick(x); return True`<br>`if ready(x): ...` | No | No |
 
 Conditions must return Boolean values and remain free of physical-action side
 effects in both modes. Both retain the shared primitive interfaces: allowing
