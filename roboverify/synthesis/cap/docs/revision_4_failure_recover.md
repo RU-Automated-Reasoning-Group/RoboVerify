@@ -22,7 +22,7 @@
 | --- | --- | --- |
 | Recovery enabled | Switch the feature on/off for any of the three methods | Agreed; recommend default off |
 | Maximum recovery rounds | Bound how many revised candidates can be evaluated | Proposed; value undecided |
-| Feedback profile and token limit | Control what evidence reaches synthesis and its size | Proposed; profile undecided |
+| Feedback profile and token limit | Control what evidence reaches synthesis and its size | Text-only selected for the first version; exact fields/limits remain to be finalized |
 | Recoverable failure classes | Select execution failures eligible for debugging | Proposed; classes undecided |
 | Shared effort limits | Account for generation, static repair, recovery, reset, and rollouts | Proposed; cumulative trial limits must remain explicit |
 | Recovery prompt/schema version | Preserve reproducibility and future ablations | Proposed |
@@ -73,9 +73,9 @@ revised_candidate = method.synthesize(request)
 - Preserve observed facts separately from explanations inferred by a debugger or LLM. A failure label such as Move nonconvergence does not establish its root cause.
 - The failure bundle may retain execution-time binding evidence for debugging. This does not redefine the existing final-output-only DSL compliance metric.
 
-## 3. Proposed first feedback profile
+## 3. First feedback profile: text only
 
-- Start with text-only structured feedback shared across all three methods:
+- Use text-only structured feedback for the first version, shared across all three methods:
   - Task, primitive/predicate contract, condition mode, and current executable source bundle.
   - Failure category, exception, source location, and a bounded call/statement context.
   - Recent primitive calls with arguments, targets where recorded, convergence, step counts, and residual error.
@@ -89,37 +89,145 @@ revised_candidate = method.synthesize(request)
 
 ## 4. Injection into the synthesis stage
 
+- The diagrams extend the three workflows in the [progress report](progress_report_Oct15-19.md#2-implementation-and-generation-workflows).
+  - Dashed boxes separate synthesis, execution, and the shared recovery pipeline.
+  - Blue blocks show the proposed recovery additions and per-attempt restoration. These additions are not implemented.
+  - The environment loop returns observations to the executing program. The recovery loop sends a text summary back to synthesis only after a failed attempt.
+  - The recovery gate checks the enable/disable configuration, failure eligibility, and remaining round/resource budgets. Success, disabled recovery, ineligible failures, or exhausted budgets end the process.
+  - Every path from a newly prepared candidate to execution passes through restoration of the trial's initial snapshot and creation of a fresh execution context.
+- Output truncation without a policy and checker-internal errors do not enter this trajectory-based recovery loop. Their handling remains separate.
+
+### 4.1 Google baseline with configurable recovery
+
 ```mermaid
 flowchart LR
-    S0["Saved initial state"] -->|"restore before every rollout"| RESET["Restore initial state"]
     subgraph SYN["Synthesis stage"]
-        G["Method-specific generation / revision"] -->|"candidate source + helpers"| PREP["Method-specific preparation"]
+        direction TB
+        I["Task + API / mode prompt"] -->|"generation request"| G["Google LMP + recursive LMPFGen"]
     end
-    PREP -->|"candidate ready"| RESET
     subgraph RUN["Execution stage"]
-        RESET -->|"fresh execution context"| EXEC["Run policy from entry point"]
-        EXEC -->|"primitive actions / queries"| ENV["Environment"]
-        ENV -->|"observations / call results"| EXEC
-        EXEC -->|"outcome + source/event references"| RESULT["Attempt record"]
+        direction TB
+        RESET["Restore initial snapshot + fresh execution context"] -->|"invoke policy entry point"| E
+        E["Execute generated policy + helpers"] -->|"primitive actions / observation queries"| ENV["Shared adapter + MuJoCo environment"]
+        ENV -->|"query results / primitive completion"| E
+        E -->|"normal completion / failure"| R["Physical evaluation + recording"]
+        ENV -->|"trajectory + terminal state"| R
     end
-    RESULT -->|"eligible failure; recovery enabled"| COLLECT["Shared evidence collector"]
-    COLLECT -->|"structured failure record"| FEEDBACK["Shared feedback serializer"]
-    FEEDBACK -->|"policy + failure evidence + task/contract"| G
-    RESULT -->|"success / disabled / exhausted budget"| STOP["Final result"]
-    style SYN fill:none,stroke:#64748b,stroke-dasharray:6 4
-    style RUN fill:none,stroke:#64748b,stroke-dasharray:6 4
+    G -->|"policy source + bound helpers"| RESET
+    E -.->|"final source + bindings after attempt"| C["Shared DSL checker: post-hoc"]
+    C -->|"compliance + diagnostics"| A["Separate audit result"]
+    style SYN fill:none,stroke:#64748b,stroke-width:1.5px,stroke-dasharray:6 4
+    style RUN fill:none,stroke:#64748b,stroke-width:1.5px,stroke-dasharray:6 4
+    S0["Saved initial state for this scene"] -->|"same full snapshot for every attempt"| RESET
+    R -->|"outcome + attempt identity"| RG
+    subgraph REC["Shared failure recovery - proposed"]
+        direction TB
+        CFG["Recovery configuration"] -->|"enabled + round/resource limits"| RG{"Eligible failure + enabled + budget remaining?"}
+        RG -->|"yes: failed policy + log/state artifact references"| COLLECT["Collect code, bindings, errors, actions and state keyframes"]
+        COLLECT -->|"structured failure record"| FEEDBACK["Build bounded text-only feedback"]
+    end
+    RG -->|"no: success / disabled / ineligible / exhausted"| FIN["Final result + retained attempt records"]
+    FEEDBACK -->|"root-policy recovery request + failed source + text evidence"| G
+    style REC fill:none,stroke:#2563eb,stroke-width:1.5px,stroke-dasharray:6 4
+    classDef recovery fill:#eff6ff,stroke:#2563eb,color:#0f172a
+    class RESET,CFG,RG,COLLECT,FEEDBACK recovery
 ```
 
-| Method | Proposed feedback entry point | Behavior retained |
-| --- | --- | --- |
-| Google baseline | An explicit recovery request to its policy LMP, containing the failed policy and shared feedback | Upstream recursive helper generation and Python execution; no new pre-execution DSL gate |
-| Method 1 | A root-policy revision request with shared feedback, then recursive helper preparation | Local helper checks/repairs and the complete pre-execution check |
-| Method 2 | A whole-candidate revision request with shared feedback | Complete candidate checking and whole-candidate static repair |
+- Recovery feedback enters the policy LMP as a new root-policy request, followed by Google's recursive helper generation.
+- Clear stale executable bindings/history between attempts; include the failed source and its actual helper bindings explicitly as debugging evidence.
+- The shared DSL checker remains a separate post-hoc audit for each attempt. Its verdict is not a pre-execution gate or an automatic recovery trigger in this design.
+- With recovery disabled, the attempt ends after ordinary execution/evaluation and its separate audit.
 
-- Keep runtime recovery feedback distinct from static DSL repair diagnostics. Introduce an explicit request role/template; do not silently rewrite frozen prompt versions.
-- Feedback is injected between rollouts, not as per-step LLM replanning within the failed execution.
-- The revised program is a complete candidate. Avoid retaining stale executable helpers, globals, or object handles from the failed attempt; any reuse must be explicit and captured.
-- Baseline source/binding behavior requires its own adapter, but evidence selection, feedback schema, reset protocol, and recovery accounting remain shared.
+### 4.2 Method 1 with configurable recovery
+
+```mermaid
+flowchart LR
+    subgraph SYN["Synthesis stage"]
+        direction TB
+        I["Task + API / mode prompt"] -->|"policy request"| G["Generate policy or helper"]
+        G -->|"unit source"| L["Local DSL check"]
+        L -->|"violation diagnostics"| R["Repair current unit"]
+        R -->|"revised source"| L
+        L -->|"unresolved helper signature + role"| H["Recursively prepare helper"]
+        H -->|"checked helper definitions"| C["Complete bundle check"]
+        L -->|"locally valid unit; no missing helpers"| C
+        C -->|"diagnostics"| R
+    end
+    subgraph RUN["Execution stage"]
+        direction TB
+        RESET["Restore initial snapshot + fresh execution context"] -->|"invoke policy entry point"| E
+        E["Execute checked policy + helpers"] -->|"primitive actions / observation queries"| ENV["Shared adapter + MuJoCo environment"]
+        ENV -->|"query results / primitive completion"| E
+        E -->|"normal completion / failure"| OUT["Physical evaluation + recording"]
+        ENV -->|"trajectory + terminal state"| OUT
+    end
+    C -->|"complete pass + policy/helpers"| RESET
+    style SYN fill:none,stroke:#64748b,stroke-width:1.5px,stroke-dasharray:6 4
+    style RUN fill:none,stroke:#64748b,stroke-width:1.5px,stroke-dasharray:6 4
+    S0["Saved initial state for this scene"] -->|"same full snapshot for every attempt"| RESET
+    OUT -->|"outcome + attempt identity"| RG
+    subgraph REC["Shared failure recovery - proposed"]
+        direction TB
+        CFG["Recovery configuration"] -->|"enabled + round/resource limits"| RG{"Eligible failure + enabled + budget remaining?"}
+        RG -->|"yes: failed policy + log/state artifact references"| COLLECT["Collect code, bindings, errors, actions and state keyframes"]
+        COLLECT -->|"structured failure record"| FEEDBACK["Build bounded text-only feedback"]
+    end
+    RG -->|"no: success / disabled / ineligible / exhausted"| FIN["Final result + retained attempt records"]
+    FEEDBACK -->|"root-policy recovery request + failed source + text evidence"| G
+    style REC fill:none,stroke:#2563eb,stroke-width:1.5px,stroke-dasharray:6 4
+    classDef recovery fill:#eff6ff,stroke:#2563eb,color:#0f172a
+    class RESET,CFG,RG,COLLECT,FEEDBACK recovery
+```
+
+- Recovery feedback enters a root-policy revision request. The generated candidate then goes through recursive helper preparation, local checking/repair, and the complete bundle check.
+- Local static repair remains inside synthesis and uses checker diagnostics. Runtime recovery is the outer loop and uses failed-execution evidence.
+- A local helper pass cannot authorize execution; each revised complete candidate must pass before initial-state restoration and rollout.
+
+### 4.3 Method 2 with configurable recovery
+
+```mermaid
+flowchart LR
+    subgraph SYN["Synthesis stage"]
+        direction TB
+        I["Task + API / mode prompt"] -->|"complete-program request"| G["Generate policy + all helpers"]
+        G -->|"candidate source"| C["Complete shared DSL check"]
+        C -->|"violations + candidate source"| R["Repair whole candidate"]
+        R -->|"revised complete source"| C
+        C -->|"analysis error / exhausted attempts"| F["Explicit failure"]
+    end
+    subgraph RUN["Execution stage"]
+        direction TB
+        RESET["Restore initial snapshot + fresh execution context"] -->|"invoke policy entry point"| E
+        E["Execute checked policy + helpers"] -->|"primitive actions / observation queries"| ENV["Shared adapter + MuJoCo environment"]
+        ENV -->|"query results / primitive completion"| E
+        E -->|"normal completion / failure"| OUT["Physical evaluation + recording"]
+        ENV -->|"trajectory + terminal state"| OUT
+    end
+    C -->|"complete pass + candidate source"| RESET
+    style SYN fill:none,stroke:#64748b,stroke-width:1.5px,stroke-dasharray:6 4
+    style RUN fill:none,stroke:#64748b,stroke-width:1.5px,stroke-dasharray:6 4
+    S0["Saved initial state for this scene"] -->|"same full snapshot for every attempt"| RESET
+    OUT -->|"outcome + attempt identity"| RG
+    subgraph REC["Shared failure recovery - proposed"]
+        direction TB
+        CFG["Recovery configuration"] -->|"enabled + round/resource limits"| RG{"Eligible failure + enabled + budget remaining?"}
+        RG -->|"yes: failed policy + log/state artifact references"| COLLECT["Collect code, bindings, errors, actions and state keyframes"]
+        COLLECT -->|"structured failure record"| FEEDBACK["Build bounded text-only feedback"]
+    end
+    RG -->|"no: success / disabled / ineligible / exhausted"| FIN["Final result + retained attempt records"]
+    FEEDBACK -->|"whole-candidate recovery request + failed source + text evidence"| G
+    style REC fill:none,stroke:#2563eb,stroke-width:1.5px,stroke-dasharray:6 4
+    classDef recovery fill:#eff6ff,stroke:#2563eb,color:#0f172a
+    class RESET,CFG,RG,COLLECT,FEEDBACK recovery
+    F -->|"static generation/checking failure"| FIN
+```
+
+- Recovery feedback enters whole-candidate generation/revision, requesting the complete policy and all helper definitions.
+- Static whole-candidate repair and runtime recovery use different feedback sources. Both remain subject to the recorded shared resource limits.
+- Each recovery candidate passes the complete checker before initial-state restoration and execution. Static analysis errors or exhausted static attempts terminate without a new rollout.
+
+- Use an explicit recovery request role/template rather than overwriting frozen initial-generation or static-repair templates.
+- The three method adapters share evidence selection, text schema, reset protocol, and recovery accounting; their generation/checking strategies remain distinct.
 
 ## 5. Rollout protocol and reporting
 
@@ -135,7 +243,7 @@ flowchart LR
 ## 6. Discussion items before implementation
 
 - Which failure classes should trigger the first version: primitive nonconvergence, no-witness queries, normal completion with goal failure, and/or nontermination?
-- What is the minimum shared feedback profile: code/errors/action summaries only, or also position keyframes and predicate/goal diagnostics?
+- Text-only feedback is selected. Finalize the structured field set, keyframe selection, and level of predicate/goal diagnostics after the required instrumentation is specified.
 - Should a shared debugger propose a full replacement policy, or should each method's existing generator interpret the common feedback? The current proposal uses method adapters and a shared evidence/schema layer.
 - How many recovery rounds and how much total model/execution budget should be allocated?
 - Whether baseline post-hoc DSL failure is itself a recovery trigger is separate from execution-failure recovery; preserve the disabled original baseline and label any enabled variant explicitly.
