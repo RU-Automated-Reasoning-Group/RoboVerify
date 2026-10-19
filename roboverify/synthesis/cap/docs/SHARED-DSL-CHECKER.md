@@ -89,7 +89,7 @@ Examples assume `x` and `b0` are bound object handles and `count` is numeric;
 | General numeric comparisons without coordinate inputs allowed<br>Example: `def below(a, b): return a < b`<br>`if below(2, 3): ...` | **No** | **Yes** |
 | Mixed DSL and numeric conditions allowed<br>Example: `if ON_star(x, b0) and get_block_position(x)[2] > 0.5: ...` | **No** | **Yes** |
 | Coordinate reads and arithmetic allowed for action parameters<br>Example: `p = get_block_position(x)`<br>`Move(x, x, x, [0.0, 0.0, 0.5 - p[2]])` | Yes | Yes |
-| Condition restrictions checked through assignments and helper calls<br>Example: `def high(x): return get_block_position(x)[2] > 0.5`<br>`flag = high(x)`<br>`if flag: ...`<br>Rejected in DSL-only; allowed in coordinate mode. | Yes | Yes |
+| Condition restrictions checked through assignments and helper calls<br>“enforce their rules through helper calls and assignments”<br>Example: `def high(x): return get_block_position(x)[2] > 0.5`<br>`flag = high(x)`<br>`if flag: ...`<br>Rejected in DSL-only; allowed in coordinate mode. | Yes | Yes |
 | Conditions required to return Boolean values<br>Rejected example: `exists(lambda x: 1)` | Yes | Yes |
 | Physical actions allowed inside conditions or their helpers<br>Rejected example: `def ready(x): Pick(x); return True`<br>`if ready(x): ...` | No | No |
 
