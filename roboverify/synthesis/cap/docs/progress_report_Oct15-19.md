@@ -338,7 +338,7 @@ Reported token usage:
   - Generic unknown helper arguments combined with a loop-carried object variable become `mixed` during the additional definition analysis.
   - Record these as checker-rejected historical sources with a likely conservative-analysis limitation, not confirmed forbidden-primitive or forbidden-condition examples.
   - This review did not change the checker or historical outcomes; a focused regression and correction remain follow-up work.
-- **Motivation supported by current evidence:** Methods 1 and 2 enforce the implemented contract before execution; the original baseline has no such gate, and the legacy supplement contains two runtime-corroborated contract violations. No successful-but-noncompliant final output has been confirmed.
+- **Motivation supported by current evidence:** Methods 1 and 2 enforce the implemented contract **before** execution; the original baseline has no such gate, and the legacy supplement contains two runtime-corroborated contract violations. No successful-but-noncompliant final output has been confirmed.
   - Scripted tests demonstrate that baseline `dsl_only` can execute a forbidden numeric condition. That is a mechanism test, not a naturally generated successful Stack counterexample.
 
 | Successful Revision 2 baseline trial | Mode | Saved compliance | Trial directory |
