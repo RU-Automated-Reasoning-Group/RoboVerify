@@ -6,7 +6,7 @@ Missing helpers are obligations during local checking, never implicit validity.
 
 import ast
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .contracts import (
     ACTIONS,
@@ -15,15 +15,47 @@ from .contracts import (
     PREDICATES,
     QUERIES,
     Bundle,
+    CapError,
     ConstraintFailure,
     Diagnostic,
     validate_condition_mode,
 )
 
+TYPE_KINDS = frozenset({"object", "number", "bool", "position", "vector", "none"})
+MAX_ANALYSIS_STEPS = 100000
 
-@dataclass(frozen=True)
+
+class AnalysisLimit(CapError):
+    """An unfinished analysis is not a source violation or execution approval."""
+
+
+@dataclass(frozen=True, init=False)
 class Value:
-    kind: str
+    # Strings are concrete kinds; integers identify constrained generic parameters.
+    types: frozenset
+    actions: bool
+
+    def __init__(self, kind, actions=False, *, types=None):
+        object.__setattr__(self, "types", frozenset({kind} if types is None else types))
+        object.__setattr__(self, "actions", actions)
+
+    @property
+    def kind(self):
+        if len(self.types) == 1:
+            item = next(iter(self.types))
+            return item if isinstance(item, str) else "unknown"
+        return "mixed"
+
+    def with_actions(self, actions):
+        return Value(self.kind, self.actions or actions, types=self.types)
+
+
+@dataclass
+class Flow:
+    normal: dict | None
+    returns: list = field(default_factory=list)
+    breaks: list = field(default_factory=list)
+    continues: list = field(default_factory=list)
     actions: bool = False
 
 
@@ -316,13 +348,75 @@ class Checker:
         self.stack = []
         self.unit = "policy"
         self.missing = {}
+        self.analysis_steps = 0
+        self.type_parents = {}
+        self.type_domains = {}
+        self.type_revision = 0
 
     def fail(self, node, rule, message):
         raise ConstraintFailure([diagnostic(node, rule, message, self.unit)])
 
+    def step(self):
+        self.analysis_steps += 1
+        if self.analysis_steps > MAX_ANALYSIS_STEPS:
+            raise AnalysisLimit("DSL analysis work budget exhausted")
+
+    def generic_inputs(self, names):
+        result = {}
+        for name in names:
+            ident = len(self.type_parents)
+            self.type_parents[ident] = ident
+            self.type_domains[ident] = TYPE_KINDS
+            result[name] = Value("unknown", types={ident})
+        return result
+
+    def type_root(self, ident):
+        root = ident
+        while self.type_parents[root] != root:
+            root = self.type_parents[root]
+        while self.type_parents[ident] != ident:
+            parent = self.type_parents[ident]
+            self.type_parents[ident] = root
+            ident = parent
+        return root
+
+    def domain(self, item):
+        if isinstance(item, int):
+            return self.type_domains[self.type_root(item)]
+        if item == "unknown" and not self.complete:
+            return TYPE_KINDS  # An unresolved local call remains a separate obligation.
+        return frozenset({item})
+
+    def possible_kind(self, value):
+        kinds = frozenset().union(*(self.domain(t) for t in value.types))
+        if len(kinds) == 1:
+            return next(iter(kinds))
+        return "unknown" if kinds == TYPE_KINDS else "mixed"
+
+    def constrain(self, node, values, allowed):
+        # Every alternative must support the required kind. Linked parameters
+        # retain this requirement through aliases, returns, comparisons and joins.
+        self.step()
+        common = frozenset(allowed)
+        items = frozenset().union(*(v.types for v in values))
+        for item in items:
+            common &= self.domain(item)
+        if not common:
+            expected = " or ".join(sorted(allowed))
+            actual = "/".join(self.possible_kind(v) for v in values)
+            self.fail(node, "TYPE", f"Expected {expected}, got {actual}")
+        roots = sorted({self.type_root(t) for t in items if isinstance(t, int)})
+        if roots:
+            root = roots[0]
+            if self.type_domains[root] != common:
+                self.type_domains[root] = common
+                self.type_revision += 1
+            for other in roots[1:]:
+                self.type_parents[other] = root
+                self.type_revision += 1
+
     def expect(self, node, value, kind):
-        if value.kind != kind and not (value.kind == "unknown" and not self.complete):
-            self.fail(node, "TYPE", f"Expected {kind}, got {value.kind}")
+        self.constrain(node, [value], {kind})
 
     def condition(self, node, env):
         value = self.expr(node, env, "condition")
@@ -336,6 +430,7 @@ class Checker:
         return value
 
     def expr(self, node, env, role="body"):
+        self.step()
         if isinstance(node, ast.Constant):
             if type(node.value) is bool:
                 return BOOL
@@ -401,31 +496,33 @@ class Checker:
                         "Comparison operand depends on an action",
                     )
             for op, left, right in zip(node.ops, values, values[1:]):
-                kinds = {left.kind, right.kind}
+                identity = isinstance(op, (ast.Eq, ast.NotEq))
                 if self.condition_mode == "dsl_only":
-                    if not isinstance(op, (ast.Eq, ast.NotEq)) or not kinds <= {
-                        "object",
-                        "unknown",
-                    }:
+                    if not identity or any(
+                        "object" not in self.domain(t)
+                        for value in (left, right)
+                        for t in value.types
+                    ):
                         self.fail(
                             node,
                             "NUMERIC_CONDITION",
                             "dsl_only permits only object identity comparisons; numerical conditions require coordinate_predicates",
                         )
-                    self.expect(node, left, "object")
-                    self.expect(node, right, "object")
-                elif "object" in kinds:
-                    if not isinstance(op, (ast.Eq, ast.NotEq)):
+                    self.constrain(node, [left, right], {"object"})
+                elif identity:
+                    self.constrain(node, [left, right], {"object", "number"})
+                else:
+                    if any(
+                        self.domain(t) == {"object"}
+                        for v in (left, right)
+                        for t in v.types
+                    ):
                         self.fail(
                             node,
                             "IDENTITY_COMPARISON",
                             "Objects support only == and !=",
                         )
-                    self.expect(node, left, "object")
-                    self.expect(node, right, "object")
-                else:
-                    self.expect(node, left, "number")
-                    self.expect(node, right, "number")
+                    self.constrain(node, [left, right], {"number"})
             return BOOL
         if not isinstance(node, ast.Call):
             self.fail(node, "EXPRESSION", type(node).__name__)
@@ -503,7 +600,7 @@ class Checker:
             if not terminated:
                 returns.append(NONE)
             result = merge_values(returns)
-            result = Value(result.kind, result.actions or acting)
+            result = result.with_actions(acting or any(arg.actions for arg in args))
             if role == "condition" and result.actions:
                 self.fail(node, "ACTION_IN_CONDITION", name)
             return result
@@ -512,64 +609,106 @@ class Checker:
             self.unit = old_unit
 
     def block(self, statements, env, role, *, in_function=False, loop=0):
-        env, returns, acting = dict(env), [], False
+        flow = self.block_flow(
+            statements, env, role, in_function=in_function, loop=loop
+        )
+        return flow.normal or dict(env), flow.returns, flow.actions, flow.normal is None
+
+    def block_flow(self, statements, env, role, *, in_function=False, loop=0):
+        flow = Flow(dict(env))
+        dead_env = dict(env)
         for stmt in statements:
+            self.step()
             if isinstance(stmt, ast.FunctionDef):
                 continue
-            if isinstance(stmt, ast.Assign):
-                name = stmt.targets[0].id
-                if name in self.functions:
-                    self.fail(stmt, "PROTECTED_BINDING", name)
-                value = self.expr(stmt.value, env, role)
-                env[name] = value
-                acting |= value.actions
-            elif isinstance(stmt, ast.Expr):
-                acting |= self.expr(stmt.value, env, role).actions
-            elif isinstance(stmt, ast.Return):
-                if not in_function:
-                    self.fail(stmt, "RETURN", "Top-level return is not supported")
-                value = self.expr(stmt.value, env, role) if stmt.value else NONE
-                returns.append(value)
-                return env, returns, acting or value.actions, True
-            elif isinstance(stmt, (ast.If, ast.While)):
-                self.condition(stmt.test, env)
-                left, lr, la, lt = self.block(
-                    stmt.body,
-                    env,
-                    role,
-                    in_function=in_function,
-                    loop=loop + isinstance(stmt, ast.While),
-                )
-                right, rr, ra, rt = self.block(
-                    stmt.orelse, env, role, in_function=in_function, loop=loop
-                )
-                # A while body may run zero times. The type must remain valid on re-entry.
-                if isinstance(stmt, ast.While):
-                    merged = merge_env(env, left)
-                    self.condition(stmt.test, merged)
-                    self.block(
-                        stmt.body, merged, role, in_function=in_function, loop=loop + 1
-                    )
-                    env = merge_env(right, merged)
-                else:
-                    env = (
-                        right
-                        if lt and not rt
-                        else left if rt and not lt else merge_env(left, right)
-                    )
-                returns.extend(lr + rr)
-                acting |= la or ra
-                if isinstance(stmt, ast.If) and lt and rt:
-                    return env, returns, acting, True
-            elif isinstance(stmt, (ast.Break, ast.Continue)):
-                if not loop:
-                    self.fail(stmt, "LOOP_CONTROL", "break/continue requires a loop")
-                # Remaining code is still checked conservatively.
-            elif not isinstance(stmt, ast.Pass):
-                self.fail(stmt, "STATEMENT", type(stmt).__name__)
+            reachable = flow.normal is not None
+            current = dict(flow.normal if reachable else dead_env)
             if not in_function:
-                self.globals = dict(env)
-        return env, returns, acting, False
+                self.globals = dict(current)
+            step = self.statement_flow(stmt, current, role, in_function, loop)
+            dead_env = step.normal if step.normal is not None else current
+            if reachable:
+                flow.normal = step.normal
+                flow.returns.extend(step.returns)
+                flow.breaks.extend(step.breaks)
+                flow.continues.extend(step.continues)
+                flow.actions |= step.actions
+            # Unreachable source is still checked, but cannot overwrite a real
+            # break/continue/return state or introduce a loop back edge.
+        if not in_function and flow.normal is not None:
+            self.globals = dict(flow.normal)
+        return flow
+
+    def statement_flow(self, stmt, env, role, in_function, loop):
+        if isinstance(stmt, ast.Assign):
+            name = stmt.targets[0].id
+            if name in self.functions:
+                self.fail(stmt, "PROTECTED_BINDING", name)
+            value = self.expr(stmt.value, env, role)
+            env[name] = value
+            return Flow(env, actions=value.actions)
+        if isinstance(stmt, ast.Expr):
+            value = self.expr(stmt.value, env, role)
+            return Flow(env, actions=value.actions)
+        if isinstance(stmt, ast.Return):
+            if not in_function:
+                self.fail(stmt, "RETURN", "Top-level return is not supported")
+            value = self.expr(stmt.value, env, role) if stmt.value else NONE
+            return Flow(None, returns=[value], actions=value.actions)
+        if isinstance(stmt, ast.If):
+            self.condition(stmt.test, env)
+            left = self.block_flow(
+                stmt.body, env, role, in_function=in_function, loop=loop
+            )
+            right = self.block_flow(
+                stmt.orelse, env, role, in_function=in_function, loop=loop
+            )
+            return Flow(
+                join_envs([left.normal, right.normal]),
+                left.returns + right.returns,
+                left.breaks + right.breaks,
+                left.continues + right.continues,
+                left.actions or right.actions,
+            )
+        if isinstance(stmt, ast.While):
+            return self.loop_flow(stmt, env, role, in_function, loop)
+        if isinstance(stmt, (ast.Break, ast.Continue)):
+            if not loop:
+                self.fail(stmt, "LOOP_CONTROL", "break/continue requires a loop")
+            if isinstance(stmt, ast.Break):
+                return Flow(None, breaks=[dict(env)])
+            return Flow(None, continues=[dict(env)])
+        if isinstance(stmt, ast.Pass):
+            return Flow(env)
+        self.fail(stmt, "STATEMENT", type(stmt).__name__)
+
+    def loop_flow(self, stmt, entry, role, in_function, loop):
+        head = dict(entry)
+        while True:
+            self.step()
+            before_types = self.type_revision
+            if not in_function:
+                self.globals = dict(head)
+            self.condition(stmt.test, head)
+            body = self.block_flow(
+                stmt.body, head, role, in_function=in_function, loop=loop + 1
+            )
+            # Entry contributes the zero-iteration path. Only fallthrough and
+            # continue states feed the next iteration; break/return do not.
+            merged = join_envs([head, entry, body.normal, *body.continues])
+            if merged == head and before_types == self.type_revision:
+                break
+            head = merged
+        otherwise = self.block_flow(
+            stmt.orelse, head, role, in_function=in_function, loop=loop
+        )
+        return Flow(
+            join_envs([otherwise.normal, *body.breaks]),
+            body.returns + otherwise.returns,
+            otherwise.breaks,
+            otherwise.continues,
+            body.actions or otherwise.actions,
+        )
 
     def check(self):
         self.block(self.trees["policy"].body, self.inputs, self.role)
@@ -581,9 +720,7 @@ class Checker:
             for name, (fn, unit) in self.functions.items():
                 self.unit = unit
                 self.stack = [name]
-                local = self.globals | dict.fromkeys(
-                    (a.arg for a in fn.args.args), UNKNOWN
-                )
+                local = self.globals | self.generic_inputs(a.arg for a in fn.args.args)
                 self.block(fn.body, local, "body", in_function=True)
         finally:
             self.complete, self.unit, self.stack = original_complete, original_unit, []
@@ -597,15 +734,25 @@ class Checker:
 def merge_values(values):
     if not values:
         return NONE
-    kinds = {v.kind for v in values}
     return Value(
-        next(iter(kinds)) if len(kinds) == 1 else "mixed",
+        "mixed",
         any(v.actions for v in values),
+        types=frozenset().union(*(v.types for v in values)),
     )
 
 
 def merge_env(a, b):
     return {name: merge_values([a[name], b[name]]) for name in a.keys() & b.keys()}
+
+
+def join_envs(environments):
+    available = [env for env in environments if env is not None]
+    if not available:
+        return None
+    result = dict(available[0])
+    for env in available[1:]:
+        result = merge_env(result, env)
+    return result
 
 
 def validate(
@@ -642,7 +789,7 @@ def validate_helper(
     checker.stack = [name]
     checker.block(
         fn.body,
-        checker.inputs | dict.fromkeys((a.arg for a in fn.args.args), UNKNOWN),
+        checker.inputs | checker.generic_inputs(a.arg for a in fn.args.args),
         role,
         in_function=True,
     )
