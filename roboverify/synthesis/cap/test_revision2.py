@@ -155,6 +155,43 @@ class Revision2RunnerTests(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertEqual(result["dsl_compliance"], "fail")
 
+    def test_query_lambda_captures_actual_global_helper_version(self):
+        responses = [
+            "def ready(b):\n    return Higher(b,b)\ndef check(b):\n    return exists(lambda x: ready(x))\nif check(b0):\n    Pick(b0)",
+            "def ready(b):\n    return get_block_position(b)[2] > 0",
+            "def check(b):\n    return exists(lambda x: ready(x))",
+        ]
+        for mode, expected in (("dsl_only", "fail"), ("coordinate_predicates", "pass")):
+            with self.subTest(mode=mode):
+                result = self.execute("cap_google_baseline", responses, mode=mode)
+                self.assertTrue(result["success"])
+                self.assertEqual(result["dsl_compliance"], expected)
+                root = Path(result["run_dir"])
+                report = json.loads(
+                    (root / "artifacts/trial_001/dsl_compliance.json").read_text()
+                )
+                if expected == "fail":
+                    self.assertEqual(
+                        report["diagnostics"][0]["rule"], "NUMERIC_CONDITION"
+                    )
+                pointer = root / "artifacts/trial_001/final_output.json"
+                target = root / json.loads(pointer.read_text())["artifact"]
+                output = json.loads(target.read_text())
+                self.assertEqual(output["schema"], "cap-final-output-v2")
+                parent = output["functions"][output["bindings"]["check"]]
+                child = output["functions"][parent["bindings"]["ready"]]
+                self.assertEqual(child["source_kind"], "helper")
+
+                # Simulate the earlier incomplete capture without inventing bindings.
+                output["schema"] = "cap-final-output-v1"
+                parent["bindings"].pop("ready")
+                legacy = pointer.parent / "legacy_output.json"
+                legacy.write_text(json.dumps(output))
+                pointer.write_text(
+                    json.dumps({"artifact": str(legacy.relative_to(root))})
+                )
+                self.assertEqual(audit_run(root)["status"], "unsupported")
+
     def test_incomplete_no_source_and_physical_failure_are_distinct(self):
         result = self.execute("cap_google_baseline", ["missing(b0)"])
         self.assertEqual(result["dsl_compliance"], "incomplete")

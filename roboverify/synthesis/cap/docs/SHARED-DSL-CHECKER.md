@@ -592,6 +592,25 @@ explicit error rather than silent reinterpretation. No model requests or
 simulator steps occur in audit. `typed_v3` adds Method-2 templates while keeping
 `legacy_v1` and `typed_v2` immutable and preserving typed_v2 API wording.
 
+### CAP-AUDIT-1: query-lambda dependency capture
+
+**Implementation defect, fixed 2026-10-19 UTC.** The v1 final-output recorder
+inspected only a function's immediate `co_names`. A helper referenced inside a
+query lambda can instead appear in a nested code object's names. This omitted
+its actual global binding and could make normalization report a false
+`UNRESOLVED_HELPER` violation. The v2 recorder recursively collects names from
+nested code objects and retains their actual function-global bindings. It still
+never calls generated functions or changes Google's execution algorithm.
+
+The exporter now writes `cap-final-output-v2`; the auditor accepts v1 and v2 and
+records `audit_version=final-output-v2`. For a v1 artifact with an unestablished
+lambda helper binding, it reports `unsupported` rather than assuming a binding
+or declaring a source violation. One Haiku baseline trial required this
+correction; its original audit, sources, physical outcome, and model requests
+are retained. Regression coverage verifies shadowed helper versions referenced
+inside lambdas in both condition modes and conservative handling of legacy data.
+The full 88-test CaP suite passes.
+
 ## 8. Validation requirements
 
 - A numeric branch in the final baseline output is assessed after the attempt:

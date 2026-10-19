@@ -4,7 +4,16 @@ import ast
 import hashlib
 import json
 from pathlib import Path
-from types import FunctionType
+from types import CodeType, FunctionType
+
+
+def referenced_global_names(code):
+    """Include globals used inside query lambdas compiled as nested code objects."""
+    names = set(code.co_names)
+    for constant in code.co_consts:
+        if isinstance(constant, CodeType):
+            names.update(referenced_global_names(constant))
+    return sorted(names)
 
 
 class FinalOutputRecorder:
@@ -17,7 +26,7 @@ class FinalOutputRecorder:
 
     def publish(self, value):
         self.counter += 1
-        value = {"schema": "cap-final-output-v1", **value}
+        value = {"schema": "cap-final-output-v2", **value}
         path = self.logger.artifact(f"outputs/output_{self.counter:04d}.json", value)
         pointer = self.logger.root / "final_output.json"
         temporary = pointer.with_suffix(".tmp")
@@ -67,7 +76,7 @@ class FinalOutputRecorder:
                     "bindings": {},
                     "source_sha256": hashlib.sha256(source.encode()).hexdigest(),
                 }
-                for name in fn.__code__.co_names:
+                for name in referenced_global_names(fn.__code__):
                     child = visit(fn.__globals__.get(name))
                     if child:
                         nodes[key]["bindings"][name] = child

@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 from .checker import DSLContract, analysis_deadline, check_bundle
-from .contracts import Bundle, ConstraintFailure, Diagnostic
+from .contracts import API_NAMES, Bundle, ConstraintFailure, Diagnostic
 from .validation import definitions, parse
 
 
@@ -21,7 +21,7 @@ def read_final_output(run_dir):
     if not target.is_relative_to(root) or not target.exists():
         return {"status": "incomplete", "reason": "Missing final-output artifact"}
     output = json.loads(target.read_text())
-    if output.get("schema") != "cap-final-output-v1":
+    if output.get("schema") not in {"cap-final-output-v1", "cap-final-output-v2"}:
         return {"status": "unsupported", "reason": "Unknown final-output schema"}
     return output
 
@@ -61,16 +61,31 @@ def normalize_output(output):
         def __init__(self, bindings, blocked=()):
             self.bindings = bindings
             self.blocked = set(blocked)
+            self.lambda_depth = 0
 
         def visit_Lambda(self, node):
             old = self.blocked
             self.blocked = old | {arg.arg for arg in node.args.args}
+            self.lambda_depth += 1
             self.generic_visit(node)
+            self.lambda_depth -= 1
             self.blocked = old
             return node
 
         def visit_Call(self, node):
             self.generic_visit(node)
+            if (
+                output.get("schema") == "cap-final-output-v1"
+                and self.lambda_depth
+                and isinstance(node.func, ast.Name)
+                and node.func.id not in API_NAMES
+                and node.func.id not in self.blocked
+                and node.func.id not in self.bindings
+            ):
+                raise ValueError(
+                    "Legacy final-output capture omitted or cannot establish the "
+                    f"query-lambda helper binding: {node.func.id}"
+                )
             if (
                 isinstance(node.func, ast.Name)
                 and node.func.id in self.bindings
@@ -125,7 +140,7 @@ def audit_run(run_dir, *, timeout=10.0):
     record = {
         "scope": "final_output",
         "status": "error",
-        "audit_version": "final-output-v1",
+        "audit_version": "final-output-v2",
         "audit_source_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
     }
     try:
