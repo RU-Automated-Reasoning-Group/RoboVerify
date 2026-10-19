@@ -120,6 +120,45 @@ flowchart LR
     class GATE,COLLECT,ALIGN,SELECT,SERIALIZE,PACK feedback
 ```
 
+High-level pseudocode (proposed interface; not implemented):
+
+```python
+def shared_feedback(attempt, task, contract, config, budget):
+    # Check outcome, enable/disable, failure eligibility, and remaining resources.
+    decision = assess_recovery(attempt, config, budget)
+    if not decision.allowed:
+        return record_result(attempt, Stop(decision.reason))
+
+    states = load_recorded_states(attempt)
+    logs = load_execution_logs(attempt)
+    program = load_executed_policy_and_bindings(attempt)
+    evidence = align_evidence(states, logs, program)
+
+    selected = select_relevant_evidence(
+        evidence,
+        profile=config.feedback_profile,
+        preserve_failure_context=True,
+        mark_missing_information=True,
+    )
+    feedback_text = serialize_text(selected)
+    payload = RecoveryPayload(
+        task=task,
+        contract=contract,
+        current_policy=program,
+        feedback=feedback_text,
+        reset_rule="Restore initial snapshot; run policy from its entry point",
+    )
+
+    # Include the required source/API context and reserve response capacity.
+    if not fits_feedback_and_request_budgets(payload, config, budget):
+        return record_result(attempt, Stop("Insufficient feedback/request budget"))
+
+    return record_result(attempt, Ready(payload))
+```
+
+- `assess_recovery` stops on success, disabled recovery, an ineligible failure, or exhausted round/resource limits.
+- `record_result` preserves either the feedback payload or the stop reason. Generation, initial-state restoration, and policy execution remain outside this module.
+
 | Module step | Responsibility |
 | --- | --- |
 | Eligibility gate | Respect enable/disable, recoverable failures, maximum rounds, and remaining resources |
