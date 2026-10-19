@@ -331,7 +331,7 @@ def select_relevant_evidence(record, earlier, token_limit):
         "higher_tolerance": adapter["higher_tolerance"],
         "keyframes": frames,
         "failure_context": [compact_event(e) for e in latest],
-        "earlier_failures": earlier,
+        "earlier_failures": [dict(summary) for summary in earlier],
         "missing_fields": [],
         "omitted_event_count": len(events),
         "selected_event_ids": [],

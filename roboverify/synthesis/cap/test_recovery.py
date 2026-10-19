@@ -79,6 +79,9 @@ class RecoveryTests(unittest.TestCase):
                 )
                 self.assertTrue(restoration["exact_match"])
                 self.assertTrue((root / "recovery_feedback.json").exists())
+                feedback = json.loads((root / "recovery_feedback.json").read_text())
+                self.assertEqual(feedback["evidence"]["earlier_failures"], [])
+                self.assertIn('"earlier_failures":[]', backend.prompts[1])
 
     def test_disabled_is_one_attempt_and_unchanged_prompt(self):
         failed = "x=get(lambda x: not ON_star(x,x))"
@@ -102,6 +105,18 @@ class RecoveryTests(unittest.TestCase):
         identity = json.loads((root / "rounds/004/identity.json").read_text())
         self.assertEqual(identity["duplicate_of"], 0)
         self.assertLessEqual(feedback["feedback_token_bound"], 8192)
+        for index, attempt in enumerate(result["attempts"][1:], 1):
+            delivered = json.loads(
+                (
+                    Path(attempt["run_dir"])
+                    / "artifacts/trial_001/recovery_feedback.json"
+                ).read_text()
+            )
+            self.assertEqual(len(delivered["evidence"]["earlier_failures"]), index - 1)
+            prepared = json.loads(
+                (root / f"rounds/{index-1:03d}/feedback.json").read_text()
+            )
+            self.assertEqual(prepared, delivered)
 
     def test_generation_failure_has_no_invented_rollout(self):
         result, model = self.execute("cap_method_2", [""], enabled=True)
@@ -131,6 +146,68 @@ class RecoveryTests(unittest.TestCase):
         )
         self.assertTrue(result["success"], result)
         self.assertEqual(result["recovery_rounds"], 1)
+
+    def test_goal_primitive_tick_and_unknown_evaluation_failures_can_recover(self):
+        from unittest.mock import patch
+        from .tasks import evaluate_terminal
+
+        for scenario, source in (
+            ("goal", "pass"),
+            ("primitive", "Pick(b0)"),
+            ("ticks", "while ON_star(b0,b0):\n    pass"),
+            ("unknown_goal", "pass"),
+        ):
+            with self.subTest(scenario=scenario):
+                envs = []
+
+                def factory(config, snapshot):
+                    env = RobotFixture(
+                        1,
+                        success=scenario != "goal" or bool(envs),
+                        stuck=scenario == "primitive" and not envs,
+                    )
+                    if snapshot:
+                        restore(env, snapshot)
+                    envs.append(env)
+                    return env
+
+                calls = [0]
+
+                def evaluate(*args):
+                    calls[0] += 1
+                    if calls[0] <= 2:
+                        raise ValueError("Synthetic unavailable task evaluation")
+                    return evaluate_terminal(*args)
+
+                context = (
+                    patch(
+                        "synthesis.cap.runner.evaluate_terminal", side_effect=evaluate
+                    )
+                    if scenario == "unknown_goal"
+                    else contextlib.nullcontext()
+                )
+                config = RunConfig(
+                    method="cap_method_2",
+                    num_blocks=1,
+                    save_video=False,
+                    output_root=self.tmp.name,
+                    prompt_version="typed_v3",
+                    max_steps=100,
+                    recovery=RecoveryConfig(enabled=True),
+                )
+                with context, contextlib.redirect_stdout(io.StringIO()):
+                    result = run(
+                        config,
+                        ModelConfig(),
+                        backend=ScriptedModel([source, "pass"]),
+                        environment_factory=factory,
+                        capture_stdout=False,
+                    )
+                self.assertTrue(result["success"])
+                self.assertFalse(result["first_attempt_success"])
+                self.assertEqual(result["recovery_rounds"], 1)
+                if scenario == "unknown_goal":
+                    self.assertIsNone(result["attempts"][0]["environment_success"])
 
     def test_insufficient_feedback_records_stop_without_request(self):
         result, model = self.execute(

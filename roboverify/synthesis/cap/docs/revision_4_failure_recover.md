@@ -566,3 +566,10 @@ Output replacement Python policy code only, including its top-level invocation.
 - Preparation failure consumes its started round and stops with `preparation_failure_no_rollout`; there is no automatic trajectory-based recovery without an executed policy. Static repair and transport retry remain separate within an attempt.
 - Validation: 116 CaP tests passed before the added six-group batch regression; the subsequent 35-test recovery/batch/controller run passed, including MuJoCo controller tests. The scripted [six-group physical preflight](../../../runs/cap-recovery-preflight/20261019-223951/report.md) forces a no-witness failure, then successfully completes Stack from the exact initial snapshot in all three recovery-enabled methods. Recovery-disabled counterparts stop at the forced failure. These scripted checks are not model success-rate measurements.
 - Each parent run saves `rounds/<index>/result.json`, `identity.json`, and `feedback.json`, plus per-attempt checkpoints, prompts, usage, trajectory and video. Batch reports include recovery setting, first-attempt/final success, recovery rounds, calls and total tokens. Repeated candidates are recorded and remain executable.
+
+### CAP-RECOVERY-1: frozen history in delivered feedback
+
+- The first 30-trial live batch at `runs/cap-revision4-haiku55/20261019-224320` is retained as a diagnostic batch, excluded from the corrected comparison.
+- Artifact audit found that `earlier_failures` shared the orchestrator's mutable history list. Appending the latest failure after serializing the selection artifact also mutated the in-memory feedback subsequently sent to the model. The latest failure therefore appeared both in detailed evidence and in earlier history; the prepared and delivered payloads differed.
+- Fix: copy the earlier summaries when constructing feedback. Regression tests check the exact delivered prompt, require zero earlier failures for the first recovery request and three for the fourth, and compare prepared/delivered feedback objects for equality.
+- A complete fresh comparison is required after this correction; no individual failed or successful trial is selectively replaced.
