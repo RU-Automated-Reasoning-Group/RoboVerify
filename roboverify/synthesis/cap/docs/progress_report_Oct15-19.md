@@ -69,16 +69,32 @@
   - These integrations have not been implemented or evaluated. Different output languages, dynamic bindings, or unsupported constructs would require adaptation; this is not a claim that arbitrary generated Python can already be checked.
 - **Checker boundary:** checks cover the supported syntax, primitive/API signatures, types, helper dependencies, and condition effects. Passing is not a proof of task completion, termination, controller convergence, or physical safety.
 
+- **Environment interaction in the diagrams:**
+  - Dashed boxes separate synthesis from execution. The bidirectional execution edges represent repeated interaction between the generated program and the environment.
+  - The program requests current positions, evaluates DSL predicates or selection queries, and issues Pick/Move/Release calls as its control flow requires. Query results return to the program; actions update the environment before execution continues.
+  - This is program-level feedback, not an LLM replanning loop. Initial coordinates and runtime query results are not supplied to the LLM in the current implementation.
+  - Queries do not advance physics; primitives do. Interaction ends when the program returns or fails, after which physical evaluation is recorded. Static repair loops remain inside synthesis.
+
 ### 2.2 Baseline: original Google CaP with post-hoc measurement
 
 ```mermaid
 flowchart LR
-    I["Task + API / mode prompt"] -->|"generation request"| G["Google LMP + recursive LMPFGen"]
-    G -->|"policy + bound helpers"| E["Google Python execution"]
-    E -->|"primitive calls / position reads"| S["Shared simulator adapter"]
-    S -->|"trajectory + terminal state"| R["Physical result"]
-    E -.->|"captured final source + bindings"| C["Shared DSL checker: post-hoc"]
-    C -->|"compliance / diagnostic"| A["Separate audit result"]
+    subgraph SYN["Synthesis stage"]
+        direction TB
+        I["Task + API / mode prompt"] -->|"generation request"| G["Google LMP + recursive LMPFGen"]
+    end
+    subgraph RUN["Execution stage"]
+        direction TB
+        E["Execute generated policy + helpers"] -->|"primitive actions / observation queries"| ENV["Shared adapter + MuJoCo environment"]
+        ENV -->|"query results / primitive completion"| E
+        E -->|"normal completion / failure"| R["Physical evaluation + recording"]
+        ENV -->|"trajectory + terminal state"| R
+    end
+    G -->|"policy source + bound helpers"| E
+    E -.->|"final source + bindings after attempt"| C["Shared DSL checker: post-hoc"]
+    C -->|"compliance + diagnostics"| A["Separate audit result"]
+    style SYN fill:none,stroke:#64748b,stroke-width:1.5px,stroke-dasharray:6 4
+    style RUN fill:none,stroke:#64748b,stroke-width:1.5px,stroke-dasharray:6 4
 ```
 
 ```python
@@ -102,16 +118,27 @@ def baseline(task, api, mode):
 
 ```mermaid
 flowchart LR
-    I["Task + API / mode prompt"] -->|"policy request"| G["Generate policy or helper"]
-    G -->|"unit source"| L["Local DSL check"]
-    L -->|"violation diagnostics"| R["Repair current unit"]
-    R -->|"revised source"| L
-    L -->|"unresolved helper signature + role"| H["Recursively prepare helper"]
-    H -->|"checked helper definitions"| C["Complete bundle check"]
-    L -->|"locally valid unit; no missing helpers"| C
-    C -->|"diagnostics"| R
-    C -->|"complete pass + policy/helpers"| E["Checked execution"]
-    E -->|"shared primitive calls + trajectory"| S["Physical result"]
+    subgraph SYN["Synthesis stage"]
+        direction TB
+        I["Task + API / mode prompt"] -->|"policy request"| G["Generate policy or helper"]
+        G -->|"unit source"| L["Local DSL check"]
+        L -->|"violation diagnostics"| R["Repair current unit"]
+        R -->|"revised source"| L
+        L -->|"unresolved helper signature + role"| H["Recursively prepare helper"]
+        H -->|"checked helper definitions"| C["Complete bundle check"]
+        L -->|"locally valid unit; no missing helpers"| C
+        C -->|"diagnostics"| R
+    end
+    subgraph RUN["Execution stage"]
+        direction TB
+        E["Execute checked policy + helpers"] -->|"primitive actions / observation queries"| ENV["Shared adapter + MuJoCo environment"]
+        ENV -->|"query results / primitive completion"| E
+        E -->|"normal completion / failure"| OUT["Physical evaluation + recording"]
+        ENV -->|"trajectory + terminal state"| OUT
+    end
+    C -->|"complete pass + policy/helpers"| E
+    style SYN fill:none,stroke:#64748b,stroke-width:1.5px,stroke-dasharray:6 4
+    style RUN fill:none,stroke:#64748b,stroke-width:1.5px,stroke-dasharray:6 4
 ```
 
 ```python
@@ -149,13 +176,24 @@ def prepare_recursively(unit, role, contract):
 
 ```mermaid
 flowchart LR
-    I["Task + API / mode prompt"] -->|"complete-program request"| G["Generate policy + all helpers"]
-    G -->|"candidate source"| C["Complete shared DSL check"]
-    C -->|"violations + candidate source"| R["Repair whole candidate"]
-    R -->|"revised complete source"| C
-    C -->|"complete pass"| E["Checked execution"]
-    E -->|"shared primitive calls + trajectory"| S["Physical result"]
-    C -->|"analysis error / exhausted attempts"| F["Explicit failure"]
+    subgraph SYN["Synthesis stage"]
+        direction TB
+        I["Task + API / mode prompt"] -->|"complete-program request"| G["Generate policy + all helpers"]
+        G -->|"candidate source"| C["Complete shared DSL check"]
+        C -->|"violations + candidate source"| R["Repair whole candidate"]
+        R -->|"revised complete source"| C
+        C -->|"analysis error / exhausted attempts"| F["Explicit failure"]
+    end
+    subgraph RUN["Execution stage"]
+        direction TB
+        E["Execute checked policy + helpers"] -->|"primitive actions / observation queries"| ENV["Shared adapter + MuJoCo environment"]
+        ENV -->|"query results / primitive completion"| E
+        E -->|"normal completion / failure"| OUT["Physical evaluation + recording"]
+        ENV -->|"trajectory + terminal state"| OUT
+    end
+    C -->|"complete pass + candidate source"| E
+    style SYN fill:none,stroke:#64748b,stroke-width:1.5px,stroke-dasharray:6 4
+    style RUN fill:none,stroke:#64748b,stroke-width:1.5px,stroke-dasharray:6 4
 ```
 
 ```python
