@@ -1,17 +1,12 @@
 # Progress report: October 15–19, 2026
 
-- **Reporting window:** October 15, 2026, 1:40 pm Eastern through October 19, 2026.
-  - Run directory timestamps are UTC; the Haiku batch dated October 19 UTC ran on October 18 Eastern.
-  - Code baseline for this report: `178bdb7`, branch `feature/cap`.
-  - Earlier October 15 experiments that preceded 1:40 pm Eastern are background, not new work in this window.
-- **Purpose:** prepare a 30-minute advisor meeting and record progress toward a DSL-restricted Code-as-Policies baseline for RoboVerify.
-- **Evidence:** repository commits, saved experiment reports, generated sources, execution timelines, and post-hoc DSL audits. This report does not introduce new model requests or physical reruns.
+- Build a Code-as-Policies baseline for comparison with RoboVerify, using the same robot primitives and predicates.
+- Preserve Google CaP’s implementation and express the DSL restrictions through prompting.
+- Add two checker-guided variants to enforce the restrictions: recursive helper checking and whole-program checking.
+- Implement reproducible experiments and investigate generation and execution failures.
+- Next steps: extend task coverage and give CaP access to the same demonstrations used by RoboVerify.
 
-## Opening statement
-
-> Since Thursday, I have been building a Code-as-Policies baseline for comparison with RoboVerify, using the same robot primitives and predicates. I first preserved Google CaP’s implementation and imposed the DSL restrictions through prompting. Because prompting alone does not enforce those restrictions, I added two checker-guided variants: recursive helper checking and whole-program checking. I also implemented reproducible experiments and investigated generation and execution failures. The next steps are to extend the task coverage and give CaP access to the same demonstrations used by RoboVerify.
-
-## 1. Original assignment and motivation — 0–5 minutes
+## 1. Original assignment and motivation
 
 - **Advisor’s assignment:** construct a CaP baseline for Yuning’s synthesis/verification approach.
   - Compare the quality of generated policies on the shared benchmarks.
@@ -31,7 +26,7 @@
   - The final research comparison remains RoboVerify versus CaP under comparable task inputs, primitive semantics, predicates, and evaluation conditions.
   - No new matched RoboVerify-versus-CaP performance comparison was completed in this window.
 
-## 2. Implementation and generation workflows — 5–10 minutes
+## 2. Implementation and generation workflows
 
 ### 2.1 Completed changes
 
@@ -181,7 +176,7 @@ def method_2(task, contract):
 - Both checked methods use interface/DSL diagnostics, not rollout feedback, for repairs.
 - Five attempts per local unit in Method 1 and five whole-candidate attempts in Method 2 are different allocations; shared call/token budgets also apply.
 
-## 3. Experiments and results — 10–18 minutes
+## 3. Experiments and results
 
 ### 3.1 Evaluation protocol
 
@@ -275,7 +270,7 @@ def method_2(task, contract):
 - Parity/preflight evidence: [Revision 1](revision_1.md#validation), [Revision 2 preflight](../../../runs/cap-revision2-preflight/20261018-214704/report.md).
 - All 30 videos in each Revision 2 live batch matched trajectory state counts; saved full starts, request hashes, token totals, and exclusive timing sums were checked. Earlier deadline-interrupted videos are marked unavailable rather than silently omitted.
 
-## 4. Interpretation and baseline hypothesis — 18–24 minutes
+## 4. Interpretation and baseline hypothesis
 
 ### 4.1 What the baseline evidence actually shows
 
@@ -335,7 +330,7 @@ def method_2(task, contract):
 - Static DSL compliance, task postcondition satisfaction, and formal symbolic/geometric verification are distinct measurements.
 - The existing RoboVerify proof results are background evidence; this reporting window does not supply a matched CaP/RoboVerify generalization comparison.
 
-## 5. Next steps and advisor decisions — 24–30 minutes
+## 5. Next steps and advisor decisions
 
 ### 5.1 Expand to the remaining five tasks
 
