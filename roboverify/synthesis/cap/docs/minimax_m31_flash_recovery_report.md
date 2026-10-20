@@ -1,5 +1,7 @@
 # MiniMax M3.1 Flash free: shared recovery experiment
 
+Results are also included in the [combined Revision 4 report](revision_4_recovery_report.md).
+
 - **Status: completed; 300/300 planned trials finished.** Target: 50 trials in each of six settings.
 - Stack, three blocks, the same full initial snapshot as the Haiku comparison; `dsl_only`; `typed_v3`.
 - Model: `minimax/minimax-m3.1-flash:free`; reasoning explicitly `medium`; response cap 16,384 tokens; temperature and top_p omitted.
@@ -74,4 +76,4 @@ All 137 successful final policies passed the saved DSL audit. This batch contain
 
 ## Haiku reference
 
-- [Haiku: 20 trials per setting](revision_4_recovery_report.md). These are separate model cohorts; no MiniMax trial is accumulated into the Haiku totals.
+- [Haiku cohort in the combined report](revision_4_recovery_report.md#2-haiku-55--20-trials-per-setting). These are separate model cohorts; no MiniMax trial is accumulated into the Haiku totals.
