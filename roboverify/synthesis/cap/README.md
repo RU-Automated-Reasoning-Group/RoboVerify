@@ -692,3 +692,18 @@ and `model_config`. With three methods, one condition mode, and five trials this
 See [configuration, budgets, evidence, and logging](docs/revision_4_failure_recover.md#implementation-and-validation).
 
 The [Revision 4 Haiku comparison](docs/revision_4_recovery_report.md) records 120 corrected live trials (20 per setting), per-trial costs and 33 recovery rounds. All 118 CaP tests pass.
+
+## Rate-limited experiment batches
+
+`create_batch(..., transport_control={"state_path": "/absolute/path/requests.json",
+"interval_seconds": 6.0, "request_limit": 800})` optionally shares request-start
+pacing and a wire-request ledger across workers. No credentials or prompts enter
+this ledger. Waiting remains inside the existing request/trial deadlines.
+
+`execute_batch(..., dispatch_gate=callback)` optionally checks admission before
+starting each trial. A refusal drains active workers and leaves unstarted jobs
+pending; `resume=True` skips completed trials. A quota-aware caller reserves the
+remaining model-call allowances of active trials and the candidate trial through
+`request_control.dispatch_reservation`, using the current provider quota. These
+controls are disabled unless explicitly configured and do not change generation,
+DSL checking, recovery prompts, controller behavior, or existing model budgets.

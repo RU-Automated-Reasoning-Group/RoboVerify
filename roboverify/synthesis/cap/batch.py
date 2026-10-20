@@ -43,6 +43,7 @@ def create_batch(
     responses=None,
     fixture=False,
     recovery_variants=None,
+    transport_control=None,
 ):
     directory = Path(directory).resolve()
     if directory.exists():
@@ -111,6 +112,7 @@ def create_batch(
                     "initial_state": str(snapshot) if snapshot else None,
                     "responses": responses,
                     "fixture": fixture,
+                    "transport_control": transport_control,
                 }
             )
     manifest = {
@@ -314,7 +316,7 @@ def write_report(directory, manifest, schedule):
     temporary.replace(directory / "report.md")
 
 
-def _execute_batch(directory, *, resume=False):
+def _execute_batch(directory, *, resume=False, dispatch_gate=None):
     directory = Path(directory).resolve()
     if (
         hashlib.sha256((directory / "manifest.json").read_bytes()).hexdigest()
@@ -378,7 +380,13 @@ def _execute_batch(directory, *, resume=False):
     atomic_json(metadata_path, metadata)
     try:
         while pending or active:
+            admission_blocked = False
             while pending and len(active) < manifest["max_workers"]:
+                if dispatch_gate is not None and not dispatch_gate(
+                    pending[0], [entry[2] for entry in active.values()]
+                ):
+                    admission_blocked = True
+                    break
                 job = pending.pop(0)
                 path = directory / "trials" / job["id"]
                 path.mkdir(parents=True, exist_ok=True)
@@ -463,6 +471,9 @@ def _execute_batch(directory, *, resume=False):
                         f"Finished {ident}: {row['status']}; DSL={row.get('dsl_compliance')}",
                         flush=True,
                     )
+            if pending and not active and admission_blocked:
+                # An admission refusal leaves unstarted jobs pending and resumable.
+                break
             if active:
                 time.sleep(0.2)
     finally:
@@ -485,8 +496,8 @@ def _execute_batch(directory, *, resume=False):
     return json.loads((directory / "summary.json").read_text())
 
 
-def execute_batch(directory, *, resume=False):
+def execute_batch(directory, *, resume=False, dispatch_gate=None):
     directory = Path(directory).resolve()
     with (directory / ".batch.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        return _execute_batch(directory, resume=resume)
+        return _execute_batch(directory, resume=resume, dispatch_gate=dispatch_gate)

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .batch import atomic_json
 from .config import ModelConfig, RunConfig
-from .llm import ScriptedModel
+from .llm import HTTPModel, ScriptedModel
 from .runner import run
 
 
@@ -18,6 +18,13 @@ def main(path):
     backend = (
         ScriptedModel(spec["responses"]) if spec.get("responses") is not None else None
     )
+    if backend is None and spec.get("transport_control"):
+        from .request_control import SharedRequestGate
+
+        backend = HTTPModel(
+            model,
+            opener=SharedRequestGate(**spec["transport_control"], job_id=spec["id"]),
+        )
     factory = None
     if spec.get("fixture"):
         from .test_adapter import RobotFixture
@@ -44,6 +51,7 @@ def main(path):
             "batch_dir": spec["batch_dir"],
             "job_id": spec["id"],
             "trial": spec["trial"],
+            "transport_control": spec.get("transport_control"),
         },
     )
     atomic_json(Path(path).with_name("worker_result.json"), result)
