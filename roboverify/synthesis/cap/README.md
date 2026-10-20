@@ -691,7 +691,7 @@ and `model_config`. With three methods, one condition mode, and five trials this
 30 trials. Recovery attempts stay inside their original trial and all usage is accumulated.
 See [configuration, budgets, evidence, and logging](docs/revision_4_failure_recover.md#implementation-and-validation).
 
-The [Revision 4 recovery comparison](docs/revision_4_recovery_report.md) records 120 Haiku trials (20 per setting) and 300 MiniMax trials (50 per setting), with separate model results, per-trial token usage, recovery outcomes, and artifact audits. The latest implementation passed all 124 CaP tests.
+The [Revision 4 recovery comparison](docs/revision_4_recovery_report.md) records 120 Haiku trials (20 per setting) and 300 MiniMax trials (50 per setting), with separate model results, per-trial token usage, recovery outcomes, and artifact audits. Those experiments used the implementation validated by 124 CaP tests; GPU scheduling validation is recorded in Revision 4.1.
 
 ## Rate-limited experiment batches
 
@@ -707,3 +707,94 @@ remaining model-call allowances of active trials and the candidate trial through
 `request_control.dispatch_reservation`, using the current provider quota. These
 controls are disabled unless explicitly configured and do not change generation,
 DSL checking, recovery prompts, controller behavior, or existing model budgets.
+
+## GPU-scheduled parallel experiments
+
+[Revision 4.1 Section 2](docs/revision_4_1.md#2-gpu-scheduling) is implemented.
+GPU scheduling is optional and works with all three methods and recovery on/off.
+Section 1's historical-program prompt injection is **not implemented yet**.
+
+From `roboverify/`, configure the existing simulator environment as described in
+[root AGENTS.md](../../../AGENTS.md), then inspect physical identities and verified
+EGL mappings:
+
+```bash
+.venv/bin/python -m synthesis.cap.gpu_scheduler --inventory
+```
+
+Choose GPUs you are permitted to use. Replace the UUID placeholders below with
+those devices, and save this as `batch.json`. `initial_state` should point to a
+saved full-state archive. Measure worker memory before setting headroom and
+worker allowances; 2,048/1,024 MiB below are integration-test examples.
+
+```json
+{
+  "run_config": {
+    "task": "stack",
+    "num_blocks": 3,
+    "prompt_version": "typed_v3",
+    "save_video": true
+  },
+  "model_config": {
+    "provider": "openrouter",
+    "model": "anthropic/claude-haiku-5.5",
+    "max_output_tokens": 16384,
+    "extra_body": {"reasoning": {"effort": "medium"}}
+  },
+  "initial_state": "/absolute/path/to/initial_state.npz",
+  "methods": ["cap_google_baseline", "cap_method_1", "cap_method_2"],
+  "modes": ["dsl_only"],
+  "recovery_variants": [false, true],
+  "trials": 5,
+  "max_workers": 2,
+  "schedule_seed": 0,
+  "gpu_config": {
+    "gpu_policy": "auto",
+    "gpu_allowlist": ["GPU-REPLACE-WITH-ALLOWED-UUID-1", "GPU-REPLACE-WITH-ALLOWED-UUID-2"],
+    "max_workers_per_gpu": 1,
+    "min_free_memory_mb": 2048,
+    "worker_memory_mb": 1024,
+    "gpu_poll_interval_seconds": 2,
+    "gpu_sample_window_seconds": 10,
+    "admission_timeout_seconds": 60,
+    "reservation_directory": "/tmp/roboverify-cap-gpu-reservations"
+  }
+}
+```
+
+Use the **same reservation directory** for cooperating batches on this host.
+Different directories do not coordinate worker slots. Load is an admission
+signal, not permission to use someone else's GPU. Auto mode requires working
+NVML and a verified mapping; `fixed` accepts exactly one explicit UUID and logs
+any monitoring limitation. Both modes enforce shared worker slots. The installed
+EGL mapper supports the shim's eight-device enumeration prefix and requires the
+persistent device UUID extension; it fails explicitly on unsupported mappings.
+
+```bash
+.venv/bin/python -m synthesis.cap.batch --config batch.json --directory runs/cap-my-batch
+.venv/bin/python -m synthesis.cap.batch --directory runs/cap-my-batch --resume
+```
+
+This example schedules 30 trials. Every trial owns a fresh worker process, and
+its GPU assignment remains fixed through recovery. Existing per-trial budgets
+and shared request controls still apply. To retain rate limiting, include the
+existing `transport_control` object in the JSON. API callers can also retain
+`execute_batch(..., dispatch_gate=...)` for quota-aware admission. Keep credentials
+in the provider's environment variable, outside batch configuration.
+
+When no GPU qualifies, trials wait outside their active budgets. After the
+admission timeout, active workers finish and unstarted trials remain pending.
+Resume uses the immutable manifest, skips finished trials, and refuses to launch
+a duplicate while a prior worker remains live. Worker/mapping/launch failures
+remain in the results; they are not automatically replaced.
+
+The batch saves `gpu_samples.jsonl`, `execution_metadata.json`, per-worker
+`gpu_probe.json`, and assignments in schedules, trial summaries, and runner
+configuration. Existing reports retain queue/active time, phase timings, outcome,
+and token accounting. Compare throughput and failures when increasing workers;
+GPU utilization alone is insufficient. See [CaP experiment guidance](AGENTS.md).
+
+For a no-model diagnostic, add a `responses` array of scripted code strings to
+the JSON. The opt-in hardware test additionally checks serial/parallel trajectory
+and video parity; its environment variables and results are documented in
+[Revision 4.1 validation](docs/revision_4_1.md#26-validation).

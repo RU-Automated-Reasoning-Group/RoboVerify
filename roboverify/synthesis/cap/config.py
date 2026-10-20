@@ -97,3 +97,57 @@ class RunConfig:
         validate_prompt_version(self.prompt_version)
         if not math.isfinite(self.audit_timeout) or self.audit_timeout <= 0:
             raise ValueError("Audit timeout must be positive")
+
+
+@dataclass
+class GPUConfig:
+    """Optional batch resource policy; UUIDs confer permission, load does not."""
+
+    gpu_allowlist: list[str]
+    reservation_directory: str
+    gpu_policy: str = "auto"
+    max_workers_per_gpu: int = 1
+    min_free_memory_mb: float = 0
+    worker_memory_mb: float = 0
+    gpu_poll_interval_seconds: float = 2
+    gpu_sample_window_seconds: float = 10
+    admission_timeout_seconds: float = 60
+
+    def __post_init__(self):
+        if self.gpu_policy not in {"fixed", "auto"}:
+            raise ValueError("gpu_policy must be fixed or auto")
+        if (
+            not self.gpu_allowlist
+            or len(set(self.gpu_allowlist)) != len(self.gpu_allowlist)
+            or any(
+                not re.fullmatch(
+                    r"GPU-[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}", u
+                )
+                for u in self.gpu_allowlist
+            )
+        ):
+            raise ValueError("gpu_allowlist must contain unique physical GPU UUIDs")
+        if self.gpu_policy == "fixed" and len(self.gpu_allowlist) != 1:
+            raise ValueError("Fixed mode requires exactly one GPU UUID")
+        if not self.reservation_directory:
+            raise ValueError("A shared reservation_directory is required")
+        if type(self.max_workers_per_gpu) is not int or self.max_workers_per_gpu < 1:
+            raise ValueError("max_workers_per_gpu must be a positive integer")
+        for name in (
+            "min_free_memory_mb",
+            "worker_memory_mb",
+            "gpu_poll_interval_seconds",
+            "gpu_sample_window_seconds",
+            "admission_timeout_seconds",
+        ):
+            value = getattr(self, name)
+            if not math.isfinite(value) or value < 0:
+                raise ValueError(f"Invalid GPU setting: {name}")
+        if self.gpu_poll_interval_seconds <= 0 or self.admission_timeout_seconds <= 0:
+            raise ValueError("GPU polling and admission timeout must be positive")
+        if self.gpu_policy == "auto" and (
+            self.min_free_memory_mb <= 0 or self.worker_memory_mb <= 0
+        ):
+            raise ValueError(
+                "Auto mode requires measured memory headroom and worker reservation"
+            )

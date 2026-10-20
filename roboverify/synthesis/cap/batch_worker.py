@@ -8,11 +8,37 @@ from pathlib import Path
 from .batch import atomic_json
 from .config import ModelConfig, RunConfig
 from .llm import HTTPModel, ScriptedModel
-from .runner import run
 
 
 def main(path):
     spec = json.loads(Path(path).read_text())
+    assignment = spec.get("gpu_assignment")
+    if assignment:
+        from .gpu_scheduler import initialize_worker, rendering_probe
+
+        try:
+            evidence = initialize_worker(assignment, path)
+            if not spec.get("fixture"):
+                evidence["render_probe"] = rendering_probe()
+            else:
+                evidence["render_probe"] = "skipped: non-rendering fixture"
+            atomic_json(Path(path).with_name("gpu_probe.json"), evidence)
+        except Exception as exc:
+            atomic_json(
+                Path(path).with_name("worker_result.json"),
+                {
+                    "status": "gpu_initialization_failed",
+                    "success": False,
+                    "reason": f"{type(exc).__name__}: {exc}",
+                    "model_calls": 0,
+                    "known_tokens": 0,
+                    "gpu_assignment": assignment,
+                },
+            )
+            raise
+    # Device assignment and mapping checks precede imports of trial machinery.
+    from .runner import run
+
     config = RunConfig(**spec["run_config"])
     model = ModelConfig(**spec["model_config"])
     backend = (
@@ -52,6 +78,7 @@ def main(path):
             "job_id": spec["id"],
             "trial": spec["trial"],
             "transport_control": spec.get("transport_control"),
+            "gpu_assignment": assignment,
         },
     )
     atomic_json(Path(path).with_name("worker_result.json"), result)

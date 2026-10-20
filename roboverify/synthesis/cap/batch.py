@@ -14,7 +14,7 @@ from collections import defaultdict
 from dataclasses import asdict
 from pathlib import Path
 
-from .config import ModelConfig, RunConfig
+from .config import GPUConfig, ModelConfig, RunConfig
 
 METHODS = ("cap_google_baseline", "cap_method_1", "cap_method_2")
 MODES = ("dsl_only", "coordinate_predicates")
@@ -44,6 +44,7 @@ def create_batch(
     fixture=False,
     recovery_variants=None,
     transport_control=None,
+    gpu_config=None,
 ):
     directory = Path(directory).resolve()
     if directory.exists():
@@ -70,6 +71,13 @@ def create_batch(
         or any(type(v) is not bool for v in recovery_variants)
     ):
         raise ValueError("Recovery variants must be unique Boolean settings")
+    if gpu_config is not None:
+        gpu_config = (
+            gpu_config if isinstance(gpu_config, GPUConfig) else GPUConfig(**gpu_config)
+        )
+        gpu_config.reservation_directory = str(
+            Path(gpu_config.reservation_directory).resolve()
+        )
     directory.mkdir(parents=True)
     snapshot = None
     snapshot_hash = None
@@ -119,12 +127,15 @@ def create_batch(
         "schema": "cap-batch-v1",
         "created_epoch": time.time(),
         "max_workers": max_workers,
+        "gpu_config": asdict(gpu_config) if gpu_config else None,
         "schedule_seed": schedule_seed,
         "snapshot_sha256": snapshot_hash,
         "fixture": fixture,
         "scripted": responses is not None,
         "jobs": jobs,
     }
+    for job in jobs:
+        Path(job["run_config"]["output_root"]).mkdir(parents=True)
     atomic_json(directory / "manifest.json", manifest)
     (directory / "manifest.sha256").write_text(
         hashlib.sha256((directory / "manifest.json").read_bytes()).hexdigest() + "\n"
@@ -221,6 +232,8 @@ def collect_job(job, state):
         (path / "report.txt").write_text(RunSummary(run_dir).render() + "\n")
     result["process_status"] = state["status"]
     result["worker_exit_code"] = state.get("exit_code")
+    if state.get("gpu_assignment"):
+        result["gpu_assignment"] = state["gpu_assignment"]
     return result
 
 
@@ -365,6 +378,11 @@ def _execute_batch(directory, *, resume=False, dispatch_gate=None):
             row = collect_job(job, state)
             atomic_json(directory / "trials" / job["id"] / "summary.json", row)
     pending = [j for j in manifest["jobs"] if schedule[j["id"]]["status"] == "pending"]
+    gpu = None
+    if manifest.get("gpu_config") and pending:
+        from .gpu_scheduler import GPUScheduler
+
+        gpu = GPUScheduler(manifest["gpu_config"])
     active = {}
     metadata_path = directory / "execution_metadata.json"
     metadata = (
@@ -378,26 +396,62 @@ def _execute_batch(directory, *, resume=False, dispatch_gate=None):
     )
     metadata["sessions"].append({"started_epoch": time.time(), "resume": resume})
     atomic_json(metadata_path, metadata)
+    blocked_since = None
+    saved_gpu_sample = None
     try:
         while pending or active:
+            monitoring_error = None
+            if gpu:
+                from .gpu_scheduler import GPUUnavailable
+
+                try:
+                    gpu.poll()
+                except GPUUnavailable as exc:
+                    monitoring_error = str(exc)
+                    metadata["gpu_wait_reason"] = monitoring_error
+                    blocked_since = (
+                        time.monotonic() if blocked_since is None else blocked_since
+                    )
+                metadata["gpu_telemetry"] = gpu.telemetry
+                metadata["worker_resource_samples"] = gpu.worker_telemetry
+                if gpu.latest_sample and gpu.latest_sample["epoch"] != saved_gpu_sample:
+                    with (directory / "gpu_samples.jsonl").open("a") as samples:
+                        samples.write(json.dumps(gpu.latest_sample) + "\n")
+                    saved_gpu_sample = gpu.latest_sample["epoch"]
+                atomic_json(metadata_path, metadata)
             admission_blocked = False
             while pending and len(active) < manifest["max_workers"]:
+                if monitoring_error:
+                    break
                 if dispatch_gate is not None and not dispatch_gate(
                     pending[0], [entry[2] for entry in active.values()]
                 ):
                     admission_blocked = True
                     break
-                job = pending.pop(0)
+                job = pending[0]
                 path = directory / "trials" / job["id"]
                 path.mkdir(parents=True, exist_ok=True)
+                assignment = gpu.reserve(path / "job.json") if gpu else None
+                if gpu and assignment is None:
+                    blocked_since = (
+                        time.monotonic() if blocked_since is None else blocked_since
+                    )
+                    metadata["gpu_wait_reason"] = gpu.last_reason
+                    atomic_json(metadata_path, metadata)
+                    break
+                blocked_since = None
+                pending.pop(0)
                 spec = job | {
                     "enqueued_epoch": manifest["created_epoch"],
                     "batch_dir": str(directory),
+                    "gpu_assignment": assignment,
                 }
                 atomic_json(path / "job.json", spec)
                 handle = (path / "worker.log").open("ab")
                 state = schedule[job["id"]]
                 state.update(status="running", pid=None, dispatched_epoch=time.time())
+                if assignment:
+                    state["gpu_assignment"] = assignment
                 atomic_json(directory / "schedule.json", schedule)
                 try:
                     process = subprocess.Popen(
@@ -410,9 +464,16 @@ def _execute_batch(directory, *, resume=False, dispatch_gate=None):
                         stdout=handle,
                         stderr=subprocess.STDOUT,
                         start_new_session=True,
+                        env=(
+                            dict(os.environ, GPUS=str(assignment["egl_index"]))
+                            if assignment
+                            else None
+                        ),
                     )
                 except OSError as exc:
                     handle.close()
+                    if assignment:
+                        gpu.release(assignment["token"])
                     state.update(
                         status="worker_failed",
                         reason=f"Worker launch failed: {exc}",
@@ -427,6 +488,8 @@ def _execute_batch(directory, *, resume=False, dispatch_gate=None):
                     status="running", pid=process.pid, dispatched_epoch=time.time()
                 )
                 active[job["id"]] = (process, handle, job, time.monotonic())
+                if assignment:
+                    gpu.bind(assignment["token"], process.pid)
                 metadata["peak_active_workers"] = max(
                     metadata["peak_active_workers"], len(active)
                 )
@@ -450,6 +513,8 @@ def _execute_batch(directory, *, resume=False, dispatch_gate=None):
                 code = process.poll()
                 if code is not None:
                     handle.close()
+                    if gpu:
+                        gpu.release(schedule[ident]["gpu_assignment"]["token"])
                     state = schedule[ident]
                     state.update(
                         status="completed" if code == 0 else "worker_failed",
@@ -474,7 +539,17 @@ def _execute_batch(directory, *, resume=False, dispatch_gate=None):
             if pending and not active and admission_blocked:
                 # An admission refusal leaves unstarted jobs pending and resumable.
                 break
-            if active:
+            if gpu and pending and not active and blocked_since is not None:
+                if (
+                    time.monotonic() - blocked_since
+                    >= gpu.config.admission_timeout_seconds
+                ):
+                    metadata["pause_reason"] = (
+                        "GPU admission timeout; unstarted trials remain pending"
+                    )
+                    atomic_json(metadata_path, metadata)
+                    break
+            if active or (gpu and pending):
                 time.sleep(0.2)
     finally:
         for ident, (process, handle, job, _) in active.items():
@@ -482,6 +557,8 @@ def _execute_batch(directory, *, resume=False, dispatch_gate=None):
                 os.killpg(process.pid, signal.SIGKILL)
                 process.wait()
             handle.close()
+            if gpu:
+                gpu.release(schedule[ident]["gpu_assignment"]["token"])
             schedule[ident].update(
                 status="interrupted",
                 reason="Parent interrupted; no automatic retry",
@@ -501,3 +578,31 @@ def execute_batch(directory, *, resume=False, dispatch_gate=None):
     with (directory / ".batch.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         return _execute_batch(directory, resume=resume, dispatch_gate=dispatch_gate)
+
+
+def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--directory", required=True)
+    parser.add_argument(
+        "--config", help="JSON containing run_config, model_config, and batch options"
+    )
+    parser.add_argument("--resume", action="store_true")
+    args = parser.parse_args()
+    if args.resume:
+        if args.config:
+            parser.error("Resume uses the immutable manifest; omit --config")
+    else:
+        if not args.config:
+            parser.error("A new batch requires --config")
+        options = json.loads(Path(args.config).read_text())
+        config = RunConfig(**options.pop("run_config"))
+        model = ModelConfig(**options.pop("model_config"))
+        create_batch(args.directory, config, model, **options)
+    summary = execute_batch(args.directory, resume=args.resume)
+    print(json.dumps({"finished": summary["finished"], "planned": summary["planned"]}))
+
+
+if __name__ == "__main__":
+    main()
