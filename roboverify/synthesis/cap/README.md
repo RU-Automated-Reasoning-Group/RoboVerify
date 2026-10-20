@@ -691,4 +691,4 @@ and `model_config`. With three methods, one condition mode, and five trials this
 30 trials. Recovery attempts stay inside their original trial and all usage is accumulated.
 See [configuration, budgets, evidence, and logging](docs/revision_4_failure_recover.md#implementation-and-validation).
 
-The [Revision 4 Haiku comparison](docs/revision_4_recovery_report.md) records 30 corrected live trials, per-trial costs and seven recovery rounds. All 118 CaP tests pass.
+The [Revision 4 Haiku comparison](docs/revision_4_recovery_report.md) records 120 corrected live trials (20 per setting), per-trial costs and 33 recovery rounds. All 118 CaP tests pass.

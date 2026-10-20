@@ -576,14 +576,14 @@ Output replacement Python policy code only, including its top-level invocation.
 
 ## Completed Haiku 5.5 comparison
 
-- [Full results and interpretation](revision_4_recovery_report.md): 30 corrected Stack trials, five per method/recovery setting, `dsl_only`, medium reasoning, 16k response cap, three parallel workers.
+- [Accumulated results and interpretation](revision_4_recovery_report.md): 120 corrected Stack trials, twenty per method/recovery setting (the original five plus fifteen additional), `dsl_only`, medium reasoning, 16k response cap, three parallel workers.
 
 | Method | Recovery off | Recovery on: first attempt | Recovery on: final |
 | --- | ---: | ---: | ---: |
-| Baseline | 1/5 | 2/5 | 5/5 |
-| Method 1 | 3/5 | 3/5 | 5/5 |
-| Method 2 | 2/5 | 5/5 | 5/5 |
+| Baseline | 9/20 | 8/20 | 19/20 |
+| Method 1 | 10/20 | 10/20 | 20/20 |
+| Method 2 | 14/20 | 17/20 | 20/20 |
 
-- Five initially failed trials were repaired, requiring seven recovery rounds in total. Method 2 used no recovery in this sample; its between-group difference comes from independent initial generations.
-- All 37 rollouts restore the same full snapshot. Exact feedback/history, request usage, trajectories and video frame mappings pass artifact audit; all 30 final source audits pass. The corrected build passes all 118 CaP tests.
-- Corrected usage: 348,076 tokens, 47 calls. The CAP-RECOVERY-1 diagnostic batch remains separate; its outcomes and additional usage are disclosed in the report.
+- 24 initially unsuccessful recovery-on trials became successful; 33 additional recovery rounds were used.
+- Both included cohorts use the same corrected implementation, prompt/model settings, budgets and full initial snapshot. The earlier CAP-RECOVERY-1 diagnostic batch remains excluded.
+- Combined reported usage: 1,422,385 tokens and 197 calls. Per-trial usage, attempt artifacts, cohort-specific results and audit evidence are linked in the report.

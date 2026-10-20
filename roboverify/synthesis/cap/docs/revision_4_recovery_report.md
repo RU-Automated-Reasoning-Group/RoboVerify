@@ -1,83 +1,82 @@
-# Revision 4: Haiku 5.5 recovery comparison
+# Revision 4: Haiku 5.5 recovery comparison — 20 trials per setting
 
-- Stack, three blocks; `dsl_only`; `typed_v3`; Haiku 5.5 medium reasoning; 16,384 output tokens per request.
-- Five independent generations per method and recovery setting, on one shared archived scene. Three parallel workers.
-- Recovery permits four extra synthesis/rollout rounds, always starting from the same full initial snapshot. No failed trial was replaced.
-- The initial prompts are byte-identical across settings within each method. Recovery-on adds conservative request reservations, runtime evidence and additional effort. This is not a comparison against matched-cost independent restarts.
+- **120 trials:** the original five corrected trials plus fifteen new trials for each of the six settings.
+- Stack, three blocks, one shared archived initial scene; `dsl_only`; `typed_v3`; Haiku 5.5 medium reasoning; 16,384 output tokens per request; three parallel workers.
+- Both cohorts use the corrected recovery implementation from `df0a42a`. The extension is recorded at `231b368`, whose changes from that implementation are documentation only.
+- All failures are retained. The earlier CAP-RECOVERY-1 diagnostic batch is excluded.
 
-| Method | Recovery off | Recovery on: first attempt | Recovery on: final | Failures recovered | Tokens off | Tokens on | Calls off / on |
+## Accumulated results
+
+| Method | Recovery off | On: first attempt | On: final | Initially failed trials recovered | Tokens off | Tokens on | Calls off / on |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| cap_google_baseline | 1/5 | 2/5 | 5/5 | 3 | 30,252 | 149,142 | 5 / 20 |
-| cap_method_1 | 3/5 | 3/5 | 5/5 | 2 | 31,204 | 52,801 | 5 / 7 |
-| cap_method_2 | 2/5 | 5/5 | 5/5 | 0 | 41,577 | 43,100 | 5 / 5 |
+| Baseline | 9/20 | 8/20 | 19/20 | 11 | 164,348 | 456,633 | 30 / 68 |
+| Method 1 | 10/20 | 10/20 | 20/20 | 10 | 120,686 | 258,352 | 20 / 33 |
+| Method 2 | 14/20 | 17/20 | 20/20 | 3 | 186,554 | 235,812 | 22 / 24 |
 
-Total: 348,076 reported tokens, 47 model calls, 37 prepared attempts, 37 policy rollouts. Provider-reported cost: $0.102141. Reasoning is included in completion usage, not added twice.
+- Recovery benefit is measured from the first attempt to the final outcome within the recovery-on group. Off/on groups use independent model generations; their initial-success difference is not a recovery gain.
+- Recovery receives extra failure observations and additional generation/execution budget. This experiment does not compare against independent restarts at matched cost.
+- Twenty generations per setting on one fixed scene do not establish generalization across new layouts or tasks.
 
-## Recovery details
+## Original and additional cohorts
 
-| Method | Trial | Initial status | Recovery rounds | Final status | Stop reason |
+| Method | Setting | Original five | Additional fifteen | Combined twenty | Final DSL pass |
 | --- | --- | --- | --- | --- | --- |
-| cap_google_baseline | 1 | completed | 0 | completed | success |
-| cap_google_baseline | 2 | primitive_failed | 1 | completed | success |
-| cap_google_baseline | 3 | primitive_failed | 1 | completed | success |
-| cap_google_baseline | 4 | completed | 0 | completed | success |
-| cap_google_baseline | 5 | budget_exhausted | 3 | completed | success |
-| cap_method_1 | 1 | completed | 0 | completed | success |
-| cap_method_1 | 2 | primitive_failed | 1 | completed | success |
-| cap_method_1 | 3 | completed | 0 | completed | success |
-| cap_method_1 | 4 | primitive_failed | 1 | completed | success |
-| cap_method_1 | 5 | completed | 0 | completed | success |
-| cap_method_2 | 1 | completed | 0 | completed | success |
-| cap_method_2 | 2 | completed | 0 | completed | success |
-| cap_method_2 | 3 | completed | 0 | completed | success |
-| cap_method_2 | 4 | completed | 0 | completed | success |
-| cap_method_2 | 5 | completed | 0 | completed | success |
+| Baseline | Recovery off | 1/5 | 8/15 | 9/20 | 18/20 |
+| Baseline | Recovery on | 5/5 | 14/15 | 19/20 | 19/20 |
+| Method 1 | Recovery off | 3/5 | 7/15 | 10/20 | 20/20 |
+| Method 1 | Recovery on | 5/5 | 15/15 | 20/20 | 20/20 |
+| Method 2 | Recovery off | 2/5 | 12/15 | 14/20 | 20/20 |
+| Method 2 | Recovery on | 5/5 | 15/15 | 20/20 | 20/20 |
 
-## Failure inventory
+- [Original corrected 30-trial report](../../../runs/cap-revision4-haiku55/20261019-225124/report.md); [historical five-trial analysis](revision_4_recovery_initial5_report.md).
+- [Additional 90-trial report](../../../runs/cap-revision4-haiku55/20261020-001210-additional15/report.md). New local trial IDs 1–15 correspond to accumulated trial IDs 6–20.
+- [All 120 trials, including each trial’s token usage](../../../runs/cap-revision4-haiku55/20261020-001210-additional15/accumulated/report.md); [all attempt trajectories and videos](../../../runs/cap-revision4-haiku55/20261020-001210-additional15/accumulated/artifacts.md).
 
-Counts below are failed attempts, not independent trials.
+## Recovery outcomes
 
-| Method | Recovery | Status | Reason | Count |
+| Method | Initially unsuccessful, recovery on | Recovered | Final failures | Additional rounds used |
 | --- | --- | --- | --- | --- |
-| cap_google_baseline | off | budget_exhausted | BudgetExceeded: Execution/query step budget exhausted | 1 |
-| cap_google_baseline | off | goal_failed |  | 1 |
-| cap_google_baseline | off | primitive_failed | PrimitiveFailure: Move did not converge within its shared primitive budget | 2 |
-| cap_google_baseline | on | budget_exhausted | BudgetExceeded: Execution/query step budget exhausted | 3 |
-| cap_google_baseline | on | primitive_failed | PrimitiveFailure: Move did not converge within its shared primitive budget | 2 |
-| cap_method_1 | off | primitive_failed | PrimitiveFailure: Move did not converge within its shared primitive budget | 2 |
-| cap_method_1 | on | primitive_failed | PrimitiveFailure: Move did not converge within its shared primitive budget | 2 |
-| cap_method_2 | off | primitive_failed | PrimitiveFailure: Move did not converge within its shared primitive budget | 3 |
+| Baseline | 12 | 11 | 1 | 16 |
+| Method 1 | 10 | 10 | 0 | 13 |
+| Method 2 | 3 | 3 | 0 | 4 |
 
-## Artifact checks
+| Recovery stop reason | Trials |
+| --- | --- |
+| preparation_failure_no_rollout | 1 |
+| success | 59 |
 
-- All 37 recorded starts match the reference full snapshot; all initial prompt hashes match within methods.
-- Every recovery prompt includes the current failure and the required earlier summaries; feedback remains within its recorded bound.
-- Token and call counts reconcile with request/response artifacts across every attempt.
-- Physical/logical goal disagreements: 2. Both criteria and DSL source compliance remain separately recorded.
-- Five samples per group on one scene are exploratory; they do not establish generalization across layouts/tasks.
+### Unsuccessful recovery-enabled trials
 
-[Per-trial report](../../../runs/cap-revision4-haiku55/20261019-225124/report.md) · [Attempt trajectories/videos](../../../runs/cap-revision4-haiku55/20261019-225124/artifacts.md) · [Machine-readable audit](../../../runs/cap-revision4-haiku55/20261019-225124/experiment_audit.json) · [Frozen comparison plan](../../../runs/cap-revision4-haiku55/20261019-225124/comparison_plan.json)
+| Method | Accumulated trial | Status | Reason | Artifacts |
+| --- | --- | --- | --- | --- |
+| Baseline | 12 | failed | SyntaxError: invalid syntax (executed.py, line 1) | [Manifest](../../../runs/cap-revision4-haiku55/20261020-001210-additional15/trials/cap_google_baseline-dsl_only-007-recovery-on/cap/20261020-002049-231b368-cap_google_baseline-recovery-76acf51a/artifacts/trial_001/manifest.json) |
 
-## Interpretation and scope
+- The helper response included prose and Markdown, so Python compilation failed before rollout. Runtime recovery requires an executed policy trajectory; this preparation failure is recorded and remains in the denominator.
 
-- Five initially unsuccessful recovery-on trials became successful: Baseline trials 2 and 3 after one revision each, Baseline trial 5 after three revisions, and Method 1 trials 2 and 4 after one revision each.
-- Method 2's recovery-on group succeeded on all initial attempts. Its difference from recovery-off (2/5 versus 5/5) is therefore **not an observed recovery gain**; the groups use independent model generations.
-- Baseline trial 5 exhausted 10,000 execution/query ticks in its first three rollouts. The fourth rollout succeeded. Its recorded policy text and actual helper bindings differ: earlier generated helpers did not implement the visible inline helper's intended block-selection/placement sequence. The successful revision put the primitive sequence directly in the invoked policy function. This is an observed workflow/source-binding issue, not evidence that a physical primitive alone caused those budget failures.
-- Two unsuccessful terminal states satisfy the relational DSL postcondition but fail the physical goal: Baseline recovery-off trial 2 (`goal_failed`) and Method 2 recovery-off trial 5 (Move nonconvergence). Neither is counted as success. There are no physically successful states with a false DSL postcondition in this batch, so the stricter recovery-on success gate does not change this comparison's outcomes.
-- All 30 final outputs pass the shared DSL checker. Source compliance does not establish task completion or formal verification.
+## Resource accounting
 
-## Implementation and validation
+| Included batch | Reported tokens | Model calls | Known provider cost |
+| --- | --- | --- | --- |
+| Original corrected five per setting | 348,076 | 47 | $0.102141 |
+| Additional fifteen per setting | 1,074,309 | 150 | $0.309952 |
+| **Combined 120 trials** | **1,422,385** | **197** | **$0.412093** |
 
-- Shared recovery defaults off and supports all three methods. Enabled trials permit four recovery rounds, restore the full initial snapshot and create a fresh execution context before each rollout, and accumulate bounded textual failure history.
-- Initial attempt: 50,000 tokens, 12 calls, 600 seconds. Each recovery: 100,000 tokens, 16 calls, 600 seconds. Whole trial: 450,000 tokens, 76 calls, 3,000 seconds. Each rollout retains 10,000 execution/query ticks and 10,000 simulation steps. Per-response output cap: 16,384; feedback cap: 8,192 using a conservative UTF-8 byte bound. Original primitive control limits/tolerances are unchanged.
-- Baseline retains its original execution workflow and post-hoc DSL audit. Optional recovery on DSL noncompliance is implemented but disabled in this experiment.
-- **118 CaP tests pass**, plus the controller regression suite and scripted six-group physical preflight. Additional failure-trigger cases cover normal goal failure, primitive failure, tick exhaustion and unavailable evaluation. All 37 videos have matching frame/state indices; no provider usage is missing.
-- Implementation commits: `555bedf` (shared recovery) and `df0a42a` (freeze feedback history). The corrected batch uses `df0a42a`.
+- 153 prepared attempts, 151 policy rollouts, and 33 additional recovery rounds. Missing provider usage: 0 calls.
+- Usage includes policy, helper, static-repair, transport-retry and recovery requests. Reasoning is included in completion tokens and is not added twice.
+- Initial attempt: 50,000 tokens, 12 calls, 600 seconds. Each recovery: 100,000 tokens, 16 calls, 600 seconds. Whole trial: 450,000 tokens, 76 calls, 3,000 seconds. At most four recovery rounds; 10,000 execution/query ticks and simulation steps per rollout.
+- Feedback limit: 8,192 under the conservative UTF-8 byte bound. Per-request output remains 16,384 tokens. These settings match the original corrected batch.
+
+## Audit and scope
+
+- All 153 attempt starts match the archived full initial snapshot; 151 attempts entered policy rollout. Initial policy prompts match within methods across settings and cohorts. Prepared and delivered recovery feedback match, with correct history counts and serialized bounds. Artifact issues: 0.
+- All 153 saved videos match their trajectory frame/state indices, including the initial-state-only recordings for two preparation failures. Calls and token totals reconcile against request/response artifacts.
+- All 92 successful final policies passed the DSL checker. Baseline has one failed source audit (recovery-off trial 16, which also failed physical execution) and two incomplete preparation outputs (off trial 6 and on trial 12). No successful-but-DSL-invalid final policy was observed.
+- Physical/logical terminal-goal disagreements: 2 across attempts. The physical goal, logical postcondition and source DSL compliance remain separate measurements.
+- Recovery-off preserves the original normal-completion/physical-success metric. Recovery-on additionally requires the shared logical postcondition. Source compliance alone does not establish physical task completion or formal verification.
+- The implementation previously passed 118 CaP tests, controller regressions and the physical recovery preflight. This extension changes neither the implementation nor the experiment configuration.
+- [Machine-readable accumulated results and per-trial audit](../../../runs/cap-revision4-haiku55/20261020-001210-additional15/accumulated/summary.json); [extension configuration and cohort mapping](../../../runs/cap-revision4-haiku55/20261020-001210-additional15/comparison_plan.json); [reproducible artifact-only accumulation script](../../../runs/cap-revision4-haiku55/20261020-001210-additional15/audit_accumulate.py).
 
 ## Excluded diagnostic batch
 
-- The earlier 30-trial batch `20261019-224320` is retained separately and excluded from the tables above. Its artifact audit discovered **CAP-RECOVERY-1**: a shared mutable history list caused the latest failure to be duplicated in the earlier-failure summaries sent to the model.
-- The fix copies history when constructing feedback. Tests now compare the prepared and delivered feedback and verify the exact number of earlier failures in each recovery round. The entire comparison was rerun; no individual trial was selectively replaced.
-- Diagnostic batch: 307,349 tokens, 41 calls, provider-reported cost $0.092757. Corrected batch: 348,076 tokens, 47 calls, $0.102141. Combined actual usage: 655,425 tokens, 88 calls, $0.194898. Only the corrected 30 trials contribute to the main results.
-
-[Excluded diagnostic details](../../../runs/cap-revision4-haiku55/20261019-224320/analysis.md) · [Validation logs](../../../runs/cap-revision4-haiku55/20261019-225124/validation/cap_suite.txt)
+- The 30-trial batch `20261019-224320` remains excluded because of CAP-RECOVERY-1 (the latest failure was duplicated in earlier history). Its results are not included in the 120 trials or usage table above.
+- [Diagnostic evidence](../../../runs/cap-revision4-haiku55/20261019-224320/analysis.md) and the [history fix](revision_4_failure_recover.md#cap-recovery-1-frozen-history-in-delivered-feedback) are preserved.
