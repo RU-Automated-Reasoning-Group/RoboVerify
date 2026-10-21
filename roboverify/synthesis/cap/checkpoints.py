@@ -10,9 +10,16 @@ from .prompt_package import prompt_provenance
 
 class Checkpoints:
     def __init__(
-        self, logger, *, method, condition_mode="dsl_only", prompt_version="legacy_v1"
+        self,
+        logger,
+        *,
+        method,
+        condition_mode="dsl_only",
+        prompt_version="legacy_v1",
+        primitive_prompt=None,
     ):
-        self.provenance = prompt_provenance(prompt_version) | {
+        self.primitive_prompt = primitive_prompt
+        self.provenance = prompt_provenance(prompt_version, primitive_prompt) | {
             "method": method,
             "condition_mode": validate_condition_mode(condition_mode),
         }

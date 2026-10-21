@@ -31,7 +31,7 @@ methods. Baseline modes are prompt-only; method-1 modes are checked:
 - [Revision 3: checker correctness](docs/revision_3.md).
 - [Revision 4: shared failure recovery](docs/revision_4_failure_recover.md).
 - [Revision 4.1: GPU scheduling — implemented](docs/revision_4_1_gpu_scheduling.md).
-- [Revision 4.2: primitive nonconvergence — planned](docs/revision_4_2_fix_primitive_noncovergence.md).
+- [Revision 4.2: configurable primitive prompts and feedback — implemented](docs/revision_4_2_fix_primitive_noncovergence.md).
 - [Revision 4: deferred improvements](docs/revision_4_unimplemented.md).
 - [Revision 5: task expansion plan](docs/revision_5_add_tasks.md).
 - [Revision 6: demonstration input plan](docs/revision_6_add_demonstration.md).
@@ -801,3 +801,41 @@ For a no-model diagnostic, add a `responses` array of scripted code strings to
 the JSON. The opt-in hardware test additionally checks serial/parallel trajectory
 and video parity; its environment variables and results are documented in
 [Revision 4.1 validation](docs/revision_4_1_gpu_scheduling.md#16-validation).
+
+
+## Revision 4.2 primitive prompt and feedback ablations
+
+All methods accept optional `primitive_prompt` and `primitive_feedback` objects
+inside batch JSON `run_config`; see [the configuration and verified contracts](docs/revision_4_2_fix_primitive_noncovergence.md).
+All new Booleans default to false. General API supplements apply to initial,
+recovery, helper, and existing static-repair prompts; they do not change the
+controller or DSL checker. Actual primitive diagnostics are appended only to
+recovery-policy requests following a primitive failure.
+
+The reproducible 220-trial design is provided by:
+
+```bash
+.venv/bin/python -m synthesis.cap.revision42_experiment --directory runs/cap-revision42/NEW_BATCH
+.venv/bin/python -m synthesis.cap.revision42_experiment --directory runs/cap-revision42/EXISTING_BATCH --resume
+.venv/bin/python -m synthesis.cap.revision42_report --directory runs/cap-revision42/EXISTING_BATCH --videos
+```
+
+Use the existing simulator environment setup. The experiment entry point uses
+the declared Stack snapshot and GPU UUID allowlist from its frozen configuration;
+inspect/adapt these explicitly for another host or scene. The four authorized
+credential slots are named `OPENROUTER_API_KEY`, `OPENROUTER_API_KEY_2`,
+`OPENROUTER_API_KEY_3`, and `OPENROUTER_API_KEY_4`. Store their values outside the
+repository. The shared request ledger records environment names only, rotates
+requests under individual pacing/caps, and reserves remaining active-trial call
+allowances before admitting additional trials. Quota-limited admission leaves
+pending trials resumable, without replacing failed trials.
+
+`create_batch(..., experiment_variants=[...])` supports named prompt/feedback
+variants with optional method subsets. Variant overrides are restricted to those
+two configuration groups. Its immutable manifest records the balanced dispatch
+order and unique identities; the parent report separates profiles.
+
+The main/ablation [report](docs/revision_4_2_report.md) includes initial/final
+success, primitive nonconvergence, conditional recovery transitions, per-trial
+tokens and artifact links, plus [plots](docs/plots/). Scripted preflight runs are
+explicitly excluded from the live-trial denominator.

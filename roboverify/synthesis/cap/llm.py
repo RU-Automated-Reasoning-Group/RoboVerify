@@ -86,6 +86,10 @@ class HTTPModel:
             detail = exc.read(8192).decode("utf-8", errors="replace")
             if key:
                 detail = detail.replace(key, "[REDACTED]")
+            for name in getattr(self.opener, "credential_envs", ()):
+                credential = os.environ.get(name)
+                if credential:
+                    detail = detail.replace(credential, "[REDACTED]")
             raise TransportError(
                 f"Model HTTP status {exc.code}: {detail[:1000]}",
                 exc.code == 429 or exc.code >= 500,

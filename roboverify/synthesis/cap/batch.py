@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import random
+import re
 import shutil
 import signal
 import subprocess
@@ -45,6 +46,7 @@ def create_batch(
     recovery_variants=None,
     transport_control=None,
     gpu_config=None,
+    experiment_variants=None,
 ):
     directory = Path(directory).resolve()
     if directory.exists():
@@ -71,6 +73,31 @@ def create_batch(
         or any(type(v) is not bool for v in recovery_variants)
     ):
         raise ValueError("Recovery variants must be unique Boolean settings")
+    variants = experiment_variants or [{"name": "default", "run_config": {}}]
+    if experiment_variants is not None:
+        if not isinstance(experiment_variants, list) or not experiment_variants:
+            raise ValueError("Experiment variants must be a nonempty list")
+        names = [v["name"] for v in variants]
+        if len(set(names)) != len(names) or any(
+            not re.fullmatch(r"[a-z][a-z0-9_]*", n) for n in names
+        ):
+            raise ValueError("Experiment variant names must be unique safe identifiers")
+        for v in variants:
+            allowed = v.get("methods", list(methods))
+            if (
+                not allowed
+                or len(set(allowed)) != len(allowed)
+                or not set(allowed) <= set(methods)
+            ):
+                raise ValueError("Invalid variant methods")
+            if set(v.get("run_config", {})) - {
+                "primitive_prompt",
+                "primitive_feedback",
+            }:
+                raise ValueError(
+                    "Variant overrides are restricted to primitive prompt/feedback settings"
+                )
+            RunConfig(**(asdict(config) | v.get("run_config", {})))
     if gpu_config is not None:
         gpu_config = (
             gpu_config if isinstance(gpu_config, GPUConfig) else GPUConfig(**gpu_config)
@@ -90,8 +117,10 @@ def create_batch(
     jobs = []
     for trial in range(1, trials + 1):
         groups = [
-            (method, mode, recovery)
+            (method, mode, recovery, variant)
+            for variant in variants
             for method in methods
+            if method in variant.get("methods", methods)
             for mode in modes
             for recovery in (
                 recovery_variants
@@ -100,19 +129,26 @@ def create_batch(
             )
         ]
         rng.shuffle(groups)
-        for method, mode, recovery in groups:
+        for method, mode, recovery, variant in groups:
             ident = f"{method}-{mode}-{trial:03d}"
             if recovery_variants is not None:
                 ident += "-recovery-" + ("on" if recovery else "off")
-            job_config = asdict(config) | {
-                "method": method,
-                "condition_mode": mode,
-                "recovery": asdict(config.recovery) | {"enabled": recovery},
-                "output_root": str(directory / "trials" / ident),
-            }
+            if experiment_variants is not None:
+                ident += "-" + variant["name"]
+            job_config = (
+                asdict(config)
+                | variant.get("run_config", {})
+                | {
+                    "method": method,
+                    "condition_mode": mode,
+                    "recovery": asdict(config.recovery) | {"enabled": recovery},
+                    "output_root": str(directory / "trials" / ident),
+                }
+            )
             jobs.append(
                 {
                     "id": ident,
+                    "variant": variant["name"],
                     "trial": trial,
                     "run_config": job_config,
                     "model_config": asdict(model),
@@ -128,6 +164,7 @@ def create_batch(
         "created_epoch": time.time(),
         "max_workers": max_workers,
         "gpu_config": asdict(gpu_config) if gpu_config else None,
+        "experiment_variants": experiment_variants,
         "schedule_seed": schedule_seed,
         "snapshot_sha256": snapshot_hash,
         "fixture": fixture,
@@ -174,6 +211,7 @@ def collect_job(job, state):
         condition_mode=job["run_config"]["condition_mode"],
         trial=job["trial"],
         job_id=job["id"],
+        variant=job.get("variant", "default"),
     )
     if run_dir:
         summary = RunSummary(run_dir)
@@ -252,7 +290,12 @@ def write_report(directory, manifest, schedule):
     groups = defaultdict(list)
     for row in rows:
         groups[
-            (row["method"], row["condition_mode"], row.get("recovery_enabled", False))
+            (
+                row["method"],
+                row["condition_mode"],
+                row.get("recovery_enabled", False),
+                row.get("variant", "default"),
+            )
         ].append(row)
     planned = defaultdict(int)
     for job in manifest["jobs"]:
@@ -261,6 +304,7 @@ def write_report(directory, manifest, schedule):
                 job["run_config"]["method"],
                 job["run_config"]["condition_mode"],
                 job["run_config"].get("recovery", {}).get("enabled", False),
+                job.get("variant", "default"),
             )
         ] += 1
     lines = [
@@ -287,21 +331,27 @@ def write_report(directory, manifest, schedule):
         "Recovery-enabled trials allow four additional rounds (100k tokens, 16 calls, 600 s each), with whole-trial caps from recovery configuration. Per-request output remains capped; all attempts count toward tokens and calls.",
         "All trials use the manifest snapshot; queue waiting is separate from active trial time. Physical success and DSL compliance are separate metrics. Failed/incomplete trials remain in the denominator.",
         "",
-        "| Method | Condition mode | Recovery | First-attempt success | Final success | DSL pass | Finished / planned |",
-        "| --- | --- | --- | --- | --- | --- | --- |",
+        "| Method | Variant | Condition mode | Recovery | First-attempt success | Final success | DSL pass | Finished / planned |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for key, count in sorted(planned.items()):
         data = groups[key]
         lines.append(
-            f"| {key[0]} | {key[1]} | {'on' if key[2] else 'off'} | {sum(r.get('first_attempt_success', r.get('success')) is True for r in data)}/{count} | {sum(r.get('success') is True for r in data)}/{count} | {sum(r.get('dsl_compliance') == 'pass' for r in data)}/{count} | {len(data)}/{count} |"
+            f"| {key[0]} | {key[3]} | {key[1]} | {'on' if key[2] else 'off'} | {sum(r.get('first_attempt_success', r.get('success')) is True for r in data)}/{count} | {sum(r.get('success') is True for r in data)}/{count} | {sum(r.get('dsl_compliance') == 'pass' for r in data)}/{count} | {len(data)}/{count} |"
         )
     lines += [
         "",
-        "| Method | Mode | Recovery | Trial | Status | Success | DSL compliance | # of tokens used | Calls | Recovery rounds | Active s | Queue s | Failure / stop reason |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| Method | Variant | Mode | Recovery | Trial | Status | Success | DSL compliance | # of tokens used | Calls | Recovery rounds | Active s | Queue s | Failure / stop reason |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for row in sorted(
-        rows, key=lambda r: (r["method"], r["condition_mode"], r["trial"])
+        rows,
+        key=lambda r: (
+            r["method"],
+            r.get("variant", "default"),
+            r["condition_mode"],
+            r["trial"],
+        ),
     ):
         token = str(row.get("known_tokens", 0)) + (
             "*" if row.get("unknown_usage_calls", 0) else ""
@@ -317,7 +367,7 @@ def write_report(directory, manifest, schedule):
             else str(row["trial"])
         )
         lines.append(
-            f"| {row['method']} | {row['condition_mode']} | {'on' if row.get('recovery_enabled') else 'off'} | {link} | {row['status']} | {row.get('success')} | {row.get('dsl_compliance','not_available')} | {token} | {row.get('model_calls',0)} | {row.get('recovery_rounds',0)} | {row.get('active_wall_seconds',0):.2f} | {row.get('queue_wait_seconds',0):.2f} | {reason} |"
+            f"| {row['method']} | {row.get('variant', 'default')} | {row['condition_mode']} | {'on' if row.get('recovery_enabled') else 'off'} | {link} | {row['status']} | {row.get('success')} | {row.get('dsl_compliance','not_available')} | {token} | {row.get('model_calls',0)} | {row.get('recovery_rounds',0)} | {row.get('active_wall_seconds',0):.2f} | {row.get('queue_wait_seconds',0):.2f} | {reason} |"
         )
     lines += [
         "",

@@ -149,5 +149,102 @@ class RequestControlTests(unittest.TestCase):
             self.assertEqual(stamp, result_file.stat().st_mtime_ns)
 
 
+class RotatingCredentialTests(unittest.TestCase):
+    def test_rotation_caps_and_artifacts_never_contain_credentials(self):
+        import os
+        import urllib.request
+        from unittest.mock import patch
+
+        from .request_control import RotatingRequestGate
+
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch.dict(
+                os.environ, {"TEST_KEY_A": "secret-one", "TEST_KEY_B": "secret-two"}
+            ),
+        ):
+            path = Path(tmp) / "requests.json"
+            headers = []
+            gate = RotatingRequestGate(
+                path,
+                credential_limits={"TEST_KEY_A": 3, "TEST_KEY_B": 1},
+                request_limit=4,
+                interval_seconds=0,
+                opener=lambda request, timeout: headers.append(
+                    request.get_header("Authorization")
+                ),
+            )
+            for _ in range(4):
+                gate(urllib.request.Request("https://example.invalid"), timeout=1)
+            self.assertEqual(headers[:2], ["Bearer secret-one", "Bearer secret-two"])
+            self.assertEqual(headers[2:], ["Bearer secret-one"] * 2)
+            with self.assertRaises(OSError):
+                gate(urllib.request.Request("https://example.invalid"), timeout=1)
+            state = json.loads(path.read_text())
+            self.assertEqual(state["by_credential"], {"TEST_KEY_A": 3, "TEST_KEY_B": 1})
+            for item in Path(tmp).iterdir():
+                self.assertNotIn("secret-one", item.read_text())
+                self.assertNotIn("secret-two", item.read_text())
+
+    def test_pacing_and_dynamic_quota_caps(self):
+        import os
+        from unittest.mock import patch
+
+        from .request_control import RotatingRequestGate
+
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch.dict(os.environ, {"TEST_KEY_A": "a", "TEST_KEY_B": "b"}),
+        ):
+            path = Path(tmp) / "requests.json"
+            gate = RotatingRequestGate(
+                path,
+                credential_limits={"TEST_KEY_A": 3, "TEST_KEY_B": 3},
+                interval_seconds=1,
+            )
+            self.assertEqual(gate.reserve(1)[1], "TEST_KEY_A")
+            self.assertEqual(gate.reserve(1)[1], "TEST_KEY_B")
+            with self.assertRaises(TimeoutError):
+                gate.reserve(0.01)
+            state = json.loads(path.read_text())
+            self.assertEqual(state["admitted"], 2)
+            state["credential_caps"] = {"TEST_KEY_A": 1, "TEST_KEY_B": 1}
+            path.write_text(json.dumps(state))
+            with self.assertRaises(OSError):
+                gate.reserve(1)
+
+    def test_rotated_key_is_redacted_from_provider_error(self):
+        import os
+        import urllib.error
+        from unittest.mock import patch
+
+        from .llm import HTTPModel, TransportError
+        from .request_control import RotatingRequestGate
+
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch.dict(
+                os.environ, {"TEST_KEY_A": "secret-one", "TEST_KEY_B": "secret-two"}
+            ),
+        ):
+
+            def error(request, timeout):
+                raise urllib.error.HTTPError(
+                    request.full_url, 500, "failed", {}, io.BytesIO(b"bad secret-two")
+                )
+
+            gate = RotatingRequestGate(
+                Path(tmp) / "requests.json",
+                credential_limits={"TEST_KEY_B": 1},
+                interval_seconds=0,
+                opener=error,
+            )
+            model = HTTPModel(ModelConfig(api_key_env="TEST_KEY_A"), opener=gate)
+            with self.assertRaises(TransportError) as caught:
+                model.generate("pass", 1)
+            self.assertNotIn("secret-two", str(caught.exception))
+            self.assertIn("[REDACTED]", str(caught.exception))
+
+
 if __name__ == "__main__":
     unittest.main()

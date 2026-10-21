@@ -69,6 +69,42 @@ class RecoveryConfig:
 
 
 @dataclass
+class PrimitivePromptConfig:
+    explain_target_offsets: bool = False
+    explain_convergence_criteria: bool = False
+    explain_partial_execution: bool = False
+    explain_motion_planning_limits: bool = False
+
+    def __post_init__(self):
+        if any(type(v) is not bool for v in vars(self).values()):
+            raise ValueError("Primitive prompt options must be Boolean")
+
+
+@dataclass
+class PrimitiveFeedbackConfig:
+    target_derivation: bool = False
+    controller_phases: bool = False
+    action_context: bool = False
+    context_lookback: int = 16
+    context_actions: int = 4
+
+    def __post_init__(self):
+        for name in ("target_derivation", "controller_phases", "action_context"):
+            if type(getattr(self, name)) is not bool:
+                raise ValueError("Primitive feedback options must be Boolean")
+        for name in ("context_lookback", "context_actions"):
+            value = getattr(self, name)
+            if type(value) is not int or value < 1 or value > 128:
+                raise ValueError("Primitive context limits must be integers in [1,128]")
+        if self.context_actions > self.context_lookback:
+            raise ValueError("Context action count exceeds its lookback")
+
+    @property
+    def enabled(self):
+        return self.target_derivation or self.controller_phases or self.action_context
+
+
+@dataclass
 class RunConfig:
     method: str = "cap_method_1"
     task: str = "stack"
@@ -87,12 +123,22 @@ class RunConfig:
     max_sim_steps: int = 10000
     prompt_version: str = "legacy_v1"
     recovery: RecoveryConfig = field(default_factory=RecoveryConfig)
+    primitive_prompt: PrimitivePromptConfig = field(
+        default_factory=PrimitivePromptConfig
+    )
+    primitive_feedback: PrimitiveFeedbackConfig = field(
+        default_factory=PrimitiveFeedbackConfig
+    )
     baseline_audit: bool = True
     audit_timeout: float = 10.0
 
     def __post_init__(self):
         if isinstance(self.recovery, dict):
             self.recovery = RecoveryConfig(**self.recovery)
+        if isinstance(self.primitive_prompt, dict):
+            self.primitive_prompt = PrimitivePromptConfig(**self.primitive_prompt)
+        if isinstance(self.primitive_feedback, dict):
+            self.primitive_feedback = PrimitiveFeedbackConfig(**self.primitive_feedback)
         validate_condition_mode(self.condition_mode)
         validate_prompt_version(self.prompt_version)
         if not math.isfinite(self.audit_timeout) or self.audit_timeout <= 0:

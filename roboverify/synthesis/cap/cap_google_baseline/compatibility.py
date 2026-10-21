@@ -137,6 +137,7 @@ def module_config(
     condition_mode="dsl_only",
     prompt_version="legacy_v1",
     higher_tolerance=0.001,
+    primitive_prompt=None,
 ):
     return {
         "prompt_text": package(prompt_version)["baseline_prefixes"][
@@ -147,6 +148,7 @@ def module_config(
             condition_mode,
             prompt_version=prompt_version,
             higher_tolerance=higher_tolerance,
+            primitive_prompt=primitive_prompt,
         ),
         "query_prefix": "\n# " if helper else "\n# Instruction: ",
         "query_suffix": "",

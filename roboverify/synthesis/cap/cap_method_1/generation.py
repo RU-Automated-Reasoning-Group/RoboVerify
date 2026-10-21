@@ -25,6 +25,7 @@ def prompt(
     prompt_version="legacy_v1",
     higher_tolerance=0.001,
     unit="policy",
+    primitive_prompt=None,
     **fields,
 ):
     data = package(prompt_version)
@@ -40,6 +41,7 @@ def prompt(
                 condition_mode,
                 prompt_version=prompt_version,
                 higher_tolerance=higher_tolerance,
+                primitive_prompt=primitive_prompt,
             ),
             **fields,
         )
@@ -62,6 +64,7 @@ class Generator:
     ):
         self.prompt_version = validate_prompt_version(prompt_version)
         self.higher_tolerance = higher_tolerance
+        self.primitive_prompt = checkpoints.primitive_prompt
         if checkpoints.prompt_version != prompt_version:
             raise ValueError("Checkpoint and generator prompt versions differ")
         self.condition_mode = validate_condition_mode(condition_mode)
@@ -85,6 +88,7 @@ class Generator:
                 "policy",
                 prompt_version=self.prompt_version,
                 higher_tolerance=self.higher_tolerance,
+                primitive_prompt=self.primitive_prompt,
                 api_names=self.api_names,
                 condition_mode=self.condition_mode,
                 instruction=instruction,
@@ -191,6 +195,7 @@ class Generator:
                             "helper",
                             prompt_version=self.prompt_version,
                             higher_tolerance=self.higher_tolerance,
+                            primitive_prompt=self.primitive_prompt,
                             unit=call.name,
                             api_names=self.api_names,
                             condition_mode=self.condition_mode,
@@ -265,6 +270,7 @@ class Generator:
                         "repair",
                         prompt_version=self.prompt_version,
                         higher_tolerance=self.higher_tolerance,
+                        primitive_prompt=self.primitive_prompt,
                         unit=unit,
                         api_names=self.api_names,
                         condition_mode=self.condition_mode,

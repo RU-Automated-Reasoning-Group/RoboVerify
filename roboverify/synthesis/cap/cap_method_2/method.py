@@ -45,6 +45,7 @@ class Method2:
             condition_mode,
             prompt_version=prompt_version,
             higher_tolerance=higher_tolerance,
+            primitive_prompt=checkpoints.primitive_prompt,
         )
         self.runtime = Runtime(adapter, budget, logger, condition_mode)
         self.generator = self  # Same runner generate-only interface as Method 1.

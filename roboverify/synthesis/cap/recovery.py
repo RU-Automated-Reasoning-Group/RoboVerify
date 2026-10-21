@@ -261,7 +261,7 @@ def goal_evidence(trace):
     }
 
 
-def select_relevant_evidence(record, earlier, token_limit):
+def select_relevant_evidence(record, earlier, token_limit, primitive_feedback=None):
     """Required failure context first, then recent supporting evidence by event ID."""
     trace, events = record["trace"], record["events"]
     if not record["rolled_out"]:
@@ -353,8 +353,28 @@ def select_relevant_evidence(record, earlier, token_limit):
         required["missing_fields"].append(
             "exception location: not applicable for normal goal failure"
         )
+    # Preserve the legacy path exactly unless an explicit enrichment is selected.
+    from .config import PrimitiveFeedbackConfig
+    from .primitive_feedback import build_diagnostics
+
+    options = primitive_feedback or PrimitiveFeedbackConfig()
+    diagnostics, action_candidates = build_diagnostics(
+        record, adapter["object_handles"], options
+    )
+    if diagnostics is not None:
+        required["primitive_diagnostics"] = diagnostics
     if token_bound(encoded(required)) > token_limit:
         return {"ready": False, "reason": "required_feedback_exceeds_token_limit"}
+    if diagnostics is not None and "action_context" in diagnostics:
+        context = diagnostics["action_context"]
+        for candidate in action_candidates:
+            context["actions"].append(candidate)
+            context["omitted_candidate_ids"].remove(candidate["action_id"])
+            if token_bound(encoded(required)) + 768 > token_limit:
+                context["actions"].remove(candidate)
+                context["omitted_candidate_ids"].append(candidate["action_id"])
+        context["actions"].sort(key=lambda item: item["action_id"])
+        context["omitted_candidate_ids"].sort()
     optional = [
         e
         for e in events
@@ -598,7 +618,7 @@ def run_recovery(config, model_config, **kwargs):
 
             with using_higher_tolerance(config.higher_tolerance):
                 feedback = select_relevant_evidence(
-                    record, history, cfg.feedback_tokens
+                    record, history, cfg.feedback_tokens, config.primitive_feedback
                 )
             logger.artifact(f"rounds/{index:03d}/feedback.json", feedback)
             if not feedback["ready"]:

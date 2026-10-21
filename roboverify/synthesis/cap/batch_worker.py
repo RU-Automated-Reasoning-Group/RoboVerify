@@ -45,11 +45,16 @@ def main(path):
         ScriptedModel(spec["responses"]) if spec.get("responses") is not None else None
     )
     if backend is None and spec.get("transport_control"):
-        from .request_control import SharedRequestGate
+        from .request_control import RotatingRequestGate, SharedRequestGate
 
+        gate = (
+            RotatingRequestGate
+            if "credential_limits" in spec["transport_control"]
+            else SharedRequestGate
+        )
         backend = HTTPModel(
             model,
-            opener=SharedRequestGate(**spec["transport_control"], job_id=spec["id"]),
+            opener=gate(**spec["transport_control"], job_id=spec["id"]),
         )
     factory = None
     if spec.get("fixture"):
@@ -77,6 +82,7 @@ def main(path):
             "batch_dir": spec["batch_dir"],
             "job_id": spec["id"],
             "trial": spec["trial"],
+            "variant": spec.get("variant", "default"),
             "transport_control": spec.get("transport_control"),
             "gpu_assignment": assignment,
         },

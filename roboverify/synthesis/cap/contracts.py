@@ -154,8 +154,11 @@ def api_description(
     *,
     prompt_version="legacy_v1",
     higher_tolerance=0.001,
+    primitive_prompt=None,
 ):
     validate_condition_mode(condition_mode)
     from .prompt_package import render_api
 
-    return render_api(names, condition_mode, prompt_version, higher_tolerance)
+    return render_api(
+        names, condition_mode, prompt_version, higher_tolerance, primitive_prompt
+    )

@@ -4,6 +4,7 @@ import inspect
 import itertools
 import math
 import uuid
+from dataclasses import asdict
 
 from .contracts import (
     ACTIONS,
@@ -163,7 +164,15 @@ class RoboVerifyAdapter:
             )
         else:
             instruction = ReleaseByName(*aliases, target_z=finite(args[1]))
-        event = self.logger.emit("primitive_start", primitive=name, arguments=args)
+        contract = {}
+        if getattr(self.logger, "primitive_phase_feedback_enabled", False):
+            contract = {
+                "controller_config": asdict(instruction.control),
+                "step_limit": instruction.limit,
+            }
+        event = self.logger.emit(
+            "primitive_start", primitive=name, arguments=args, **contract
+        )
         previous_observer = getattr(self.env, "_cap_control_event", None)
 
         def observe_control(**fields):

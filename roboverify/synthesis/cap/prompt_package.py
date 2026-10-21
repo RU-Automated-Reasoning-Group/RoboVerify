@@ -26,14 +26,17 @@ def package(version):
     return json.loads(package_bytes(version))
 
 
-def prompt_provenance(version):
+def prompt_provenance(version, primitive_prompt=None):
+    from .primitive_prompts import provenance
+
     return {
+        **provenance(primitive_prompt),
         "prompt_version": validate_prompt_version(version),
         "prompt_package_sha256": hashlib.sha256(package_bytes(version)).hexdigest(),
     }
 
 
-def render_api(names, condition_mode, version, higher_tolerance):
+def render_api(names, condition_mode, version, higher_tolerance, primitive_prompt=None):
     data = package(version)
     if version == "legacy_v1":
         description = "\n".join(
@@ -51,4 +54,11 @@ def render_api(names, condition_mode, version, higher_tolerance):
         )
         description += data["api_footer"] + data["examples"]
         description = description.rstrip("\n")
-    return description + "\n" + data["condition_rules"][condition_mode].rstrip("\n")
+    from .primitive_prompts import render
+
+    return (
+        description
+        + render(primitive_prompt)
+        + "\n"
+        + data["condition_rules"][condition_mode].rstrip("\n")
+    )

@@ -145,7 +145,7 @@ def run_once(
     if not math.isfinite(queue_wait_seconds) or queue_wait_seconds < 0:
         raise ValueError("Queue wait must be finite and nonnegative")
     validate_condition_mode(config.condition_mode)
-    provenance = prompt_provenance(config.prompt_version)
+    provenance = prompt_provenance(config.prompt_version, config.primitive_prompt)
     if config.method not in {"cap_method_1", "cap_method_2", "cap_google_baseline"}:
         raise ValueError("Unknown CaP method")
     if config.timeout <= 0 or config.max_attempts < 1:
@@ -203,6 +203,9 @@ def run_once(
         capture_stdout=capture_stdout,
     )
     logger = CapLogger(run_log.run_dir, run=run_log, timings=budget.timings)
+    logger.primitive_phase_feedback_enabled = (
+        config.primitive_feedback.controller_phases
+    )
     logger.context.update(recovery_round=(batch_context or {}).get("recovery_round", 0))
     if recovery_feedback is not None:
         logger.artifact("recovery_feedback.json", recovery_feedback)
@@ -211,7 +214,23 @@ def run_once(
         method=config.method,
         condition_mode=config.condition_mode,
         prompt_version=config.prompt_version,
+        primitive_prompt=config.primitive_prompt,
     )
+    from .primitive_prompts import BLOCKS
+    from .primitive_prompts import VERSION as PRIMITIVE_PROMPT_VERSION
+
+    if (
+        any(asdict(config.primitive_prompt).values())
+        or config.primitive_feedback.enabled
+    ):
+        logger.artifact(
+            "primitive_prompt_package.json",
+            {
+                "version": PRIMITIVE_PROMPT_VERSION,
+                "blocks": BLOCKS,
+                "flags": asdict(config.primitive_prompt),
+            },
+        )
     logger.artifact("prompt_package.json", package(config.prompt_version))
     model = LoggedModel(
         backend or HTTPModel(model_config),
