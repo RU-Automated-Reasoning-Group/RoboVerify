@@ -1,131 +1,18 @@
-# Revision 4.1: recovery history and CaP GPU scheduling
+# Revision 4.1: CaP GPU scheduling
 
-- **Status:** Section 1: **not implemented yet**. Section 2: **implemented** (optional CaP GPU scheduling).
-- **Goal:** let the synthesizer compare earlier failed programs with the latest program, so it can recognize recurring mistakes and avoid undoing useful corrections.
-- **Scope:** the shared recovery module used by Baseline, Method 1, and Method 2.
-- **Implemented scheduling scope:** GPU selection and parallel-trial resource scheduling entirely within `synthesis/cap/`; see Section 2.
-- **References:** [Revision 4](revision_4_failure_recover.md), [MiniMax Baseline trial 6 case study](case_study/revision_4_failure_recovery_cases/minimax_baseline_dsl_only_trial_006.md).
+- **Status: implemented.** This document retains the implemented scheduling feature and its validation results.
+- **Scope:** GPU selection, resource reservations, and parallel trial scheduling entirely within `synthesis/cap/`.
+- **Workflow:** each later `4.x` revision addresses one focused problem, with its own implementation and validation before proceeding to the next. Splitting these documents changes no runtime behavior or saved experiment result.
 
-## 1. Recovery history
-
-**Status: not implemented yet.** Existing recovery-history prompts remain unchanged.
-
-### 1.1 Motivation and evidence
-
-Current recovery prompts contain the latest failed program and selected execution evidence, plus short summaries of older failures. Older summaries include a candidate hash, status, reason, and goal/compliance outcomes, but do not include the corresponding source code. A hash identifies an artifact; it does not let the model reconstruct that program.
-
-The case study shows a sequence of unsuccessful revisions: an impossible selection condition, an uninitialized variable, unsuccessful placement, and two different errors in calculating the Z target for `Move`. The last two rounds both report Move nonconvergence, but their formulas and targets differ. This supports investigating repeated or related mistakes; it does not establish that all repeated failure labels have the same root cause or that missing historical code caused the failures.
-
-Including historical programs is a reasonable next change because it gives the model the missing connection between an earlier failure and the code that produced it. Whether this reduces recurrence or improves recovery success remains an experimental question. Extra source can also increase input cost and distract from the latest failure.
-
-### 1.2 Proposed information contract
-
-| Information in a recovery request | Current Revision 4 | Proposed historical-source profile |
-| --- | --- | --- |
-| Original task, API, and condition-mode rules | Included | Included |
-| Latest failed executed program and attributable helper bindings | Included | Included |
-| Latest failure's selected events, keyframes, and goal evidence | Included | Included |
-| Earlier failed programs that actually entered rollout | Not included | Include complete executed-source bundles |
-| Earlier failure status, reason, and goal/compliance outcomes | Included as summaries | Retain and associate with the corresponding source bundle |
-| Earlier failure locations | Not guaranteed in older summaries | Include source unit/checkpoint and line when recorded |
-| Full earlier trajectories, videos, previous prompts, and model reasoning | Not included | Keep in artifacts; do not replay them into the prompt |
-
-- Include all earlier failed rollout attempts from the **same trial**, in chronological order. At recovery round 4, the prompt contains the failed programs from rounds 0–3, with round 3 receiving the latest detailed evidence.
-- An attempt that began top-level execution but failed before its first primitive still counts, such as the `NameError` in trial 6. A generated candidate rejected before rollout is not a historical executed program.
-- Associate each attempt with its round, candidate identity, source/checkpoint identities, observed failure, failure location, and terminal task/compliance results. Keep observed failures separate from inferred diagnoses.
-- Retain complete source units containing executed code, including branches that were not taken. Do not reconstruct a program only from executed statement fragments.
-- Preserve helper definitions and the bindings relevant to execution. For Baseline, include attributable execution-time source versions when a later helper definition would otherwise hide an earlier executed version. Do not merge different helper versions into a fictitious single executable. This debugging record does not change the final-output-only DSL compliance metric.
-- Identical source units may be serialized once in an inline source registry and referenced by multiple attempts. Every referenced body must be present in that same prompt; a hash or filesystem path alone is insufficient.
-- Keep repeated candidates in the attempt history even when their source bodies are deduplicated. Different outcomes must remain attributable to their respective rollouts.
-
-### 1.3 Configuration and prompt structure
-
-Add a configurable recovery-history profile so the original behavior remains available for ablation. The following names are proposed, not existing configuration fields:
-
-| Proposed setting | Meaning |
-| --- | --- |
-| `recovery_history_mode = summaries_only` | Preserve Revision 4: latest source and evidence, earlier failure summaries |
-| `recovery_history_mode = executed_programs` | Latest source and evidence, plus every earlier failed rollout's source bundle and associated failure summary |
-
-Keep `summaries_only` as the compatibility default until the comparison is evaluated. The history setting applies only when recovery is enabled and must work through the same shared API for all three methods. Generation workflows and their existing static checks remain unchanged.
-
-Suggested request structure:
-
-```text
-ORIGINAL TASK, API, AND CONDITION RULES
-{existing_initial_prompt}
-
-RECOVERY INSTRUCTIONS
-Revise the policy to complete the original task.
-Every replacement starts from the same restored initial state.
-Historical programs and trajectories are debugging evidence, not executable state.
-Compare the latest program with earlier failed programs before revising it.
-Use recorded evidence to assess whether an edit repeats an earlier mistake
-or removes a useful correction. Do not infer a shared cause from a failure label alone.
-Return a complete replacement policy under the existing output rules.
-
-EXECUTED SOURCE REGISTRY
-{complete_source_units_and_attributable_binding_versions}
-
-EARLIER FAILED ATTEMPTS — CHRONOLOGICAL
-{round, source_references, bindings, failure_status, failure_reason,
- failure_source_location, task_outcomes, dsl_compliance, duplicate_identity}
-
-LATEST FAILED ATTEMPT
-{latest_round_and_source_references}
-{latest_selected_execution_evidence_and_goal_results}
-```
-
-The latest program appears once in the source registry and is explicitly identified. Earlier history is placed before the latest detailed evidence so the current failure remains close to the output instruction. Do not request hidden reasoning or add a new diagnosis-generation model call. Any optional source diff must be deterministic and supplemental to complete source, not a substitute for it.
-
-### 1.4 Context limits and accounting
-
-- Retain the **16,384 output-token cap per request** for the initial comparison. This change primarily increases input size; it does not by itself justify a larger output cap.
-- Keep the current **8,192 feedback evidence bound** for selected evidence and failure summaries. Historical source bodies need a separately configurable allowance, alongside the existing current-source context. Measure saved source sizes before choosing that allowance; no new numeric source limit is settled by this document.
-- Count the entire serialized request—including source registry, histories, task/API text, and formatting—against the model context window and per-round/cumulative token reservations. Do not treat historical code as free context.
-- Record the counting method. The current implementation uses a conservative UTF-8 byte upper bound for reservations; this is not a measured provider token count.
-- Fit required source and failure associations first, then add optional execution evidence within its existing budget. Deduplicate identical source bodies without dropping attempt records.
-- If all required historical source cannot fit, record an explicit history/context-budget stop. Do not silently truncate code or fall back to summaries while labeling the request `executed_programs`.
-- Initially retain the existing recovery count and overall effort limits. If source inclusion makes those limits bind more often, report that effect and evaluate any budget increase as a separately configured comparison.
-
-### 1.5 Planned implementation and validation
-
-| Area | Planned change | Acceptance check |
-| --- | --- | --- |
-| Failure collection and history storage | Preserve immutable per-attempt executed-source bundles, bindings, and failure locations | Later edits or helper redefinitions cannot mutate older records |
-| Shared prompt builder | Serialize the chosen history profile, inline source registry, and attempt-to-source associations | The fourth recovery request includes source for rounds 0–3; every reference resolves inside the prompt |
-| Baseline source attribution | Preserve relevant source/binding versions observed during execution | A final helper version cannot overwrite evidence of an earlier executed version |
-| Budget accounting | Include historical source in request/context and round/trial reservations | Oversized history stops explicitly; code is never silently truncated |
-| Logging | Save history mode, included rounds, source hashes, bindings, serialized-size accounting, and exact delivered payload | Prepared history matches the actual next model request |
-| Compatibility | Retain the existing summary profile and recovery-off behavior | No historical-source injection when the feature is not selected |
-
-Use synthetic regression tests for history immutability, source deduplication, repeated candidates, helper-version attribution, pre-primitive exceptions, missing required artifacts, and context-budget exhaustion. Keep missing evidence explicit; do not invent code, bindings, or failure locations.
-
-### 1.6 Proposed experiment
-
-Compare `summaries_only` and `executed_programs` for all three methods with recovery enabled. Hold the model, reasoning effort, output cap, task, condition mode, initial state, and maximum recovery count fixed. Run the batch settings in parallel under the shared request limits.
-
-For a focused recovery comparison, branch both profiles from the same saved initial failed program and its exact initial state. Record this as a recovery comparison from a shared candidate, separate from a fresh end-to-end generation experiment. It controls the starting policy without claiming later stochastic generations are identical.
-
-| Measure | Purpose |
-| --- | --- |
-| Final task success and recovery rounds | Determine whether historical source improves recovery |
-| Recurrence of an already observed code defect | Test the motivation directly; require source/evidence review, not just matching failure labels |
-| Reintroduction of a previously corrected defect | Detect regressions between revisions |
-| Repeated source candidates | Distinguish identical-program retries from different programs with similar failures |
-| Input/output tokens, calls, and elapsed time | Quantify the additional cost |
-| History/context/round-budget stops | Detect whether the larger input reduces the opportunity to recover |
-| DSL compliance and task outcomes separately | Preserve the distinction between valid source and successful execution |
-
-The trial 6 case study is a diagnostic example, not sufficient evidence of an improvement. No implementation, rerun, or experiment is authorized by this planning document alone.
-
-## 2. GPU scheduling
+## 1. GPU scheduling
 
 **Status: implemented.** GPU admission is optional and applies to all three
 methods, with recovery enabled or disabled. It is implemented entirely within
-`synthesis/cap/`. Section 1 remains **not implemented yet**.
+`synthesis/cap/`. Primitive-failure work is planned separately in
+[Revision 4.2](revision_4_2_fix_primitive_noncovergence.md); other deferred work is
+kept in the [unimplemented backlog](revision_4_unimplemented.md).
 
-### 2.1 Scope and architecture
+### 1.1 Scope and architecture
 
 MuJoCo physics and primitive control remain on CPU; GPUs provide offscreen
 rendering. The scheduler targets trial throughput across model requests,
@@ -159,7 +46,7 @@ No simulator package, primitive API, CFG module, shared experiment reporter,
 existing entry script, vendored Google core, or dependency is changed.
 Omitting `gpu_config` preserves the existing batch execution path.
 
-### 2.2 Configuration and admission
+### 1.2 Configuration and admission
 
 Pass `gpu_config` to `create_batch(...)`, or include it in the JSON configuration
 for the new batch CLI. See the [README usage example](../README.md#gpu-scheduled-parallel-experiments).
@@ -202,7 +89,7 @@ Tune memory allowances and worker counts from measurements. The tested values
 are diagnostic settings, not universal production defaults. Slots coordinate
 participating schedulers; they do not reserve hardware against other lab users.
 
-### 2.3 Atomic reservations and failure handling
+### 1.3 Atomic reservations and failure handling
 
 `reservation_directory/scheduler.lock` protects a host-specific
 `reservations.json`. Each reservation records the trial's absolute job path,
@@ -228,7 +115,7 @@ The existing batch lock prevents two parents from dispatching the same manifest.
 The shared GPU lock coordinates different batches. Request pacing and wire-call
 limits remain separate controls and continue to apply inside each worker.
 
-### 2.4 Device mapping and initialization
+### 1.4 Device mapping and initialization
 
 The installed `mujoco_py` shim enumerates the first eight EGL devices. The mapper
 uses the same enumeration prefix and `EGL_EXT_device_persistent_id` to match each
@@ -252,7 +139,7 @@ and every recovery attempt. Each attempt retains the existing fresh execution
 context and exact initial-state restore. Environment cleanup uses the existing
 runner, and process exit releases the graphics resources.
 
-### 2.5 Budgets, artifacts, and measurements
+### 1.5 Budgets, artifacts, and measurements
 
 Resource admission occurs before the existing active trial budget starts.
 Queue time remains separate. The batch hard deadline, model-call/token limits,
@@ -276,7 +163,7 @@ instantaneous maxima. CPU/RSS/I/O observations cover the worker process, not
 all encoder descendants. Existing rendering and video-finalization timings help
 interpret these measurements. Scheduling itself adds no model tokens.
 
-### 2.6 Validation
+### 1.6 Validation
 
 The validation uses mocked GPU state, isolated subprocesses, scripted model
 responses, and real MuJoCo rendering. No paid model requests are required.

@@ -30,6 +30,9 @@ methods. Baseline modes are prompt-only; method-1 modes are checked:
 - [Shared DSL checker architecture](docs/SHARED-DSL-CHECKER.md).
 - [Revision 3: checker correctness](docs/revision_3.md).
 - [Revision 4: shared failure recovery](docs/revision_4_failure_recover.md).
+- [Revision 4.1: GPU scheduling — implemented](docs/revision_4_1_gpu_scheduling.md).
+- [Revision 4.2: primitive nonconvergence — planned](docs/revision_4_2_fix_primitive_noncovergence.md).
+- [Revision 4: deferred improvements](docs/revision_4_unimplemented.md).
 - [Revision 5: task expansion plan](docs/revision_5_add_tasks.md).
 - [Revision 6: demonstration input plan](docs/revision_6_add_demonstration.md).
 
@@ -710,9 +713,9 @@ DSL checking, recovery prompts, controller behavior, or existing model budgets.
 
 ## GPU-scheduled parallel experiments
 
-[Revision 4.1 Section 2](docs/revision_4_1.md#2-gpu-scheduling) is implemented.
+[Revision 4.1 Section 1](docs/revision_4_1_gpu_scheduling.md#1-gpu-scheduling) is implemented.
 GPU scheduling is optional and works with all three methods and recovery on/off.
-Section 1's historical-program prompt injection is **not implemented yet**.
+[Revision 4.2](docs/revision_4_2_fix_primitive_noncovergence.md) is the focused primitive-nonconvergence plan (**not implemented yet**). Historical-program injection and other proposals are retained in the [deferred backlog](docs/revision_4_unimplemented.md).
 
 From `roboverify/`, configure the existing simulator environment as described in
 [root AGENTS.md](../../../AGENTS.md), then inspect physical identities and verified
@@ -797,4 +800,4 @@ GPU utilization alone is insufficient. See [CaP experiment guidance](AGENTS.md).
 For a no-model diagnostic, add a `responses` array of scripted code strings to
 the JSON. The opt-in hardware test additionally checks serial/parallel trajectory
 and video parity; its environment variables and results are documented in
-[Revision 4.1 validation](docs/revision_4_1.md#26-validation).
+[Revision 4.1 validation](docs/revision_4_1_gpu_scheduling.md#16-validation).

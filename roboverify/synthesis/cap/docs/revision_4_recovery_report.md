@@ -263,7 +263,7 @@ These are conditional repair outcomes on each model’s own initially failed pro
 
 - **Basic motion evidence is present:** all 185 primitive-failure feedbacks contain arguments, a controller target, and a residual. Their continued failures cannot generally be explained as missing the exception or target. However, the model must reconstruct reference coordinates, offsets, carried-block/gripper geometry, and the implications of the observed motion from separate fields.
 - **Loop progress is poorly summarized:** among 92 execution-budget feedbacks, 61 underlying logs contain multiple `loop_iteration` events, but **0/92 feedbacks contain more than one**. Baseline records Python events instead of this checked-interpreter event, so its repeated loops need separate normalization. The current error/event counts do not summarize which object was repeatedly selected or whether goal relations improved across iterations. None of these feedback JSON objects includes an explicit `execution_ticks`, `max_execution_ticks`, or `budget_exhausted_by` field.
-- **Old programs are missing:** 169 feedbacks contain older-failure summaries; none includes the corresponding older program bodies. All requests contain the latest attributable source bundle. This supports the [historical-program proposal](revision_4_1.md#1-recovery-history), but does not establish that history alone will fix the observed failures.
+- **Old programs are missing:** 169 feedbacks contain older-failure summaries; none includes the corresponding older program bodies. All requests contain the latest attributable source bundle. This supports the [deferred historical-program proposal](revision_4_unimplemented.md#14-historical-programs-and-the-editoutcome-ledger), but does not establish that history alone will fix the observed failures.
 - **Feedback reaches policy generation but not all downstream generation:** 59 additional helper calls occur in 42 replacement rounds, all in Baseline. None contains the structured runtime-feedback block. Helpers still receive their normal API/helper prompts. Three additional static-repair calls also occur and remain distinguishable from runtime recovery.
 - **The evidence bound is almost full:** serialized feedback ranges from 1,750 to 8,192 under the UTF-8 byte bound, with median 8,051. This is a conservative accounting bound, not actual provider input tokens. Merely appending more raw events will often displace other evidence; semantic summaries and less repeated event metadata are preferable.
 - **An empty goal-failure reason is not zero feedback:** failed clauses and coordinates are already present. The missing improvement is an explicit explanation of the observed task deficits, including physical-goal details when they differ from logical ON* clauses.
@@ -315,6 +315,44 @@ Move(b0, b0, top, [0.0, 0.0, 0.055])
 
 Controller convergence and scene changes support the need to inspect transport geometry. These logs do not by themselves identify every contacting body or prove that the old target was globally unreachable.
 
+#### 4.5.1 Existing feedback can support targeted repair: Haiku Method 1 trial 4
+
+- **Outcome:** the initial policy failed on Move nonconvergence; the first recovery produced a successful policy. There were two model calls and two rollouts, with no additional helper or static-repair requests.
+- **Input verification:** the saved initial/recovery prompts match the actual HTTP request contents. Both requests contain text only. Recovery supplies selected observations and execution records, not the video or full trajectory.
+- **Evidence:** [full trial trace](../../../runs/cap-recovery-analysis/20261020-history-review/trials/haiku-cap_method_1-004.md), [delivered recovery prompt](../../../runs/cap-revision4-haiku55/20261019-225124/trials/cap_method_1-dsl_only-004-recovery-on/cap/20261019-225454-df0a42a-cap_method_1-recovery-94c86119/attempts/round_001/cap/20261019-225512-df0a42a-cap_method_1-stack-13d9419f/artifacts/trial_001/lmp/call_0001/prompt.txt), and [prepared feedback](../../../runs/cap-revision4-haiku55/20261019-225124/trials/cap_method_1-dsl_only-004-recovery-on/cap/20261019-225454-df0a42a-cap_method_1-recovery-94c86119/artifacts/trial_001/rounds/000/feedback.json).
+
+| Information delivered for recovery | Specific evidence in this trial |
+| --- | --- |
+| Original task and interface | Stack the three blocks into a tower rooted at b0; retain the API, DSL-only condition rules, 50-step primitive limit, and stated Move tolerance |
+| Complete failed source and failure location | Policy line 5: `Move(b0, b0, last, [0.0, 0.0, 0.055])` |
+| Failed controller result | Target `(1.319731, 1.315961, 0.480121)` m; 50 steps; final position error 0.020949 m, exceeding the 0.002 m tolerance |
+| Three state snapshots | Gripper/block coordinates at entry, immediately before the failing Move, and at failure; b0's Y changes from 0.900809 to 1.395398 m over the failed rollout |
+| Recent execution and task state | Preceding Release and Pick results, selection/assignment events, an event count of five loop iterations, and false `ON_star(block_1,block_0)` / `ON_star(block_2,block_0)` clauses |
+| Replacement execution contract | Restore the same saved initial state and use a fresh execution context; failure-state coordinates are debugging evidence |
+| Older failures | None: this is the first recovery request |
+
+The observable repair strategy is to separate source lift, high transfer, and final descent, as shown in the code comparison above. The previous program used one direct Move after Pick, which does not itself lift the block. The replacement adds two Move calls before the existing placement approach. It retains the selection/loop condition, the 0.055 m placement offset, and `Release(cand, 0.1)`; `last` is renamed `top`. Feedback does not supply this replacement sequence as a code patch.
+
+| Execution check | Initial policy | First recovery policy |
+| --- | ---: | ---: |
+| While-body iterations | 5; the fifth fails | 2; normal termination |
+| Converged / failed primitive calls | 13 / 1 | 10 / 0 |
+| Simulation steps | 155 | 83 |
+| Environment task success | False | True |
+| DSL postcondition | False | True |
+| DSL compliance | Pass | Pass |
+
+The first four iterations' primitives converge without completing the task; only the fifth iteration's Move exhausts its 50-step budget. The replacement's six Move calls use 8, 11, 6, 8, 5, and 5 steps and all satisfy the unchanged tolerance. Both rollouts have the same verified initial-state hash. Recovery does not resume from the failure state, increase primitive budgets, or weaken the success criteria.
+
+| Interpretation | What this case supports |
+| --- | --- |
+| Existing feedback can support a targeted failure hypothesis and useful repair | Supported by the supplied source/state/controller evidence, the targeted path change, and success on the same restored start |
+| The LLM correctly identified the exact physical root cause | Not established: no contact-level or reachability diagnosis identifies a particular collision or joint limit |
+| Feedback caused the improvement compared with simply generating another program | Not isolated: there is no matched failure-only or independent-regeneration control for this candidate |
+| The same feedback will reliably recover other failures | Not established; unrecovered primitive-failure cases remain, including the example linked in Section 4.6 |
+
+This is a high-level account of observable feedback, source edits, and execution results, not a reconstruction of private model reasoning. It motivates improving the **reliability and efficiency** of already useful feedback, rather than assuming current feedback cannot support reasoning. A controlled follow-up should branch from the same failed policy and initial state, compare failure-notification-only, current feedback, and revised feedback under matched settings, and report success alongside calls, tokens, time, and budget stops. No new experiment was run for this subsection.
+
 ### 4.6 Remaining failures and recurring defects
 
 | Final unrecovered outcome | Trials |
@@ -326,6 +364,18 @@ Controller convergence and scene changes support the need to inspect transport g
 | Release nonconvergence | 2 |
 | Normal completion, goal failed | 2 |
 | No-witness get | 1 |
+
+A concrete **unrecovered primitive-failure example** is [MiniMax Method 1 trial 18](../../../runs/cap-recovery-analysis/20261020-history-review/trials/minimax-cap_method_1-018.md), with [original parent artifacts](../../../runs/cap-revision4-minimax31flash/20261020-152924-free-300/trials/cap_method_1-dsl_only-018-recovery-on/cap/20261020-170025-29473fe-cap_method_1-recovery-7e945f9d). The [detailed case study](case_study/revision_4_failure_recovery_cases/minimax_method_1_dsl_only_trial_018.md) includes every round’s delivered feedback, a high-level summary of the saved API reasoning, full policy source, code changes, and verified execution results. All five policies pass the DSL check, but every rollout ends in primitive nonconvergence:
+
+| Round | Failing primitive | Primitive steps | Final position error |
+| --- | --- | ---: | ---: |
+| 0: initial policy | Move | 50 | 1.438950 m |
+| 1: first recovery | Move | 50 | 0.021080 m |
+| 2: second recovery | Move | 50 | 0.039724 m |
+| 3: third recovery | Release | 50 | 0.013029 m |
+| 4: fourth recovery | Move | 50 | 1.407469 m |
+
+The stop reason is `max_recovery_rounds`, with final success false. The detailed review identifies a repaired-and-reintroduced reference-coordinate error (rounds 0 → 1 → 4), a round-2 selection change that actually picks b0, and a round-3 failure in retreat after the gripper has opened. Model explanations, source behavior, and retrospective diagnoses are kept separate. The linked trace includes each delivered feedback, replacement source/diff, and next outcome. This demonstrates that recovery with the current feedback does not guarantee success, even for DSL-compliant candidates. It does not establish one common physical cause across the attempts or isolate a feedback defect. Because this example uses MiniMax and Section 4.5.1 uses Haiku, the two are illustrative cases, not a matched model/feedback comparison. Section 4.6 D also links Baseline trial 6, whose final two attempts fail on Move.
 
 #### A. Namespace errors need an execution-context diagnosis
 
@@ -381,7 +431,7 @@ All six stop as `preparation_failure_no_rollout`; they do not provide another fa
 
 ### 4.7 Recommended feedback and pipeline improvements
 
-These are proposals supported by the review, not implemented changes. Historical-program inclusion remains the planned [Revision 4.1 history mode](revision_4_1.md#1-recovery-history). The observed gaps suggest pairing it with more specific evidence and better propagation.
+These are proposals supported by the review, not implemented changes. The active [Revision 4.2 plan](revision_4_2_fix_primitive_noncovergence.md) focuses on primitive nonconvergence. Historical-program inclusion and the other proposals are retained in the [deferred backlog](revision_4_unimplemented.md), including its [history mode](revision_4_unimplemented.md#14-historical-programs-and-the-editoutcome-ledger). The table preserves the review findings; it is not a plan to implement all mechanisms together. Each later version should address and test one focused problem.
 
 | Priority | Change | Evidence motivating it | Proposed feedback or behavior |
 | --- | --- | --- | --- |
