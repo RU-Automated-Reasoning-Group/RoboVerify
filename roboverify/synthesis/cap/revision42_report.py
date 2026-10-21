@@ -30,6 +30,7 @@ LABELS = {
 MODEL_LABELS = {
     "minimax/minimax-m3.1-flash:free": "MiniMax M3.1 Flash free",
     "anthropic/claude-haiku-5.5": "Claude Haiku 5.5",
+    "qwen/qwen3.8-27b": "Qwen3.8 27B",
 }
 
 
@@ -310,7 +311,7 @@ def plots(cohorts, directory, *, prefix="revision42"):
             color="black" if g and g["finished"] else "gray",
         )
 
-    def legend(ax, measures):
+    def legend(ax, measures, shown=models):
         handles = [Patch(facecolor=c, label=l) for l, c in measures] + [
             Patch(
                 facecolor="white",
@@ -318,7 +319,7 @@ def plots(cohorts, directory, *, prefix="revision42"):
                 hatch=hatch[m],
                 label=MODEL_LABELS.get(m, m),
             )
-            for m in models
+            for m in shown
         ]
         ax.legend(handles=handles, loc="upper right", fontsize=7, ncol=2)
 
@@ -332,13 +333,17 @@ def plots(cohorts, directory, *, prefix="revision42"):
         ("initial_nonconv", "Initial nonconvergence", "#de8f05"),
         ("final_nonconv", "Final nonconvergence", "#d62728"),
     ]
-    bars_per_method = len(measures) * len(models)
+    # Only models with full-treatment groups appear in the main comparison.
+    full_models = [
+        m for m in models if any(cohorts[m].get((x, "full")) for x in METHODS)
+    ]
+    bars_per_method = len(measures) * len(full_models)
     width = 0.84 / bars_per_method
     fig, ax = plt.subplots(figsize=(max(8, 1.8 * bars_per_method), 4.8))
     x = np.arange(len(METHODS))
     for i, (field, _, color) in enumerate(measures):
-        for j, model in enumerate(models):
-            k = i * len(models) + j
+        for j, model in enumerate(full_models):
+            k = i * len(full_models) + j
             bars = ax.bar(
                 x + (k - (bars_per_method - 1) / 2) * width,
                 [rate(model, m, "full", field) for m in METHODS],
@@ -354,7 +359,7 @@ def plots(cohorts, directory, *, prefix="revision42"):
     ax.set_ylim(0, 1.45)
     ax.set_ylabel("Fraction of finished trials")
     ax.set_title("Full treatment")
-    legend(ax, [(l, c) for _, l, c in measures])
+    legend(ax, [(l, c) for _, l, c in measures], full_models)
     save(fig, f"{prefix}_full_outcomes.png")
 
     layouts = {m: ablation_layout(cohorts[m]) for m in models}
@@ -504,7 +509,7 @@ def generate(
 
     def ordered(model):
         return sorted(
-            cohorts[model].items(),
+            ((k, g) for k, g in cohorts[model].items() if g["planned"]),
             key=lambda x: (METHODS.index(x[0][0]), PROFILES.index(x[0][1])),
         )
 
@@ -566,8 +571,14 @@ def generate(
         ]
     for model in models:
         groups = cohorts[model]
+        full = sum(groups[(m, "full")]["planned"] for m in METHODS)
         design = [
-            f"**{name(model)}:** {sum(groups[(m, 'full')]['planned'] for m in METHODS)} full-treatment trials cover all three methods."
+            f"**{name(model)}:** "
+            + (
+                f"{full} full-treatment trials cover all three methods."
+                if full
+                else "no full-treatment groups; compare its profiles with the other models' groups."
+            )
         ]
         for m, profiles in ablation_layout(groups).items():
             ablations = [p for p in profiles if p != "full"]
@@ -602,7 +613,9 @@ def generate(
     ]
     for model in models:
         for m in METHODS:
-            g = cohorts[model][(m, "full")]
+            g = cohorts[model].get((m, "full"))
+            if not g or not g["planned"]:
+                continue
             n = g["finished"]
             lines.append(
                 f"| {name(model)} | {NAMES[m]} | {n}/{g['planned']} | {g['initial_success']}/{n} | {g['success']}/{n} | {g['initial_nonconv']}/{n} | {g['final_nonconv']}/{n} | {g['tokens']:,} |"
