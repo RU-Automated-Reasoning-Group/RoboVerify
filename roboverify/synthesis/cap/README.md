@@ -715,7 +715,7 @@ DSL checking, recovery prompts, controller behavior, or existing model budgets.
 
 [Revision 4.1 Section 1](docs/revision_4_1_gpu_scheduling.md#1-gpu-scheduling) is implemented.
 GPU scheduling is optional and works with all three methods and recovery on/off.
-[Revision 4.2](docs/revision_4_2_fix_primitive_noncovergence.md) is the focused primitive-nonconvergence plan (**not implemented yet**). Historical-program injection and other proposals are retained in the [deferred backlog](docs/revision_4_unimplemented.md).
+[Revision 4.2](docs/revision_4_2_fix_primitive_noncovergence.md) implements configurable primitive prompts and failure diagnostics; its 220-trial comparison is complete. Historical-program injection and other proposals are retained in the [deferred backlog](docs/revision_4_unimplemented.md).
 
 From `roboverify/`, configure the existing simulator environment as described in
 [root AGENTS.md](../../../AGENTS.md), then inspect physical identities and verified
@@ -812,6 +812,13 @@ recovery, helper, and existing static-repair prompts; they do not change the
 controller or DSL checker. Actual primitive diagnostics are appended only to
 recovery-policy requests following a primitive failure.
 
+The four new prompt blocks and their heading are stored in
+[prompts/primitive_v1.json](prompts/primitive_v1.json).
+[primitive_prompts.py](primitive_prompts.py) loads that resource, selects enabled
+blocks, substitutes controller values, and records provenance. The resource move
+preserves the exact rendered text and existing supplement hashes; the base
+`legacy_v1`, `typed_v2`, and `typed_v3` packages remain unchanged.
+
 The reproducible 220-trial design is provided by:
 
 ```bash
@@ -839,3 +846,13 @@ The main/ablation [report](docs/revision_4_2_report.md) includes initial/final
 success, primitive nonconvergence, conditional recovery transitions, per-trial
 tokens and artifact links, plus [plots](docs/plots/). Scripted preflight runs are
 explicitly excluded from the live-trial denominator.
+
+
+The completed Revision 4.2 batch has 20 trials in each of 11 settings. Full-treatment
+success is Baseline 18/20, Method 1 18/20, and Method 2 20/20; ablation results are
+in the linked report. All 446 state restores and videos and 226 delivered recovery
+payloads passed the artifact audit. One full Baseline trial stopped because its
+required feedback plus metadata exceeded the unchanged 8,192-byte cap; this
+limitation and all failures remain reported. The final interpretation is also
+saved in the batch's `final_interpretation.md` for use after regenerating numerical
+tables and plots.

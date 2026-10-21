@@ -1,6 +1,6 @@
 # Revision 4.2: primitive nonconvergence
 
-- **Status: implemented; live experiment pending.** All four Section 3 candidate changes are configurable. Focused tests and the 11-setting scripted physical preflight passed; the authorized 220-trial experiment and result audit are tracked in [Revision 4.2 report](revision_4_2_report.md).
+- **Status: implemented and tested; 220/220 live trials completed.** All four Section 3 candidate changes are configurable. Full-treatment results are Baseline 18/20, Method 1 18/20, and Method 2 20/20; all ablation results and limitations are recorded in [Revision 4.2 report](revision_4_2_report.md).
 - **Problem:** generated policies can request poorly constructed motion targets or transport sequences, then fail when Pick, Move, or Release does not converge within its primitive budget.
 - **Scope:** four independently configurable additions to the general primitive/API prompt, available during initial generation and recovery. Primitive-failure feedback enrichment remains a separate candidate intervention. Preserve the existing method workflows, controller behavior, and task-success criteria.
 - **Completed prerequisite:** [Revision 4.1 GPU scheduling](revision_4_1_gpu_scheduling.md), including its existing validation. Use it for later parallel experiments; this plan does not change scheduling.
@@ -61,7 +61,7 @@ This is a controller-internal predicate over the two recorded finger-state value
 - The CaP adapter checks `last_control_result`, raises `PrimitiveFailure` on nonconvergence, and the runner stops the current rollout. Subsequent policy statements do not execute. Already applied physical effects are not rolled back by the primitive.
 - `ControlResult.steps` is cumulative for the primitive and `phase` identifies the last attempted phase. Motion phases provide a position residual; open/close phases set `position_error=None`. The existing result does not contain an exact measured finger-state sum or complete per-phase result history; the implemented collector obtains them from phase events and recorded observations or marks them unavailable. Controller configuration is recorded observationally only when phase diagnostics are enabled.
 
-The existing [controller regression suite](../../api/test_control.py) was run during this source review: **20 tests passed**. It covers controller termination, shared Pick budgets, Release ordering and XYZ drift, and numeric/named instruction parity using deterministic test environments. This validates the reviewed implementation, not the unimplemented Revision 4.2 prompt switches or feedback collector, and is not a new physical-policy experiment.
+The existing [controller regression suite](../../api/test_control.py) was run during this source review: **20 tests passed**. It covers controller termination, shared Pick budgets, Release ordering and XYZ drift, and numeric/named instruction parity using deterministic test environments. That source-review check validated the controller implementation; validation of the subsequently implemented Revision 4.2 prompt switches and feedback collector is recorded in Section 6.
 
 ## 2. Evidence motivating this focused revision
 
@@ -148,7 +148,7 @@ General API text in helper prompts is separate from the deferred proposal to pas
 - Preserve existing prompt packages and experiments. Version the new optional text blocks and use a deterministic block order. With all options off, render the pre-change prompt exactly for the selected base version, including role/mode-specific text; do not introduce a new heading or whitespace-only difference.
 - Save the base prompt version/hash, supplement version/hash, four resolved Boolean values, enabled block IDs/order, and complete rendered-prompt hash in configuration and per-call provenance. A base package hash alone cannot distinguish these 16 combinations.
 - Include the extra general-prompt text in full-request context and token accounting for every affected call. Keep the 16,384 output-token cap and existing budgets fixed initially; record additional input usage and any budget stops. General prompt supplements are not runtime evidence and must not silently consume/truncate the 8,192-byte failure-evidence allocation.
-- Suggested first comparison: all-off plus each single-switch-on profile, with actual runtime-feedback construction unchanged. An all-on profile and leave-one-out ablations can follow; a full 16-condition factorial is optional and requires a separately selected trial budget. Do not infer interactions from single-switch tests alone.
+- Possible future finer-grained comparison: all-off plus each single-switch-on profile, with actual runtime-feedback construction unchanged. An all-on profile and leave-one-out ablations can follow; a full 16-condition factorial is optional and requires a separately selected trial budget. Do not infer interactions from single-switch tests alone.
 - These options affect initial generation as well as recovery. For end-to-end comparisons, use the same initial scene/task/model settings and report initial-attempt outcomes separately from final recovery outcomes. Different prompts can generate different initial policies, so their later transitions are not matched failed candidates.
 - If a separate recovery-only diagnostic is desired, branch from the same archived failed program/state and identify that experiment explicitly as a controlled recovery study. It does not change the agreed general application of these options in ordinary trials.
 - The authorized experiment in Section 6 uses all-on as an explicit treatment, not a new compatibility default. It first compares full treatments across methods and then removes one candidate group at a time; individual prompt-switch ablations remain possible but are not part of these 220 trials.
@@ -316,6 +316,11 @@ Implemented configuration (all-off compatibility defaults):
 }
 ```
 
+The general prompt text is stored in [prompts/primitive_v1.json](../prompts/primitive_v1.json);
+[primitive_prompts.py](../primitive_prompts.py) handles loading, flag selection,
+controller-value substitution, and provenance. Relocating the text after the
+completed experiment preserves rendered prompt bytes and supplement hashes.
+
 Prompt supplement version: `primitive-prompt-v1`; diagnostic version: `primitive-feedback-v1`. The optional diagnostics appear under `evidence.primitive_diagnostics` only for an attributable primitive failure. Existing nonprimitive-failure handling is unchanged. Inline helpers receive the general API supplement through their normal method prompt; no new propagation of runtime evidence to helper requests is introduced.
 
 This is the shared record for the three independently configurable feedback candidates in Sections 3.2–3.4. The full treatment enables all four general-prompt blocks plus all three feedback candidates. A candidate-level ablation disables only its corresponding feature group; prompt switches never implicitly enable feedback collectors.
@@ -414,4 +419,15 @@ Audit the actual delivered prompts/feedback, intended ablation flags, full-state
 - Four minimal provider compatibility requests (one per credential slot) returned `pass` with the requested MiniMax route/settings. They used 913 reported tokens and provider-reported cost zero, and are excluded from experiment trials.
 - The live configuration permits up to 18 workers / 9 per allowed GPU, with 1,024 MiB worker reservations and 4,096 MiB free headroom. Global/per-credential quota reservations may reduce admitted concurrency below that ceiling. No GPU outside the two explicitly configured UUIDs is selected.
 
-Evidence: [final scripted preflight](../../../runs/cap-revision42-validation/20261021-final-preflight/audited_report.md), [artifact audit](../../../runs/cap-revision42-validation/20261021-final-preflight/revision42_audit.json), and [validation logs](../../../runs/cap-revision42-validation/20261021-final-preflight/validation/). Preflight and test results do not substitute for the pending 220-trial model experiment.
+Evidence: [final scripted preflight](../../../runs/cap-revision42-validation/20261021-final-preflight/audited_report.md), [artifact audit](../../../runs/cap-revision42-validation/20261021-final-preflight/revision42_audit.json), and [validation logs](../../../runs/cap-revision42-validation/20261021-final-preflight/validation/). The subsequent 220-trial model experiment is complete; preflight/test outcomes remain excluded from its denominator.
+
+
+### 6.5 Completed experiment and observed limitation
+
+The live batch `20261021-174848-minimax-220` used implementation commit `29d9ebf` and completed all 11 settings at 20 trials each. It produced 207/220 final task successes across the mixed treatments, 446 prepared attempts, 444 actual rollouts, and 493 model requests. Reported usage was 4,378,031 tokens with no missing usage; provider-reported cost was zero. All 207 successful final programs passed the recorded DSL audit. The full experimental and video audit has zero consistency issues.
+
+The full treatment does not dominate all leave-one-out ablations. The clearest descriptive effect is lower initial nonconvergence with the general-prompt additions. Feedback ablations have different independently generated initial failures, and the shared byte cap can alter the amount of other optional evidence retained; a matched failed-policy comparison is needed for stronger causal conclusions.
+
+Baseline full trial 20 stopped after its third rollout because the combined required diagnostic/metadata payload was 8,300 bytes against the fixed 8,192-byte limit, even with no optional action records or supporting events. This is an observed packing limitation, not a reason to erase or replace the trial. It remains a failed outcome; no post-run runtime fix or selective rerun was made. A future change should address redundant metadata/packing separately and preserve reproducible controls.
+
+See [the completed report and plots](revision_4_2_report.md) for group results, per-trial token usage, transition denominators, failure breakdown, source/prompt audits, and artifact links.
