@@ -35,13 +35,29 @@ CREDENTIALS = [
     "OPENROUTER_API_KEY_3",
     "OPENROUTER_API_KEY_4",
 ]
-PROFILES = ("full", "no_prompt", "no_target", "no_phases", "no_context")
+PROFILES = ("full", "no_prompt", "no_target", "no_phases", "no_context", "only_prompt")
+FEEDBACK_ABLATIONS = {
+    "no_target": "target_derivation",
+    "no_phases": "controller_phases",
+    "no_context": "action_context",
+}
+# The original 220-trial design: full for every method, ablations for Method 1/2.
+DEFAULT_SELECTION = {
+    name: list(METHODS if name == "full" else METHODS[1:]) for name in PROFILES[:5]
+}
 
 
-def variants():
+def variants(selection=None):
+    """Return batch variants for ``{profile: [methods]}`` in PROFILES order."""
+    selection = DEFAULT_SELECTION if selection is None else selection
+    if not set(selection) <= set(PROFILES) or any(
+        not methods or not set(methods) <= set(METHODS)
+        for methods in selection.values()
+    ):
+        raise ValueError("Invalid profile/method selection")
     full_prompt = dict.fromkeys(asdict(PrimitivePromptConfig()), True)
     result = []
-    for name in PROFILES:
+    for name in (p for p in PROFILES if p in selection):
         prompt = dict(full_prompt)
         feedback = asdict(
             PrimitiveFeedbackConfig(
@@ -50,18 +66,14 @@ def variants():
         )
         if name == "no_prompt":
             prompt = asdict(PrimitivePromptConfig())
+        elif name == "only_prompt":
+            feedback.update(dict.fromkeys(FEEDBACK_ABLATIONS.values(), False))
         elif name != "full":
-            feedback[
-                {
-                    "no_target": "target_derivation",
-                    "no_phases": "controller_phases",
-                    "no_context": "action_context",
-                }[name]
-            ] = False
+            feedback[FEEDBACK_ABLATIONS[name]] = False
         result.append(
             {
                 "name": name,
-                "methods": list(METHODS if name == "full" else METHODS[1:]),
+                "methods": [m for m in METHODS if m in selection[name]],
                 "run_config": {
                     "primitive_prompt": prompt,
                     "primitive_feedback": feedback,
@@ -213,8 +225,14 @@ def create(
     request_interval=6.0,
     paid_request_limit=1085,
     video_mode=None,
+    selection=None,
+    prior_batches=(),
 ):
     previous, job, config, model = base_configuration(model_name, video_mode)
+    experiment_variants = variants(selection)
+    planned = (
+        11 if preflight else 20 * sum(len(v["methods"]) for v in experiment_variants)
+    )
     paid = not model.model.endswith(":free")
     credentials = list(credentials or (CREDENTIALS[:1] if paid else CREDENTIALS))
     limits = {}
@@ -274,7 +292,7 @@ def create(
         max_workers=max_workers,
         schedule_seed=42,
         recovery_variants=[True],
-        experiment_variants=variants(),
+        experiment_variants=experiment_variants,
         gpu_config=gpu,
         transport_control=control,
         responses=responses,
@@ -291,7 +309,7 @@ def create(
     atomic_json(
         directory / "comparison_plan.json",
         {
-            "planned": 11 if preflight else 220,
+            "planned": planned,
             "preflight": preflight,
             "prior_batch": str(PRIOR.resolve()),
             "model": model.model,
@@ -308,7 +326,9 @@ def create(
             "quota_at_creation": quotas,
             "gpu_policy": asdict(gpu),
             "no_failed_trial_replacements": True,
-            "ablation_unit": "Section 3 candidate group; no_prompt disables all four prompt Booleans",
+            "ablation_unit": "Section 3 candidate group; no_prompt disables all four prompt Booleans; only_prompt keeps them and disables all three feedback enrichments",
+            "profile_methods": {v["name"]: v["methods"] for v in experiment_variants},
+            "accumulates_with": [str(Path(b).resolve()) for b in prior_batches],
             "wire_pacing": f"{request_interval:g} seconds between starts for each credential; common admission reserves active-trial call allowances",
         },
     )
@@ -378,6 +398,19 @@ def main():
     parser.add_argument("--request-interval", type=float, default=6.0)
     parser.add_argument("--paid-request-limit", type=int, default=1085)
     parser.add_argument(
+        "--variant",
+        action="append",
+        metavar="PROFILE=METHOD[,METHOD]",
+        help="select profile/method groups; default is the original 220-trial design",
+    )
+    parser.add_argument(
+        "--accumulates-with",
+        action="append",
+        default=[],
+        type=Path,
+        help="earlier batch whose groups this batch complements, recorded in the plan",
+    )
+    parser.add_argument(
         "--video-mode",
         choices=("inline", "deferred", "off"),
         help="override the prior configuration's video setting",
@@ -394,6 +427,15 @@ def main():
             request_interval=args.request_interval,
             paid_request_limit=args.paid_request_limit,
             video_mode=args.video_mode,
+            selection=(
+                {
+                    name: methods.split(",")
+                    for name, methods in (v.split("=", 1) for v in args.variant)
+                }
+                if args.variant
+                else None
+            ),
+            prior_batches=args.accumulates_with,
         )
     if not args.create_only:
         result = execute(directory, resume=args.resume)
