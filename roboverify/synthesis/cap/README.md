@@ -868,8 +868,9 @@ explicitly excluded from the live-trial denominator.
 
 The completed MiniMax Revision 4.2 batch has 20 trials in each of 11 settings. Full-treatment
 success is Baseline 18/20, Method 1 18/20, and Method 2 20/20; ablation results are
-in the linked report. The Claude Haiku 5.5 rerun (360 trials in 18 settings,
-including Baseline ablations and `only_prompt`) shares that report. All 446 state restores and videos and 226 delivered recovery
+in the linked report. Extension batches add Baseline ablations and `only_prompt`
+for MiniMax (140 trials), the Claude Haiku 5.5 rerun (360 trials in 18 settings),
+and a Qwen3.8 27B `only_prompt` stress test (60 trials); all share that report. All 446 state restores and videos and 226 delivered recovery
 payloads passed the artifact audit. One full Baseline trial stopped because its
 required feedback plus metadata exceeded the unchanged 8,192-byte cap; this
 limitation and all failures remain reported. The final interpretation is also

@@ -1,17 +1,22 @@
 # Revision 4.2: primitive prompt and feedback experiment
 
-**Status: complete; MiniMax M3.1 Flash free 220/220; Claude Haiku 5.5 360/360 trials finished.** Pending trials are not observed failures.
+**Status: complete; MiniMax M3.1 Flash free 360/360; Claude Haiku 5.5 360/360; Qwen3.8 27B 60/60 trials finished.** Pending trials are not observed failures.
 
-Models: MiniMax M3.1 Flash free, Claude Haiku 5.5; each uses medium reasoning; 16,384 output tokens; Stack with three blocks; `dsl_only`; `typed_v3` plus the selected primitive prompt supplement. All trials enable recovery, with up to four repairs/five rollouts from the same full initial state. Model identity is the only experimental difference between cohorts.
+Models: MiniMax M3.1 Flash free, Claude Haiku 5.5, Qwen3.8 27B; each uses medium reasoning; 16,384 output tokens; Stack with three blocks; `dsl_only`; `typed_v3` plus the selected primitive prompt supplement. All trials enable recovery, with up to four repairs/five rollouts from the same full initial state. Model identity is the only experimental difference between cohorts.
 
-**MiniMax M3.1 Flash free:** 60 full-treatment trials cover all three methods. Method 1 ablations: `no_prompt`, `no_target`, `no_phases`, `no_context` (80 trials). Method 2 ablations: `no_prompt`, `no_target`, `no_phases`, `no_context` (80 trials).
+**MiniMax M3.1 Flash free:** 60 full-treatment trials cover all three methods. Baseline ablations: `no_prompt`, `no_target`, `no_phases`, `no_context`, `only_prompt` (100 trials). Method 1 ablations: `no_prompt`, `no_target`, `no_phases`, `no_context`, `only_prompt` (100 trials). Method 2 ablations: `no_prompt`, `no_target`, `no_phases`, `no_context`, `only_prompt` (100 trials).
 
 - `20261021-174848-minimax-220` (220 planned): [Immutable manifest](../../../runs/cap-revision42/20261021-174848-minimax-220/manifest.json) · [Configuration and source hashes](../../../runs/cap-revision42/20261021-174848-minimax-220/comparison_plan.json)
+- `20261021-minimax-extension-140` (140 planned): [Immutable manifest](../../../runs/cap-revision42/20261021-minimax-extension-140/manifest.json) · [Configuration and source hashes](../../../runs/cap-revision42/20261021-minimax-extension-140/comparison_plan.json)
 
 **Claude Haiku 5.5:** 60 full-treatment trials cover all three methods. Baseline ablations: `no_prompt`, `no_target`, `no_phases`, `no_context`, `only_prompt` (100 trials). Method 1 ablations: `no_prompt`, `no_target`, `no_phases`, `no_context`, `only_prompt` (100 trials). Method 2 ablations: `no_prompt`, `no_target`, `no_phases`, `no_context`, `only_prompt` (100 trials).
 
 - `20261021-haiku55-220` (220 planned): [Immutable manifest](../../../runs/cap-revision42/20261021-haiku55-220/manifest.json) · [Configuration and source hashes](../../../runs/cap-revision42/20261021-haiku55-220/comparison_plan.json)
 - `20261021-haiku55-extension-140` (140 planned): [Immutable manifest](../../../runs/cap-revision42/20261021-haiku55-extension-140/manifest.json) · [Configuration and source hashes](../../../runs/cap-revision42/20261021-haiku55-extension-140/comparison_plan.json)
+
+**Qwen3.8 27B:** no full-treatment groups; compare its profiles with the other models' groups. Baseline ablations: `only_prompt` (20 trials). Method 1 ablations: `only_prompt` (20 trials). Method 2 ablations: `only_prompt` (20 trials).
+
+- `20261021-qwen38-27b-only-prompt-60` (60 planned): [Immutable manifest](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/manifest.json) · [Configuration and source hashes](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/comparison_plan.json)
 
 The full groups are reused as controls; no duplicate control cohort is added. [Machine-readable analysis](../../../runs/cap-revision42/20261021-combined-minimax-haiku55/revision42_analysis.json) · [Per-trial CSV](../../../runs/cap-revision42/20261021-combined-minimax-haiku55/revision42_trials.csv)
 
@@ -36,34 +41,45 @@ Ratios use finished trials; planned counts remain visible until completion. Nonc
 
 | Model | Method | Profile | Finished / planned | Initial success | Final success | Initial nonconvergence | Final nonconvergence | Any nonconvergence | Nonconverged / executed rollouts | Tokens |
 | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| MiniMax M3.1 Flash free | Baseline | full | 20/20 | 8/20 | 18/20 | 6/20 | 1/20 | 7/20 | 10/34 | 393,895 |
+| MiniMax M3.1 Flash free | Baseline | no_prompt | 20/20 | 1/20 | 14/20 | 11/20 | 2/20 | 15/20 | 19/63 | 792,942 |
+| MiniMax M3.1 Flash free | Baseline | no_target | 20/20 | 11/20 | 19/20 | 5/20 | 0/20 | 6/20 | 7/35 | 427,965 |
+| MiniMax M3.1 Flash free | Baseline | no_phases | 20/20 | 8/20 | 17/20 | 5/20 | 0/20 | 8/20 | 11/37 | 548,382 |
+| MiniMax M3.1 Flash free | Baseline | no_context | 20/20 | 6/20 | 18/20 | 7/20 | 0/20 | 7/20 | 12/39 | 613,410 |
+| MiniMax M3.1 Flash free | Baseline | only_prompt | 20/20 | 8/20 | 20/20 | 6/20 | 0/20 | 7/20 | 12/41 | 520,882 |
 | Claude Haiku 5.5 | Baseline | full | 20/20 | 18/20 | 20/20 | 1/20 | 0/20 | 1/20 | 2/24 | 298,416 |
 | Claude Haiku 5.5 | Baseline | no_prompt | 20/20 | 6/20 | 17/20 | 10/20 | 1/20 | 11/20 | 12/37 | 501,919 |
 | Claude Haiku 5.5 | Baseline | no_target | 20/20 | 18/20 | 19/20 | 1/20 | 0/20 | 1/20 | 1/20 | 245,478 |
 | Claude Haiku 5.5 | Baseline | no_phases | 20/20 | 15/20 | 20/20 | 1/20 | 0/20 | 1/20 | 1/25 | 310,097 |
 | Claude Haiku 5.5 | Baseline | no_context | 20/20 | 15/20 | 17/20 | 0/20 | 0/20 | 0/20 | 0/20 | 324,167 |
 | Claude Haiku 5.5 | Baseline | only_prompt | 20/20 | 18/20 | 18/20 | 0/20 | 1/20 | 1/20 | 4/28 | 454,794 |
+| Qwen3.8 27B | Baseline | only_prompt | 20/20 | 12/20 | 16/20 | 3/20 | 0/20 | 4/20 | 7/31 | 454,274 |
 | MiniMax M3.1 Flash free | Method 1 | full | 20/20 | 6/20 | 18/20 | 7/20 | 2/20 | 8/20 | 15/41 | 397,139 |
 | MiniMax M3.1 Flash free | Method 1 | no_prompt | 20/20 | 2/20 | 19/20 | 14/20 | 0/20 | 16/20 | 24/56 | 481,067 |
 | MiniMax M3.1 Flash free | Method 1 | no_target | 20/20 | 9/20 | 19/20 | 7/20 | 0/20 | 8/20 | 10/37 | 349,255 |
 | MiniMax M3.1 Flash free | Method 1 | no_phases | 20/20 | 10/20 | 20/20 | 7/20 | 0/20 | 8/20 | 11/36 | 357,175 |
 | MiniMax M3.1 Flash free | Method 1 | no_context | 20/20 | 12/20 | 20/20 | 4/20 | 0/20 | 5/20 | 5/32 | 267,157 |
+| MiniMax M3.1 Flash free | Method 1 | only_prompt | 20/20 | 8/20 | 20/20 | 7/20 | 0/20 | 10/20 | 13/39 | 382,245 |
 | Claude Haiku 5.5 | Method 1 | full | 20/20 | 19/20 | 20/20 | 1/20 | 0/20 | 1/20 | 1/21 | 176,025 |
 | Claude Haiku 5.5 | Method 1 | no_prompt | 20/20 | 9/20 | 20/20 | 10/20 | 0/20 | 10/20 | 13/34 | 273,816 |
 | Claude Haiku 5.5 | Method 1 | no_target | 20/20 | 19/20 | 20/20 | 0/20 | 0/20 | 0/20 | 0/21 | 176,747 |
 | Claude Haiku 5.5 | Method 1 | no_phases | 20/20 | 16/20 | 20/20 | 2/20 | 0/20 | 3/20 | 3/25 | 223,682 |
 | Claude Haiku 5.5 | Method 1 | no_context | 20/20 | 18/20 | 20/20 | 0/20 | 0/20 | 0/20 | 0/22 | 187,035 |
 | Claude Haiku 5.5 | Method 1 | only_prompt | 20/20 | 19/20 | 20/20 | 0/20 | 0/20 | 0/20 | 0/21 | 166,591 |
+| Qwen3.8 27B | Method 1 | only_prompt | 20/20 | 16/20 | 20/20 | 2/20 | 0/20 | 3/20 | 3/26 | 312,186 |
 | MiniMax M3.1 Flash free | Method 2 | full | 20/20 | 10/20 | 20/20 | 5/20 | 0/20 | 8/20 | 10/35 | 353,868 |
 | MiniMax M3.1 Flash free | Method 2 | no_prompt | 20/20 | 3/20 | 16/20 | 11/20 | 2/20 | 16/20 | 27/64 | 599,750 |
 | MiniMax M3.1 Flash free | Method 2 | no_target | 20/20 | 9/20 | 20/20 | 6/20 | 0/20 | 9/20 | 15/41 | 428,629 |
 | MiniMax M3.1 Flash free | Method 2 | no_phases | 20/20 | 13/20 | 18/20 | 5/20 | 1/20 | 5/20 | 10/35 | 366,233 |
 | MiniMax M3.1 Flash free | Method 2 | no_context | 20/20 | 10/20 | 19/20 | 6/20 | 0/20 | 7/20 | 10/33 | 383,863 |
+| MiniMax M3.1 Flash free | Method 2 | only_prompt | 20/20 | 10/20 | 19/20 | 5/20 | 0/20 | 6/20 | 12/42 | 401,619 |
 | Claude Haiku 5.5 | Method 2 | full | 20/20 | 20/20 | 20/20 | 0/20 | 0/20 | 0/20 | 0/20 | 261,273 |
 | Claude Haiku 5.5 | Method 2 | no_prompt | 20/20 | 15/20 | 20/20 | 5/20 | 0/20 | 5/20 | 6/26 | 294,617 |
 | Claude Haiku 5.5 | Method 2 | no_target | 20/20 | 20/20 | 20/20 | 0/20 | 0/20 | 0/20 | 0/20 | 254,902 |
 | Claude Haiku 5.5 | Method 2 | no_phases | 20/20 | 20/20 | 20/20 | 0/20 | 0/20 | 0/20 | 0/20 | 241,926 |
 | Claude Haiku 5.5 | Method 2 | no_context | 20/20 | 20/20 | 20/20 | 0/20 | 0/20 | 0/20 | 0/20 | 234,474 |
 | Claude Haiku 5.5 | Method 2 | only_prompt | 20/20 | 20/20 | 20/20 | 0/20 | 0/20 | 0/20 | 0/20 | 238,181 |
+| Qwen3.8 27B | Method 2 | only_prompt | 20/20 | 17/20 | 19/20 | 2/20 | 0/20 | 2/20 | 5/26 | 351,193 |
 
 ![Ablation task success](plots/revision42_ablation_success.png)
 
@@ -74,16 +90,23 @@ Ratios use finished trials; planned counts remain visible until completion. Nonc
 | Model | Method | Profile | Unsuccessful | Final nonconvergence | Final execution/query budget stop | Final goal failure | Final other runtime failure | Preparation stop | Feedback-size stop |
 | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | MiniMax M3.1 Flash free | Baseline | full | 2 | 1 | 0 | 0 | 0 | 1 | 1 |
+| MiniMax M3.1 Flash free | Baseline | no_prompt | 6 | 2 | 0 | 2 | 1 | 1 | 1 |
+| MiniMax M3.1 Flash free | Baseline | no_target | 1 | 0 | 0 | 1 | 0 | 0 | 0 |
+| MiniMax M3.1 Flash free | Baseline | no_phases | 3 | 0 | 0 | 0 | 1 | 2 | 0 |
+| MiniMax M3.1 Flash free | Baseline | no_context | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| MiniMax M3.1 Flash free | Baseline | only_prompt | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | MiniMax M3.1 Flash free | Method 1 | full | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | MiniMax M3.1 Flash free | Method 1 | no_prompt | 1 | 0 | 1 | 0 | 0 | 0 | 0 |
 | MiniMax M3.1 Flash free | Method 1 | no_target | 1 | 0 | 1 | 0 | 0 | 0 | 0 |
 | MiniMax M3.1 Flash free | Method 1 | no_phases | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | MiniMax M3.1 Flash free | Method 1 | no_context | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| MiniMax M3.1 Flash free | Method 1 | only_prompt | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | MiniMax M3.1 Flash free | Method 2 | full | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | MiniMax M3.1 Flash free | Method 2 | no_prompt | 4 | 2 | 1 | 1 | 0 | 0 | 0 |
 | MiniMax M3.1 Flash free | Method 2 | no_target | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | MiniMax M3.1 Flash free | Method 2 | no_phases | 2 | 1 | 0 | 1 | 0 | 0 | 0 |
 | MiniMax M3.1 Flash free | Method 2 | no_context | 1 | 0 | 0 | 0 | 0 | 1 | 0 |
+| MiniMax M3.1 Flash free | Method 2 | only_prompt | 1 | 0 | 0 | 1 | 0 | 0 | 0 |
 | Claude Haiku 5.5 | Baseline | full | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | Claude Haiku 5.5 | Baseline | no_prompt | 3 | 1 | 0 | 0 | 0 | 2 | 0 |
 | Claude Haiku 5.5 | Baseline | no_target | 1 | 0 | 0 | 0 | 0 | 1 | 0 |
@@ -102,6 +125,9 @@ Ratios use finished trials; planned counts remain visible until completion. Nonc
 | Claude Haiku 5.5 | Method 2 | no_phases | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | Claude Haiku 5.5 | Method 2 | no_context | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | Claude Haiku 5.5 | Method 2 | only_prompt | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Qwen3.8 27B | Baseline | only_prompt | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| Qwen3.8 27B | Method 1 | only_prompt | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Qwen3.8 27B | Method 2 | only_prompt | 1 | 0 | 0 | 0 | 0 | 1 | 0 |
 
 The feedback-size column can overlap a final rollout failure: that stop occurs while preparing feedback for another attempt. A preparation stop has no final rollout.
 
@@ -110,16 +136,23 @@ The feedback-size column can overlap a final rollout failure: that stop occurs w
 | Model | Method | Profile | Nonconv → nonconv / eligible transitions | Same primitive | Next task success | Next other execution failure | Next preparation failure | Terminal nonconv without next attempt | Pick / Move / Release failed rollouts |
 | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
 | MiniMax M3.1 Flash free | Baseline | full | 3/9 | 1 | 6 | 0 | 0 | 1 | 3 / 6 / 1 |
+| MiniMax M3.1 Flash free | Baseline | no_prompt | 3/17 | 2 | 6 | 8 | 0 | 2 | 2 / 15 / 2 |
+| MiniMax M3.1 Flash free | Baseline | no_target | 1/7 | 0 | 5 | 1 | 0 | 0 | 3 / 4 / 0 |
+| MiniMax M3.1 Flash free | Baseline | no_phases | 3/11 | 3 | 6 | 1 | 1 | 0 | 1 / 9 / 1 |
+| MiniMax M3.1 Flash free | Baseline | no_context | 5/12 | 1 | 5 | 2 | 0 | 0 | 4 / 5 / 3 |
+| MiniMax M3.1 Flash free | Baseline | only_prompt | 5/12 | 3 | 5 | 2 | 0 | 0 | 4 / 7 / 1 |
 | MiniMax M3.1 Flash free | Method 1 | full | 7/13 | 3 | 5 | 1 | 0 | 2 | 2 / 9 / 4 |
 | MiniMax M3.1 Flash free | Method 1 | no_prompt | 7/24 | 5 | 12 | 5 | 0 | 0 | 4 / 19 / 1 |
 | MiniMax M3.1 Flash free | Method 1 | no_target | 2/10 | 1 | 6 | 2 | 0 | 0 | 6 / 2 / 2 |
 | MiniMax M3.1 Flash free | Method 1 | no_phases | 3/11 | 2 | 6 | 2 | 0 | 0 | 4 / 4 / 3 |
 | MiniMax M3.1 Flash free | Method 1 | no_context | 0/5 | 0 | 3 | 2 | 0 | 0 | 1 / 3 / 1 |
+| MiniMax M3.1 Flash free | Method 1 | only_prompt | 3/13 | 2 | 9 | 1 | 0 | 0 | 2 / 10 / 1 |
 | MiniMax M3.1 Flash free | Method 2 | full | 2/10 | 1 | 8 | 0 | 0 | 0 | 3 / 6 / 1 |
 | MiniMax M3.1 Flash free | Method 2 | no_prompt | 8/25 | 3 | 9 | 8 | 0 | 2 | 5 / 20 / 2 |
 | MiniMax M3.1 Flash free | Method 2 | no_target | 6/15 | 3 | 9 | 0 | 0 | 0 | 6 / 8 / 1 |
 | MiniMax M3.1 Flash free | Method 2 | no_phases | 5/9 | 4 | 3 | 1 | 0 | 1 | 4 / 4 / 2 |
 | MiniMax M3.1 Flash free | Method 2 | no_context | 3/10 | 1 | 6 | 1 | 0 | 0 | 4 / 5 / 1 |
+| MiniMax M3.1 Flash free | Method 2 | only_prompt | 6/12 | 1 | 3 | 3 | 0 | 0 | 2 / 7 / 3 |
 | Claude Haiku 5.5 | Baseline | full | 1/2 | 1 | 0 | 1 | 0 | 0 | 0 / 2 / 0 |
 | Claude Haiku 5.5 | Baseline | no_prompt | 1/11 | 0 | 7 | 1 | 2 | 1 | 2 / 8 / 2 |
 | Claude Haiku 5.5 | Baseline | no_target | 0/1 | 0 | 1 | 0 | 0 | 0 | 0 / 0 / 1 |
@@ -138,45 +171,70 @@ The feedback-size column can overlap a final rollout failure: that stop occurs w
 | Claude Haiku 5.5 | Method 2 | no_phases | 0/0 | 0 | 0 | 0 | 0 | 0 | 0 / 0 / 0 |
 | Claude Haiku 5.5 | Method 2 | no_context | 0/0 | 0 | 0 | 0 | 0 | 0 | 0 / 0 / 0 |
 | Claude Haiku 5.5 | Method 2 | only_prompt | 0/0 | 0 | 0 | 0 | 0 | 0 | 0 / 0 / 0 |
+| Qwen3.8 27B | Baseline | only_prompt | 3/7 | 1 | 1 | 1 | 2 | 0 | 3 / 4 / 0 |
+| Qwen3.8 27B | Method 1 | only_prompt | 0/3 | 0 | 3 | 0 | 0 | 0 | 0 / 1 / 2 |
+| Qwen3.8 27B | Method 2 | only_prompt | 3/5 | 2 | 1 | 0 | 1 | 0 | 1 / 2 / 2 |
 
 A transition is eligible only when an actual next attempt exists. Repeated failure labels do not establish the same defect, and disappearance of nonconvergence is not necessarily success. Attempts/transitions within a trial are dependent; these plots do not assign independent-sample confidence intervals to them.
 
 ## 4. Validation, resources, and comparison scope
 
-- **MiniMax M3.1 Flash free** — artifact audit issues: **0**; verified delivered recovery payloads: 226; saved videos: 446. Reported tokens: 4,378,031; calls: 493; calls without returned usage: 0.
+- **MiniMax M3.1 Flash free** — artifact audit issues: **0**; verified delivered recovery payloads: 387; saved videos: 747. Reported tokens: 8,065,476; calls: 936; calls without returned usage: 0.
 - **Claude Haiku 5.5** — artifact audit issues: **0**; verified delivered recovery payloads: 70; saved videos: 430. Reported tokens: 4,864,140; calls: 569; calls without returned usage: 0.
+- **Qwen3.8 27B** — artifact audit issues: **0**; verified delivered recovery payloads: 28; saved videos: 88. Reported tokens: 1,117,653; calls: 89; calls without returned usage: 0.
 - Independent video decoding checks: enabled. Reasoning is included in output usage once.
 - Source compliance, physical task success, and logical postconditions remain distinct. Baseline retains the pinned original executor and no pre-execution DSL gate. No preparation/API repair mechanism was added.
 - GPU assignments are fixed through each trial; request pacing and quota reservations are independent controls. Credential values are absent from manifests/logs; only environment-variable identities are recorded.
 - All groups use independent policy generations on one fixed scene. Ablating general prompts can change the initial candidate; this is an end-to-end ablation, not a paired repair comparison from identical failed programs.
 - Historical MiniMax recovery-on results were Baseline 42/50, Method 1 40/50, Method 2 40/50 final success; initial nonconvergence 24/50, 28/50, 19/50; final nonconvergence 3/50, 6/50, 7/50. These are a separate historical cohort with different execution dates/request concurrency, not a contemporaneous control.
-- The scripted physical preflights and minimal credential probes are excluded from the 580 live trials. Full validation logs and preflight audits are retained with the experiment artifacts.
+- The scripted physical preflights and minimal credential probes are excluded from the 780 live trials. Full validation logs and preflight audits are retained with the experiment artifacts.
 - Requested workers (`20261021-174848-minimax-220`): 18; observed peak active workers: 14. [GPU/resource telemetry](../../../runs/cap-revision42/20261021-174848-minimax-220/execution_metadata.json)
 - Wire requests by credential environment (`20261021-174848-minimax-220`): `{"OPENROUTER_API_KEY": 361, "OPENROUTER_API_KEY_2": 44, "OPENROUTER_API_KEY_3": 44, "OPENROUTER_API_KEY_4": 44}`.
+- Requested workers (`20261021-minimax-extension-140`): 18; observed peak active workers: 8. [GPU/resource telemetry](../../../runs/cap-revision42/20261021-minimax-extension-140/execution_metadata.json)
+- Wire requests by credential environment (`20261021-minimax-extension-140`): `{"OPENROUTER_API_KEY": 443}`.
 - Requested workers (`20261021-haiku55-220`): 18; observed peak active workers: 18. [GPU/resource telemetry](../../../runs/cap-revision42/20261021-haiku55-220/execution_metadata.json)
 - Wire requests by credential environment (`20261021-haiku55-220`): `{"OPENROUTER_API_KEY": 276}`.
 - Requested workers (`20261021-haiku55-extension-140`): 18; observed peak active workers: 16. [GPU/resource telemetry](../../../runs/cap-revision42/20261021-haiku55-extension-140/execution_metadata.json)
 - Wire requests by credential environment (`20261021-haiku55-extension-140`): `{"OPENROUTER_API_KEY": 293}`.
+- Requested workers (`20261021-qwen38-27b-only-prompt-60`): 18; observed peak active workers: 13. [GPU/resource telemetry](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/execution_metadata.json)
+- Wire requests by credential environment (`20261021-qwen38-27b-only-prompt-60`): `{"OPENROUTER_API_KEY": 89}`.
 
 ## 5. Interpretation of the completed results
 
-- **Workload totals.** MiniMax finishes 207/220 and Claude Haiku 5.5 finishes 351/360. These are totals across different treatments, not single-method success estimates. Every Haiku Method 1/2 group succeeds 20/20 (200/200); all nine unsuccessful Haiku trials are Baseline trials.
-- **The general-prompt effect replicates across both models and is clearest in the initial attempt.** With the same feedback configuration, which is not delivered before the first rollout, removing the four prompt additions raises initial nonconvergence in every method/model pair: MiniMax Method 1 7/20 → 14/20 and Method 2 5/20 → 11/20; Haiku Baseline 1/20 → 10/20, Method 1 1/20 → 10/20, and Method 2 0/20 → 5/20. Initial success falls correspondingly (Section 5.3).
-- **Feedback components cannot be ranked from these data.** Final-success differences among feedback profiles are at most a few trials per 20. For Haiku, the prompt-on profiles leave few executed failures for feedback to act on: Method 2 has no initially unsuccessful trial in its five prompt-on profiles (0/100), and Method 1 has nine, all recovered. Most Haiku Baseline losses are preparation SyntaxErrors in Baseline's unchanged helper-generation path, which feedback enrichments do not address.
-- **`only_prompt` (Haiku only).** Keeping the prompt additions while disabling all three feedback enrichments gives Baseline 18/20, Method 1 20/20 and Method 2 20/20. Baseline's two `only_prompt` losses were both initially unsuccessful trials that legacy-only feedback did not rescue (Section 5.5). Two cases do not establish a feedback effect.
-- **Identical initial prompts were verified for both models.** Within each method, all prompt-on profiles have byte-identical first prompts, so their initial differences are sampling outcomes. The `no_prompt` first prompts match the historical typed_v3 prompts byte for byte: for MiniMax Method 1/2, and for all three Haiku methods against the Revision 4 Haiku cohort.
+- **Workload totals.** MiniMax finishes 334/360, Claude Haiku 5.5 351/360 and Qwen3.8 27B 55/60. These are totals across different treatments, not single-method success estimates.
+- **The general-prompt effect replicates in every method/model pair and is clearest in the initial attempt.** The feedback configuration is not delivered before the first rollout. Removing the four prompt additions raises initial nonconvergence:
+
+  | Model | Baseline | Method 1 | Method 2 |
+  | --- | --- | --- | --- |
+  | MiniMax | 6/20 → 11/20 | 7/20 → 14/20 | 5/20 → 11/20 |
+  | Haiku | 1/20 → 10/20 | 1/20 → 10/20 | 0/20 → 5/20 |
+
+  Initial success falls correspondingly (Section 5.3).
+- **Prompt additions with legacy feedback are as effective as the full configuration in these data.**
+  - `only_prompt` finishes MiniMax 20/20, 20/20 and 19/20 (Baseline, Method 1, Method 2), versus 18/20, 18/20 and 20/20 for `full`. Haiku finishes 18/20, 20/20 and 20/20, versus 20/20 in every `full` group.
+  - Among initially unsuccessful MiniMax trials, `only_prompt` recovers 33/34 and `full` 32/36 (Section 5.4).
+  - Both MiniMax feedback-size stops occurred with all three enrichments enabled.
+  - At 20 trials per group, these differences do not establish that the enrichments help or hurt. They also do not show any benefit beyond legacy feedback.
+- **Feedback components cannot be ranked from these data.** Final-success differences among feedback profiles are at most a few trials per 20.
+  - Haiku leaves few executed failures for feedback to act on: Method 2 has no initially unsuccessful trial in its five prompt-on profiles (0/100), and Method 1 has nine, all recovered.
+  - Most remaining Baseline losses for all three models are preparation stops, such as generated helper SyntaxErrors, which the enrichments do not address.
+- **Qwen3.8 27B, `only_prompt` only, behaves like a model between MiniMax and Haiku.** It reaches initial success 12/20, 16/20 and 17/20 and final success 16/20, 20/20 and 19/20. Its 7 initial nonconvergences across methods all ended without final nonconvergence. Three of its five losses are response-length stops: recovery requests exhausted the 16,384-token output cap.
+- **Identical initial prompts were verified.** Within each method, all prompt-on profiles have byte-identical first prompts, so their initial differences are sampling outcomes. The `no_prompt` first prompts match the historical typed_v3 prompts byte for byte: for MiniMax Method 1/2, and for all three Haiku methods against the Revision 4 Haiku cohort.
+- **One successful final policy fails the post-hoc DSL audit.** MiniMax Baseline `no_phases` trial 11 succeeds physically, but its final output reports `TYPE: Expected position, got vector`. Its loop and selection conditions use only DSL predicates; the diagnostic concerns the vector arithmetic used to compute Move offsets. It has not yet been reviewed whether this is a genuine contract violation or a conservative typing limitation of the checker. It is the first successful-but-audit-failing Baseline output in the Revision 4.2 batches.
 
 ### 5.1 MiniMax M3.1 Flash
 
-- **Full treatment:** 56/60 tasks succeed: Baseline 18/20, Method 1 18/20, and Method 2 20/20. The eight ablation groups contribute another 151/160 successes.
-- **The full configuration does not uniformly dominate the feedback ablations.** Method 1 finishes at 18/20 with all features, versus 19/20 without target derivation and 20/20 without phase diagnostics or action context. Method 2 finishes at 20/20 full and without targets, 18/20 without phases, and 19/20 without context. With 20 trials per setting and independently generated initial candidates, these small final-success differences do not establish a reliable ranking of the feedback components.
+- **Full treatment:** 56/60 tasks succeed: Baseline 18/20, Method 1 18/20, and Method 2 20/20.
+- **Baseline ablations (new):** full 18/20, `no_prompt` 14/20, `no_target` 19/20, `no_phases` 17/20, `no_context` 18/20, `only_prompt` 20/20. `no_prompt` has the most initial nonconvergence (11/20) and the lowest initial success (1/20).
+- **The full configuration does not uniformly dominate the feedback ablations.** Method 1 finishes 18/20 with all features, versus 19/20, 20/20, 20/20 and 20/20 for `no_target`, `no_phases`, `no_context` and `only_prompt`. Method 2 finishes 20/20 full, 20/20 `no_target`, 18/20 `no_phases`, 19/20 `no_context` and 19/20 `only_prompt`. With 20 trials per setting and independently generated initial candidates, these small differences do not establish a ranking of the feedback components.
 
-### 5.2 Claude Haiku 5.5
+### 5.2 Claude Haiku 5.5 and Qwen3.8 27B
 
-- **Full treatment:** 60/60 tasks succeed. Initial success is already 18/20, 19/20 and 20/20 for Baseline, Method 1 and Method 2, with one initial nonconvergence each for Baseline and Method 1.
-- **Baseline is the only method with residual failures.** Across its six profiles Baseline finishes 20, 17, 19, 20, 17 and 18 of 20 (full, `no_prompt`, `no_target`, `no_phases`, `no_context`, `only_prompt`). Six of its nine losses are preparation stops on generated helper/source SyntaxErrors; the remaining three are two final nonconvergences and one repeated runtime query failure.
-- **Haiku uses fewer tokens than MiniMax in every group both models ran.** Full-treatment usage is 298,416 / 176,025 / 261,273 tokens versus MiniMax 393,895 / 397,139 / 353,868. `no_prompt` raises Haiku usage (for example Baseline 501,919 and Method 1 273,816) because more trials require recovery rounds.
-- **Model identity is the only experimental difference.** Haiku jobs reuse the MiniMax job definitions, including the 300-second request timeout, budgets and evidence cap; only execution controls differ (one paid credential, 1.5-second pacing, a 2,000-request batch cap and deferred video rendering).
+- **Haiku full treatment:** 60/60 tasks succeed. Initial success is already 18/20, 19/20 and 20/20, with one initial nonconvergence each for Baseline and Method 1.
+- **Haiku Baseline is the only Haiku method with residual failures.** Across its six profiles it finishes 20, 17, 19, 20, 17 and 18 of 20 (full, `no_prompt`, `no_target`, `no_phases`, `no_context`, `only_prompt`). Six of its nine losses are preparation stops on generated helper/source SyntaxErrors.
+- **Token use.** Haiku uses fewer tokens than MiniMax in every group both models ran; for example, full treatment uses 298,416 / 176,025 / 261,273 versus 393,895 / 397,139 / 353,868. Qwen's `only_prompt` groups use 454,274 / 312,186 / 351,193.
+- **Qwen was added as a weaker-model stress test** with the `only_prompt` profile only. It has no full-treatment control, so its groups are compared descriptively with the other models' `only_prompt` groups.
+- **Model identity is the only experimental difference.** All cohorts reuse the same job definitions, including the 300-second request timeout, budgets and evidence cap. Only execution controls differ: credentials, pacing, request caps and video mode.
 
 ### 5.3 Exploratory pooled initial-prompt comparison
 
@@ -184,9 +242,11 @@ This table pools the prompt-on profiles within each method **only for the initia
 
 | Model | Method | General prompt | Initial success | Initial nonconvergence |
 | --- | --- | --- | ---: | ---: |
-| MiniMax M3.1 Flash free | Method 1 | On, four profiles pooled | 37/80 (46.2%) | 25/80 (31.2%) |
+| MiniMax M3.1 Flash free | Baseline | On, five profiles pooled | 41/100 (41.0%) | 29/100 (29.0%) |
+| MiniMax M3.1 Flash free | Baseline | Off | 1/20 (5.0%) | 11/20 (55.0%) |
+| MiniMax M3.1 Flash free | Method 1 | On, five profiles pooled | 45/100 (45.0%) | 32/100 (32.0%) |
 | MiniMax M3.1 Flash free | Method 1 | Off | 2/20 (10.0%) | 14/20 (70.0%) |
-| MiniMax M3.1 Flash free | Method 2 | On, four profiles pooled | 42/80 (52.5%) | 22/80 (27.5%) |
+| MiniMax M3.1 Flash free | Method 2 | On, five profiles pooled | 52/100 (52.0%) | 27/100 (27.0%) |
 | MiniMax M3.1 Flash free | Method 2 | Off | 3/20 (15.0%) | 11/20 (55.0%) |
 | Claude Haiku 5.5 | Baseline | On, five profiles pooled | 84/100 (84.0%) | 3/100 (3.0%) |
 | Claude Haiku 5.5 | Baseline | Off | 6/20 (30.0%) | 10/20 (50.0%) |
@@ -194,8 +254,9 @@ This table pools the prompt-on profiles within each method **only for the initia
 | Claude Haiku 5.5 | Method 1 | Off | 9/20 (45.0%) | 10/20 (50.0%) |
 | Claude Haiku 5.5 | Method 2 | On, five profiles pooled | 100/100 (100.0%) | 0/100 (0.0%) |
 | Claude Haiku 5.5 | Method 2 | Off | 15/20 (75.0%) | 5/20 (25.0%) |
-
-MiniMax Baseline ran only the full profile and has no prompt-off group.
+| Qwen3.8 27B | Baseline | On, `only_prompt` | 12/20 (60.0%) | 3/20 (15.0%) |
+| Qwen3.8 27B | Method 1 | On, `only_prompt` | 16/20 (80.0%) | 2/20 (10.0%) |
+| Qwen3.8 27B | Method 2 | On, `only_prompt` | 17/20 (85.0%) | 2/20 (10.0%) |
 
 ### 5.4 Recovery of initially unsuccessful trials
 
@@ -203,14 +264,17 @@ Feedback can only matter after an executed failure. The table counts trials whos
 
 | Model | Method | full | no_prompt | no_target | no_phases | no_context | only_prompt |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| MiniMax M3.1 Flash free | Baseline | 10/12 | — | — | — | — | — |
-| MiniMax M3.1 Flash free | Method 1 | 12/14 | 17/18 | 10/11 | 10/10 | 8/8 | — |
-| MiniMax M3.1 Flash free | Method 2 | 10/10 | 13/17 | 11/11 | 5/7 | 9/10 | — |
+| MiniMax M3.1 Flash free | Baseline | 10/12 | 13/19 | 8/9 | 9/12 | 12/14 | 12/12 |
+| MiniMax M3.1 Flash free | Method 1 | 12/14 | 17/18 | 10/11 | 10/10 | 8/8 | 12/12 |
+| MiniMax M3.1 Flash free | Method 2 | 10/10 | 13/17 | 11/11 | 5/7 | 9/10 | 9/10 |
 | Claude Haiku 5.5 | Baseline | 2/2 | 11/14 | 1/2 | 5/5 | 2/5 | 0/2 |
 | Claude Haiku 5.5 | Method 1 | 1/1 | 11/11 | 1/1 | 4/4 | 2/2 | 1/1 |
 | Claude Haiku 5.5 | Method 2 | 0/0 | 5/5 | 0/0 | 0/0 | 0/0 | 0/0 |
+| Qwen3.8 27B | Baseline | — | — | — | — | — | 4/8 |
+| Qwen3.8 27B | Method 1 | — | — | — | — | — | 4/4 |
+| Qwen3.8 27B | Method 2 | — | — | — | — | — | 2/3 |
 
-`—` marks a group that was not run. The Haiku Baseline `no_target` and `no_context` losses in this table are preparation SyntaxErrors, not unrepaired executed failures.
+`—` marks a group that was not run. Several unrecovered Baseline trials are preparation stops (SyntaxErrors or response-length stops) rather than unrepaired executed failures.
 
 ### 5.5 Failures and budget effects
 
@@ -222,10 +286,18 @@ Section 2.1 gives every unsuccessful trial's terminal path.
 - Method 2 no_context trial 1 stops during initial preparation because a request reservation exceeds the fixed round token allowance. Its 19/20 final result is not evidence that removing action context prevented repair of an executed failure; this trial never reached that stage.
 - Baseline full trial 20 executes three unsuccessful candidates (execution/query budget failure, NameError, Pick nonconvergence), then stops with `required_feedback_exceeds_token_limit`. Offline reconstruction of the same saved attempt gives **8,300 bytes** for the combined required diagnostics plus metadata, even with zero optional action-context records and zero optional legacy supporting events, exceeding the **8,192-byte cap by 108 bytes**. The legacy selector on the same recorded events fits at 8,061 bytes. This is a feedback-packing limitation of the new combination, not evidence that the model used all four repairs unsuccessfully. No additional candidate was generated or rerun.
 [Feedback-size diagnostic](../../../runs/cap-revision42/20261021-174848-minimax-220/feedback_budget_diagnostic.json) · [Affected trial](../../../runs/cap-revision42/20261021-174848-minimax-220/trials/cap_google_baseline-dsl_only-020-recovery-on-full/cap/20261021-184244-29d9ebf-cap_google_baseline-recovery-b33d7805)
-- Delivered action context also depends on the shared byte cap: of 126 MiniMax feedback payloads with action-context enrichment enabled, 125 have context candidates, 118 include at least one selected action, 98 omit at least one candidate under the cap, and 7 omit every candidate. One payload has no eligible candidate. These omissions are explicit. Removing another enrichment can free space for more context or legacy events, so these are ablations of the bounded end-to-end system, not strictly identical payloads with only one block deleted.
+- Baseline `no_prompt` trial 10 is a second `required_feedback_exceeds_token_limit` stop after a Pick nonconvergence, again with all three feedback enrichments enabled. Its size breakdown has not been reconstructed.
+- In the new Baseline ablations, the 12 unsuccessful trials comprise:
+  - 5 preparation stops on generated SyntaxErrors, one of them a duplicate argument `b0`;
+  - 3 final goal failures;
+  - 2 final runtime errors: a NameError, and a TypeError from a helper called with a missing argument;
+  - 2 final nonconvergences (`no_prompt` trials 10 and 20).
+
+  Method 2 `only_prompt` trial 1 ends in two final goal failures.
+- Delivered action context also depends on the shared byte cap: of 126 feedback payloads with action-context enrichment enabled in the original MiniMax batch, 125 have context candidates, 118 include at least one selected action, 98 omit at least one candidate under the cap, and 7 omit every candidate. One payload has no eligible candidate. These omissions are explicit. Removing another enrichment can free space for more context or legacy events, so these are ablations of the bounded end-to-end system, not strictly identical payloads with only one block deleted.
 [Actual feedback-feature coverage](../../../runs/cap-revision42/20261021-174848-minimax-220/feedback_feature_coverage.json)
 
-**Root causes of the six MiniMax final nonconvergences.** This is a read-only retrospective review of each trial's final checkpoint, timeline events, recorded trajectory and delivered feedback. The reachable ceiling is inferred from where the gripper stalls, not from a kinematic computation.
+**Root causes of the six final nonconvergences in the original 220-trial MiniMax batch.** This is a read-only retrospective review of each trial's final checkpoint, timeline events, recorded trajectory and delivered feedback. The reachable ceiling is inferred from where the gripper stalls, not from a kinematic computation.
 
 | Trial | Final failure | Root cause | Recurring across rounds | Delivered feedback |
 | --- | --- | --- | --- | --- |
@@ -247,6 +319,12 @@ Section 2.1 gives every unsuccessful trial's terminal path.
 - **Baseline `only_prompt` trials 5 and 16** fail for a reason other than motion: Baseline's separately generated helpers shadow the policy's own definitions. In trial 5, the executed helper `is_top(t, base) = ON(t, base)` matches no block in the initial scene, so `get` fails at step 0 in all five rounds. In trial 16, the executed `is_free` checks only `ON(·, b0)`, so every iteration picks up the base itself; the final Release retreat targets z = 0.926 m and stalls with a 0.0031 m residual. In both trials, the legacy feedback's binding table showed the policy's correct definition, not the helper that actually executed. The model therefore kept editing code that never ran. This is the helper-namespace failure previously recorded for Haiku Baseline trial 5 in Revision 4 and kept in the deferred backlog.
 - **Baseline `no_prompt` trial 19** uses a no-lift transport in every round: Pick, then `Move(b0, b0, b0, [0, 0, 0.06])`, then Release. The carried block is dragged into the base, which is pushed from (1.302, 0.901) to (1.531, 1.121) m over the final rollout. The carried block never satisfies `ON_star(x, b0)`, and each new Move chases the displaced base until it stalls 0.032 m from its target. Round 4 received feedback about round 3's Boolean-query error, so it included no primitive diagnostics and nothing about the displaced base.
 
+**Qwen3.8 27B failures.**
+
+- Three trials stop when a recovery request returns an incomplete response at the 16,384-token output cap (`ModelError: Incomplete/empty model response: length`). Each follows earlier primitive failures: Baseline trials 9 and 10 and Method 2 trial 6. This is a model/output-budget limit, recorded as a preparation stop with no further rollout.
+- Two Baseline trials (2 and 13) stop on generated helper/source SyntaxErrors at initial preparation.
+- No Qwen trial ends in final nonconvergence. All seven initial nonconvergences either recovered or later ended in one of the response-length stops above.
+
 - A follow-up should improve packing of overlapping facts/metadata without increasing budgets silently, and use matched failed programs/states for direct repair comparisons. The MiniMax cases additionally suggest explicit feedback facts for displaced supports, references that move with the gripper, and goals already satisfied inside a continuing loop. These observations motivate further work; no post-run implementation change or selective rerun was made.
 
 ### 5.6 Historical comparison and scope
@@ -267,7 +345,7 @@ The [earlier recovery report](revision_4_recovery_report.md) supplies both histo
 
 ## 6. Completed validation and reproducibility
 
-### 6.1 MiniMax M3.1 Flash batch
+### 6.1 Original MiniMax M3.1 Flash batch
 
 - Implementation commit: `29d9ebf`. All **62 frozen Python/JSON source files** matched their recorded hashes at batch completion. Runtime changes were not made during the batch.
 - After completion, the four prompt blocks and heading were relocated to [prompts/primitive_v1.json](../prompts/primitive_v1.json). All 16 supplement renderings/provenance records and 96 complete API renderings remain identical; 13 focused prompt tests pass. This resource-only refactor is subsequent to the recorded experiment source snapshot.
@@ -292,7 +370,22 @@ The [earlier recovery report](revision_4_recovery_report.md) supplies both histo
 - Trial run directories started after commit `3f0c0f9` carry that hash in their names. Runtime code is unchanged across both batches.
 [Accumulated audit](../../../runs/cap-revision42/20261021-combined-minimax-haiku55/revision42_audit.json) · [220-job plan](../../../runs/cap-revision42/20261021-haiku55-220/comparison_plan.json) · [Extension plan](../../../runs/cap-revision42/20261021-haiku55-extension-140/comparison_plan.json) · [Haiku preflight](../../../runs/cap-revision42-validation/20261021-haiku55-preflight/revision42_audit.json)
 
-The numerical tables and figures are generated by `synthesis.cap.revision42_report` from all three batch directories. This interpretation is retained separately as [final_interpretation.md](../../../runs/cap-revision42/20261021-combined-minimax-haiku55/final_interpretation.md) so it can be restored after the numerical tables are regenerated. The MiniMax-only interpretation remains in its [batch directory](../../../runs/cap-revision42/20261021-174848-minimax-220/final_interpretation.md).
+### 6.3 MiniMax extension and Qwen3.8 27B batches
+
+- **MiniMax extension (`20261021-minimax-extension-140`):** the same seven groups as the Haiku extension. It reuses the original MiniMax model configuration unchanged and the job definitions of the Haiku extension, except for the model. There was one credential with 6-second pacing; free-tier admission reserved the remaining call allowance of active trials, which limited concurrency to 4–8 workers. Results:
+  - **Live data:** 140/140 trials; 301 prepared attempts, 296 rollouts, 301/301 exact initial-state matches, 301 decoded videos and 161 matching delivered recovery payloads.
+  - **DSL audit:** 126 of 127 successful final policies pass (Section 5).
+  - **Usage:** 443 calls, 3,687,445 reported tokens, zero missing usage and $0.00 reported cost. All requests stayed within the credential's remaining daily free quota.
+  - **Wall time:** 102.5 minutes.
+- **Qwen3.8 27B (`20261021-qwen38-27b-only-prompt-60`):** `qwen/qwen3.8-27b` through OpenRouter with reasoning `{"enabled": true, "effort": "medium"}`. A minimal live probe was made before dispatch and is excluded. The jobs equal the Haiku `only_prompt` jobs except for the model identifier. Results:
+  - **Live data:** 60/60 trials; 88 prepared attempts, 83 rollouts, 88/88 exact initial-state matches, 88 decoded videos and 28 matching delivered recovery payloads.
+  - **DSL audit:** all 55 successful final policies pass.
+  - **Usage:** 89 calls, 1,117,653 reported tokens, zero missing usage and $1.87 reported cost.
+  - **Wall time:** 11.2 minutes.
+- Both batches were created from commit `f3ebe71`. Their recorded runtime source hashes match the current files; only the report generator changed afterwards.
+- The accumulated audit covers **780/780 trials** across five batches with zero artifact-audit issues and independent video decoding.
+
+The numerical tables and figures are generated by `synthesis.cap.revision42_report` from all five batch directories. This interpretation is retained separately as [final_interpretation.md](../../../runs/cap-revision42/20261021-combined-minimax-haiku55/final_interpretation.md) so it can be restored after the numerical tables are regenerated. The MiniMax-only interpretation remains in its [batch directory](../../../runs/cap-revision42/20261021-174848-minimax-220/final_interpretation.md).
 
 ## 7. Per-trial results
 
@@ -318,6 +411,106 @@ The numerical tables and figures are generated by `synthesis.cap.revision42_repo
 | MiniMax M3.1 Flash free | Baseline | full | 18 | budget_exhausted | completed | True | 40501 | 5 | [Run](../../../runs/cap-revision42/20261021-174848-minimax-220/trials/cap_google_baseline-dsl_only-018-recovery-on-full/cap/20261021-183237-29d9ebf-cap_google_baseline-recovery-5f41f3d6) |
 | MiniMax M3.1 Flash free | Baseline | full | 19 | failed | completed | True | 16780 | 2 | [Run](../../../runs/cap-revision42/20261021-174848-minimax-220/trials/cap_google_baseline-dsl_only-019-recovery-on-full/cap/20261021-183824-29d9ebf-cap_google_baseline-recovery-4a15d562) |
 | MiniMax M3.1 Flash free | Baseline | full | 20 | budget_exhausted | primitive_failed | False | 32166 | 4 | [Run](../../../runs/cap-revision42/20261021-174848-minimax-220/trials/cap_google_baseline-dsl_only-020-recovery-on-full/cap/20261021-184244-29d9ebf-cap_google_baseline-recovery-b33d7805) |
+| MiniMax M3.1 Flash free | Baseline | no_prompt | 1 | primitive_failed | completed | True | 30698 | 4 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-001-recovery-on-no_prompt/cap/20261021-210513-f3ebe71-cap_google_baseline-recovery-d8a5d9fb) |
+| MiniMax M3.1 Flash free | Baseline | no_prompt | 2 | completed | completed | True | 11539 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-002-recovery-on-no_prompt/cap/20261021-210755-f3ebe71-cap_google_baseline-recovery-9f96eb37) |
+| MiniMax M3.1 Flash free | Baseline | no_prompt | 3 | budget_exhausted | goal_failed | False | 79580 | 10 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-003-recovery-on-no_prompt/cap/20261021-211234-f3ebe71-cap_google_baseline-recovery-42c59d8b) |
+| MiniMax M3.1 Flash free | Baseline | no_prompt | 4 | primitive_failed | failed | False | 43271 | 5 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-004-recovery-on-no_prompt/cap/20261021-211447-f3ebe71-cap_google_baseline-recovery-b709f93b) |
+| MiniMax M3.1 Flash free | Baseline | no_prompt | 5 | primitive_failed | completed | True | 38950 | 6 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-005-recovery-on-no_prompt/cap/20261021-212028-f3ebe71-cap_google_baseline-recovery-e48ede64) |
+| MiniMax M3.1 Flash free | Baseline | no_prompt | 6 | failed | goal_failed | False | 44740 | 5 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-006-recovery-on-no_prompt/cap/20261021-212158-f3ebe71-cap_google_baseline-recovery-c39ab12a) |
+| MiniMax M3.1 Flash free | Baseline | no_prompt | 7 | budget_exhausted | completed | True | 61521 | 8 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-007-recovery-on-no_prompt/cap/20261021-212659-f3ebe71-cap_google_baseline-recovery-21bc247d) |
+| MiniMax M3.1 Flash free | Baseline | no_prompt | 8 | primitive_failed | completed | True | 21223 | 3 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-008-recovery-on-no_prompt/cap/20261021-212929-f3ebe71-cap_google_baseline-recovery-eead7d1e) |
+| MiniMax M3.1 Flash free | Baseline | no_prompt | 9 | budget_exhausted | completed | True | 40510 | 5 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-009-recovery-on-no_prompt/cap/20261021-213134-f3ebe71-cap_google_baseline-recovery-ee22136a) |
+| MiniMax M3.1 Flash free | Baseline | no_prompt | 10 | primitive_failed | primitive_failed | False | 45718 | 6 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-010-recovery-on-no_prompt/cap/20261021-213815-f3ebe71-cap_google_baseline-recovery-dd1b8392) |
+| MiniMax M3.1 Flash free | Baseline | no_prompt | 11 | goal_failed | completed | True | 26503 | 4 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-011-recovery-on-no_prompt/cap/20261021-214315-f3ebe71-cap_google_baseline-recovery-74e85391) |
+| MiniMax M3.1 Flash free | Baseline | no_prompt | 12 | failed | failed | False | 4279 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-012-recovery-on-no_prompt/cap/20261021-214430-f3ebe71-cap_google_baseline-recovery-3a88264d) |
+| MiniMax M3.1 Flash free | Baseline | no_prompt | 13 | primitive_failed | completed | True | 17359 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-013-recovery-on-no_prompt/cap/20261021-214825-f3ebe71-cap_google_baseline-recovery-84ca7a68) |
+| MiniMax M3.1 Flash free | Baseline | no_prompt | 14 | primitive_failed | completed | True | 37058 | 4 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-014-recovery-on-no_prompt/cap/20261021-215027-f3ebe71-cap_google_baseline-recovery-2acc7470) |
+| MiniMax M3.1 Flash free | Baseline | no_prompt | 15 | primitive_failed | completed | True | 16937 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-015-recovery-on-no_prompt/cap/20261021-215537-f3ebe71-cap_google_baseline-recovery-e425df10) |
+| MiniMax M3.1 Flash free | Baseline | no_prompt | 16 | primitive_failed | completed | True | 61039 | 8 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-016-recovery-on-no_prompt/cap/20261021-220008-f3ebe71-cap_google_baseline-recovery-97266b75) |
+| MiniMax M3.1 Flash free | Baseline | no_prompt | 17 | goal_failed | completed | True | 58831 | 6 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-017-recovery-on-no_prompt/cap/20261021-220403-f3ebe71-cap_google_baseline-recovery-1ea6a1cd) |
+| MiniMax M3.1 Flash free | Baseline | no_prompt | 18 | primitive_failed | completed | True | 14585 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-018-recovery-on-no_prompt/cap/20261021-221507-f3ebe71-cap_google_baseline-recovery-572527c2) |
+| MiniMax M3.1 Flash free | Baseline | no_prompt | 19 | primitive_failed | completed | True | 25013 | 4 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-019-recovery-on-no_prompt/cap/20261021-222306-f3ebe71-cap_google_baseline-recovery-05b13187) |
+| MiniMax M3.1 Flash free | Baseline | no_prompt | 20 | failed | primitive_failed | False | 113588 | 16 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-020-recovery-on-no_prompt/cap/20261021-223127-f3ebe71-cap_google_baseline-recovery-c72c167e) |
+| MiniMax M3.1 Flash free | Baseline | no_target | 1 | completed | completed | True | 10787 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-001-recovery-on-no_target/cap/20261021-210513-f3ebe71-cap_google_baseline-recovery-4f12834a) |
+| MiniMax M3.1 Flash free | Baseline | no_target | 2 | completed | completed | True | 13669 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-002-recovery-on-no_target/cap/20261021-210935-f3ebe71-cap_google_baseline-recovery-eeb6612f) |
+| MiniMax M3.1 Flash free | Baseline | no_target | 3 | completed | completed | True | 11644 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-003-recovery-on-no_target/cap/20261021-211108-f3ebe71-cap_google_baseline-recovery-05fff2ca) |
+| MiniMax M3.1 Flash free | Baseline | no_target | 4 | failed | completed | True | 52395 | 5 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-004-recovery-on-no_target/cap/20261021-211553-f3ebe71-cap_google_baseline-recovery-77f4ac3e) |
+| MiniMax M3.1 Flash free | Baseline | no_target | 5 | primitive_failed | completed | True | 17296 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-005-recovery-on-no_target/cap/20261021-211952-f3ebe71-cap_google_baseline-recovery-b68b4a71) |
+| MiniMax M3.1 Flash free | Baseline | no_target | 6 | budget_exhausted | goal_failed | False | 118295 | 13 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-006-recovery-on-no_target/cap/20261021-212307-f3ebe71-cap_google_baseline-recovery-fcace38c) |
+| MiniMax M3.1 Flash free | Baseline | no_target | 7 | primitive_failed | completed | True | 32299 | 3 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-007-recovery-on-no_target/cap/20261021-212446-f3ebe71-cap_google_baseline-recovery-b9fe087d) |
+| MiniMax M3.1 Flash free | Baseline | no_target | 8 | completed | completed | True | 11199 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-008-recovery-on-no_target/cap/20261021-212755-f3ebe71-cap_google_baseline-recovery-378b9673) |
+| MiniMax M3.1 Flash free | Baseline | no_target | 9 | primitive_failed | completed | True | 18749 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-009-recovery-on-no_target/cap/20261021-213104-f3ebe71-cap_google_baseline-recovery-0370409c) |
+| MiniMax M3.1 Flash free | Baseline | no_target | 10 | completed | completed | True | 6210 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-010-recovery-on-no_target/cap/20261021-213805-f3ebe71-cap_google_baseline-recovery-b0ba67cb) |
+| MiniMax M3.1 Flash free | Baseline | no_target | 11 | primitive_failed | completed | True | 29784 | 4 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-011-recovery-on-no_target/cap/20261021-214405-f3ebe71-cap_google_baseline-recovery-0862ae59) |
+| MiniMax M3.1 Flash free | Baseline | no_target | 12 | completed | completed | True | 10626 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-012-recovery-on-no_target/cap/20261021-214615-f3ebe71-cap_google_baseline-recovery-3e95e42b) |
+| MiniMax M3.1 Flash free | Baseline | no_target | 13 | completed | completed | True | 10432 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-013-recovery-on-no_target/cap/20261021-214758-f3ebe71-cap_google_baseline-recovery-2ccf9f21) |
+| MiniMax M3.1 Flash free | Baseline | no_target | 14 | budget_exhausted | completed | True | 21096 | 3 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-014-recovery-on-no_target/cap/20261021-215222-f3ebe71-cap_google_baseline-recovery-80fd871b) |
+| MiniMax M3.1 Flash free | Baseline | no_target | 15 | completed | completed | True | 8201 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-015-recovery-on-no_target/cap/20261021-215509-f3ebe71-cap_google_baseline-recovery-f8b1a72e) |
+| MiniMax M3.1 Flash free | Baseline | no_target | 16 | goal_failed | completed | True | 17472 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-016-recovery-on-no_target/cap/20261021-215839-f3ebe71-cap_google_baseline-recovery-4d15e2e9) |
+| MiniMax M3.1 Flash free | Baseline | no_target | 17 | completed | completed | True | 6107 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-017-recovery-on-no_target/cap/20261021-221412-f3ebe71-cap_google_baseline-recovery-03263583) |
+| MiniMax M3.1 Flash free | Baseline | no_target | 18 | completed | completed | True | 8164 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-018-recovery-on-no_target/cap/20261021-222144-f3ebe71-cap_google_baseline-recovery-853bad7c) |
+| MiniMax M3.1 Flash free | Baseline | no_target | 19 | completed | completed | True | 7139 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-019-recovery-on-no_target/cap/20261021-222342-f3ebe71-cap_google_baseline-recovery-8d1baaf0) |
+| MiniMax M3.1 Flash free | Baseline | no_target | 20 | primitive_failed | completed | True | 16401 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-020-recovery-on-no_target/cap/20261021-224541-f3ebe71-cap_google_baseline-recovery-23c94df0) |
+| MiniMax M3.1 Flash free | Baseline | no_phases | 1 | primitive_failed | failed | False | 141279 | 16 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-001-recovery-on-no_phases/cap/20261021-210513-f3ebe71-cap_google_baseline-recovery-3835263c) |
+| MiniMax M3.1 Flash free | Baseline | no_phases | 2 | failed | completed | True | 30290 | 3 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-002-recovery-on-no_phases/cap/20261021-210649-f3ebe71-cap_google_baseline-recovery-a0ec792a) |
+| MiniMax M3.1 Flash free | Baseline | no_phases | 3 | primitive_failed | completed | True | 36760 | 4 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-003-recovery-on-no_phases/cap/20261021-210955-f3ebe71-cap_google_baseline-recovery-8fb09438) |
+| MiniMax M3.1 Flash free | Baseline | no_phases | 4 | completed | completed | True | 22459 | 3 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-004-recovery-on-no_phases/cap/20261021-211237-f3ebe71-cap_google_baseline-recovery-7a737aba) |
+| MiniMax M3.1 Flash free | Baseline | no_phases | 5 | primitive_failed | failed | False | 34253 | 4 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-005-recovery-on-no_phases/cap/20261021-212054-f3ebe71-cap_google_baseline-recovery-5e22508a) |
+| MiniMax M3.1 Flash free | Baseline | no_phases | 6 | primitive_failed | completed | True | 16839 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-006-recovery-on-no_phases/cap/20261021-212359-f3ebe71-cap_google_baseline-recovery-d5084a5c) |
+| MiniMax M3.1 Flash free | Baseline | no_phases | 7 | completed | completed | True | 7142 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-007-recovery-on-no_phases/cap/20261021-212552-f3ebe71-cap_google_baseline-recovery-2cc7cd87) |
+| MiniMax M3.1 Flash free | Baseline | no_phases | 8 | failed | completed | True | 25812 | 3 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-008-recovery-on-no_phases/cap/20261021-212735-f3ebe71-cap_google_baseline-recovery-a973ae4a) |
+| MiniMax M3.1 Flash free | Baseline | no_phases | 9 | primitive_failed | completed | True | 33602 | 4 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-009-recovery-on-no_phases/cap/20261021-213337-f3ebe71-cap_google_baseline-recovery-f1554362) |
+| MiniMax M3.1 Flash free | Baseline | no_phases | 10 | failed | completed | True | 21178 | 3 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-010-recovery-on-no_phases/cap/20261021-213559-f3ebe71-cap_google_baseline-recovery-eccef8dc) |
+| MiniMax M3.1 Flash free | Baseline | no_phases | 11 | completed | completed | True | 11652 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-011-recovery-on-no_phases/cap/20261021-214120-f3ebe71-cap_google_baseline-recovery-108fd9d5) |
+| MiniMax M3.1 Flash free | Baseline | no_phases | 12 | completed | completed | True | 8229 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-012-recovery-on-no_phases/cap/20261021-214628-f3ebe71-cap_google_baseline-recovery-8eb4e417) |
+| MiniMax M3.1 Flash free | Baseline | no_phases | 13 | completed | completed | True | 15192 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-013-recovery-on-no_phases/cap/20261021-214900-f3ebe71-cap_google_baseline-recovery-f9314f91) |
+| MiniMax M3.1 Flash free | Baseline | no_phases | 14 | completed | completed | True | 7323 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-014-recovery-on-no_phases/cap/20261021-215121-f3ebe71-cap_google_baseline-recovery-24a910ee) |
+| MiniMax M3.1 Flash free | Baseline | no_phases | 15 | completed | completed | True | 7110 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-015-recovery-on-no_phases/cap/20261021-215540-f3ebe71-cap_google_baseline-recovery-c4dd7269) |
+| MiniMax M3.1 Flash free | Baseline | no_phases | 16 | budget_exhausted | completed | True | 61791 | 7 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-016-recovery-on-no_phases/cap/20261021-220054-f3ebe71-cap_google_baseline-recovery-4b7c6ad6) |
+| MiniMax M3.1 Flash free | Baseline | no_phases | 17 | failed | completed | True | 15756 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-017-recovery-on-no_phases/cap/20261021-220829-f3ebe71-cap_google_baseline-recovery-62277f8c) |
+| MiniMax M3.1 Flash free | Baseline | no_phases | 18 | completed | completed | True | 5978 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-018-recovery-on-no_phases/cap/20261021-222100-f3ebe71-cap_google_baseline-recovery-e4fb7fa6) |
+| MiniMax M3.1 Flash free | Baseline | no_phases | 19 | failed | failed | False | 17022 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-019-recovery-on-no_phases/cap/20261021-222237-f3ebe71-cap_google_baseline-recovery-1a91d2bf) |
+| MiniMax M3.1 Flash free | Baseline | no_phases | 20 | goal_failed | completed | True | 28715 | 3 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-020-recovery-on-no_phases/cap/20261021-222908-f3ebe71-cap_google_baseline-recovery-9dac66d0) |
+| MiniMax M3.1 Flash free | Baseline | no_context | 1 | failed | failed | False | 12088 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-001-recovery-on-no_context/cap/20261021-210513-f3ebe71-cap_google_baseline-recovery-a3050b71) |
+| MiniMax M3.1 Flash free | Baseline | no_context | 2 | failed | completed | True | 19500 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-002-recovery-on-no_context/cap/20261021-210513-f3ebe71-cap_google_baseline-recovery-90c292be) |
+| MiniMax M3.1 Flash free | Baseline | no_context | 3 | completed | completed | True | 9652 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-003-recovery-on-no_context/cap/20261021-210947-f3ebe71-cap_google_baseline-recovery-28ede465) |
+| MiniMax M3.1 Flash free | Baseline | no_context | 4 | primitive_failed | completed | True | 28196 | 4 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-004-recovery-on-no_context/cap/20261021-211520-f3ebe71-cap_google_baseline-recovery-543c0ce5) |
+| MiniMax M3.1 Flash free | Baseline | no_context | 5 | completed | completed | True | 7597 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-005-recovery-on-no_context/cap/20261021-211938-f3ebe71-cap_google_baseline-recovery-b584765f) |
+| MiniMax M3.1 Flash free | Baseline | no_context | 6 | completed | completed | True | 10133 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-006-recovery-on-no_context/cap/20261021-212222-f3ebe71-cap_google_baseline-recovery-e640b6da) |
+| MiniMax M3.1 Flash free | Baseline | no_context | 7 | completed | completed | True | 6364 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-007-recovery-on-no_context/cap/20261021-212636-f3ebe71-cap_google_baseline-recovery-58f20390) |
+| MiniMax M3.1 Flash free | Baseline | no_context | 8 | primitive_failed | completed | True | 17552 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-008-recovery-on-no_context/cap/20261021-212926-f3ebe71-cap_google_baseline-recovery-d2ca34b8) |
+| MiniMax M3.1 Flash free | Baseline | no_context | 9 | failed | completed | True | 16675 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-009-recovery-on-no_context/cap/20261021-213141-f3ebe71-cap_google_baseline-recovery-089bc87c) |
+| MiniMax M3.1 Flash free | Baseline | no_context | 10 | primitive_failed | completed | True | 53728 | 6 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-010-recovery-on-no_context/cap/20261021-213742-f3ebe71-cap_google_baseline-recovery-4e5b5784) |
+| MiniMax M3.1 Flash free | Baseline | no_context | 11 | completed | completed | True | 7048 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-011-recovery-on-no_context/cap/20261021-214311-f3ebe71-cap_google_baseline-recovery-6feb2fbd) |
+| MiniMax M3.1 Flash free | Baseline | no_context | 12 | failed | failed | False | 17443 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-012-recovery-on-no_context/cap/20261021-214421-f3ebe71-cap_google_baseline-recovery-56c79337) |
+| MiniMax M3.1 Flash free | Baseline | no_context | 13 | completed | completed | True | 6575 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-013-recovery-on-no_context/cap/20261021-214725-f3ebe71-cap_google_baseline-recovery-6d0a52ff) |
+| MiniMax M3.1 Flash free | Baseline | no_context | 14 | budget_exhausted | completed | True | 24725 | 3 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-014-recovery-on-no_context/cap/20261021-215219-f3ebe71-cap_google_baseline-recovery-748a527b) |
+| MiniMax M3.1 Flash free | Baseline | no_context | 15 | primitive_failed | completed | True | 178597 | 21 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-015-recovery-on-no_context/cap/20261021-215403-f3ebe71-cap_google_baseline-recovery-7c392530) |
+| MiniMax M3.1 Flash free | Baseline | no_context | 16 | failed | completed | True | 19252 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-016-recovery-on-no_context/cap/20261021-220130-f3ebe71-cap_google_baseline-recovery-8b19bfa4) |
+| MiniMax M3.1 Flash free | Baseline | no_context | 17 | primitive_failed | completed | True | 66975 | 7 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-017-recovery-on-no_context/cap/20261021-221133-f3ebe71-cap_google_baseline-recovery-4f68614a) |
+| MiniMax M3.1 Flash free | Baseline | no_context | 18 | primitive_failed | completed | True | 58678 | 6 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-018-recovery-on-no_context/cap/20261021-221521-f3ebe71-cap_google_baseline-recovery-f284d2c7) |
+| MiniMax M3.1 Flash free | Baseline | no_context | 19 | primitive_failed | completed | True | 18094 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-019-recovery-on-no_context/cap/20261021-222456-f3ebe71-cap_google_baseline-recovery-4a2efd53) |
+| MiniMax M3.1 Flash free | Baseline | no_context | 20 | failed | completed | True | 34538 | 4 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-020-recovery-on-no_context/cap/20261021-223154-f3ebe71-cap_google_baseline-recovery-370c7b63) |
+| MiniMax M3.1 Flash free | Baseline | only_prompt | 1 | primitive_failed | completed | True | 19225 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-001-recovery-on-only_prompt/cap/20261021-210513-f3ebe71-cap_google_baseline-recovery-e05b2357) |
+| MiniMax M3.1 Flash free | Baseline | only_prompt | 2 | failed | completed | True | 28249 | 3 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-002-recovery-on-only_prompt/cap/20261021-210653-f3ebe71-cap_google_baseline-recovery-1489f2ec) |
+| MiniMax M3.1 Flash free | Baseline | only_prompt | 3 | budget_exhausted | completed | True | 24146 | 4 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-003-recovery-on-only_prompt/cap/20261021-211038-f3ebe71-cap_google_baseline-recovery-55331cbd) |
+| MiniMax M3.1 Flash free | Baseline | only_prompt | 4 | primitive_failed | completed | True | 36321 | 4 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-004-recovery-on-only_prompt/cap/20261021-211709-f3ebe71-cap_google_baseline-recovery-3dae1dd8) |
+| MiniMax M3.1 Flash free | Baseline | only_prompt | 5 | completed | completed | True | 6690 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-005-recovery-on-only_prompt/cap/20261021-212128-f3ebe71-cap_google_baseline-recovery-a76c788f) |
+| MiniMax M3.1 Flash free | Baseline | only_prompt | 6 | completed | completed | True | 6802 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-006-recovery-on-only_prompt/cap/20261021-212257-f3ebe71-cap_google_baseline-recovery-71310ab7) |
+| MiniMax M3.1 Flash free | Baseline | only_prompt | 7 | completed | completed | True | 14544 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-007-recovery-on-only_prompt/cap/20261021-212421-f3ebe71-cap_google_baseline-recovery-6f618ada) |
+| MiniMax M3.1 Flash free | Baseline | only_prompt | 8 | primitive_failed | completed | True | 36404 | 3 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-008-recovery-on-only_prompt/cap/20261021-212745-f3ebe71-cap_google_baseline-recovery-8c5fa855) |
+| MiniMax M3.1 Flash free | Baseline | only_prompt | 9 | primitive_failed | completed | True | 28531 | 4 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-009-recovery-on-only_prompt/cap/20261021-213457-f3ebe71-cap_google_baseline-recovery-3e3d6feb) |
+| MiniMax M3.1 Flash free | Baseline | only_prompt | 10 | primitive_failed | completed | True | 36927 | 4 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-010-recovery-on-only_prompt/cap/20261021-213658-f3ebe71-cap_google_baseline-recovery-0d8f7315) |
+| MiniMax M3.1 Flash free | Baseline | only_prompt | 11 | budget_exhausted | completed | True | 31860 | 4 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-011-recovery-on-only_prompt/cap/20261021-214031-f3ebe71-cap_google_baseline-recovery-511bf45b) |
+| MiniMax M3.1 Flash free | Baseline | only_prompt | 12 | completed | completed | True | 7082 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-012-recovery-on-only_prompt/cap/20261021-214514-f3ebe71-cap_google_baseline-recovery-c5c8199c) |
+| MiniMax M3.1 Flash free | Baseline | only_prompt | 13 | goal_failed | completed | True | 15883 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-013-recovery-on-only_prompt/cap/20261021-214739-f3ebe71-cap_google_baseline-recovery-108bd358) |
+| MiniMax M3.1 Flash free | Baseline | only_prompt | 14 | completed | completed | True | 7665 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-014-recovery-on-only_prompt/cap/20261021-215107-f3ebe71-cap_google_baseline-recovery-7a12e5b3) |
+| MiniMax M3.1 Flash free | Baseline | only_prompt | 15 | completed | completed | True | 10803 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-015-recovery-on-only_prompt/cap/20261021-215405-f3ebe71-cap_google_baseline-recovery-b3a0e8af) |
+| MiniMax M3.1 Flash free | Baseline | only_prompt | 16 | completed | completed | True | 11333 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-016-recovery-on-only_prompt/cap/20261021-215649-f3ebe71-cap_google_baseline-recovery-c3f165aa) |
+| MiniMax M3.1 Flash free | Baseline | only_prompt | 17 | failed | completed | True | 38397 | 4 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-017-recovery-on-only_prompt/cap/20261021-221003-f3ebe71-cap_google_baseline-recovery-67dc93b2) |
+| MiniMax M3.1 Flash free | Baseline | only_prompt | 18 | budget_exhausted | completed | True | 34859 | 4 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-018-recovery-on-only_prompt/cap/20261021-221842-f3ebe71-cap_google_baseline-recovery-88228171) |
+| MiniMax M3.1 Flash free | Baseline | only_prompt | 19 | completed | completed | True | 6655 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-019-recovery-on-only_prompt/cap/20261021-222608-f3ebe71-cap_google_baseline-recovery-f6561143) |
+| MiniMax M3.1 Flash free | Baseline | only_prompt | 20 | primitive_failed | completed | True | 118506 | 13 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_google_baseline-dsl_only-020-recovery-on-only_prompt/cap/20261021-223549-f3ebe71-cap_google_baseline-recovery-f02d4e6a) |
 | MiniMax M3.1 Flash free | Method 1 | full | 1 | budget_exhausted | primitive_failed | False | 67712 | 6 | [Run](../../../runs/cap-revision42/20261021-174848-minimax-220/trials/cap_method_1-dsl_only-001-recovery-on-full/cap/20261021-174851-29d9ebf-cap_method_1-recovery-e5eade75) |
 | MiniMax M3.1 Flash free | Method 1 | full | 2 | primitive_failed | completed | True | 15730 | 2 | [Run](../../../runs/cap-revision42/20261021-174848-minimax-220/trials/cap_method_1-dsl_only-002-recovery-on-full/cap/20261021-175006-29d9ebf-cap_method_1-recovery-ffa13d52) |
 | MiniMax M3.1 Flash free | Method 1 | full | 3 | budget_exhausted | completed | True | 20360 | 2 | [Run](../../../runs/cap-revision42/20261021-174848-minimax-220/trials/cap_method_1-dsl_only-003-recovery-on-full/cap/20261021-175145-29d9ebf-cap_method_1-recovery-2e00dbde) |
@@ -418,6 +611,26 @@ The numerical tables and figures are generated by `synthesis.cap.revision42_repo
 | MiniMax M3.1 Flash free | Method 1 | no_context | 18 | primitive_failed | completed | True | 28732 | 3 | [Run](../../../runs/cap-revision42/20261021-174848-minimax-220/trials/cap_method_1-dsl_only-018-recovery-on-no_context/cap/20261021-183246-29d9ebf-cap_method_1-recovery-ce0e8abd) |
 | MiniMax M3.1 Flash free | Method 1 | no_context | 19 | completed | completed | True | 6810 | 1 | [Run](../../../runs/cap-revision42/20261021-174848-minimax-220/trials/cap_method_1-dsl_only-019-recovery-on-no_context/cap/20261021-184033-29d9ebf-cap_method_1-recovery-ba5f5817) |
 | MiniMax M3.1 Flash free | Method 1 | no_context | 20 | primitive_failed | completed | True | 17713 | 2 | [Run](../../../runs/cap-revision42/20261021-174848-minimax-220/trials/cap_method_1-dsl_only-020-recovery-on-no_context/cap/20261021-184337-29d9ebf-cap_method_1-recovery-178bc075) |
+| MiniMax M3.1 Flash free | Method 1 | only_prompt | 1 | completed | completed | True | 7777 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_1-dsl_only-001-recovery-on-only_prompt/cap/20261021-210513-f3ebe71-cap_method_1-recovery-65058121) |
+| MiniMax M3.1 Flash free | Method 1 | only_prompt | 2 | goal_failed | completed | True | 38072 | 4 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_1-dsl_only-002-recovery-on-only_prompt/cap/20261021-210820-f3ebe71-cap_method_1-recovery-bba60c19) |
+| MiniMax M3.1 Flash free | Method 1 | only_prompt | 3 | primitive_failed | completed | True | 34876 | 4 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_1-dsl_only-003-recovery-on-only_prompt/cap/20261021-211131-f3ebe71-cap_method_1-recovery-81a2094e) |
+| MiniMax M3.1 Flash free | Method 1 | only_prompt | 4 | primitive_failed | completed | True | 27973 | 3 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_1-dsl_only-004-recovery-on-only_prompt/cap/20261021-211338-f3ebe71-cap_method_1-recovery-5ac4af26) |
+| MiniMax M3.1 Flash free | Method 1 | only_prompt | 5 | primitive_failed | completed | True | 17784 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_1-dsl_only-005-recovery-on-only_prompt/cap/20261021-211944-f3ebe71-cap_method_1-recovery-6d2ae9a0) |
+| MiniMax M3.1 Flash free | Method 1 | only_prompt | 6 | completed | completed | True | 9527 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_1-dsl_only-006-recovery-on-only_prompt/cap/20261021-212133-f3ebe71-cap_method_1-recovery-1c769c46) |
+| MiniMax M3.1 Flash free | Method 1 | only_prompt | 7 | budget_exhausted | completed | True | 27634 | 3 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_1-dsl_only-007-recovery-on-only_prompt/cap/20261021-212440-f3ebe71-cap_method_1-recovery-aa544cc1) |
+| MiniMax M3.1 Flash free | Method 1 | only_prompt | 8 | completed | completed | True | 6400 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_1-dsl_only-008-recovery-on-only_prompt/cap/20261021-212838-f3ebe71-cap_method_1-recovery-cbafaa71) |
+| MiniMax M3.1 Flash free | Method 1 | only_prompt | 9 | primitive_failed | completed | True | 32085 | 4 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_1-dsl_only-009-recovery-on-only_prompt/cap/20261021-213205-f3ebe71-cap_method_1-recovery-26d2e57a) |
+| MiniMax M3.1 Flash free | Method 1 | only_prompt | 10 | primitive_failed | completed | True | 25802 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_1-dsl_only-010-recovery-on-only_prompt/cap/20261021-213851-f3ebe71-cap_method_1-recovery-17a1563b) |
+| MiniMax M3.1 Flash free | Method 1 | only_prompt | 11 | primitive_failed | completed | True | 24240 | 3 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_1-dsl_only-011-recovery-on-only_prompt/cap/20261021-214212-f3ebe71-cap_method_1-recovery-5e66f864) |
+| MiniMax M3.1 Flash free | Method 1 | only_prompt | 12 | completed | completed | True | 7369 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_1-dsl_only-012-recovery-on-only_prompt/cap/20261021-214634-f3ebe71-cap_method_1-recovery-6f899f46) |
+| MiniMax M3.1 Flash free | Method 1 | only_prompt | 13 | budget_exhausted | completed | True | 17327 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_1-dsl_only-013-recovery-on-only_prompt/cap/20261021-214903-f3ebe71-cap_method_1-recovery-3b94da74) |
+| MiniMax M3.1 Flash free | Method 1 | only_prompt | 14 | completed | completed | True | 6479 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_1-dsl_only-014-recovery-on-only_prompt/cap/20261021-215134-f3ebe71-cap_method_1-recovery-ea4c8df4) |
+| MiniMax M3.1 Flash free | Method 1 | only_prompt | 15 | completed | completed | True | 15143 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_1-dsl_only-015-recovery-on-only_prompt/cap/20261021-215632-f3ebe71-cap_method_1-recovery-8f49c85c) |
+| MiniMax M3.1 Flash free | Method 1 | only_prompt | 16 | budget_exhausted | completed | True | 15530 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_1-dsl_only-016-recovery-on-only_prompt/cap/20261021-215811-f3ebe71-cap_method_1-recovery-ed6062b2) |
+| MiniMax M3.1 Flash free | Method 1 | only_prompt | 17 | completed | completed | True | 12183 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_1-dsl_only-017-recovery-on-only_prompt/cap/20261021-221359-f3ebe71-cap_method_1-recovery-c6b35b31) |
+| MiniMax M3.1 Flash free | Method 1 | only_prompt | 18 | goal_failed | completed | True | 27545 | 3 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_1-dsl_only-018-recovery-on-only_prompt/cap/20261021-221642-f3ebe71-cap_method_1-recovery-30d1b087) |
+| MiniMax M3.1 Flash free | Method 1 | only_prompt | 19 | primitive_failed | completed | True | 16633 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_1-dsl_only-019-recovery-on-only_prompt/cap/20261021-222651-f3ebe71-cap_method_1-recovery-9e2a6c94) |
+| MiniMax M3.1 Flash free | Method 1 | only_prompt | 20 | completed | completed | True | 11866 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_1-dsl_only-020-recovery-on-only_prompt/cap/20261021-222944-f3ebe71-cap_method_1-recovery-bc6fff0f) |
 | MiniMax M3.1 Flash free | Method 2 | full | 1 | completed | completed | True | 7022 | 1 | [Run](../../../runs/cap-revision42/20261021-174848-minimax-220/trials/cap_method_2-dsl_only-001-recovery-on-full/cap/20261021-174852-29d9ebf-cap_method_2-recovery-89bd400f) |
 | MiniMax M3.1 Flash free | Method 2 | full | 2 | primitive_failed | completed | True | 18075 | 2 | [Run](../../../runs/cap-revision42/20261021-174848-minimax-220/trials/cap_method_2-dsl_only-002-recovery-on-full/cap/20261021-174853-29d9ebf-cap_method_2-recovery-8915e59b) |
 | MiniMax M3.1 Flash free | Method 2 | full | 3 | completed | completed | True | 16415 | 2 | [Run](../../../runs/cap-revision42/20261021-174848-minimax-220/trials/cap_method_2-dsl_only-003-recovery-on-full/cap/20261021-175205-29d9ebf-cap_method_2-recovery-1f0f32fa) |
@@ -518,6 +731,26 @@ The numerical tables and figures are generated by `synthesis.cap.revision42_repo
 | MiniMax M3.1 Flash free | Method 2 | no_context | 18 | primitive_failed | completed | True | 32023 | 3 | [Run](../../../runs/cap-revision42/20261021-174848-minimax-220/trials/cap_method_2-dsl_only-018-recovery-on-no_context/cap/20261021-183646-29d9ebf-cap_method_2-recovery-69b57cae) |
 | MiniMax M3.1 Flash free | Method 2 | no_context | 19 | completed | completed | True | 6886 | 1 | [Run](../../../runs/cap-revision42/20261021-174848-minimax-220/trials/cap_method_2-dsl_only-019-recovery-on-no_context/cap/20261021-184046-29d9ebf-cap_method_2-recovery-7b7da39a) |
 | MiniMax M3.1 Flash free | Method 2 | no_context | 20 | completed | completed | True | 6949 | 1 | [Run](../../../runs/cap-revision42/20261021-174848-minimax-220/trials/cap_method_2-dsl_only-020-recovery-on-no_context/cap/20261021-184309-29d9ebf-cap_method_2-recovery-fb40bdf1) |
+| MiniMax M3.1 Flash free | Method 2 | only_prompt | 1 | primitive_failed | goal_failed | False | 49463 | 5 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_2-dsl_only-001-recovery-on-only_prompt/cap/20261021-210513-f3ebe71-cap_method_2-recovery-3bb12081) |
+| MiniMax M3.1 Flash free | Method 2 | only_prompt | 2 | primitive_failed | completed | True | 50127 | 5 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_2-dsl_only-002-recovery-on-only_prompt/cap/20261021-210638-f3ebe71-cap_method_2-recovery-54eb787a) |
+| MiniMax M3.1 Flash free | Method 2 | only_prompt | 3 | budget_exhausted | completed | True | 18000 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_2-dsl_only-003-recovery-on-only_prompt/cap/20261021-211231-f3ebe71-cap_method_2-recovery-45bf8364) |
+| MiniMax M3.1 Flash free | Method 2 | only_prompt | 4 | primitive_failed | completed | True | 27635 | 3 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_2-dsl_only-004-recovery-on-only_prompt/cap/20261021-211543-f3ebe71-cap_method_2-recovery-bed166a6) |
+| MiniMax M3.1 Flash free | Method 2 | only_prompt | 5 | completed | completed | True | 18172 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_2-dsl_only-005-recovery-on-only_prompt/cap/20261021-211841-f3ebe71-cap_method_2-recovery-1ef06097) |
+| MiniMax M3.1 Flash free | Method 2 | only_prompt | 6 | completed | completed | True | 8776 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_2-dsl_only-006-recovery-on-only_prompt/cap/20261021-212330-f3ebe71-cap_method_2-recovery-805b1769) |
+| MiniMax M3.1 Flash free | Method 2 | only_prompt | 7 | completed | completed | True | 7225 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_2-dsl_only-007-recovery-on-only_prompt/cap/20261021-212625-f3ebe71-cap_method_2-recovery-2d5d2819) |
+| MiniMax M3.1 Flash free | Method 2 | only_prompt | 8 | completed | completed | True | 7764 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_2-dsl_only-008-recovery-on-only_prompt/cap/20261021-213028-f3ebe71-cap_method_2-recovery-4ca0219a) |
+| MiniMax M3.1 Flash free | Method 2 | only_prompt | 9 | completed | completed | True | 7157 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_2-dsl_only-009-recovery-on-only_prompt/cap/20261021-213326-f3ebe71-cap_method_2-recovery-feb86cbc) |
+| MiniMax M3.1 Flash free | Method 2 | only_prompt | 10 | failed | completed | True | 18456 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_2-dsl_only-010-recovery-on-only_prompt/cap/20261021-213812-f3ebe71-cap_method_2-recovery-d852e018) |
+| MiniMax M3.1 Flash free | Method 2 | only_prompt | 11 | completed | completed | True | 8569 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_2-dsl_only-011-recovery-on-only_prompt/cap/20261021-214415-f3ebe71-cap_method_2-recovery-47f78f40) |
+| MiniMax M3.1 Flash free | Method 2 | only_prompt | 12 | completed | completed | True | 7858 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_2-dsl_only-012-recovery-on-only_prompt/cap/20261021-214532-f3ebe71-cap_method_2-recovery-26fd8135) |
+| MiniMax M3.1 Flash free | Method 2 | only_prompt | 13 | completed | completed | True | 7962 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_2-dsl_only-013-recovery-on-only_prompt/cap/20261021-214742-f3ebe71-cap_method_2-recovery-eed7ec2f) |
+| MiniMax M3.1 Flash free | Method 2 | only_prompt | 14 | budget_exhausted | completed | True | 18479 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_2-dsl_only-014-recovery-on-only_prompt/cap/20261021-214911-f3ebe71-cap_method_2-recovery-9a01361a) |
+| MiniMax M3.1 Flash free | Method 2 | only_prompt | 15 | completed | completed | True | 8171 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_2-dsl_only-015-recovery-on-only_prompt/cap/20261021-215238-f3ebe71-cap_method_2-recovery-75f63fa1) |
+| MiniMax M3.1 Flash free | Method 2 | only_prompt | 16 | budget_exhausted | completed | True | 36335 | 4 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_2-dsl_only-016-recovery-on-only_prompt/cap/20261021-215742-f3ebe71-cap_method_2-recovery-ff2bb095) |
+| MiniMax M3.1 Flash free | Method 2 | only_prompt | 17 | primitive_failed | completed | True | 23500 | 2 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_2-dsl_only-017-recovery-on-only_prompt/cap/20261021-220810-f3ebe71-cap_method_2-recovery-f5c4df8a) |
+| MiniMax M3.1 Flash free | Method 2 | only_prompt | 18 | completed | completed | True | 7170 | 1 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_2-dsl_only-018-recovery-on-only_prompt/cap/20261021-221956-f3ebe71-cap_method_2-recovery-95d3bfcb) |
+| MiniMax M3.1 Flash free | Method 2 | only_prompt | 19 | primitive_failed | completed | True | 40710 | 4 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_2-dsl_only-019-recovery-on-only_prompt/cap/20261021-222441-f3ebe71-cap_method_2-recovery-8425d08a) |
+| MiniMax M3.1 Flash free | Method 2 | only_prompt | 20 | budget_exhausted | completed | True | 30090 | 3 | [Run](../../../runs/cap-revision42/20261021-minimax-extension-140/trials/cap_method_2-dsl_only-020-recovery-on-only_prompt/cap/20261021-222707-f3ebe71-cap_method_2-recovery-76d5bf55) |
 | Claude Haiku 5.5 | Baseline | full | 1 | failed | completed | True | 19929 | 2 | [Run](../../../runs/cap-revision42/20261021-haiku55-220/trials/cap_google_baseline-dsl_only-001-recovery-on-full/cap/20261021-201321-7b34aa7-cap_google_baseline-recovery-bfbd6790) |
 | Claude Haiku 5.5 | Baseline | full | 2 | completed | completed | True | 7606 | 1 | [Run](../../../runs/cap-revision42/20261021-haiku55-220/trials/cap_google_baseline-dsl_only-002-recovery-on-full/cap/20261021-201407-3f0c0f9-cap_google_baseline-recovery-237dd6ec) |
 | Claude Haiku 5.5 | Baseline | full | 3 | completed | completed | True | 7438 | 1 | [Run](../../../runs/cap-revision42/20261021-haiku55-220/trials/cap_google_baseline-dsl_only-003-recovery-on-full/cap/20261021-201417-3f0c0f9-cap_google_baseline-recovery-89e42bfa) |
@@ -878,5 +1111,65 @@ The numerical tables and figures are generated by `synthesis.cap.revision42_repo
 | Claude Haiku 5.5 | Method 2 | only_prompt | 18 | completed | completed | True | 11603 | 1 | [Run](../../../runs/cap-revision42/20261021-haiku55-extension-140/trials/cap_method_2-dsl_only-018-recovery-on-only_prompt/cap/20261021-203356-3f0c0f9-cap_method_2-recovery-3b73a706) |
 | Claude Haiku 5.5 | Method 2 | only_prompt | 19 | completed | completed | True | 10721 | 1 | [Run](../../../runs/cap-revision42/20261021-haiku55-extension-140/trials/cap_method_2-dsl_only-019-recovery-on-only_prompt/cap/20261021-203422-3f0c0f9-cap_method_2-recovery-7ebf0664) |
 | Claude Haiku 5.5 | Method 2 | only_prompt | 20 | completed | completed | True | 15640 | 1 | [Run](../../../runs/cap-revision42/20261021-haiku55-extension-140/trials/cap_method_2-dsl_only-020-recovery-on-only_prompt/cap/20261021-203445-3f0c0f9-cap_method_2-recovery-bed31ce4) |
+| Qwen3.8 27B | Baseline | only_prompt | 1 | completed | completed | True | 10718 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_google_baseline-dsl_only-001-recovery-on-only_prompt/cap/20261021-214935-f3ebe71-cap_google_baseline-recovery-0b2dbed0) |
+| Qwen3.8 27B | Baseline | only_prompt | 2 | failed | failed | False | 13350 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_google_baseline-dsl_only-002-recovery-on-only_prompt/cap/20261021-214935-f3ebe71-cap_google_baseline-recovery-52ad3a93) |
+| Qwen3.8 27B | Baseline | only_prompt | 3 | completed | completed | True | 9843 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_google_baseline-dsl_only-003-recovery-on-only_prompt/cap/20261021-214935-f3ebe71-cap_google_baseline-recovery-db54efbd) |
+| Qwen3.8 27B | Baseline | only_prompt | 4 | completed | completed | True | 9266 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_google_baseline-dsl_only-004-recovery-on-only_prompt/cap/20261021-214935-f3ebe71-cap_google_baseline-recovery-f526ee3c) |
+| Qwen3.8 27B | Baseline | only_prompt | 5 | primitive_failed | completed | True | 30036 | 2 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_google_baseline-dsl_only-005-recovery-on-only_prompt/cap/20261021-215027-f3ebe71-cap_google_baseline-recovery-b574e228) |
+| Qwen3.8 27B | Baseline | only_prompt | 6 | completed | completed | True | 9575 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_google_baseline-dsl_only-006-recovery-on-only_prompt/cap/20261021-215031-f3ebe71-cap_google_baseline-recovery-89ae1f7d) |
+| Qwen3.8 27B | Baseline | only_prompt | 7 | completed | completed | True | 12214 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_google_baseline-dsl_only-007-recovery-on-only_prompt/cap/20261021-215051-f3ebe71-cap_google_baseline-recovery-269809ac) |
+| Qwen3.8 27B | Baseline | only_prompt | 8 | completed | completed | True | 9688 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_google_baseline-dsl_only-008-recovery-on-only_prompt/cap/20261021-215118-f3ebe71-cap_google_baseline-recovery-de7c922f) |
+| Qwen3.8 27B | Baseline | only_prompt | 9 | primitive_failed | generation_failed | False | 65096 | 4 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_google_baseline-dsl_only-009-recovery-on-only_prompt/cap/20261021-215124-f3ebe71-cap_google_baseline-recovery-39cf583f) |
+| Qwen3.8 27B | Baseline | only_prompt | 10 | goal_failed | generation_failed | False | 45678 | 3 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_google_baseline-dsl_only-010-recovery-on-only_prompt/cap/20261021-215155-f3ebe71-cap_google_baseline-recovery-18e29c36) |
+| Qwen3.8 27B | Baseline | only_prompt | 11 | completed | completed | True | 9949 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_google_baseline-dsl_only-011-recovery-on-only_prompt/cap/20261021-215156-f3ebe71-cap_google_baseline-recovery-21861d1a) |
+| Qwen3.8 27B | Baseline | only_prompt | 12 | completed | completed | True | 10662 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_google_baseline-dsl_only-012-recovery-on-only_prompt/cap/20261021-215237-f3ebe71-cap_google_baseline-recovery-dcad3606) |
+| Qwen3.8 27B | Baseline | only_prompt | 13 | failed | failed | False | 10373 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_google_baseline-dsl_only-013-recovery-on-only_prompt/cap/20261021-215239-f3ebe71-cap_google_baseline-recovery-1ba306f2) |
+| Qwen3.8 27B | Baseline | only_prompt | 14 | completed | completed | True | 12641 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_google_baseline-dsl_only-014-recovery-on-only_prompt/cap/20261021-215303-f3ebe71-cap_google_baseline-recovery-72ef1611) |
+| Qwen3.8 27B | Baseline | only_prompt | 15 | budget_exhausted | completed | True | 73805 | 5 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_google_baseline-dsl_only-015-recovery-on-only_prompt/cap/20261021-215319-f3ebe71-cap_google_baseline-recovery-65b29b50) |
+| Qwen3.8 27B | Baseline | only_prompt | 16 | goal_failed | completed | True | 23063 | 2 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_google_baseline-dsl_only-016-recovery-on-only_prompt/cap/20261021-215336-f3ebe71-cap_google_baseline-recovery-6f32351f) |
+| Qwen3.8 27B | Baseline | only_prompt | 17 | completed | completed | True | 12125 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_google_baseline-dsl_only-017-recovery-on-only_prompt/cap/20261021-215411-f3ebe71-cap_google_baseline-recovery-68a04a6f) |
+| Qwen3.8 27B | Baseline | only_prompt | 18 | completed | completed | True | 9794 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_google_baseline-dsl_only-018-recovery-on-only_prompt/cap/20261021-215417-f3ebe71-cap_google_baseline-recovery-142382ee) |
+| Qwen3.8 27B | Baseline | only_prompt | 19 | primitive_failed | completed | True | 64904 | 5 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_google_baseline-dsl_only-019-recovery-on-only_prompt/cap/20261021-215524-f3ebe71-cap_google_baseline-recovery-0c8c09bb) |
+| Qwen3.8 27B | Baseline | only_prompt | 20 | completed | completed | True | 11494 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_google_baseline-dsl_only-020-recovery-on-only_prompt/cap/20261021-215533-f3ebe71-cap_google_baseline-recovery-b98086d9) |
+| Qwen3.8 27B | Method 1 | only_prompt | 1 | completed | completed | True | 9984 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_1-dsl_only-001-recovery-on-only_prompt/cap/20261021-214935-f3ebe71-cap_method_1-recovery-c0770149) |
+| Qwen3.8 27B | Method 1 | only_prompt | 2 | completed | completed | True | 9289 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_1-dsl_only-002-recovery-on-only_prompt/cap/20261021-214935-f3ebe71-cap_method_1-recovery-627b1510) |
+| Qwen3.8 27B | Method 1 | only_prompt | 3 | completed | completed | True | 9188 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_1-dsl_only-003-recovery-on-only_prompt/cap/20261021-214935-f3ebe71-cap_method_1-recovery-45958988) |
+| Qwen3.8 27B | Method 1 | only_prompt | 4 | completed | completed | True | 14184 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_1-dsl_only-004-recovery-on-only_prompt/cap/20261021-214935-f3ebe71-cap_method_1-recovery-04eb20be) |
+| Qwen3.8 27B | Method 1 | only_prompt | 5 | budget_exhausted | completed | True | 38840 | 3 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_1-dsl_only-005-recovery-on-only_prompt/cap/20261021-214935-f3ebe71-cap_method_1-recovery-b23b8d85) |
+| Qwen3.8 27B | Method 1 | only_prompt | 6 | completed | completed | True | 8844 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_1-dsl_only-006-recovery-on-only_prompt/cap/20261021-215034-f3ebe71-cap_method_1-recovery-a1af21bc) |
+| Qwen3.8 27B | Method 1 | only_prompt | 7 | completed | completed | True | 12974 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_1-dsl_only-007-recovery-on-only_prompt/cap/20261021-215044-f3ebe71-cap_method_1-recovery-ba109951) |
+| Qwen3.8 27B | Method 1 | only_prompt | 8 | completed | completed | True | 11058 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_1-dsl_only-008-recovery-on-only_prompt/cap/20261021-215056-f3ebe71-cap_method_1-recovery-b573dab8) |
+| Qwen3.8 27B | Method 1 | only_prompt | 9 | primitive_failed | completed | True | 25115 | 2 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_1-dsl_only-009-recovery-on-only_prompt/cap/20261021-215118-f3ebe71-cap_method_1-recovery-df7601f7) |
+| Qwen3.8 27B | Method 1 | only_prompt | 10 | completed | completed | True | 9054 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_1-dsl_only-010-recovery-on-only_prompt/cap/20261021-215136-f3ebe71-cap_method_1-recovery-a1ba83f1) |
+| Qwen3.8 27B | Method 1 | only_prompt | 11 | completed | completed | True | 11441 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_1-dsl_only-011-recovery-on-only_prompt/cap/20261021-215157-f3ebe71-cap_method_1-recovery-d7a560ca) |
+| Qwen3.8 27B | Method 1 | only_prompt | 12 | completed | completed | True | 9382 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_1-dsl_only-012-recovery-on-only_prompt/cap/20261021-215220-f3ebe71-cap_method_1-recovery-69f8a530) |
+| Qwen3.8 27B | Method 1 | only_prompt | 13 | completed | completed | True | 11940 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_1-dsl_only-013-recovery-on-only_prompt/cap/20261021-215241-f3ebe71-cap_method_1-recovery-1a2f9339) |
+| Qwen3.8 27B | Method 1 | only_prompt | 14 | completed | completed | True | 11612 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_1-dsl_only-014-recovery-on-only_prompt/cap/20261021-215255-f3ebe71-cap_method_1-recovery-0b61512c) |
+| Qwen3.8 27B | Method 1 | only_prompt | 15 | primitive_failed | completed | True | 32727 | 2 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_1-dsl_only-015-recovery-on-only_prompt/cap/20261021-215330-f3ebe71-cap_method_1-recovery-5dc52c6a) |
+| Qwen3.8 27B | Method 1 | only_prompt | 16 | goal_failed | completed | True | 37957 | 3 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_1-dsl_only-016-recovery-on-only_prompt/cap/20261021-215348-f3ebe71-cap_method_1-recovery-1a2a0a9b) |
+| Qwen3.8 27B | Method 1 | only_prompt | 17 | completed | completed | True | 13924 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_1-dsl_only-017-recovery-on-only_prompt/cap/20261021-215353-f3ebe71-cap_method_1-recovery-45879d13) |
+| Qwen3.8 27B | Method 1 | only_prompt | 18 | completed | completed | True | 9820 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_1-dsl_only-018-recovery-on-only_prompt/cap/20261021-215437-f3ebe71-cap_method_1-recovery-f16101c6) |
+| Qwen3.8 27B | Method 1 | only_prompt | 19 | completed | completed | True | 7855 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_1-dsl_only-019-recovery-on-only_prompt/cap/20261021-215518-f3ebe71-cap_method_1-recovery-a4418bf8) |
+| Qwen3.8 27B | Method 1 | only_prompt | 20 | completed | completed | True | 16998 | 2 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_1-dsl_only-020-recovery-on-only_prompt/cap/20261021-215526-f3ebe71-cap_method_1-recovery-d94ddad0) |
+| Qwen3.8 27B | Method 2 | only_prompt | 1 | completed | completed | True | 9316 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_2-dsl_only-001-recovery-on-only_prompt/cap/20261021-214935-f3ebe71-cap_method_2-recovery-677c639b) |
+| Qwen3.8 27B | Method 2 | only_prompt | 2 | completed | completed | True | 11039 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_2-dsl_only-002-recovery-on-only_prompt/cap/20261021-214935-f3ebe71-cap_method_2-recovery-9131167f) |
+| Qwen3.8 27B | Method 2 | only_prompt | 3 | completed | completed | True | 12397 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_2-dsl_only-003-recovery-on-only_prompt/cap/20261021-214935-f3ebe71-cap_method_2-recovery-01e5b3e9) |
+| Qwen3.8 27B | Method 2 | only_prompt | 4 | completed | completed | True | 10761 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_2-dsl_only-004-recovery-on-only_prompt/cap/20261021-214935-f3ebe71-cap_method_2-recovery-b2cf4682) |
+| Qwen3.8 27B | Method 2 | only_prompt | 5 | completed | completed | True | 12186 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_2-dsl_only-005-recovery-on-only_prompt/cap/20261021-215027-f3ebe71-cap_method_2-recovery-6f161797) |
+| Qwen3.8 27B | Method 2 | only_prompt | 6 | primitive_failed | generation_failed | False | 68733 | 4 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_2-dsl_only-006-recovery-on-only_prompt/cap/20261021-215036-f3ebe71-cap_method_2-recovery-8dac511a) |
+| Qwen3.8 27B | Method 2 | only_prompt | 7 | completed | completed | True | 16770 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_2-dsl_only-007-recovery-on-only_prompt/cap/20261021-215045-f3ebe71-cap_method_2-recovery-14c02032) |
+| Qwen3.8 27B | Method 2 | only_prompt | 8 | completed | completed | True | 8611 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_2-dsl_only-008-recovery-on-only_prompt/cap/20261021-215057-f3ebe71-cap_method_2-recovery-a7e2e15f) |
+| Qwen3.8 27B | Method 2 | only_prompt | 9 | completed | completed | True | 11026 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_2-dsl_only-009-recovery-on-only_prompt/cap/20261021-215122-f3ebe71-cap_method_2-recovery-727e5c3d) |
+| Qwen3.8 27B | Method 2 | only_prompt | 10 | completed | completed | True | 11222 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_2-dsl_only-010-recovery-on-only_prompt/cap/20261021-215156-f3ebe71-cap_method_2-recovery-b7847afa) |
+| Qwen3.8 27B | Method 2 | only_prompt | 11 | completed | completed | True | 9457 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_2-dsl_only-011-recovery-on-only_prompt/cap/20261021-215204-f3ebe71-cap_method_2-recovery-e3d7ceeb) |
+| Qwen3.8 27B | Method 2 | only_prompt | 12 | completed | completed | True | 8075 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_2-dsl_only-012-recovery-on-only_prompt/cap/20261021-215209-f3ebe71-cap_method_2-recovery-e3cd4ba8) |
+| Qwen3.8 27B | Method 2 | only_prompt | 13 | completed | completed | True | 11126 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_2-dsl_only-013-recovery-on-only_prompt/cap/20261021-215249-f3ebe71-cap_method_2-recovery-5959baff) |
+| Qwen3.8 27B | Method 2 | only_prompt | 14 | completed | completed | True | 13164 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_2-dsl_only-014-recovery-on-only_prompt/cap/20261021-215300-f3ebe71-cap_method_2-recovery-26987ad5) |
+| Qwen3.8 27B | Method 2 | only_prompt | 15 | completed | completed | True | 10436 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_2-dsl_only-015-recovery-on-only_prompt/cap/20261021-215335-f3ebe71-cap_method_2-recovery-ae74ce04) |
+| Qwen3.8 27B | Method 2 | only_prompt | 16 | completed | completed | True | 11145 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_2-dsl_only-016-recovery-on-only_prompt/cap/20261021-215339-f3ebe71-cap_method_2-recovery-75959585) |
+| Qwen3.8 27B | Method 2 | only_prompt | 17 | completed | completed | True | 12079 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_2-dsl_only-017-recovery-on-only_prompt/cap/20261021-215357-f3ebe71-cap_method_2-recovery-62d8f4d6) |
+| Qwen3.8 27B | Method 2 | only_prompt | 18 | primitive_failed | completed | True | 52972 | 3 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_2-dsl_only-018-recovery-on-only_prompt/cap/20261021-215411-f3ebe71-cap_method_2-recovery-2f3839db) |
+| Qwen3.8 27B | Method 2 | only_prompt | 19 | budget_exhausted | completed | True | 40662 | 3 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_2-dsl_only-019-recovery-on-only_prompt/cap/20261021-215501-f3ebe71-cap_method_2-recovery-b02479b1) |
+| Qwen3.8 27B | Method 2 | only_prompt | 20 | completed | completed | True | 10016 | 1 | [Run](../../../runs/cap-revision42/20261021-qwen38-27b-only-prompt-60/trials/cap_method_2-dsl_only-020-recovery-on-only_prompt/cap/20261021-215525-f3ebe71-cap_method_2-recovery-993ba7a1) |
 
 `*` marks incomplete returned token usage. No failed trial is replaced.
