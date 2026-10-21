@@ -81,6 +81,7 @@ class ReportDenominatorTests(unittest.TestCase):
                 stop_reason="preparation_failure_no_rollout",
             ),
             trial([attempt("goal_failed")]),
+            trial([attempt("failed")]),
             trial(
                 [attempt("primitive_failed", primitive="Pick")],
                 stop_reason="required_feedback_exceeds_token_limit",
@@ -90,6 +91,7 @@ class ReportDenominatorTests(unittest.TestCase):
         self.assertEqual(g["final_budget_stop"], 1)
         self.assertEqual(g["preparation_stop"], 1)
         self.assertEqual(g["final_goal_failure"], 1)
+        self.assertEqual(g["final_runtime_failure"], 1)
         self.assertEqual(g["feedback_size_stop"], 1)
         self.assertEqual(g["final_nonconv"], 1)
 

@@ -255,6 +255,9 @@ def aggregate(records):
             final["rolled_out"] and final["status"] == "budget_exhausted"
         )
         g["final_goal_failure"] += final["status"] == "goal_failed"
+        g["final_runtime_failure"] += (
+            final["rolled_out"] and final["status"] == "failed"
+        )
         g["preparation_stop"] += (
             r.get("stop_reason") == "preparation_failure_no_rollout"
         )
@@ -633,13 +636,13 @@ def generate(
         "",
         "### 2.1 Unsuccessful trials by terminal path",
         "",
-        "| Model | Method | Profile | Unsuccessful | Final nonconvergence | Final execution/query budget stop | Final goal failure | Preparation stop | Feedback-size stop |",
-        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| Model | Method | Profile | Unsuccessful | Final nonconvergence | Final execution/query budget stop | Final goal failure | Final other runtime failure | Preparation stop | Feedback-size stop |",
+        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for model in models:
         for (m, v), g in ordered(model):
             lines.append(
-                f"| {name(model)} | {NAMES[m]} | {v} | {g['finished'] - g['success']} | {g['final_nonconv']} | {g['final_budget_stop']} | {g['final_goal_failure']} | {g['preparation_stop']} | {g['feedback_size_stop']} |"
+                f"| {name(model)} | {NAMES[m]} | {v} | {g['finished'] - g['success']} | {g['final_nonconv']} | {g['final_budget_stop']} | {g['final_goal_failure']} | {g['final_runtime_failure']} | {g['preparation_stop']} | {g['feedback_size_stop']} |"
             )
     lines += [
         "",
