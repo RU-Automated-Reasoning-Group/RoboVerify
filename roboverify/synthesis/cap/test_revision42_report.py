@@ -15,8 +15,9 @@ def attempt(status, *, primitive=None, rolled=True, success=False):
     }
 
 
-def trial(attempts, variant="full"):
+def trial(attempts, variant="full", stop_reason="max_recovery_rounds"):
     return {
+        "stop_reason": stop_reason,
         "method": "cap_method_1",
         "variant": variant,
         "attempts": attempts,
@@ -71,6 +72,26 @@ class ReportDenominatorTests(unittest.TestCase):
         self.assertEqual(full["rollouts"], 2)
         self.assertEqual(full["final_nonconv"], 0)
         self.assertEqual(g[("cap_method_1", "no_target")]["success"], 1)
+
+    def test_terminal_paths_distinguish_rollout_and_preparation_stops(self):
+        rows = [
+            trial([attempt("budget_exhausted")]),
+            trial(
+                [attempt("budget_exhausted", rolled=False)],
+                stop_reason="preparation_failure_no_rollout",
+            ),
+            trial([attempt("goal_failed")]),
+            trial(
+                [attempt("primitive_failed", primitive="Pick")],
+                stop_reason="required_feedback_exceeds_token_limit",
+            ),
+        ]
+        g = aggregate(rows)[("cap_method_1", "full")]
+        self.assertEqual(g["final_budget_stop"], 1)
+        self.assertEqual(g["preparation_stop"], 1)
+        self.assertEqual(g["final_goal_failure"], 1)
+        self.assertEqual(g["feedback_size_stop"], 1)
+        self.assertEqual(g["final_nonconv"], 1)
 
 
 if __name__ == "__main__":
