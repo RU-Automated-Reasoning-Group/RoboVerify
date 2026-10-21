@@ -24,6 +24,7 @@ from .config import (
 from .request_control import dispatch_reservation
 
 PRIOR = Path("runs/cap-revision4-minimax31flash/20261020-152924-free-300")
+DEFAULT_MODEL = "minimax/minimax-m3.1-flash:free"
 GPU_UUIDS = [
     "GPU-4e45a91e-060f-7724-1e8d-c8e03021a651",
     "GPU-9e9f9166-3050-3b33-3900-55a1c3267159",
@@ -70,9 +71,9 @@ def variants():
     return result
 
 
-def quota_snapshot():
+def quota_snapshot(credentials=CREDENTIALS):
     result = {}
-    for name in CREDENTIALS:
+    for name in credentials:
         if not os.environ.get(name):
             continue
         request = urllib.request.Request(
@@ -85,12 +86,14 @@ def quota_snapshot():
 
 
 class Admission:
-    def __init__(self, directory, limits, request_limit):
+    def __init__(self, directory, limits, request_limit, *, paid=False):
         self.directory, self.limits, self.request_limit = (
             directory,
             limits,
             request_limit,
         )
+        # Paid models have no free daily quota; only the recorded caps apply.
+        self.paid = paid
         self.checked_at = 0
         self.quota = None
         self.checked_counts = {}
@@ -104,7 +107,7 @@ class Admission:
             else {"admitted": 0, "by_job": {}, "by_credential": {}}
         )
         now = time.time()
-        if self.quota is None or now - self.checked_at >= 30:
+        if not self.paid and (self.quota is None or now - self.checked_at >= 30):
             try:
                 self.quota = quota_snapshot()
                 self.checked_at = now
@@ -128,11 +131,15 @@ class Admission:
         caps = {}
         for name, limit in self.limits.items():
             admitted = state.get("by_credential", {}).get(name, 0)
-            remote = max(
-                0,
-                self.quota[name]["remaining"]
-                - max(0, admitted - self.checked_counts.get(name, 0))
-                - 2,
+            remote = (
+                limit
+                if self.paid
+                else max(
+                    0,
+                    self.quota[name]["remaining"]
+                    - max(0, admitted - self.checked_counts.get(name, 0))
+                    - 2,
+                )
             )
             available = min(max(0, limit - admitted), remote)
             caps[name] = admitted + available
@@ -170,12 +177,17 @@ class Admission:
         return result["allowed"]
 
 
-def base_configuration():
+def base_configuration(model_name=None, video_mode=None):
     previous = json.loads((PRIOR / "manifest.json").read_text())
     job = previous["jobs"][0]
-    config = RunConfig(**job["run_config"])
+    run_config = dict(job["run_config"])
+    if video_mode is not None:
+        run_config.update(save_video=None, video_mode=video_mode)
+    config = RunConfig(**run_config)
     config.recovery.enabled = True
-    model = ModelConfig(**job["model_config"])
+    model = ModelConfig(
+        **(job["model_config"] | {"model": model_name or DEFAULT_MODEL})
+    )
     return previous, job, config, model
 
 
@@ -191,25 +203,44 @@ while exists(lambda x: not ON_star(x, b0)):
 """
 
 
-def create(directory, *, preflight=False, max_workers=18):
-    previous, job, config, model = base_configuration()
+def create(
+    directory,
+    *,
+    preflight=False,
+    max_workers=18,
+    model_name=None,
+    credentials=None,
+    request_interval=6.0,
+    paid_request_limit=1085,
+    video_mode=None,
+):
+    previous, job, config, model = base_configuration(model_name, video_mode)
+    paid = not model.model.endswith(":free")
+    credentials = list(credentials or (CREDENTIALS[:1] if paid else CREDENTIALS))
     limits = {}
     quotas = {}
-    if not preflight:
-        quotas = quota_snapshot()
-        if set(quotas) != set(CREDENTIALS):
-            raise ValueError("All four configured credential variables are required")
+    if not preflight and paid:
+        missing = [name for name in credentials if not os.environ.get(name)]
+        if missing:
+            raise ValueError(f"Missing credential environment variables: {missing}")
+        limits = dict.fromkeys(credentials, paid_request_limit)
+    elif not preflight:
+        quotas = quota_snapshot(credentials)
+        if set(quotas) != set(credentials):
+            raise ValueError("All configured credential variables are required")
         limits = {
-            name: max(0, min(950 if name == CREDENTIALS[0] else 45, q["remaining"] - 5))
+            name: max(0, min(950 if name == credentials[0] else 45, q["remaining"] - 5))
             for name, q in quotas.items()
         }
-    request_limit = min(1085, sum(limits.values())) if limits else 1
+    request_limit = (
+        min(paid_request_limit if paid else 1085, sum(limits.values())) if limits else 1
+    )
     control = (
         None
         if preflight
         else {
             "state_path": str(directory / "request_gate.json"),
-            "interval_seconds": 6.0,
+            "interval_seconds": request_interval,
             "request_limit": request_limit,
             "credential_limits": limits,
         }
@@ -263,6 +294,9 @@ def create(directory, *, preflight=False, max_workers=18):
             "planned": 11 if preflight else 220,
             "preflight": preflight,
             "prior_batch": str(PRIOR.resolve()),
+            "model": model.model,
+            "admission": "paid_request_cap" if paid else "free_daily_quota",
+            "video_mode": config.video_mode,
             "historical_comparison": "unpaired, fixed scene; provider load/time differs",
             "snapshot_sha256": manifest["snapshot_sha256"],
             "source_sha256": sources,
@@ -275,7 +309,7 @@ def create(directory, *, preflight=False, max_workers=18):
             "gpu_policy": asdict(gpu),
             "no_failed_trial_replacements": True,
             "ablation_unit": "Section 3 candidate group; no_prompt disables all four prompt Booleans",
-            "wire_pacing": "six seconds between starts for each credential; common admission reserves active-trial call allowances",
+            "wire_pacing": f"{request_interval:g} seconds between starts for each credential; common admission reserves active-trial call allowances",
         },
     )
     preflight_path = Path("/tmp/revision42-provider-preflight")
@@ -289,7 +323,12 @@ def execute(directory, *, resume=False):
     gate = (
         None
         if plan["preflight"]
-        else Admission(directory, plan["credential_limits"], plan["request_limit"])
+        else Admission(
+            directory,
+            plan["credential_limits"],
+            plan["request_limit"],
+            paid=plan.get("admission") == "paid_request_cap",
+        )
     )
     while True:
         result = execute_batch(directory, resume=resume, dispatch_gate=gate)
@@ -330,10 +369,32 @@ def main():
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--max-workers", type=int, default=18)
     parser.add_argument("--create-only", action="store_true")
+    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument(
+        "--credential",
+        action="append",
+        help="credential environment-variable name; repeat to rotate",
+    )
+    parser.add_argument("--request-interval", type=float, default=6.0)
+    parser.add_argument("--paid-request-limit", type=int, default=1085)
+    parser.add_argument(
+        "--video-mode",
+        choices=("inline", "deferred", "off"),
+        help="override the prior configuration's video setting",
+    )
     args = parser.parse_args()
     directory = args.directory.resolve()
     if not args.resume:
-        create(directory, preflight=args.preflight, max_workers=args.max_workers)
+        create(
+            directory,
+            preflight=args.preflight,
+            max_workers=args.max_workers,
+            model_name=args.model,
+            credentials=args.credential,
+            request_interval=args.request_interval,
+            paid_request_limit=args.paid_request_limit,
+            video_mode=args.video_mode,
+        )
     if not args.create_only:
         result = execute(directory, resume=args.resume)
         print(
