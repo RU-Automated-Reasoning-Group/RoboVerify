@@ -1,6 +1,6 @@
 # Revision 4.2: primitive nonconvergence
 
-- **Status: implemented and tested; 220/220 live trials completed.** All four Section 3 candidate changes are configurable. Full-treatment results are Baseline 18/20, Method 1 18/20, and Method 2 20/20; all ablation results and limitations are recorded in [Revision 4.2 report](revision_4_2_report.md).
+- **Status: implemented and tested; MiniMax 220/220 and Claude Haiku 5.5 360/360 live trials completed.** All four Section 3 candidate changes are configurable. MiniMax full-treatment results are Baseline 18/20, Method 1 18/20, and Method 2 20/20; Haiku succeeds 20/20 in each full group. The Haiku cohort also covers Baseline ablations and an `only_prompt` profile for all methods. All ablation results and limitations are recorded in [Revision 4.2 report](revision_4_2_report.md).
 - **Problem:** generated policies can request poorly constructed motion targets or transport sequences, then fail when Pick, Move, or Release does not converge within its primitive budget.
 - **Scope:** four independently configurable additions to the general primitive/API prompt, available during initial generation and recovery. Primitive-failure feedback enrichment remains a separate candidate intervention. Preserve the existing method workflows, controller behavior, and task-success criteria.
 - **Completed prerequisite:** [Revision 4.1 GPU scheduling](revision_4_1_gpu_scheduling.md), including its existing validation. Use it for later parallel experiments; this plan does not change scheduling.

@@ -832,6 +832,19 @@ The reproducible 220-trial design is provided by:
 .venv/bin/python -m synthesis.cap.revision42_report --directory runs/cap-revision42/EXISTING_BATCH --videos
 ```
 
+`--model` reruns the same design with another model; only the model identifier
+changes in the job definitions. A model without the `:free` suffix uses a fixed
+recorded request cap (`--paid-request-limit`) instead of the free daily-quota
+lookup. Name its credential variables with repeated `--credential` options and set
+`--request-interval` and `--video-mode` explicitly. Repeated
+`--variant PROFILE=METHOD[,METHOD]` options select an extension batch, such as
+Baseline ablations or the `only_prompt` profile, which keeps the four prompt
+additions and disables all three feedback enrichments. `--accumulates-with`
+records the batch it complements. The report accepts repeated `--directory`
+options: batches with the same model accumulate, different models are shown side
+by side, and `--output` holds the combined analysis. `--interpretation` inserts
+the retained hand-written sections.
+
 Use the existing simulator environment setup. The experiment entry point uses
 the declared Stack snapshot and GPU UUID allowlist from its frozen configuration;
 inspect/adapt these explicitly for another host or scene. The four authorized
@@ -853,14 +866,16 @@ tokens and artifact links, plus [plots](docs/plots/). Scripted preflight runs ar
 explicitly excluded from the live-trial denominator.
 
 
-The completed Revision 4.2 batch has 20 trials in each of 11 settings. Full-treatment
+The completed MiniMax Revision 4.2 batch has 20 trials in each of 11 settings. Full-treatment
 success is Baseline 18/20, Method 1 18/20, and Method 2 20/20; ablation results are
-in the linked report. All 446 state restores and videos and 226 delivered recovery
+in the linked report. The Claude Haiku 5.5 rerun (360 trials in 18 settings,
+including Baseline ablations and `only_prompt`) shares that report. All 446 state restores and videos and 226 delivered recovery
 payloads passed the artifact audit. One full Baseline trial stopped because its
 required feedback plus metadata exceeded the unchanged 8,192-byte cap; this
 limitation and all failures remain reported. The final interpretation is also
-saved in the batch's `final_interpretation.md` for use after regenerating numerical
-tables and plots.
+saved in `final_interpretation.md` (the combined MiniMax/Haiku version is in
+`runs/cap-revision42/20261021-combined-minimax-haiku55/`) for use after
+regenerating numerical tables and plots.
 
 
 ## Deferred video rendering
