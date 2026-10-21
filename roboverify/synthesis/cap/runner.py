@@ -345,6 +345,9 @@ def run_once(
                             logger,
                             budget,
                             video=config.save_video,
+                            video_mode=config.video_mode,
+                            queue_root=(batch_context or {}).get("batch_dir")
+                            or (batch_context or {}).get("render_queue_root"),
                             seed=config.seed,
                             task=config.task,
                         )

@@ -18,10 +18,13 @@ def main(path):
 
         try:
             evidence = initialize_worker(assignment, path)
-            if not spec.get("fixture"):
+            if (
+                not spec.get("fixture")
+                and RunConfig(**spec["run_config"]).video_mode == "inline"
+            ):
                 evidence["render_probe"] = rendering_probe()
             else:
-                evidence["render_probe"] = "skipped: non-rendering fixture"
+                evidence["render_probe"] = "skipped: no inline rendering"
             atomic_json(Path(path).with_name("gpu_probe.json"), evidence)
         except Exception as exc:
             atomic_json(

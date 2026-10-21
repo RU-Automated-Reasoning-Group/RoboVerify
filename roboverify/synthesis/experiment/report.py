@@ -449,7 +449,11 @@ class RunSummary:
                 "exit_reason",
                 "artifacts_path",
             ):
-                lines.append(f"{key}: {self.result.get(key)}")
+                value = self.result.get(key)
+                if key == "video":
+                    from synthesis.cap.deferred_video import resolved_video
+                    value = resolved_video(value)
+                lines.append(f"{key}: {value}")
             audit = read_json(self.dir / "artifacts/trial_001/dsl_compliance.json")
             lines.append(f"dsl_compliance: {audit.get('status', self.result.get('dsl_compliance'))}")
             if audit:

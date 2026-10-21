@@ -7,6 +7,12 @@ experiment guidance specific to `synthesis/cap/`.
 - Before starting any task under `synthesis/cap/`, read the [README](README.md)
   overview and the sections relevant to the task. Read historical experiment
   reports only when needed.
+- For new experiments, use `video_mode: "deferred"` by default. Save full rollout
+  trajectories, then render videos through the shared background queue. Use
+  `inline` only for an explicit comparison/debugging need and `off` when videos
+  are explicitly unnecessary. When adapting an old configuration, set
+  `video_mode` explicitly: legacy `save_video: true` retains inline behavior.
+  Keep video completion/failures separate from policy outcomes and recovery.
 - Run independent experiment trials in parallel by default. Maximize useful
   utilization of authorized CPU, GPU, memory, and model-request capacity to reduce
   experiment completion time.
@@ -19,7 +25,9 @@ experiment guidance specific to `synthesis/cap/`.
   evidence of faster experiments.
 - Preserve independent trial processes, fixed initial-state replay, per-trial
   budgets, artifact ownership, and the declared experiment denominator. Keep all
-  recovery attempts in the same trial and rendering assignment.
+  recovery attempts in the same trial and trial GPU assignment. Deferred rendering
+  jobs reserve their own fixed assignments from the shared GPU ledger; trial and
+  render workers must respect the combined batch worker limit and per-GPU limits.
 - Record the scheduling configuration, actual assignments, queue time, active
   time, resource measurements, and failures. Resume pending trials without
   duplicating live workers, completed trials, or paid model requests.

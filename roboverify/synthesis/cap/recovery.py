@@ -527,7 +527,7 @@ def run_recovery(config, model_config, **kwargs):
                     kwargs.get("queue_wait_seconds", 0) if index == 0 else 0
                 ),
                 batch_context=dict(kwargs.get("batch_context") or {})
-                | {"recovery_round": index},
+                | {"recovery_round": index, "render_queue_root": str(parent.run_dir)},
             )
             result = run_once(
                 round_config,

@@ -47,8 +47,16 @@ def create_batch(
     transport_control=None,
     gpu_config=None,
     experiment_variants=None,
+    render_workers=2,
+    render_timeout=600.0,
 ):
     directory = Path(directory).resolve()
+    if (
+        type(render_workers) is not int
+        or render_workers < 1
+        or not 0 < render_timeout < float("inf")
+    ):
+        raise ValueError("Invalid rendering worker count or timeout")
     if directory.exists():
         raise FileExistsError("Batch directory already exists; use resume")
     if (
@@ -163,6 +171,8 @@ def create_batch(
         "schema": "cap-batch-v1",
         "created_epoch": time.time(),
         "max_workers": max_workers,
+        "render_workers": min(render_workers, max_workers),
+        "render_timeout": render_timeout,
         "gpu_config": asdict(gpu_config) if gpu_config else None,
         "experiment_variants": experiment_variants,
         "schedule_seed": schedule_seed,
@@ -283,9 +293,25 @@ def write_report(directory, manifest, schedule):
             cached = directory / "trials" / job["id"] / "summary.json"
             if cached.exists():
                 rows.append(json.loads(cached.read_text()))
+    from .deferred_video import resolved_video
+
+    for row in rows:
+        row["video"] = resolved_video(row.get("video"))
+        for attempt in row.get("attempts", []):
+            attempt["video"] = resolved_video(attempt.get("video"))
+    video_summary = (
+        json.loads((directory / "video_summary.json").read_text())
+        if (directory / "video_summary.json").exists()
+        else {}
+    )
     atomic_json(
         directory / "summary.json",
-        {"planned": len(manifest["jobs"]), "finished": len(rows), "trials": rows},
+        {
+            "planned": len(manifest["jobs"]),
+            "finished": len(rows),
+            "trials": rows,
+            "video_rendering": video_summary,
+        },
     )
     groups = defaultdict(list)
     for row in rows:
@@ -314,6 +340,11 @@ def write_report(directory, manifest, schedule):
         + ("complete" if len(rows) == len(manifest["jobs"]) else "in progress"),
         "",
     ]
+    if video_summary.get("jobs"):
+        lines += [
+            f"Deferred videos: {video_summary['counts']}. Video completion is separate from experiment status.",
+            "",
+        ]
     if manifest["fixture"]:
         lines += ["Scripted fixture diagnostic; not a physical task benchmark.", ""]
     if not manifest["fixture"] and manifest.get(
@@ -429,10 +460,20 @@ def _execute_batch(directory, *, resume=False, dispatch_gate=None):
             atomic_json(directory / "trials" / job["id"] / "summary.json", row)
     pending = [j for j in manifest["jobs"] if schedule[j["id"]]["status"] == "pending"]
     gpu = None
-    if manifest.get("gpu_config") and pending:
+    if manifest.get("gpu_config") and (
+        pending or (directory / "render_queue").exists()
+    ):
         from .gpu_scheduler import GPUScheduler
 
         gpu = GPUScheduler(manifest["gpu_config"])
+    from .deferred_video import RenderPool
+
+    renders = RenderPool(
+        directory,
+        gpu=gpu,
+        max_workers=manifest.get("render_workers", 2),
+        timeout=manifest.get("render_timeout", 600),
+    )
     active = {}
     metadata_path = directory / "execution_metadata.json"
     metadata = (
@@ -449,7 +490,7 @@ def _execute_batch(directory, *, resume=False, dispatch_gate=None):
     blocked_since = None
     saved_gpu_sample = None
     try:
-        while pending or active:
+        while pending or active or renders.pending() or renders.active:
             monitoring_error = None
             if gpu:
                 from .gpu_scheduler import GPUUnavailable
@@ -469,8 +510,16 @@ def _execute_batch(directory, *, resume=False, dispatch_gate=None):
                         samples.write(json.dumps(gpu.latest_sample) + "\n")
                     saved_gpu_sample = gpu.latest_sample["epoch"]
                 atomic_json(metadata_path, metadata)
+            if not monitoring_error:
+                renders.tick(manifest["max_workers"] - len(active))
+            metadata["peak_combined_workers"] = max(
+                metadata.get("peak_combined_workers", 0),
+                len(active) + len(renders.active),
+            )
             admission_blocked = False
-            while pending and len(active) < manifest["max_workers"]:
+            while (
+                pending and len(active) + len(renders.active) < manifest["max_workers"]
+            ):
                 if monitoring_error:
                     break
                 if dispatch_gate is not None and not dispatch_gate(
@@ -540,6 +589,10 @@ def _execute_batch(directory, *, resume=False, dispatch_gate=None):
                 active[job["id"]] = (process, handle, job, time.monotonic())
                 if assignment:
                     gpu.bind(assignment["token"], process.pid)
+                metadata["peak_combined_workers"] = max(
+                    metadata.get("peak_combined_workers", 0),
+                    len(active) + len(renders.active),
+                )
                 metadata["peak_active_workers"] = max(
                     metadata["peak_active_workers"], len(active)
                 )
@@ -587,8 +640,8 @@ def _execute_batch(directory, *, resume=False, dispatch_gate=None):
                         flush=True,
                     )
             if pending and not active and admission_blocked:
-                # An admission refusal leaves unstarted jobs pending and resumable.
-                break
+                # Unstarted trials remain pending in the schedule; drain available videos.
+                pending = []
             if gpu and pending and not active and blocked_since is not None:
                 if (
                     time.monotonic() - blocked_since
@@ -599,7 +652,37 @@ def _execute_batch(directory, *, resume=False, dispatch_gate=None):
                     )
                     atomic_json(metadata_path, metadata)
                     break
-            if active or (gpu and pending):
+            if not pending and not active:
+                if "experiment_finished_epoch" not in metadata and all(
+                    v["status"] not in {"pending", "running"} for v in schedule.values()
+                ):
+                    metadata["experiment_finished_epoch"] = time.time()
+                    atomic_json(metadata_path, metadata)
+                if (
+                    renders.blocked_since
+                    and not renders.active
+                    and gpu
+                    and (
+                        time.monotonic() - renders.blocked_since
+                        >= gpu.config.admission_timeout_seconds
+                    )
+                ):
+                    metadata["video_pause_reason"] = (
+                        "GPU admission timeout; video jobs remain resumable"
+                    )
+                    break
+                if (
+                    monitoring_error
+                    and not renders.active
+                    and blocked_since is not None
+                    and gpu
+                    and (
+                        time.monotonic() - blocked_since
+                        >= gpu.config.admission_timeout_seconds
+                    )
+                ):
+                    break
+            if active or pending or renders.active or renders.pending():
                 time.sleep(0.2)
     finally:
         for ident, (process, handle, job, _) in active.items():
@@ -618,6 +701,11 @@ def _execute_batch(directory, *, resume=False, dispatch_gate=None):
                 directory / "trials" / ident / "summary.json",
                 collect_job(job, schedule[ident]),
             )
+        renders.close()
+        metadata["video_rendering"] = renders.report()
+        if metadata["video_rendering"]["all_videos_completed"]:
+            metadata["all_videos_finished_epoch"] = time.time()
+        atomic_json(metadata_path, metadata)
         atomic_json(directory / "schedule.json", schedule)
         write_report(directory, manifest, schedule)
     return json.loads((directory / "summary.json").read_text())

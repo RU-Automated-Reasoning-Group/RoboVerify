@@ -117,7 +117,8 @@ class RunConfig:
     max_depth: int = 12
     max_tokens: int = 100000
     higher_tolerance: float = 0.001
-    save_video: bool = True
+    save_video: bool | None = None
+    video_mode: str | None = None
     output_root: str = "runs"
     condition_mode: str = "dsl_only"
     max_sim_steps: int = 10000
@@ -139,6 +140,21 @@ class RunConfig:
             self.primitive_prompt = PrimitivePromptConfig(**self.primitive_prompt)
         if isinstance(self.primitive_feedback, dict):
             self.primitive_feedback = PrimitiveFeedbackConfig(**self.primitive_feedback)
+        if self.save_video is not None and type(self.save_video) is not bool:
+            raise ValueError("save_video must be Boolean or omitted")
+        if self.video_mode is None:
+            self.video_mode = (
+                "deferred"
+                if self.save_video is None
+                else "inline" if self.save_video else "off"
+            )
+        if self.video_mode not in {"inline", "deferred", "off"}:
+            raise ValueError("video_mode must be inline, deferred, or off")
+        if self.save_video is not None and self.save_video != (
+            self.video_mode != "off"
+        ):
+            raise ValueError("Conflicting save_video and video_mode settings")
+        self.save_video = self.video_mode != "off"
         validate_condition_mode(self.condition_mode)
         validate_prompt_version(self.prompt_version)
         if not math.isfinite(self.audit_timeout) or self.audit_timeout <= 0:

@@ -32,6 +32,7 @@ methods. Baseline modes are prompt-only; method-1 modes are checked:
 - [Revision 4: shared failure recovery](docs/revision_4_failure_recover.md).
 - [Revision 4.1: GPU scheduling — implemented](docs/revision_4_1_gpu_scheduling.md).
 - [Revision 4.2: configurable primitive prompts and feedback — implemented](docs/revision_4_2_fix_primitive_noncovergence.md).
+- [Revision 4.2.1: deferred video rendering — implemented](docs/revision_4_2_1_deferred_video_rendering.md).
 - [Revision 4: deferred improvements](docs/revision_4_unimplemented.md).
 - [Revision 5: task expansion plan](docs/revision_5_add_tasks.md).
 - [Revision 6: demonstration input plan](docs/revision_6_add_demonstration.md).
@@ -247,7 +248,11 @@ uv run python -m synthesis.entry.run_cap --method cap_method_1 --task stack --nu
 
 Set `OPENROUTER_API_KEY` in the launching environment. Do not put credentials in
 command-line arguments or JSON configuration files. Video recording is enabled
-by default and requires ffmpeg; `--no-save-video` disables it explicitly.
+by default in **deferred** mode: record full snapshots during rollout, then render
+videos in separate workers. `--video-mode inline|deferred|off` selects the behavior.
+Rendering requires ffmpeg/ffprobe. Legacy explicit `--save-video` selects inline
+when `--video-mode` is absent; `--no-save-video` selects off. Contradictory explicit
+settings are rejected.
 
 To compare on an identical state, reuse the saved `initial_state.npz` from the
 first run, or use a current demonstration archive with `--trace-index`:
@@ -856,3 +861,49 @@ required feedback plus metadata exceeded the unchanged 8,192-byte cap; this
 limitation and all failures remain reported. The final interpretation is also
 saved in the batch's `final_interpretation.md` for use after regenerating numerical
 tables and plots.
+
+
+## Deferred video rendering
+
+New experiments default to `video_mode: "deferred"` across all three methods.
+Set it explicitly when adapting an older batch JSON that has `save_video: true`.
+See [Revision 4.2.1](docs/revision_4_2_1_deferred_video_rendering.md).
+
+```json
+{
+  "run_config": {"video_mode": "deferred"},
+  "render_workers": 2,
+  "render_timeout": 600
+}
+```
+
+These are additions to the normal batch configuration. `max_workers` caps the
+combined trial and render worker count. `render_workers` additionally caps
+rendering processes; both pools share GPU reservations and the explicit allowlist.
+Batch execution drains queued videos after trials finish, while marking experiment
+completion separately. Recovery may continue while earlier attempts render.
+
+Single-trial CLI runs drain their queue after policy execution. Unstack only
+enqueues videos, preserving its 60-second execution limit; drain its queue
+separately using the command below. Python `run()`
+only records/enqueues jobs; call `drain_queue(result["run_dir"])` when convenient.
+A saved queue can also be processed without new model requests or policy rollouts:
+
+```bash
+.venv/bin/python -m synthesis.cap.deferred_video --directory runs/PATH_TO_BATCH_OR_RUN --max-workers 2
+.venv/bin/python -m synthesis.cap.deferred_video --directory runs/PATH_TO_BATCH_OR_RUN --retry-failed
+```
+
+Use the normal simulator environment. Batch queues reuse the manifest GPU policy;
+standalone queues use the caller's existing GPU environment. `--timeout` bounds
+each render worker (default 600 seconds). Interrupted jobs are resumable;
+failed jobs require `--retry-failed`. Existing completed videos are not overwritten.
+Only queued trajectories with captured render metadata are accepted; older archives
+are not silently treated as exact visual replays.
+
+Each rollout retains `render_job.json` (trajectory/render identity),
+`render_status.json` (mutable video outcome, attempts, timing, assignment), and
+`frame_index.jsonl`. The queue root has `video_summary.json`. Policy `result.json`
+remains immutable; the bounded report and batch summaries resolve current video
+status through its `status_path`. A video failure never changes task success or
+triggers recovery. Deferred render time is separate from policy execution budgets.

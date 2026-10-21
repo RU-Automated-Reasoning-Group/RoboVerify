@@ -86,8 +86,9 @@ def main(argv=None):
     parser.add_argument("--max-tokens", type=int, default=100000)
     parser.add_argument("--higher-tolerance", type=float, default=0.001)
     parser.add_argument(
-        "--save-video", action=argparse.BooleanOptionalAction, default=True
+        "--save-video", action=argparse.BooleanOptionalAction, default=None
     )
+    parser.add_argument("--video-mode", choices=("inline", "deferred", "off"))
     parser.add_argument("--output-dir", default="runs")
     args = parser.parse_args(argv)
     defaults = {
@@ -139,6 +140,7 @@ def main(argv=None):
         max_tokens=args.max_tokens,
         higher_tolerance=args.higher_tolerance,
         save_video=args.save_video,
+        video_mode=args.video_mode,
         output_root=args.output_dir,
     )
     backend = None
@@ -158,6 +160,14 @@ def main(argv=None):
         trace_index=args.trace_index,
         generate_only=args.generate_only,
     )
+    if (
+        config.video_mode == "deferred"
+        and not args.generate_only
+        and config.task != "unstack"
+    ):
+        from synthesis.cap.deferred_video import drain_queue
+
+        result["video_rendering"] = drain_queue(result["run_dir"])
     output = json.dumps(result, indent=2)
     with (Path(result["run_dir"]) / "stdout.log").open("a") as handle:
         handle.write(output + "\n")

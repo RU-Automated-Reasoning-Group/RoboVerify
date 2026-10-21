@@ -145,8 +145,10 @@ def audit_trial(job, row, *, videos=False):
                 tokens["total_tokens"] += usage["total_tokens"]
                 tokens["input_tokens"] += usage.get("prompt_tokens", 0)
                 tokens["output_tokens"] += usage.get("completion_tokens", 0)
-        video = attempt.get("video", {})
-        if video.get("status") == "saved":
+        from .deferred_video import resolved_video
+
+        video = resolved_video(attempt.get("video", {}))
+        if video.get("status") in {"saved", "completed"}:
             video_count += 1
             if videos:
                 frames = subprocess.run(
@@ -360,6 +362,10 @@ def generate(directory, report_path, *, videos=False):
         if (
             path.exists()
             and read(path).get("audit_version") == 2
+            and not any(
+                a.get("video", {}).get("mode") == "deferred"
+                for a in row.get("attempts", [row])
+            )
             and (not videos or read(path).get("video_frames_checked"))
         ):
             record = read(path)

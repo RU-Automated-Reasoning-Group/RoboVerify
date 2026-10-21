@@ -10,7 +10,18 @@ from .timing import timed
 
 
 class Recorder:
-    def __init__(self, env, logger, budget, *, video=False, seed=0, task="stack"):
+    def __init__(
+        self,
+        env,
+        logger,
+        budget,
+        *,
+        video=False,
+        seed=0,
+        task="stack",
+        video_mode=None,
+        queue_root=None,
+    ):
         self.env, self.logger, self.budget = env, logger, budget
         self.seed, self.task = seed, task
         self.directory = logger.root / "execution" / "rollout_001"
@@ -19,10 +30,21 @@ class Recorder:
         self.frames = (self.directory / "frame_index.jsonl").open("a", buffering=1)
         self.states, self.snapshots, self.actions = [], [], []
         self.original_step = env.step
+        self.video_mode = video_mode or ("inline" if video else "off")
+        self.queue_root = queue_root or logger.run_dir
+        self.render_metadata = None
+        self.render_metadata_error = None
+        if self.video_mode == "deferred":
+            from .deferred_video import environment_metadata
+
+            try:
+                self.render_metadata = environment_metadata(env)
+            except Exception as exc:
+                self.render_metadata_error = str(exc)
         self.video = None
         self.video_error = None
         self.video_metadata = {"status": "pending" if video else "disabled"}
-        if video:
+        if self.video_mode == "inline":
             from synthesis.cfg.collection import VideoRecorder
 
             try:
@@ -45,6 +67,19 @@ class Recorder:
         self.logger.state_context.update(
             state_index=len(self.states) - 1, sim_step=len(self.actions)
         )
+        if self.video_mode == "deferred":
+            self.frames.write(
+                json.dumps(
+                    self.logger.context
+                    | {
+                        "frame": len(self.states) - 1,
+                        "state_index": len(self.states) - 1,
+                        "step": len(self.actions),
+                    },
+                    default=json_value,
+                )
+                + "\n"
+            )
         if self.video is not None and not self.video.error:
             try:
                 with self.budget.timings.measure("rendering"):
@@ -131,6 +166,32 @@ class Recorder:
                     self.directory / "trajectory.npz",
                     "completed" if exc is None else "failed",
                 )
+            if self.video_mode == "deferred" and self.states:
+                from .deferred_video import enqueue
+
+                try:
+                    self.frames.flush()
+                    if self.render_metadata_error:
+                        raise ValueError(self.render_metadata_error)
+                    self.video_metadata = enqueue(
+                        self.directory,
+                        self.queue_root,
+                        self.render_metadata,
+                        seed=self.seed,
+                        task=self.task,
+                        context=self.logger.context,
+                    )
+                    # Preserve one video lifecycle event and one artifact registration,
+                    # as inline recording does, so feedback event counts/IDs do not drift.
+                    self.logger.emit("video_end", metadata=self.video_metadata)
+                    self.logger.register(self.directory / "render_job.json")
+                except Exception as error:
+                    self.video_metadata = {
+                        "status": "failed",
+                        "mode": "deferred",
+                        "reason": str(error),
+                    }
+                    self.logger.emit("video_error", error=str(error))
             if self.video is not None:
                 try:
                     self.budget.remaining()

@@ -388,7 +388,9 @@ policy()"""
             if not batch.exists():
                 create_batch(
                     batch,
-                    RunConfig(prompt_version="typed_v3", num_blocks=3),
+                    RunConfig(
+                        prompt_version="typed_v3", num_blocks=3, video_mode="inline"
+                    ),
                     ModelConfig(max_output_tokens=16384),
                     initial_state=snapshot,
                     modes=("dsl_only",),
