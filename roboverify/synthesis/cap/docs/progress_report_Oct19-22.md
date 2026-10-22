@@ -33,7 +33,7 @@ When a rollout fails, a shared, deterministic feedback module (no extra LLM call
 | Supporting events | Recent primitive calls, query results, predicates and assignments, chosen deterministically under the size cap. Omitted events are counted. |
 | Goal evidence | Truth value of each goal clause (e.g. `ON_star(block_i, b0)`) at the terminal state |
 | Failed `get` | Up to 16 candidate evaluations for a query that found no witness |
-| Earlier failures | A short summary of each earlier failed attempt: candidate, outcome, reason. **Earlier programs themselves are not included.** |
+| Earlier failures | One line of fields per earlier failed attempt: round, candidate source hash, status, failure reason (at most 140 characters), physical goal, logical postcondition, DSL compliance, a duplicate-of flag, and whether the candidate changed from its parent. **No source code, states, controller data or edit description is included.** |
 | Bookkeeping | Object-handle → physical-ID map, units/frame, Higher tolerance, explicit markers for missing fields |
 
 - **Size limit:** feedback is capped at 8,192 bytes, a conservative stand-in for tokens. If the required evidence does not fit, recovery stops with an explicit reason instead of silently truncating.
