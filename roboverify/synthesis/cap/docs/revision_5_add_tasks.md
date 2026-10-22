@@ -30,6 +30,28 @@
 - The collector CLI currently accepts only Stack. `task_spec` supports Stack and Unstack only.
 - Grid/Pyramid currently fail explicitly at the CaP adapter boundary; adding a CLI choice alone does not resolve the missing goal interface.
 
+### 2.1 Open question: Reverse and ReStack specifications (deferred)
+
+- **Status:** deferred for later discussion on 2026-10-22. The CaP adapter is unchanged until the definition is settled.
+- **Finding:** Reverse and ReStack have environment cases, success evaluators and standalone verifiers outside `synthesis/cap/`. However, they have no entry in the shared [`task_spec`](../../cfg/tasks.py). The standalone verifiers' formulas also do not specify the complete task.
+
+| Task | Shared pre/post ([`cfg/tasks.py`](../../cfg/tasks.py)) | Physical success ([environment](../../environment/cee_us_env/fpp_construction_env.py)) | Standalone verifier pre/post |
+| --- | --- | --- | --- |
+| Unstack | pre `∀x. x = tbl ∨ ON_star(x, b0)`; post `∀x,y. ON_star(x, y) → x = y` | `_roboverify_unstack_all_on_ground`: every block at table height and no block on another | [verify_unstack](../../entry/verify_unstack_with_learned_invariant.py) |
+| Reverse | None | `_roboverify_reverse_tower_complete`: one tower whose bottom-to-top order is the reverse of the canonical start `[b0, …]` | [verify_reverse](../../entry/verify_reverse_with_learned_invariant.py) checks only the first loop, which puts every block on the table. Its postcondition matches Unstack's (singleton `ON_star`, equal height, Scattered) and says nothing about reversed order. Its precondition pins `ON_star_zero = ON_star` at entry. |
+| ReStack (`partial_stack`) | None; the name `restack` exists only in CaP | `_roboverify_stack_tower_complete`, the same evaluator as Stack: one tower rooted at b0, with b0 on the table. Start: `_reset_sim_roboverify_partial_stack`, a random partition into at least two towers. | [verify_partial](../../entry/verify_partial_with_learned_invariant.py) uses the Unstack postcondition. Its precondition, every block `ON_star(·, b0)`, describes a single tower and does not match the multi-tower start. |
+
+Current CaP handling in [tasks.py](../tasks.py):
+
+- **Unstack:** `validate_start` checks the shared precondition. `evaluate_terminal` reports the physical result and the DSL postcondition.
+- **Reverse:** `validate_start` requires the canonical initial tower. Only the physical result is evaluated; `dsl_postcondition` is `None`.
+- **ReStack:** `restack` maps to the `partial_stack` environment. The start is not validated, and only the physical result is evaluated.
+
+Options to decide:
+
+- **(A) Use the shared `task_spec` as the source of definitions.** Keep Stack and Unstack, and remove Reverse and ReStack from the CaP adapter until shared specifications exist. These two tasks currently cannot be evaluated with a DSL postcondition, unlike Stack and Unstack.
+- **(B) Use the environment cases as the source of definitions.** Keep both tasks, and add shared pre/postconditions that agree with the physical evaluators. Reverse needs frozen entry geometry for the original order. Treat the standalone verifiers' first-loop formulas as partial specifications, not task definitions.
+
 ## 3. Planned changes
 
 - Introduce task-aware collection configuration, including symbolic context, logical-table handling, aliases, initial-state validation, and terminal validation.

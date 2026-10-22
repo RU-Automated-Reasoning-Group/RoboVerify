@@ -208,6 +208,7 @@ Full report: [revision_4_2_report.md](revision_4_2_report.md). Recovery is on in
    - Give all three methods the same demonstrations RoboVerify uses, with an on/off switch for ablation.
    - Waiting on the demonstration format and data from Yuning.
 3. **Test three more tasks** ([Revision 5](revision_5_add_tasks.md)): Unstack, Reverse and ReStack, which already have CaP adapters.
+   - Only Stack and Unstack have shared pre/postconditions. Reverse and ReStack exist only as environment cases with physical evaluators; their [specification is an open question](revision_5_add_tasks.md#21-open-question-reverse-and-restack-specifications-deferred).
    - Shared task specification and demonstrations.
    - Matched scenes across methods.
    - Unstack keeps its 60-second limit, which covers all recovery rounds.
