@@ -28,11 +28,16 @@ MODELS = {
         "port": 8106,
         "checkpoint": "Qwen/Qwen3.8-27B-FP8",
         "revision": "017b9c7af6b5689d5dd426a76e0bc077eb5ca20a",
+        # The template defaults to xhigh, which exceeded 32k output tokens on
+        # every smoke round 0; medium matches the OpenRouter reasoning lengths.
+        "template": {"enable_thinking": True, "reasoning_effort": "medium"},
     },
     "qwen3.5-9b": {
         "port": 8107,
         "checkpoint": "Qwen/Qwen3.5-9B",
         "revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
+        # The Qwen3.5 template has no reasoning-effort option.
+        "template": {"enable_thinking": True},
     },
 }
 CREDENTIAL = "VLLM_API_KEY"
@@ -101,7 +106,7 @@ def configuration(model_name):
         max_output_tokens=OUTPUT_TOKENS,
         request_timeout=REQUEST_TIMEOUT,
         transport_retries=1,
-        extra_body={"chat_template_kwargs": {"enable_thinking": True}},
+        extra_body={"chat_template_kwargs": dict(server["template"])},
     )
     return previous, job, config, model
 
@@ -177,7 +182,7 @@ def create(
                 "checkpoint": server["checkpoint"],
                 "revision": server["revision"],
                 "sampling": "checkpoint generation_config defaults",
-                "thinking": "chat_template_kwargs.enable_thinking=true",
+                "chat_template_kwargs": server["template"],
             },
             "admission": "paid_request_cap",
             "video_mode": config.video_mode,
