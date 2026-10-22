@@ -98,7 +98,7 @@
 | 12 | `history_summaries` | History `summaries` |
 | 13 | `history_none` | History `none` |
 | 14 | `minimal` | Anchor: only the always-on core, the current source, and history `none` |
-| 15 | `legacy_v1` | Anchor: Revision 4 items with summaries, primitive enrichments off. Matches Revision 4.2 `only_prompt` and connects to earlier results. |
+| 15 | `legacy_v1` | Anchor: Revision 4 items with summaries, primitive enrichments off. Same item set as Revision 4.2 `only_prompt`, but sized under `fixed_items` (Section 5), so it is not byte-identical to that cohort. |
 
 - **Leave-one-out misses redundancy.**
   - If two items carry overlapping information, removing either one alone can show no effect, e.g. failure events vs target derivation, keyframes vs action context.
@@ -111,6 +111,8 @@
 ## 5. Evidence limits
 
 **Decided:** the byte cap must not decide whether an enabled item is delivered.
+
+- **Decided:** every profile, including `legacy_v1`, uses the `fixed_items` evidence layout. Within-experiment fairness takes priority over byte identity with Revision 4.2.
 
 - **Each item's content is set by its own count limit, not by leftover space:**
   - supporting events: most recent N;
