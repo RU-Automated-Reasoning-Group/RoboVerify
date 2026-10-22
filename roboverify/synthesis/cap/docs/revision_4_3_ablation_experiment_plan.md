@@ -78,7 +78,7 @@
 - The primitive prompt switches are fixed in every profile at the set selected by the [prompt ablation](revision_4_3_prompt_ablation_plan.md), which runs first. They are not feedback.
 - `scene_metadata` and `dsl_diagnostics` are always on and not ablated:
   - scene metadata is the core handle-to-block mapping;
-  - DSL diagnostics are too rare to test (34 of 970 Revision 4.2 feedbacks).
+  - DSL diagnostics are too rare to test (17 of 485 Revision 4.2 feedbacks).
 - `event_counts` and `selection_metadata` are tested as one "metadata" group.
 - `query_candidates` is implemented independently of `failure_events`, but is kept inside the failure-events group for this experiment because no-witness failures are rare.
 
@@ -122,7 +122,7 @@
   - query candidates: at most 16.
 - **The total evidence cap becomes a safety guard sized above the measured maximum.**
 
-  Measured maxima over 970 Revision 4.2 feedbacks:
+  Measured maxima over all 485 ready Revision 4.2 feedbacks:
 
   | Item | Max bytes |
   | --- | ---: |
@@ -137,7 +137,7 @@
 - **Delivery audit.**
   - Every request records, per enabled item, whether it was delivered complete.
   - Any incomplete delivery is a reported protocol violation, not a silent omission.
-- **History** keeps its own 16,384-byte allowance; all 758 measured historical requests fit.
+- **History** keeps its own 16,384-byte allowance; all 379 measured historical requests fit.
 - **Token budgets scale with the larger requests.**
   - Inputs grow from about 4k to about 15–25k tokens, which could otherwise create new budget stops.
   - Proposed: 200k tokens per recovery round and 900k per trial; call and time limits unchanged.

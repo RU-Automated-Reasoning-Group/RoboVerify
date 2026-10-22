@@ -23,7 +23,7 @@
   - Reviewed cases show defects being repaired and then reintroduced. Example: [MiniMax Method 1 trial 18](case_study/revision_4_failure_recovery_cases/minimax_method_1_dsl_only_trial_018.md), rounds 0 → 1 → 4.
   - The model cannot compare against a program it cannot see.
 - **History affects only rounds 2–4.** The round-1 request has no earlier attempt.
-  - Across the saved Revision 4 and 4.2 recovery requests, 758 of 1,620 had at least one earlier executed attempt.
+  - Across the saved Revision 4 and 4.2 recovery requests, 379 of 810 had at least one earlier executed attempt.
   - Measured size: see Section 4.4.
 
 ## 2. Inventory of the current feedback
@@ -223,7 +223,7 @@ OBSERVED FAILURE (latest attempt)
   - It is separate from the existing 8,192-byte evidence cap, so history does not displace latest-failure evidence.
   - The complete request still counts against the round reservation (100k tokens) and the 200k context check.
 - **Measured basis.**
-  - Replaying all 758 saved requests (Revision 4 and 4.2) that had at least one earlier executed attempt.
+  - Replaying all 379 saved requests (Revision 4 and 4.2) that had at least one earlier executed attempt.
   - With bodies deduplicated by content hash, including source text repeated inside Baseline binding records, and about 300 bytes of ledger per attempt, the history would be:
 
     | Statistic | Bytes |
@@ -233,7 +233,7 @@ OBSERVED FAILURE (latest attempt)
     | 99th percentile | 7,718 |
     | Maximum | 10,972 |
 
-  - All 758 fit in 16,384 bytes. Without deduplication, Baseline binding records alone reach 46,324 bytes, so the registry is required.
+  - All 379 fit in 16,384 bytes. Without deduplication, which matters mainly for Baseline binding records that repeat source text, histories reach 37,007 bytes, so the registry is required. (These counts follow real paths only; an earlier draft counted each request twice through the per-trial `cap/latest` symlink.)
 - **No silent truncation or fallback.**
   - If the required history exceeds the allowance, stop with `history_exceeds_source_limit`.
   - Do not drop attempts, cut bodies, or silently revert to summaries.
