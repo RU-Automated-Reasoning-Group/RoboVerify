@@ -1,12 +1,12 @@
 # Revision 4: unimplemented backlog
 
 - **Status: deferred; not implemented yet.** Retain these ideas for future small revisions, not for execution as a bundle.
-- **Active plan:** [Revision 4.2: primitive nonconvergence](revision_4_2_fix_primitive_noncovergence.md).
+- **Active plan:** [Revision 4.3: configurable feedback and full executed-policy history](revision_4_3_configurable_feedback_and_full_policy_history.md). Completed: [Revision 4.2: primitive nonconvergence](revision_4_2_fix_primitive_noncovergence.md).
 - **Completed feature:** [Revision 4.1: GPU scheduling](revision_4_1_gpu_scheduling.md).
 - **Evidence:** [Recovery report Section 4](revision_4_recovery_report.md#4-analysis-of-initially-failed-recovery-on-trials).
 - **Baseline boundary:** preserve the original executor and generation/checking workflow. No new preparation repair is planned for Baseline; the previously discussed Method 1/2 preparation/API handling is also deferred for now.
 
-A primitive failure may be the last symptom of a different policy defect. For example, [Method 1 trial 18](case_study/revision_4_failure_recovery_cases/minimax_method_1_dsl_only_trial_018.md) selects b0 after changing the query anchor in round 2, and reintroduces an earlier arithmetic defect in round 4. General selection/progress diagnostics and full historical-code injection remain separate backlog items; they are not silently included in Revision 4.2.
+A primitive failure may be the last symptom of a different policy defect. For example, [Method 1 trial 18](case_study/revision_4_failure_recovery_cases/minimax_method_1_dsl_only_trial_018.md) selects b0 after changing the query anchor in round 2, and reintroduces an earlier arithmetic defect in round 4. General selection/progress diagnostics remain a separate backlog item and are not silently included in Revision 4.2. Full historical-code injection moved to [Revision 4.3](revision_4_3_configurable_feedback_and_full_policy_history.md).
 
 ## 1. Deferred recovery improvements
 
@@ -28,7 +28,7 @@ All 325 transitions passed feedback/source/request consistency checks. The plan 
 | P1, prerequisite for added context | Feedback-bound median 8,051 of 8,192 UTF-8 bytes | Appending raw events can displace existing evidence | Use compact semantic records and deduplicated metadata; account for the complete request |
 | P2, Method 1/2 only | Six preparation stops: five Baseline and one Method 2; none Method 1 | The Method 2 response error produced no executable candidate or new trajectory | Plan bounded preparation handling for Method 1/2 separately from runtime repair. Keep all five Baseline stops as outcomes of its unchanged preparation path |
 
-The priority labels above record the earlier broad review; they do not override the current decision to address one problem per version. Primitive target/phase diagnostics have moved to [Revision 4.2](revision_4_2_fix_primitive_noncovergence.md). Names/bindings, loop/selection progress, historical source, helper propagation, query/goal explanations, and preparation handling remain deferred here.
+The priority labels above record the earlier broad review; they do not override the current decision to address one problem per version. Primitive target/phase diagnostics have moved to [Revision 4.2](revision_4_2_fix_primitive_noncovergence.md). Historical source moved to [Revision 4.3](revision_4_3_configurable_feedback_and_full_policy_history.md). Names/bindings, loop/selection progress, helper propagation, query/goal explanations, and preparation handling remain deferred here.
 
 Repeated failure labels are not sufficient evidence of repeated defects: the report finds 67 transitions with a repeated failure class but only one with the same normalized source bundle. The two final Move failures in Baseline trial 6 request different Z targets. Likewise, ten numeric-literal-only edits with no immediate success do not justify banning numeric tuning. Text feedback is the first proposed intervention; the report does not establish that text can identify every contact or grasp failure.
 
@@ -64,17 +64,12 @@ For namespace repair, feedback may state that renaming the variable alone does n
 
 ### 1.4 Historical programs and the edit/outcome ledger
 
-Retain the original proposal to include all earlier failed rollout attempts from the **same trial**, with full attributable source and immutable bindings. At recovery round 4, the policy request contains programs from rounds 0–3; round 3 receives the latest detailed evidence.
-
-- Include attempts that entered top-level execution but failed before their first primitive. Candidates rejected before rollout belong to a separate preparation record, not executed history.
-- Preserve complete source units, including branches not taken. Do not reconstruct a program from executed statement fragments alone.
-- Record attempt/round identity, source/checkpoint IDs, relevant binding versions, failure location, observed failure, and physical/logical/DSL outcomes. Never merge different helper versions into a fictitious single executable.
-- Deduplicate identical source bodies in an inline registry. Every source reference required to understand a policy request must resolve to a body in that same request; a path or hash alone is insufficient.
-- Keep repeated attempts even when source is deduplicated. Include a deterministic source diff and edit/outcome summary as an aid, not a replacement for complete source.
-- Associate changes with the next observed result. For example, record that a removed waypoint was later restored; do not label it a proven causal fix without supporting evidence.
-- Do not replay full old trajectories, videos, model reasoning, or previous prompts. Preserve them as artifacts.
-
-Historical rollout states are debugging evidence. **Every replacement policy rolls out from the same saved initial state with a fresh execution context**, never from a failure state.
+**Moved to [Revision 4.3](revision_4_3_configurable_feedback_and_full_policy_history.md#4-part-2-full-executed-policy-history)** as the configurable `executed_programs` history mode. The requirements formerly listed here are carried over there:
+- complete attributable source and bindings for every earlier executed attempt;
+- a deduplicated inline registry;
+- an edit/outcome ledger;
+- no silent truncation;
+- restart from the saved initial state.
 
 ### 1.5 Independent configuration and prompt routing
 
@@ -82,7 +77,7 @@ All names below are **proposed fields**, not implemented configuration. Keep the
 
 | Proposed setting | Compatibility value | Experimental value |
 | --- | --- | --- |
-| `recovery_history_mode` | `summaries_only`: latest source + earlier failure summaries | `executed_programs`: complete attributable source for every failed executed attempt |
+| `recovery_history_mode` | `summaries_only`: latest source + earlier failure summaries | `executed_programs`: complete attributable source for every failed executed attempt. **Moved to Revision 4.3 as `recovery.history.mode`.** |
 | `recovery_diagnostics_profile` | `legacy_v1`: existing selected events/keyframes/clauses | Earlier proposal `semantic_v2`: deferred broad diagnostics from Sections 1.2–1.3; replace this broad intervention with individually versioned features when selected |
 | `recovery_helper_feedback` | `disabled`: existing helper prompt behavior | `relevant_slice`: relevant failure/source/diagnostic context in downstream helper requests |
 | `preparation_repair_enabled` | `false`: existing preparation-stop behavior | Method 1/2 only: separate opt-in bounded path described in Section 1.6; excluded from the first runtime-feedback comparison. Baseline does not support enabling it |

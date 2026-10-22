@@ -4,6 +4,7 @@
 - **Goal:** use failed execution trajectories to debug the current policy through a shared interface usable by Baseline, Method 1, and Method 2.
 - **Agreed direction:** recovery is configurable for all three methods, with up to four recovery rounds and five total rollouts. Any policy rollout that fails to achieve the task postcondition triggers recovery evaluation, regardless of its failure category. Each revised policy starts from the saved initial state; history accumulates, and repeated candidates may run again with explicit logging.
 - **Current behavior:** runtime/task failures can trigger a new synthesis request in all three methods. Method 1/2 retain static checking and repair; Baseline retains its original execution path and post-hoc audit. Recovery defaults off.
+- **Follow-up:** [Revision 4.3](revision_4_3_configurable_feedback_and_full_policy_history.md) plans per-item configuration of this feedback and a configurable executed-program history mode.
 
 ## 1. Shared API and configuration
 

@@ -202,7 +202,7 @@ Full report: [revision_4_2_report.md](revision_4_2_report.md). Recovery is on in
      - deduplicate identical bodies;
      - attach a short edit/outcome summary per round;
      - stay within the existing feedback budget.
-   - Design: [historical programs and edit/outcome ledger](revision_4_unimplemented.md#14-historical-programs-and-the-editoutcome-ledger).
+   - Design: [Revision 4.3](revision_4_3_configurable_feedback_and_full_policy_history.md), which also makes every existing feedback item configurable.
    - Evaluate by branching from the same failed programs, with history off vs. on.
 2. **Add demonstration input** ([Revision 6](revision_6_add_demonstration.md)).
    - Give all three methods the same demonstrations RoboVerify uses, with an on/off switch for ablation.
