@@ -1,6 +1,6 @@
 # Revision 4.3: primitive prompt ablation plan
 
-- **Status:** design agreed except the open points in Section 7; no experiment run yet.
+- **Status:** design agreed except the open point in Section 8; no experiment run yet.
 - **Purpose:** decide which of the four Revision 4.2 primitive prompt blocks to keep.
 - **Order of experiments:**
   1. This prompt study runs first, with feedback fixed.
@@ -47,7 +47,7 @@ The four Boolean switches under `RunConfig.primitive_prompt` ([Revision 4.2, Sec
   - preparation stops (e.g. Baseline SyntaxErrors);
   - DSL compliance;
   - added input tokens.
-- **Final success after recovery** is reported only if recovery is enabled (Section 7). It is not used to select prompts.
+- **Final success after recovery** is reported as a secondary outcome (Section 7). It is not used to select prompts.
 
 ## 4. Analysis
 
@@ -72,10 +72,14 @@ The four Boolean switches under `RunConfig.primitive_prompt` ([Revision 4.2, Sec
 - No separate pilot is needed for prompt rendering: all 16 combinations already render deterministically, as tested in Revision 4.2.
 - A short throughput pilot of local serving runs before the full batch. Its data are excluded from the main analysis.
 
-## 7. Open points
+## 7. Recovery and feedback setting
 
-1. **Recovery during the prompt study:**
-   - **(a) Off.** One rollout per trial; the feedback setting is irrelevant. This is the cheapest option.
-   - **(b) On with a fixed feedback setting.** Adds final success as a secondary outcome at roughly 2–3× the cost.
-2. **Fixed feedback setting, if recovery is on.** Proposed: the Revision 4 defaults (`cap-recovery-v1`: legacy items, summaries history, primitive enrichments off). This matches Revision 4.2 `only_prompt` and needs no Revision 4.3 code.
-3. **Confirmation of the selection rule in Section 5.**
+**Decided:** recovery on, with the Revision 4 default feedback in every cell.
+
+- The feedback is `cap-recovery-v1`: legacy items, summaries history, and primitive enrichments off, under the original `legacy_fill` 8,192-byte layout. This matches Revision 4.2 `only_prompt` and needs no Revision 4.3 feedback code.
+- The token budgets of the feedback ablation apply: 200k per recovery round and 900k per trial; call and time limits unchanged.
+- Round-0 success stays the primary outcome. Final success and recovery of initially failed trials are secondary and are not used for selection.
+
+## 8. Open point
+
+- Confirmation of the selection rule in Section 5.
