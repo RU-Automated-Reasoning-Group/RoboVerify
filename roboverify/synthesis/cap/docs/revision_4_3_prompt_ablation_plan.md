@@ -35,6 +35,14 @@ The four Boolean switches under `RunConfig.primitive_prompt` ([Revision 4.2, Sec
 - Setting: Stack, three blocks, the saved initial scene, `dsl_only`, `typed_v3`.
 - Cells are interleaved in a recorded randomized schedule, so server load and time effects do not align with any cell.
 
+### 2.1 Serving details (decided before launch)
+
+- The 27B uses `reasoning_effort=medium` through the chat template. The template default, `xhigh`, exhausted the 32k output cap without code in every smoke round 0.
+- The 9B template has no effort option; thinking is enabled.
+- No thinking-token budget is applied to either model.
+- Time and token budgets are scaled for local decoding (see the [report](revision_4_3_report.md#11-configuration)).
+- After the 27B batch finishes, GPU 6 serves a second 9B instance behind the same balancer.
+
 ## 3. Outcomes
 
 - **Primary: round-0 task success.**
