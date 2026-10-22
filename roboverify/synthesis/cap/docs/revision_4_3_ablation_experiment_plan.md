@@ -186,14 +186,21 @@
   - With roughly 20% discordance, about 160 seeds detect a 10-point pooled difference.
   - Pooled over 3 methods × 2 models with 50 seeds each, every profile has 300 seeds. Per model × method stratum, 50 seeds detect only differences of roughly 25 points or more.
 
-## 8. Open points
+## 8. Decided details
 
-1. **Supporting events:** N = 40 with a 32 KiB guard, or N = 80 with a 48 KiB guard.
-2. **Seeds and quotas:**
-   - seeds per model × method (50 proposed);
-   - per-class quotas within them;
-   - maximum Stage A round-0 attempts per model × method before stopping.
-3. **Replicates:** one recovery chain per seed × profile, or two to estimate within-seed variability.
-4. **Equivalence margin** for "no effect" claims (e.g. 10 percentage points).
-5. **Token budgets:** confirm 200k per round and 900k per trial.
-6. **Pilot:** a small run measuring local throughput, request sizes and the delivery audit before the full batch.
+| Item | Decision |
+| --- | --- |
+| Seeds | 50 failed round-0 attempts per model × method. Seeds are method-specific. |
+| Class quotas | Move 15, Pick 8, Release 8, execution/query budget 6, no-witness `get` up to 5, goal failure 4, other runtime 4. Shortfalls are refilled proportionally from the other classes; actual counts are reported. |
+| Stage A limit | At most 300 round-0 attempts per model × method, stopping early once quotas are met |
+| Replicates | One recovery chain per seed × profile |
+| Equivalence margin | 10 percentage points, for pooled (all models and methods) TOST claims only |
+| Token budgets | 200k per recovery round, 900k per trial; call and time limits unchanged |
+| Pilot | Stage A 30 round-0 attempts per model × method, then Stage B 3 seeds per stratum under all 15 profiles (270 chains). Pilot data are excluded from the main analysis. |
+| Sampling | Checkpoint `generation_config` defaults; resolved values recorded per call |
+| Output cap | 32,768 tokens per request, doubled from 16,384. The server context length must cover the largest input plus 32,768. |
+
+## 9. Open points
+
+1. **Supporting events:** N = 40 with a 32 KiB guard (proposed), or N = 80 with a 48 KiB guard.
+2. **Prompt study first:** the four primitive prompt blocks are to be optimized in a separate study before this ablation; this plan then uses the selected prompt set instead of all four.
