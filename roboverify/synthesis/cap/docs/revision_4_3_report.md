@@ -50,3 +50,15 @@ Shared settings:
 ### 1.3 Results
 
 Pending.
+
+## 2. Feedback ablation
+
+**Status: not started.** It runs after the prompt factorial selects a prompt set.
+
+### 2.1 Profile definitions that differ from a single-item removal
+
+- **`no_current_source`** removes the latest executed program and sets history to `summaries`.
+  - The configuration rejects `executed_programs` without the current source, because the history registry also holds the latest program's bodies.
+  - This profile therefore measures the value of all program source in the request (latest and earlier) relative to `full`, with earlier failures still listed as one-line summaries.
+  - It is not a test of the latest source alone. (Decided 2026-10-22.)
+- **`minimal`** keeps the always-on core: latest outcome, missing-field markers, scene metadata and DSL diagnostics. It adds the current source and uses history `none`.

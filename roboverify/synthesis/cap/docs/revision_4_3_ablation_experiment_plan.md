@@ -85,7 +85,7 @@
 | # | Profile | Change from `full` |
 | --- | --- | --- |
 | 1 | `full` | Reference: every item on, three primitive enrichments on, history `executed_programs` |
-| 2 | `no_current_source` | Current executed source off |
+| 2 | `no_current_source` | Current executed source off, and history falls back to `summaries`. `executed_programs` requires the current source, so this profile removes the latest program and all earlier programs together; earlier failures remain as one-line summaries. |
 | 3 | `no_failure_location` | Failure location off |
 | 4 | `no_failure_events` | Failure events and query candidates off |
 | 5 | `no_keyframes` | Keyframes off |
