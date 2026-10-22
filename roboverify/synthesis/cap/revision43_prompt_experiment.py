@@ -33,7 +33,8 @@ MODELS = {
         "template": {"enable_thinking": True, "reasoning_effort": "medium"},
     },
     "qwen3.5-9b": {
-        "port": 8107,
+        # Local least-in-flight balancer; GPU 7 first, GPU 6 added after the 27B run.
+        "port": 8117,
         "checkpoint": "Qwen/Qwen3.5-9B",
         "revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
         # The Qwen3.5 template has no reasoning-effort option.
