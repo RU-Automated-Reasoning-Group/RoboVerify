@@ -34,7 +34,7 @@
 
 1. **Stage A: failure pool.**
    - For each model × method, generate fresh round-0 attempts from the saved initial state.
-   - All four primitive prompt switches are on; the initial prompt is identical across profiles.
+   - The selected prompt set is used; the initial prompt is identical across profiles.
    - Keep every attempt; classify each failed one (Section 3).
 2. **Stage B: branched recovery.**
    - Select failed round-0 attempts from the pool, stratified by failure class.
@@ -75,7 +75,7 @@
 ## 4. Profiles
 
 **Decided:**
-- The four primitive prompt switches are fixed **on** in every profile. They are not feedback, and their effect is already established.
+- The primitive prompt switches are fixed in every profile at the set selected by the [prompt ablation](revision_4_3_prompt_ablation_plan.md), which runs first. They are not feedback.
 - `scene_metadata` and `dsl_diagnostics` are always on and not ablated:
   - scene metadata is the core handle-to-block mapping;
   - DSL diagnostics are too rare to test (34 of 970 Revision 4.2 feedbacks).
@@ -203,4 +203,3 @@
 ## 9. Open points
 
 1. **Supporting events:** N = 40 with a 32 KiB guard (proposed), or N = 80 with a 48 KiB guard.
-2. **Prompt study first:** the four primitive prompt blocks are to be optimized in a separate study before this ablation; this plan then uses the selected prompt set instead of all four.
