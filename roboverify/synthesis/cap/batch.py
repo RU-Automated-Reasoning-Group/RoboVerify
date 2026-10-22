@@ -118,6 +118,14 @@ def create_batch(
                     "and recovery feedback/history settings"
                 )
             RunConfig(**variant_config(asdict(config), overrides))
+            seed = v.get("seed_attempt")
+            if seed is not None and (
+                not Path(seed).is_file()
+                or (recovery_variants or [config.recovery.enabled]) != [True]
+            ):
+                raise ValueError(
+                    "A seeded variant needs an existing seed result and recovery on"
+                )
     if gpu_config is not None:
         gpu_config = (
             gpu_config if isinstance(gpu_config, GPUConfig) else GPUConfig(**gpu_config)
@@ -175,6 +183,12 @@ def create_batch(
                     "fixture": fixture,
                     "transport_control": transport_control,
                 }
+                # Branched recovery: round 0 is the archived seed attempt.
+                | (
+                    {"seed_attempt": str(Path(variant["seed_attempt"]).resolve())}
+                    if variant.get("seed_attempt")
+                    else {}
+                )
             )
     manifest = {
         "schema": "cap-batch-v1",

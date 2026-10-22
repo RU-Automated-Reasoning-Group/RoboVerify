@@ -89,6 +89,7 @@ def main(path):
             "transport_control": spec.get("transport_control"),
             "gpu_assignment": assignment,
         },
+        **({"seed_attempt": spec["seed_attempt"]} if spec.get("seed_attempt") else {}),
     )
     atomic_json(Path(path).with_name("worker_result.json"), result)
 
