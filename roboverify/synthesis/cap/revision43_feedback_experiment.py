@@ -171,13 +171,19 @@ def _transport(directory, request_limit):
     }
 
 
-def _gpu(max_workers):
+def _gpu(gpu=None):
+    """Worker GPU policy.
+
+    The scheduler caps each device at the smallest slot limit among live
+    reservations, so batches sharing a GPU must use one per-GPU value.
+    """
+    gpu = gpu or {}
     return GPUConfig(
-        GPU_UUIDS,
+        list(gpu.get("uuids") or GPU_UUIDS),
         "/tmp/roboverify-cap-gpu-reservations",
-        max_workers_per_gpu=max(1, (max_workers + 1) // 2),
+        max_workers_per_gpu=gpu.get("workers_per_gpu", 48),
         min_free_memory_mb=2048,
-        worker_memory_mb=256,
+        worker_memory_mb=gpu.get("worker_memory_mb", 128),
         gpu_poll_interval_seconds=2,
         gpu_sample_window_seconds=10,
         admission_timeout_seconds=60,
@@ -187,7 +193,7 @@ def _gpu(max_workers):
 # --------------------------------------------------------------------- Stage A
 
 
-def create_stage_a(directory, *, model_name, flags, trials, max_workers=32):
+def create_stage_a(directory, *, model_name, flags, trials, max_workers=32, gpu=None):
     directory = Path(directory).resolve()
     previous, job, config, model = configuration(model_name)
     config.recovery.max_rounds = 0
@@ -207,7 +213,7 @@ def create_stage_a(directory, *, model_name, flags, trials, max_workers=32):
         experiment_variants=[
             {"name": "stage_a", "run_config": {"primitive_prompt": flags}}
         ],
-        gpu_config=_gpu(max_workers),
+        gpu_config=_gpu(gpu),
         transport_control=_transport(directory, request_limit),
     )
     assert manifest["snapshot_sha256"] == previous["snapshot_sha256"]
@@ -436,6 +442,7 @@ def create_stage_b(
     profiles=PROFILES,
     supporting_events=SUPPORTING_EVENTS,
     guard=EVIDENCE_GUARD,
+    gpu=None,
 ):
     directory = Path(directory).resolve()
     manifest = load_seed_manifest(seed_manifest)
@@ -458,7 +465,7 @@ def create_stage_b(
         schedule_seed=4302,
         recovery_variants=[True],
         experiment_variants=variants,
-        gpu_config=_gpu(max_workers),
+        gpu_config=_gpu(gpu),
         transport_control=_transport(directory, request_limit),
     )
     assert batch["snapshot_sha256"] == previous["snapshot_sha256"]
@@ -636,6 +643,9 @@ def main():
     a.add_argument("--prompt-flags", required=True, help="JSON or four 0/1 digits")
     a.add_argument("--trials", type=int, default=100, help="per method")
     a.add_argument("--max-workers", type=int, default=32)
+    a.add_argument("--gpu-uuid", action="append", help="worker GPU allowlist")
+    a.add_argument("--workers-per-gpu", type=int, default=48)
+    a.add_argument("--worker-memory-mb", type=int, default=128)
     a.add_argument("--resume", action="store_true")
     a.add_argument("--create-only", action="store_true")
 
@@ -655,6 +665,9 @@ def main():
     b.add_argument("--directory", type=Path, required=True)
     b.add_argument("--seeds", type=Path, required=True)
     b.add_argument("--max-workers", type=int, default=32)
+    b.add_argument("--gpu-uuid", action="append", help="worker GPU allowlist")
+    b.add_argument("--workers-per-gpu", type=int, default=48)
+    b.add_argument("--worker-memory-mb", type=int, default=128)
     b.add_argument("--supporting-events", type=int, default=SUPPORTING_EVENTS)
     b.add_argument("--evidence-guard", type=int, default=EVIDENCE_GUARD)
     b.add_argument("--profile", action="append", choices=PROFILES)
@@ -683,6 +696,11 @@ def main():
         print(json.dumps(summarize(args.directory), indent=2))
         return
     directory = args.directory.resolve()
+    gpu = {
+        "uuids": args.gpu_uuid,
+        "workers_per_gpu": args.workers_per_gpu,
+        "worker_memory_mb": args.worker_memory_mb,
+    }
     if not args.resume:
         if args.command == "stage-a":
             create_stage_a(
@@ -691,12 +709,14 @@ def main():
                 flags=prompt_flags(args.prompt_flags),
                 trials=args.trials,
                 max_workers=args.max_workers,
+                gpu=gpu,
             )
         else:
             create_stage_b(
                 directory,
                 args.seeds,
                 max_workers=args.max_workers,
+                gpu=gpu,
                 profiles=tuple(args.profile or PROFILES),
                 supporting_events=args.supporting_events,
                 guard=args.evidence_guard,
