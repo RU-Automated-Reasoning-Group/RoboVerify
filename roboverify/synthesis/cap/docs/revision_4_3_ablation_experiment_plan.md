@@ -200,6 +200,22 @@
 | Sampling | Checkpoint `generation_config` defaults; resolved values recorded per call |
 | Output cap | 32,768 tokens per request, doubled from 16,384. The server context length must cover the largest input plus 32,768. |
 
-## 9. Open points
+## 9. Launcher implementation
+
+[revision43_feedback_experiment.py](../revision43_feedback_experiment.py) implements the design; no live run has been made with it.
+
+| Subcommand | Behavior |
+| --- | --- |
+| `stage-a` | Round-0-only batch (recovery on, `max_rounds=0`) for one model and all three methods, with a fixed prompt set (`--prompt-flags 1010` or JSON) |
+| `select-seeds` | Reads round-0 attempts from Stage A or existing batches (`--source BATCH[:VARIANT]`, read only), filters by model and prompt set, classifies them (Section 3; preparation failures counted and excluded), samples per method with seeded quotas and proportional refill, and writes a read-only manifest plus its SHA-256 |
+| `stage-b` | One job per seed × profile (15 profiles, `fixed_items`, supporting events `--supporting-events 40`, guard `--evidence-guard 32768`); every job starts from its seed through the Revision 4.3 seed loader |
+| `audit` | Checks that all branches of a seed share one round-0 attempt and initial state, that profile settings match, and that every enabled item was delivered complete |
+| `summarize` | Per-profile recovery with paired exact McNemar tests against `full`, counts by failure class, tokens and stop reasons |
+
+- **`no_current_source` uses history `summaries`.** `executed_programs` requires the current source, so this profile removes the latest source and the earlier programs together; earlier failures remain as summaries.
+- **Stage A early stopping** is done with incremental Stage A batches rather than an in-batch gate. `select-seeds` pools every source and reports per-class availability and shortfalls.
+- **Seeds produced by the prompt-factorial runs** come from the Revision 4.2 runtime (pinned worktree). Stage B replays them with the Revision 4.3 code. The 4.3 seed loader and byte-identity replay already cover Revision 4.2 artifacts.
+
+## 10. Open points
 
 1. **Supporting events:** N = 40 with a 32 KiB guard (proposed), or N = 80 with a 48 KiB guard.
