@@ -1,6 +1,6 @@
 # Revision 4.3: configurable recovery feedback and full executed-policy history
 
-- **Status:** planned; not implemented. This document defines the scope for implementation review.
+- **Status:** implemented and tested on 2026-10-22; no live experiment has been run with it. Section 8 records the implementation, validation, and deviations from the plan.
 - **Goal:**
   1. Make every information item in the [Revision 4 recovery feedback](revision_4_failure_recover.md) independently configurable.
   2. Implement the deferred executed-program history (formerly [backlog Section 1.4](revision_4_unimplemented.md#14-historical-programs-and-the-editoutcome-ledger)) as a configurable history mode. This item moves here from the backlog.
@@ -106,7 +106,7 @@ Add `RecoveryConfig.feedback` (`RecoveryFeedbackConfig`).
       "event_counts": true,
       "selection_metadata": true,
       "evidence_layout": "legacy_fill",
-      "evidence_bytes": 8192
+      "evidence_bytes": null
     },
     "history": {
       "mode": "summaries",
@@ -298,3 +298,75 @@ OBSERVED FAILURE (latest attempt)
 ## 7. Evaluation
 
 The experiment design moved to [revision_4_3_ablation_experiment_plan.md](revision_4_3_ablation_experiment_plan.md).
+
+## 8. Implementation and validation
+
+### 8.1 What was implemented
+
+- **Configuration** ([config.py](../config.py)):
+  - `RecoveryFeedbackConfig` and `RecoveryHistoryConfig`, nested in `RecoveryConfig`.
+  - Unknown keys, non-Boolean switches, out-of-range windows and invalid modes are rejected.
+  - Dependency checks: `executed_programs` requires `current_source`, and `source_diff` requires `executed_programs`.
+  - `RecoveryConfig.default_profile` identifies the byte-identical `cap-recovery-v1` profile. `evidence_cap` resolves the cap.
+- **Batch variants** ([batch.py](../batch.py)):
+  - May override `recovery.feedback` and `recovery.history`, merged field by field into the batch recovery settings.
+  - Budgets remain batch-wide.
+- **Evidence selection** ([recovery.py](../recovery.py) `select_relevant_evidence`):
+  - The default profile runs the unchanged v1 path.
+  - Other profiles:
+    - emit `cap-recovery-v2` and `omitted_by_configuration`;
+    - gate each item;
+    - emit failed-query candidates as their own `query_candidates` record;
+    - support `fixed_items`.
+  - Non-default feedback artifacts also record:
+    - `item_delivery`: per item, `complete`, `not_applicable`, `disabled`, or a partial count;
+    - `history_mode`, `evidence_layout` and `evidence_cap`.
+
+    These stay outside the model-visible evidence.
+- **History:**
+  - `freeze_attempt` stores immutable JSON copies of each attempt as soon as it is collected.
+  - `build_history` builds the content-addressed registry and ledger, including Baseline binding records whose policy and helper bodies become registry references.
+  - It also builds edit summaries keyed by unit path within the checkpoint, plus optional unified diffs.
+  - Over the allowance it returns `history_exceeds_source_limit`; diffs alone are dropped first and recorded as `diffs_omitted`.
+- **Seed loader:**
+  - Call `run(..., seed_attempt=<archived rounds/000/result.json>)`.
+  - The seed is validated before any run directory is created. It must be a failed attempt with saved artifacts and an initial state matching any requested initial state.
+  - The seed's recorded calls, tokens, ticks, simulation steps and active wall time are charged to the trial ledger.
+  - `seed.json` records the result path, hashes and charges. Round 0 is not regenerated.
+- **Local model mode** ([llm.py](../llm.py)):
+  - `local_model_config` returns a `vllm` `ModelConfig` for a loopback endpoint, with thinking set through `chat_template_kwargs`.
+  - The key is read from an environment variable (default `VLLM_API_KEY`) at request time.
+  - `server_provenance` records the served model ids and roots, `max_model_len` and the vLLM version, without credentials.
+  - A `vllm` configuration that carries OpenRouter `reasoning` options is rejected.
+  - The generic batch path applies no request pacing or quota admission unless a launcher supplies them.
+
+### 8.2 Validation
+
+- **v1 golden file.** [testdata/revision43_v1_golden.json](../testdata/revision43_v1_golden.json) was recorded from the unmodified code: seven scripted scenarios covering all three methods, no-witness histories, primitive failures with all three Revision 4.2 enrichments, goal failure, NameError and tick budget. With default configuration, the implementation reproduces every prepared feedback object and recovery prompt exactly.
+- **Offline replay of archived Revision 4.2 attempts.** The default configuration regenerated the feedback and recovery prompt of every ready archived recovery round, using each run's own recorded configuration.
+  - **485/485 feedback objects** and **485/485 delivered recovery prompts** were byte-identical.
+  - Coverage: MiniMax, Haiku and Qwen batches.
+  - Each trial's `cap/latest` symlink duplicates its run directory; counting those links would give 970.
+- **Focused tests** ([test_revision43.py](../test_revision43.py)), 13 tests. They cover:
+  - configuration validation and round trips;
+  - batch variant merging;
+  - per-item gating, checked against the evidence actually serialized into the prompt;
+  - independence of query candidates and failure events;
+  - `fixed_items` count limits, delivery records and guard stop;
+  - history `none`;
+  - a five-round `executed_programs` trial;
+  - frozen-record immutability;
+  - Baseline binding references, edit summaries, diff omission and the history-size stop;
+  - a seeded branch from an archived failed attempt, plus rejection of a successful seed;
+  - local model configuration and credential-free provenance.
+
+  The five-round trial checks that rounds 0–2 are in the ledger and round 3 is current, that all bodies are present, deduplicated and resolvable, and that prepared equals delivered feedback.
+- **Full suite.** `synthesis/cap/`: 194 tests passed, 2 opt-in hardware tests skipped.
+
+### 8.3 Deviations from the plan
+
+- **`evidence_bytes` defaults to `null`,** which uses `RecoveryConfig.feedback_tokens`, rather than a literal 8192. This keeps one cap setting and preserves the v1 default.
+- **Failed-query candidates are always split out under `cap-recovery-v2`.** Even with both items enabled, they move into `query_candidates` rather than staying inside the `query_failure` event. The split is what makes the two items independently configurable. v1 keeps the original layout.
+- **No-history request layout.** A round-1 `executed_programs` request has no earlier attempt, so it uses the plain current-source section without a registry, as specified in Section 6. Later rounds use the registry layout of Section 4.3.
+- **Report generator.** Reports do not yet show feedback-profile or history columns; these will be added with the Revision 4.3 experiment launcher. Per-request profile, delivery and history records are already saved in each `feedback.json`.
+- **Experiment launcher.** The two-stage launcher from the ablation plan is not implemented here, because its open points are still being decided. The seed loader and local model mode provide the building blocks: Stage A pool, Stage B branches.
