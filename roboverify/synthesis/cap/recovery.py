@@ -1,8 +1,10 @@
 """Shared deterministic failure feedback and bounded initial-state recovery."""
 
 import ast
+import difflib
 import hashlib
 import json
+import re
 import time
 import uuid
 from collections import Counter
@@ -13,6 +15,7 @@ from .budget import Budget
 from .contracts import BudgetExceeded
 
 VERSION = "cap-recovery-v1"
+VERSION_V2 = "cap-recovery-v2"
 
 
 def encoded(value):
@@ -119,6 +122,7 @@ def snapshot_hash(snapshot):
 
 def verify_restoration(env, reference, logger):
     import numpy as np
+
     from synthesis.cfg.reset import capture
 
     actual = capture(env)
@@ -261,8 +265,37 @@ def goal_evidence(trace):
     }
 
 
-def select_relevant_evidence(record, earlier, token_limit, primitive_feedback=None):
-    """Required failure context first, then recent supporting evidence by event ID."""
+QUERY_DETAIL = ("candidates", "evaluated_count", "omitted_candidates")
+
+
+def split_query_candidates(events):
+    """Separate failed-query candidate evaluations from their failure events."""
+    stripped, candidates = [], []
+    for event in events:
+        if event["kind"] == "query_failure" and "candidates" in event:
+            candidates.append(
+                {"event_id": event["event_id"], "query": event.get("query")}
+                | {k: event[k] for k in QUERY_DETAIL if k in event}
+            )
+            event = {k: v for k, v in event.items() if k not in QUERY_DETAIL}
+        stripped.append(event)
+    return stripped, candidates
+
+
+def select_relevant_evidence(
+    record, earlier, token_limit, primitive_feedback=None, config=None
+):
+    """Required failure context first, then recent supporting evidence by event ID.
+
+    The default recovery configuration reproduces cap-recovery-v1 exactly. Other
+    profiles gate individual items, declare what they omit, and may size items by
+    their own count limits (``fixed_items``) instead of filling leftover bytes.
+    """
+    from .config import FEEDBACK_ITEMS, RecoveryConfig
+
+    cfg = config or RecoveryConfig()
+    items, legacy = cfg.feedback, cfg.default_profile
+    fixed = items.evidence_layout == "fixed_items"
     trace, events = record["trace"], record["events"]
     if not record["rolled_out"]:
         return {"ready": False, "reason": "preparation_failure_no_rollout"}
@@ -353,6 +386,28 @@ def select_relevant_evidence(record, earlier, token_limit, primitive_feedback=No
         required["missing_fields"].append(
             "exception location: not applicable for normal goal failure"
         )
+    query_candidates = []
+    if not legacy:
+        required["schema"] = VERSION_V2
+        required["omitted_by_configuration"] = items.disabled() + (
+            ["earlier_attempts"] if cfg.history.mode == "none" else []
+        )
+        if cfg.history.mode != "summaries":
+            # executed_programs carries these fields in its ledger instead.
+            del required["earlier_failures"]
+        context, query_candidates = split_query_candidates(required["failure_context"])
+        required["failure_context"] = context
+        if items.query_candidates and query_candidates:
+            required["query_candidates"] = query_candidates
+        for item, key in (
+            ("failure_events", "failure_context"),
+            ("failure_location", "last_source_location"),
+            ("keyframes", "keyframes"),
+            ("goal_clauses", "derived_goal_evidence"),
+            ("dsl_diagnostics", "dsl_diagnostics"),
+        ):
+            if not getattr(items, item):
+                required.pop(key, None)
     # Preserve the legacy path exactly unless an explicit enrichment is selected.
     from .config import PrimitiveFeedbackConfig
     from .primitive_feedback import build_diagnostics
@@ -370,7 +425,7 @@ def select_relevant_evidence(record, earlier, token_limit, primitive_feedback=No
         for candidate in action_candidates:
             context["actions"].append(candidate)
             context["omitted_candidate_ids"].remove(candidate["action_id"])
-            if token_bound(encoded(required)) + 768 > token_limit:
+            if not fixed and token_bound(encoded(required)) + 768 > token_limit:
                 context["actions"].remove(candidate)
                 context["omitted_candidate_ids"].append(candidate["action_id"])
         context["actions"].sort(key=lambda item: item["action_id"])
@@ -394,62 +449,405 @@ def select_relevant_evidence(record, earlier, token_limit, primitive_feedback=No
         }
         and e not in latest
     ]
-    selected = list(latest)
-    required["supporting_context"] = []
-    for event in reversed(optional[-80:]):
-        candidate = compact_event(event)
-        required["supporting_context"].insert(0, candidate)
-        if token_bound(encoded(required)) + 512 > token_limit:
-            required["supporting_context"].pop(0)
-            continue
-        selected.append(event)
+    window = (
+        optional[-items.supporting_event_window :]
+        if items.supporting_event_window
+        else []
+    )
+    selected = list(latest) if legacy or items.failure_events else []
+    supporting = []
+    if items.supporting_events:
+        for event in reversed(window):
+            candidate = compact_event(event)
+            supporting.insert(0, candidate)
+            if not fixed:
+                required["supporting_context"] = supporting
+                if token_bound(encoded(required)) + 512 > token_limit:
+                    supporting.pop(0)
+                    continue
+            selected.append(event)
+        required["supporting_context"] = supporting
     required["selected_event_ids"] = sorted(e["event_id"] for e in selected)
     required["omitted_event_count"] = len(events) - len(selected)
     required["event_counts"] = dict(Counter(e["kind"] for e in events))
+    if not legacy:
+        if not items.event_counts:
+            del required["event_counts"]
+        if not items.selection_metadata:
+            for key in ("selected_event_ids", "omitted_event_count", "token_counting"):
+                del required[key]
     # Counts/IDs are metadata too: never silently exceed the declared cap.
     while (
-        token_bound(encoded(required)) > token_limit and required["supporting_context"]
+        not fixed
+        and token_bound(encoded(required)) > token_limit
+        and required.get("supporting_context")
     ):
         removed = required["supporting_context"].pop(0)
-        required["selected_event_ids"].remove(removed["event_id"])
-        required["omitted_event_count"] += 1
+        if "selected_event_ids" in required:
+            required["selected_event_ids"].remove(removed["event_id"])
+            required["omitted_event_count"] += 1
     if token_bound(encoded(required)) > token_limit:
         return {"ready": False, "reason": "required_feedback_exceeds_token_limit"}
-    return {
+    feedback = {
         "ready": True,
         "evidence": required,
         "feedback_token_bound": token_bound(encoded(required)),
         "current_sources": record["sources"],
         "execution_bindings": record["bindings"],
     }
+    if legacy:
+        return feedback
+    if not items.current_source:
+        feedback["current_sources"] = feedback["execution_bindings"] = None
+    available = {
+        "current_source": True,
+        "failure_location": bool(locations),
+        "failure_events": bool(latest),
+        "query_candidates": bool(query_candidates),
+        "keyframes": True,
+        "goal_clauses": True,
+        "dsl_diagnostics": record["result"].get("dsl_compliance") == "fail"
+        and audit_path.exists(),
+        "supporting_events": True,
+        "event_counts": True,
+        "selection_metadata": True,
+    }
+    delivery = {}
+    for item in FEEDBACK_ITEMS:
+        if not getattr(items, item):
+            delivery[item] = "disabled"
+        elif not available[item]:
+            delivery[item] = "not_applicable"
+        else:
+            delivery[item] = "complete"
+    if items.supporting_events and len(supporting) < len(window):
+        delivery["supporting_events"] = {
+            "partial": len(supporting),
+            "available": len(window),
+        }
+    for item in ("target_derivation", "controller_phases", "action_context"):
+        if not getattr(options, item):
+            delivery[item] = "disabled"
+        elif diagnostics is None or item not in diagnostics:
+            delivery[item] = "not_applicable"
+        elif item == "action_context" and diagnostics[item]["omitted_candidate_ids"]:
+            delivery[item] = {
+                "partial": len(diagnostics[item]["actions"]),
+                "omitted": len(diagnostics[item]["omitted_candidate_ids"]),
+            }
+        else:
+            delivery[item] = "complete"
+    feedback.update(
+        item_delivery=delivery,
+        history_mode=cfg.history.mode,
+        evidence_layout=items.evidence_layout,
+        evidence_cap=token_limit,
+    )
+    return feedback
+
+
+RECOVERY_INSTRUCTIONS = (
+    "Revise the current policy to complete the original task using the same API and condition rules.\n"
+    "The failed trajectory is debugging evidence only. The replacement runs from its entry point "
+    "after exact restoration of the saved initial state, never from the failure state. "
+    "Diagnostic block labels/handles are not executable bindings. Do not assume an unobserved cause.\n"
+)
+RECOVERY_OUTPUT = (
+    "\nOutput complete replacement Python policy code only, with its top-level invocation. "
+    "Preserve this method's helper-generation and whole-program requirements above.\n"
+)
 
 
 def recovery_prompt(original, feedback):
-    return (
-        original
-        + "\n\nRECOVERY REQUEST ("
-        + VERSION
-        + ")\n"
-        + (
-            "Revise the current policy to complete the original task using the same API and condition rules.\n"
-            "The failed trajectory is debugging evidence only. The replacement runs from its entry point "
-            "after exact restoration of the saved initial state, never from the failure state. "
-            "Diagnostic block labels/handles are not executable bindings. Do not assume an unobserved cause.\n"
-            "CURRENT EXECUTED SOURCE AND BINDINGS\n"
+    schema = feedback["evidence"]["schema"]
+    prompt = (
+        original + "\n\nRECOVERY REQUEST (" + schema + ")\n" + RECOVERY_INSTRUCTIONS
+    )
+    if schema == VERSION:
+        return (
+            prompt
+            + "CURRENT EXECUTED SOURCE AND BINDINGS\n"
+            + encoded(
+                {
+                    "sources": feedback["current_sources"],
+                    "bindings": feedback["execution_bindings"],
+                }
+            )
+            + ("\nOBSERVED FAILURE AND ACCUMULATED HISTORY\n")
+            + encoded(feedback["evidence"])
+            + RECOVERY_OUTPUT
         )
-        + encoded(
+    history = feedback.get("history")
+    if history:
+        prompt += (
+            "Earlier executed programs are listed for comparison. Each replacement still runs "
+            "from the saved initial state; earlier failures are debugging evidence only.\n"
+            "SOURCE REGISTRY\n"
+            + encoded(history["registry"])
+            + "\nEXECUTED ATTEMPT HISTORY (oldest first)\n"
+            + encoded(history["attempts"])
+            + "\nCURRENT EXECUTED SOURCE AND BINDINGS (latest attempt)\n"
+            + encoded(history["current"])
+            + "\n"
+        )
+    elif feedback["current_sources"] is not None:
+        prompt += (
+            "CURRENT EXECUTED SOURCE AND BINDINGS\n"
+            + encoded(
+                {
+                    "sources": feedback["current_sources"],
+                    "bindings": feedback["execution_bindings"],
+                }
+            )
+            + "\n"
+        )
+    heading = (
+        "OBSERVED FAILURE AND ACCUMULATED HISTORY"
+        if feedback.get("history_mode") == "summaries"
+        else "OBSERVED FAILURE (latest attempt)"
+    )
+    return prompt + heading + "\n" + encoded(feedback["evidence"]) + RECOVERY_OUTPUT
+
+
+UNIT = re.compile(r"(?:^|/)checkpoints/[^/]+/(.+)$")
+
+
+def unit_name(path):
+    """Checkpoint directories change between rounds; the unit path within does not."""
+    match = UNIT.search(path)
+    return match.group(1) if match else path
+
+
+def failure_point(record):
+    events = record["events"]
+    point = {}
+    locations = [
+        e
+        for e in events
+        if e["kind"] in {"statement_start", "python_exception", "python_line"}
+    ]
+    if locations:
+        point.update(
             {
-                "sources": feedback["current_sources"],
-                "bindings": feedback["execution_bindings"],
+                k: locations[-1][k]
+                for k in ("source_unit", "source_line", "statement")
+                if k in locations[-1]
             }
         )
-        + ("\nOBSERVED FAILURE AND ACCUMULATED HISTORY\n")
-        + encoded(feedback["evidence"])
-        + (
-            "\nOutput complete replacement Python policy code only, with its top-level invocation. "
-            "Preserve this method's helper-generation and whole-program requirements above.\n"
+    if record["result"].get("status") == "primitive_failed":
+        starts = [e for e in events if e["kind"] == "primitive_start"]
+        if starts:
+            point["primitive"] = starts[-1].get("primitive")
+            point["arguments"] = starts[-1].get("arguments")
+    return point
+
+
+def freeze_attempt(record, round_index):
+    """Immutable copy of an executed attempt for later history requests."""
+    result = record["result"]
+    return json.loads(
+        encoded(
+            {
+                "round": round_index,
+                "candidate": record["candidate_sha256"],
+                "duplicate_of": record.get("duplicate_of"),
+                "changed_from_parent": record.get("changed_from_parent"),
+                "rolled_out": record["rolled_out"],
+                "sources": record["sources"],
+                "bindings": record["bindings"],
+                "outcome": {
+                    "status": result["status"],
+                    "reason": result.get("reason", "")[:140],
+                    "environment_success": result.get("environment_success"),
+                    "dsl_postcondition": result.get("dsl_postcondition"),
+                    "dsl_compliance": result.get("dsl_compliance"),
+                },
+                "failure_point": failure_point(record),
+            }
         )
     )
+
+
+def _line_changes(old, new):
+    added = removed = 0
+    matcher = difflib.SequenceMatcher(a=old.splitlines(), b=new.splitlines())
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag != "equal":
+            removed += i2 - i1
+            added += j2 - j1
+    return added, removed
+
+
+def edit_summary(previous, current, include_diff):
+    before = {unit_name(k): v for k, v in previous["sources"].items()}
+    after = {unit_name(k): v for k, v in current["sources"].items()}
+    summary = {
+        "compared_with_round": previous["round"],
+        "units_added": sorted(set(after) - set(before)),
+        "units_removed": sorted(set(before) - set(after)),
+        "units_changed": [],
+    }
+    diffs = {}
+    for unit in sorted(set(before) & set(after)):
+        if before[unit] == after[unit]:
+            continue
+        added, removed = _line_changes(before[unit], after[unit])
+        summary["units_changed"].append(
+            {"unit": unit, "lines_added": added, "lines_removed": removed}
+        )
+        if include_diff:
+            diffs[unit] = "\n".join(
+                difflib.unified_diff(
+                    before[unit].splitlines(),
+                    after[unit].splitlines(),
+                    f"round_{previous['round']}/{unit}",
+                    f"round_{current['round']}/{unit}",
+                    n=1,
+                    lineterm="",
+                )
+            )
+    return summary, diffs
+
+
+def build_history(earlier, latest, settings):
+    """Content-addressed source registry plus a ledger of earlier executed attempts.
+
+    Returns None when there is no earlier executed attempt, a stop dictionary when the
+    required history exceeds its allowance, or the history payload otherwise.
+    """
+    executed = [a for a in earlier if a["rolled_out"]]
+    if not executed:
+        return None
+    registry = {}
+
+    def register(body):
+        ident = "src_" + hashlib.sha256(body.encode()).hexdigest()[:12]
+        registry.setdefault(ident, body)
+        return ident
+
+    def references(attempt):
+        bindings = attempt["bindings"]
+        if bindings is not None:
+            bindings = json.loads(encoded(bindings))
+            if isinstance(bindings.get("policy"), str):
+                bindings["policy"] = register(bindings["policy"])
+            for function in (bindings.get("functions") or {}).values():
+                if isinstance(function, dict) and isinstance(
+                    function.get("source"), str
+                ):
+                    function["source"] = register(function["source"])
+        return {k: register(v) for k, v in attempt["sources"].items()}, bindings
+
+    chain = executed + [latest]
+    entries, diffs = [], {}
+    for index, attempt in enumerate(chain):
+        sources, bindings = references(attempt)
+        entry = {
+            "round": attempt["round"],
+            "candidate": attempt["candidate"],
+            "parent_round": chain[index - 1]["round"] if index else None,
+            "duplicate_of": attempt["duplicate_of"],
+            "changed_from_parent": attempt["changed_from_parent"],
+            "sources": sources,
+            "bindings": bindings,
+        }
+        if attempt is not latest:
+            entry["outcome"] = attempt["outcome"]
+            entry["failure_point"] = attempt["failure_point"]
+        if index and settings.edit_ledger:
+            entry["edit_summary"], unit_diffs = edit_summary(
+                chain[index - 1], attempt, settings.source_diff
+            )
+            if unit_diffs:
+                diffs[attempt["round"]] = unit_diffs
+        entries.append(entry)
+    current = entries.pop()
+    latest_ids = set(current["sources"].values())
+    if current["bindings"]:
+        latest_ids |= set(re.findall(r"src_[0-9a-f]{12}", encoded(current["bindings"])))
+
+    def size(ledger):
+        bodies = sum(
+            token_bound(body)
+            for ident, body in registry.items()
+            if ident not in latest_ids
+        )
+        return bodies + token_bound(encoded(ledger))
+
+    omitted_diffs = None
+    if diffs:
+        with_diffs = [
+            e | ({"diff": diffs[e["round"]]} if e["round"] in diffs else {})
+            for e in entries
+        ]
+        current_with = current | (
+            {"diff": diffs[current["round"]]} if current["round"] in diffs else {}
+        )
+        if size(with_diffs + [current_with]) <= settings.source_bytes:
+            entries, current = with_diffs, current_with
+        else:
+            omitted_diffs = "exceeds_source_bytes"
+    used = size(entries + [current])
+    if used > settings.source_bytes:
+        return {
+            "ready": False,
+            "reason": "history_exceeds_source_limit",
+            "history_bytes": used,
+            "history_limit": settings.source_bytes,
+        }
+    history = {
+        "mode": "executed_programs",
+        "registry": registry,
+        "attempts": entries,
+        "current": current,
+        "history_bytes": used,
+        "history_limit": settings.source_bytes,
+        "included_rounds": [e["round"] for e in entries],
+    }
+    if omitted_diffs:
+        history["diffs_omitted"] = omitted_diffs
+    return history
+
+
+def file_sha256(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def load_seed(path, initial_state=None):
+    """Archived failed round-0 attempt used as the frozen start of a recovery branch."""
+    path = Path(path).resolve()
+    result = read_json(path)
+    root = Path(result["run_dir"]) / "artifacts/trial_001"
+    if not (root / "timeline.jsonl").is_file():
+        raise ValueError(f"Seed attempt artifacts are missing: {root}")
+    if result.get("task_success") is True or (
+        "task_success" not in result
+        and result.get("success") is True
+        and result.get("dsl_postcondition") is not False
+    ):
+        raise ValueError("Seed attempt succeeded; there is no failure to recover")
+    state = root / "initial_state.npz"
+    if not state.is_file():
+        raise ValueError("Seed attempt has no saved initial state")
+    if initial_state is not None and file_sha256(initial_state) != file_sha256(state):
+        raise ValueError("Seed initial state differs from the requested initial state")
+    identity = {
+        "seed_result": str(path),
+        "seed_result_sha256": file_sha256(path),
+        "seed_run_dir": result["run_dir"],
+        "initial_state_sha256": file_sha256(state),
+        "method": result.get("method"),
+        "status": result.get("status"),
+        "charged": {
+            "model_calls": result.get("model_calls", 0),
+            "known_tokens": result.get("known_tokens", 0),
+            "unknown_usage_calls": result.get("unknown_usage_calls", 0),
+            "execution_ticks": result.get("execution_ticks", 0),
+            "simulation_steps": result.get("simulation_steps", 0),
+            "active_wall_seconds": result.get("active_wall_seconds", 0),
+        },
+    }
+    return result, identity
 
 
 def run_recovery(config, model_config, **kwargs):
@@ -459,6 +857,9 @@ def run_recovery(config, model_config, **kwargs):
     from .runner import run_once
 
     cfg = config.recovery
+    seed_path = kwargs.pop("seed_attempt", None)
+    # Validate a seed before creating any run directory or ledger.
+    seed = load_seed(seed_path, kwargs.get("initial_state")) if seed_path else None
     timeout = (
         min(cfg.total_timeout, 60) if config.task == "unstack" else cfg.total_timeout
     )
@@ -477,7 +878,8 @@ def run_recovery(config, model_config, **kwargs):
         asdict(config)
         | {
             "model": asdict(model_config),
-            "recovery_schema": VERSION,
+            "recovery_schema": VERSION if cfg.default_profile else VERSION_V2,
+            "seed_attempt": str(seed_path) if seed_path else None,
             "instruction": kwargs.get("instruction"),
             "initial_state": str(kwargs.get("initial_state")),
         },
@@ -486,7 +888,19 @@ def run_recovery(config, model_config, **kwargs):
     )
     logger = CapLogger(parent.run_dir, run=parent, console=False)
     logger.artifact("recovery_config.json", asdict(cfg))
-    history, attempts, records, feedback = [], [], [], None
+    history, attempts, records, frozen, feedback = [], [], [], [], None
+    if seed:
+        charged = seed[1]["charged"]
+        # Every branch of a seed starts with the same recorded round-0 usage.
+        ledger.calls += charged["model_calls"]
+        ledger.tokens += charged["known_tokens"]
+        ledger.charged_tokens += charged["known_tokens"]
+        ledger.unknown_usage_calls += charged["unknown_usage_calls"]
+        ledger.steps += charged["execution_ticks"]
+        ledger.simulation_steps += charged["simulation_steps"]
+        ledger.started -= charged["active_wall_seconds"]
+        logger.artifact("seed.json", seed[1])
+        logger.emit("recovery_seed", **seed[1])
     snapshot = kwargs.get("initial_state")
     trace_index = kwargs.get("trace_index", 0)
     stop = "max_recovery_rounds"
@@ -529,13 +943,16 @@ def run_recovery(config, model_config, **kwargs):
                 batch_context=dict(kwargs.get("batch_context") or {})
                 | {"recovery_round": index, "render_queue_root": str(parent.run_dir)},
             )
-            result = run_once(
-                round_config,
-                model_config,
-                shared_budget=ledger,
-                recovery_feedback=feedback,
-                **attempt_kwargs,
-            )
+            if index == 0 and seed:
+                result = dict(seed[0]) | {"seeded_from": seed[1]["seed_result"]}
+            else:
+                result = run_once(
+                    round_config,
+                    model_config,
+                    shared_budget=ledger,
+                    recovery_feedback=feedback,
+                    **attempt_kwargs,
+                )
             # Retain the old attempt outcome and expose the stricter task criterion separately.
             result["task_success"] = result.get("success") is True and (
                 result.get("dsl_postcondition") is True
@@ -567,6 +984,7 @@ def run_recovery(config, model_config, **kwargs):
                 and records[-1]["candidate_sha256"] != record["candidate_sha256"]
             )
             records.append(record)
+            frozen.append(freeze_attempt(record, index))
             logger.artifact(
                 f"rounds/{index:03d}/identity.json",
                 {
@@ -618,8 +1036,18 @@ def run_recovery(config, model_config, **kwargs):
 
             with using_higher_tolerance(config.higher_tolerance):
                 feedback = select_relevant_evidence(
-                    record, history, cfg.feedback_tokens, config.primitive_feedback
+                    record,
+                    history,
+                    cfg.evidence_cap,
+                    config.primitive_feedback,
+                    config=cfg,
                 )
+            if feedback["ready"] and cfg.history.mode == "executed_programs":
+                built = build_history(frozen[:-1], frozen[-1], cfg.history)
+                if built is not None and built.get("ready") is False:
+                    feedback = built
+                else:
+                    feedback["history"] = built
             logger.artifact(f"rounds/{index:03d}/feedback.json", feedback)
             if not feedback["ready"]:
                 stop = feedback["reason"]
@@ -634,7 +1062,7 @@ def run_recovery(config, model_config, **kwargs):
         final.update(
             run_dir=str(parent.run_dir),
             recovery_enabled=True,
-            recovery_schema=VERSION,
+            recovery_schema=VERSION if cfg.default_profile else VERSION_V2,
             success=bool(
                 attempts and attempts[-1]["task_success"] and stop == "success"
             ),

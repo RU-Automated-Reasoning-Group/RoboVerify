@@ -114,6 +114,77 @@ class HTTPModel:
         return Response(text, raw.get("usage") or {}, reason, raw)
 
 
+LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
+def local_model_config(
+    model,
+    base_url,
+    *,
+    api_key_env="VLLM_API_KEY",
+    thinking=True,
+    max_output_tokens=16384,
+    request_timeout=300.0,
+    transport_retries=1,
+):
+    """Model settings for a local OpenAI-compatible vLLM server.
+
+    Qwen-style chat templates take a thinking switch instead of OpenRouter's
+    reasoning-effort levels. The key is read from ``api_key_env`` at request time.
+    """
+    from urllib.parse import urlparse
+
+    from .config import ModelConfig
+
+    if urlparse(base_url).hostname not in LOOPBACK_HOSTS:
+        raise ValueError("Local model mode requires a loopback base_url")
+    return ModelConfig(
+        provider="vllm",
+        model=model,
+        base_url=base_url,
+        api_key_env=api_key_env,
+        max_output_tokens=max_output_tokens,
+        request_timeout=request_timeout,
+        transport_retries=transport_retries,
+        extra_body={"chat_template_kwargs": {"enable_thinking": thinking}},
+    )
+
+
+def server_provenance(config, opener=None, timeout=10):
+    """Served model identity and vLLM version, recorded without credentials."""
+    opener = opener or urllib.request.urlopen
+    key = os.environ.get(config.api_key_env, "") if config.api_key_env else ""
+    headers = {"Authorization": f"Bearer {key}"} if key else {}
+    base = config.base_url.rstrip("/")
+
+    def fetch(url):
+        request = urllib.request.Request(url, headers=headers, method="GET")
+        try:
+            with opener(request, timeout=timeout) as handle:
+                return json.load(handle)
+        except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
+            raise ModelError(
+                f"Local server provenance unavailable: {type(exc).__name__}"
+            ) from exc
+
+    models = fetch(base + "/models")
+    root = base[: -len("/v1")] if base.endswith("/v1") else base
+    try:
+        version = fetch(root + "/version").get("version")
+    except ModelError:
+        version = None
+    return {
+        "base_url": config.base_url,
+        "requested_model": config.model,
+        "server_version": version,
+        "served_models": [
+            {k: m.get(k) for k in ("id", "root", "max_model_len", "owned_by")}
+            for m in models.get("data", [])
+        ],
+        "extra_body": config.extra_body,
+    }
+
+
 class ScriptedModel:
     """Deterministic responses for tests and explicit offline runs."""
 

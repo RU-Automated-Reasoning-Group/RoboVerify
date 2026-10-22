@@ -29,6 +29,15 @@ def atomic_json(path, value):
     temporary.replace(path)
 
 
+def variant_config(base, overrides):
+    """Apply variant overrides; recovery feedback/history blocks merge per field."""
+    config = base | {k: v for k, v in overrides.items() if k != "recovery"}
+    recovery = dict(base["recovery"])
+    for block, values in overrides.get("recovery", {}).items():
+        recovery[block] = dict(recovery[block]) | values
+    return config | {"recovery": recovery}
+
+
 def create_batch(
     directory,
     config,
@@ -98,14 +107,17 @@ def create_batch(
                 or not set(allowed) <= set(methods)
             ):
                 raise ValueError("Invalid variant methods")
-            if set(v.get("run_config", {})) - {
+            overrides = v.get("run_config", {})
+            if set(overrides) - {
                 "primitive_prompt",
                 "primitive_feedback",
-            }:
+                "recovery",
+            } or set(overrides.get("recovery", {})) - {"feedback", "history"}:
                 raise ValueError(
-                    "Variant overrides are restricted to primitive prompt/feedback settings"
+                    "Variant overrides are restricted to primitive prompt/feedback "
+                    "and recovery feedback/history settings"
                 )
-            RunConfig(**(asdict(config) | v.get("run_config", {})))
+            RunConfig(**variant_config(asdict(config), overrides))
     if gpu_config is not None:
         gpu_config = (
             gpu_config if isinstance(gpu_config, GPUConfig) else GPUConfig(**gpu_config)
@@ -143,16 +155,13 @@ def create_batch(
                 ident += "-recovery-" + ("on" if recovery else "off")
             if experiment_variants is not None:
                 ident += "-" + variant["name"]
-            job_config = (
-                asdict(config)
-                | variant.get("run_config", {})
-                | {
-                    "method": method,
-                    "condition_mode": mode,
-                    "recovery": asdict(config.recovery) | {"enabled": recovery},
-                    "output_root": str(directory / "trials" / ident),
-                }
-            )
+            job_config = variant_config(asdict(config), variant.get("run_config", {}))
+            job_config |= {
+                "method": method,
+                "condition_mode": mode,
+                "recovery": job_config["recovery"] | {"enabled": recovery},
+                "output_root": str(directory / "trials" / ident),
+            }
             jobs.append(
                 {
                     "id": ident,

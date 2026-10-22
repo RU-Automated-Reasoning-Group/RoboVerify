@@ -34,6 +34,10 @@ class ModelConfig:
             raise ValueError("Unknown API style")
         if self.token_field not in {"max_tokens", "max_completion_tokens"}:
             raise ValueError("Unsupported output-token parameter")
+        if self.provider == "vllm" and "reasoning" in self.extra_body:
+            raise ValueError(
+                "vLLM ignores OpenRouter reasoning options; use chat_template_kwargs"
+            )
         if (
             not self.model
             or self.max_output_tokens <= 0
@@ -41,6 +45,90 @@ class ModelConfig:
             or self.transport_retries < 0
         ):
             raise ValueError("Invalid model configuration")
+
+
+FEEDBACK_ITEMS = (
+    "current_source",
+    "failure_location",
+    "failure_events",
+    "query_candidates",
+    "keyframes",
+    "goal_clauses",
+    "dsl_diagnostics",
+    "supporting_events",
+    "event_counts",
+    "selection_metadata",
+)
+
+
+def _nested(cls, value, label):
+    if isinstance(value, cls):
+        return value
+    if not isinstance(value, dict):
+        raise ValueError(f"Recovery {label} must be an object")
+    unknown = set(value) - set(cls.__dataclass_fields__)
+    if unknown:
+        raise ValueError(f"Unknown recovery {label} settings: {sorted(unknown)}")
+    return cls(**value)
+
+
+@dataclass
+class RecoveryFeedbackConfig:
+    """Which recorded evidence items a recovery request delivers (Revision 4.3)."""
+
+    current_source: bool = True
+    failure_location: bool = True
+    failure_events: bool = True
+    query_candidates: bool = True
+    keyframes: bool = True
+    goal_clauses: bool = True
+    dsl_diagnostics: bool = True
+    supporting_events: bool = True
+    supporting_event_window: int = 80
+    event_counts: bool = True
+    selection_metadata: bool = True
+    evidence_layout: str = "legacy_fill"
+    # None keeps RecoveryConfig.feedback_tokens as the evidence cap.
+    evidence_bytes: int | None = None
+
+    def __post_init__(self):
+        for name in FEEDBACK_ITEMS:
+            if type(getattr(self, name)) is not bool:
+                raise ValueError(f"Recovery feedback {name} must be Boolean")
+        window = self.supporting_event_window
+        if type(window) is not int or not 0 <= window <= 512:
+            raise ValueError("supporting_event_window must be an integer in [0,512]")
+        if self.evidence_layout not in {"legacy_fill", "fixed_items"}:
+            raise ValueError("evidence_layout must be legacy_fill or fixed_items")
+        if self.evidence_bytes is not None and (
+            type(self.evidence_bytes) is not int or self.evidence_bytes <= 0
+        ):
+            raise ValueError("evidence_bytes must be a positive integer or null")
+
+    def disabled(self):
+        return [name for name in FEEDBACK_ITEMS if not getattr(self, name)]
+
+
+@dataclass
+class RecoveryHistoryConfig:
+    """How earlier failed attempts of the same trial enter a recovery request."""
+
+    mode: str = "summaries"
+    edit_ledger: bool = True
+    source_diff: bool = False
+    source_bytes: int = 16384
+
+    def __post_init__(self):
+        if self.mode not in {"none", "summaries", "executed_programs"}:
+            raise ValueError(
+                "History mode must be none, summaries or executed_programs"
+            )
+        if type(self.edit_ledger) is not bool or type(self.source_diff) is not bool:
+            raise ValueError("History ledger/diff options must be Boolean")
+        if self.source_diff and self.mode != "executed_programs":
+            raise ValueError("source_diff requires executed_programs history")
+        if type(self.source_bytes) is not int or self.source_bytes <= 0:
+            raise ValueError("History source_bytes must be a positive integer")
 
 
 @dataclass
@@ -58,14 +146,41 @@ class RecoveryConfig:
     total_sim_steps: int = 50000
     total_timeout: float = 3000.0
     context_tokens: int = 200000
+    feedback: RecoveryFeedbackConfig = field(default_factory=RecoveryFeedbackConfig)
+    history: RecoveryHistoryConfig = field(default_factory=RecoveryHistoryConfig)
 
     def __post_init__(self):
+        self.feedback = _nested(RecoveryFeedbackConfig, self.feedback, "feedback")
+        self.history = _nested(RecoveryHistoryConfig, self.history, "history")
         if not 0 <= self.max_rounds <= 4:
             raise ValueError("Recovery permits zero to four additional rounds")
         for name, value in vars(self).items():
-            if name not in {"enabled", "on_dsl_noncompliance", "max_rounds"}:
+            if name not in {
+                "enabled",
+                "on_dsl_noncompliance",
+                "max_rounds",
+                "feedback",
+                "history",
+            }:
                 if not math.isfinite(value) or value <= 0:
                     raise ValueError(f"Recovery {name} must be positive")
+        if (
+            self.history.mode == "executed_programs"
+            and not self.feedback.current_source
+        ):
+            raise ValueError("executed_programs history requires current_source")
+
+    @property
+    def evidence_cap(self):
+        return self.feedback.evidence_bytes or self.feedback_tokens
+
+    @property
+    def default_profile(self):
+        """True when delivered feedback must reproduce cap-recovery-v1 exactly."""
+        return (
+            self.feedback == RecoveryFeedbackConfig()
+            and self.history.mode == "summaries"
+        )
 
 
 @dataclass
@@ -135,7 +250,7 @@ class RunConfig:
 
     def __post_init__(self):
         if isinstance(self.recovery, dict):
-            self.recovery = RecoveryConfig(**self.recovery)
+            self.recovery = _nested(RecoveryConfig, self.recovery, "configuration")
         if isinstance(self.primitive_prompt, dict):
             self.primitive_prompt = PrimitivePromptConfig(**self.primitive_prompt)
         if isinstance(self.primitive_feedback, dict):
