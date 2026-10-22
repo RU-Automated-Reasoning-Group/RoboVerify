@@ -119,6 +119,8 @@ def create(
     trials=50,
     max_workers=32,
     request_limit=None,
+    workers_per_gpu=48,
+    worker_memory_mb=128,
     cells=None,
     methods=None,
 ):
@@ -137,9 +139,11 @@ def create(
     gpu = GPUConfig(
         GPU_UUIDS,
         "/tmp/roboverify-cap-gpu-reservations",
-        max_workers_per_gpu=max(1, (max_workers + 1) // 2),
+        # The scheduler caps each GPU at the smallest slot limit among live
+        # reservations, so concurrent batches must share one per-GPU value.
+        max_workers_per_gpu=workers_per_gpu,
         min_free_memory_mb=2048,
-        worker_memory_mb=256,
+        worker_memory_mb=worker_memory_mb,
         gpu_poll_interval_seconds=2,
         gpu_sample_window_seconds=10,
         admission_timeout_seconds=60,
@@ -221,6 +225,8 @@ def main():
     parser.add_argument("--model", choices=sorted(MODELS), required=True)
     parser.add_argument("--trials", type=int, default=50)
     parser.add_argument("--max-workers", type=int, default=32)
+    parser.add_argument("--workers-per-gpu", type=int, default=48)
+    parser.add_argument("--worker-memory-mb", type=int, default=128)
     parser.add_argument("--cell", action="append", help="smoke runs only")
     parser.add_argument("--method", action="append", choices=METHODS)
     parser.add_argument("--resume", action="store_true")
@@ -233,6 +239,8 @@ def main():
             model_name=args.model,
             trials=args.trials,
             max_workers=args.max_workers,
+            workers_per_gpu=args.workers_per_gpu,
+            worker_memory_mb=args.worker_memory_mb,
             cells=args.cell,
             methods=args.method,
         )
