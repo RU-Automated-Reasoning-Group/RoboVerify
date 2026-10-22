@@ -60,27 +60,32 @@ The fixed recovery instructions are not configurable in this revision:
 
 ### 3.1 Configuration
 
-Add `RecoveryConfig.feedback` (`RecoveryFeedbackConfig`). Every Boolean defaults to `true`, which reproduces `cap-recovery-v1`.
+Add `RecoveryConfig.feedback` (`RecoveryFeedbackConfig`).
+
+- **Software default.** Every Boolean below defaults to `true`, history defaults to `summaries`, and the evidence layout defaults to `legacy_fill`. Together these reproduce `cap-recovery-v1`.
+  - "All on" here means the Revision 4 items only.
+  - The Revision 4.2 switches keep their existing `false` defaults: the four `primitive_prompt` blocks and the three `primitive_feedback` enrichments.
+- **Experiment reference.** The experiment's reference profile is a separate choice, made in the [ablation plan](revision_4_3_ablation_experiment_plan.md).
 
 | Setting | Item(s) | Default | Notes |
 | --- | --- | --- | --- |
 | `current_source` | 2 | `true` | Off: the request carries no source. It becomes a fresh-generation request with failure evidence. In history mode, the latest attempt's source is a registry reference (Section 4). |
 | `failure_location` | 3 | `true` | |
-| `failure_events` | 4 | `true` | Off also removes item 5 and any failure-event data used by item 17 |
-| `query_candidates` | 5 | `true` | Off strips only the candidate list from `query_failure` events |
+| `failure_events` | 4 | `true` | Does not remove item 5 (see `query_candidates`) |
+| `query_candidates` | 5 | `true` | Emitted as its own record, independent of `failure_events`, so either can be disabled alone |
 | `keyframes` | 6 | `true` | Selection rule unchanged |
 | `goal_clauses` | 7 | `true` | |
 | `dsl_diagnostics` | 8 | `true` | Only applies when the audit failed |
-| `supporting_events` | 9 | `true` | `supporting_event_window` (int, default 80, range 0–512) sets the candidate window |
+| `supporting_events` | 9 | `true` | `supporting_event_window` (int, default 80, range 0–512) sets the candidate window; under `fixed_items` it is also the number delivered |
 | `event_counts` | 10 | `true` | |
-| `scene_metadata` | 11 | `true` | Off makes block labels in other items harder to interpret; intended for ablation only |
-| `earlier_summaries` | 12 | `true` | Ignored in `executed_programs` history mode, where the ledger carries these fields (Section 4.3) |
 | `selection_metadata` | 13 | `true` | |
 
 - **Always included (not configurable):**
   - the schema/version identifier;
   - the latest outcome (item 1), because a recovery request must state that and how the attempt failed;
-  - missing-field markers (item 14), because missing data must remain explicit.
+  - missing-field markers (item 14), because missing data must remain explicit;
+  - scene metadata (item 11), because the handle-to-block mapping is needed to read every other item.
+- **Earlier-failure summaries** (item 12) are controlled by the history mode (Section 4.1), not by a separate Boolean. History is one factor with three levels, which avoids a dependent pair of switches.
 - **Revision 4.2 switches:** `target_derivation`, `controller_phases` and `action_context` stay in `RunConfig.primitive_feedback`. Reports list them with the items above as one feedback profile.
 - **Configuration loading and recording:** `--recovery-config path.json` and batch `run_config` accept the block. Unknown keys and non-Boolean values are rejected. The resolved block is recorded in `recovery_config.json` and in every `feedback.json`.
 
@@ -99,9 +104,9 @@ Add `RecoveryConfig.feedback` (`RecoveryFeedbackConfig`). Every Boolean defaults
       "supporting_events": true,
       "supporting_event_window": 80,
       "event_counts": true,
-      "scene_metadata": true,
-      "earlier_summaries": true,
-      "selection_metadata": true
+      "selection_metadata": true,
+      "evidence_layout": "legacy_fill",
+      "evidence_bytes": 8192
     },
     "history": {
       "mode": "summaries",
@@ -122,10 +127,17 @@ Add `RecoveryConfig.feedback` (`RecoveryFeedbackConfig`). Every Boolean defaults
   - A non-default profile emits schema `cap-recovery-v2` and an `omitted_by_configuration` list of disabled item names.
   - The model can then distinguish "not provided by this profile" from "unavailable" (`missing_fields`) and from "observed false".
   - The default profile keeps emitting `cap-recovery-v1` without that list, preserving byte identity.
-- **The byte cap is unchanged.** The cap of 8,192 bytes applies after item selection.
-  - Turning items off frees space that supporting events (item 9) and action context (item 17) may then fill.
-  - Ablations therefore compare bounded end-to-end payloads, as in Revision 4.2.
-  - Record actual delivered sizes and the composition of supporting events per request.
+- **Evidence layout.** `evidence_layout` selects how items are sized.
+
+  | Layout | Sizing | Use |
+  | --- | --- | --- |
+  | `legacy_fill` (default) | Current behavior: optional items fill whatever remains under the 8,192-byte cap | Byte-identical v1 reproduction |
+  | `fixed_items` | Each item is limited only by its own count limit: supporting events `supporting_event_window`, action context `context_actions`, goal clauses 16, keyframes 3, query candidates 16. `evidence_bytes` is raised above the measured maximum and acts only as a guard. | Ablations |
+
+  - Under `fixed_items`, an enabled item's content does not depend on which other items are enabled.
+  - Each request records, per enabled item, whether it was delivered complete.
+  - Exceeding the guard stops with `required_feedback_exceeds_token_limit`, the existing stop, and the audit reports it as a violation.
+  - Measured sizes and proposed guard values are in the [ablation plan](revision_4_3_ablation_experiment_plan.md#5-evidence-limits).
 - **Stop rules are unchanged:**
   - A preparation failure still stops with `preparation_failure_no_rollout`.
   - Missing essential attribution still stops.
@@ -141,6 +153,7 @@ Add `RecoveryConfig.feedback` (`RecoveryFeedbackConfig`). Every Boolean defaults
 
 | Mode | Earlier attempts in the request |
 | --- | --- |
+| `none` | No earlier attempts in the request |
 | `summaries` (default) | Current behavior: item 12's one-line summaries; no earlier source |
 | `executed_programs` | A chronological ledger of every earlier **executed** attempt in the same trial. Each entry has its complete attributable source and bindings, plus a source registry that deduplicates identical bodies. |
 
@@ -201,7 +214,8 @@ OBSERVED FAILURE (latest attempt)
 
 - The latest attempt's bodies also live in the registry, so an unchanged helper is never printed twice.
 - Every reference must resolve to a body in the same request. A path or hash alone is insufficient.
-- `earlier_summaries` is ignored in this mode because each ledger entry already contains those fields. The resolved configuration records this.
+- The one-line summaries are not repeated, because each ledger entry already contains those fields.
+- `executed_programs` requires `current_source`; configuration validation rejects the combination with `current_source=false`.
 
 ### 4.4 Size and budget
 
@@ -246,8 +260,9 @@ OBSERVED FAILURE (latest attempt)
 
 | File | Change |
 | --- | --- |
-| [config.py](../config.py) | Add `RecoveryFeedbackConfig` and `RecoveryHistoryConfig`, nested in `RecoveryConfig`. Validate types, ranges and modes; reject unknown keys. Load from JSON. |
-| [recovery.py](../recovery.py) | Gate each item in `select_relevant_evidence`. Add the `omitted_by_configuration` and schema switch. Store frozen attempt records. Add `build_history` (registry, ledger, edit summary, optional diff). Extend `recovery_prompt` with the history layout. Add the `history_exceeds_source_limit` stop. |
+| [config.py](../config.py) | Add `RecoveryFeedbackConfig` and `RecoveryHistoryConfig`, nested in `RecoveryConfig`. Validate types, ranges, modes and dependencies; reject unknown keys. Load from JSON. |
+| [llm.py](../llm.py) | Local OpenAI-compatible provider mode: thinking through the chat template, no request pacing or free-quota admission, server/model provenance |
+| [recovery.py](../recovery.py) | Gate each item in `select_relevant_evidence`. Add the `fixed_items` layout and per-item delivery records, the `omitted_by_configuration` list and schema switch. Store frozen attempt records. Add `build_history` (registry, ledger, edit summary, optional diff). Extend `recovery_prompt` with the history layout. Add the `history_exceeds_source_limit` stop. Add a seed loader that starts recovery from an archived round-0 attempt. |
 | [batch.py](../batch.py) / launcher | Accept the new blocks in batch `run_config`. Variant selection works like Revision 4.2 profiles. Record the resolved profile in `comparison_plan.json`. |
 | Report generator | Show feedback profile and history mode per group. Add history size, included rounds and the new stop reason. |
 | `test_revision43.py` | Tests in Section 6 |
@@ -280,32 +295,6 @@ OBSERVED FAILURE (latest attempt)
   - absence of a Baseline DSL gate.
 - **Preflight.** A scripted physical preflight runs all three methods with `executed_programs` before any live batch.
 
-## 7. Evaluation (to be decided before running)
+## 7. Evaluation
 
-No experiment is authorized by this document. Two designs are proposed; choosing models, counts and profiles is a separate decision.
-
-- **History ablation: `summaries` vs `executed_programs`, other settings at default.**
-  - History matters only from round 2.
-  - Independent trials like Revision 4.2 would dilute the effect with trials that succeed in round 0 or 1.
-  - Preferred design: **branch from the same archived failed attempts.**
-    - Select trials whose rounds 0 and 1 both failed in saved Revision 4.2 batches.
-    - Resume each one at round 2 under both modes.
-    - Hold fixed the frozen attempts 0–1, the initial state, model and budgets.
-    - This needs a small seed loader that replays archived attempts into the frozen history without regenerating them, plus a matching audit.
-  - Fallback: independent full trials, analysed only over trials that reach round 2.
-- **Feedback-item ablations.**
-  - Do not run all combinations.
-  - Candidates:
-    - `minimal`: core + current source;
-    - `legacy`: defaults;
-    - a few leave-one-out profiles for the items most likely to matter: keyframes, goal clauses, supporting events, earlier summaries.
-  - As in Revision 4.2, initial attempts are unaffected by feedback, so compare recovery among initially failed trials. Matched branching from the same failed round-0 attempts is preferable.
-- **Metrics, reported separately:**
-  - final success;
-  - rounds to success;
-  - reintroduced edits;
-  - repeated candidates;
-  - new stops;
-  - input/output tokens;
-  - calls;
-  - physical, logical and DSL outcomes.
+The experiment design moved to [revision_4_3_ablation_experiment_plan.md](revision_4_3_ablation_experiment_plan.md).
