@@ -29,7 +29,7 @@ When a rollout fails, a shared, deterministic feedback module (no extra LLM call
 | Current executable source | Policy and the helper sources that actually ran (Baseline helpers can differ from the visible policy text). Includes the execution-time binding map. |
 | Failure location | Source unit and line, statement, failing primitive with its arguments, and the simulation step |
 | Controller result | Convergence, steps used out of 50, final position error, and the fixed target computed when the primitive was called |
-| Keyframes | Gripper and block XYZ at three points: the initial state, just before the failing operation, and the failure/terminal state |
+| Keyframes | Gripper and block XYZ at up to three recorded states: the initial state, the start of the last primitive before the failure, and the failure/terminal state. Coinciding states collapse to two or one; 749 of 810 delivered feedbacks carry three. |
 | Supporting events | Recent primitive calls, query results, predicates and assignments, chosen deterministically under the size cap. Omitted events are counted. |
 | Goal evidence | Truth value of each goal clause (e.g. `ON_star(block_i, b0)`) at the terminal state |
 | Failed `get` | Up to 16 candidate evaluations for a query that found no witness |
