@@ -338,7 +338,7 @@ def create(
     return manifest
 
 
-def execute(directory, *, resume=False):
+def execute(directory, *, resume=False, max_workers=None):
     plan = json.loads((directory / "comparison_plan.json").read_text())
     gate = (
         None
@@ -351,7 +351,9 @@ def execute(directory, *, resume=False):
         )
     )
     while True:
-        result = execute_batch(directory, resume=resume, dispatch_gate=gate)
+        result = execute_batch(
+            directory, resume=resume, dispatch_gate=gate, max_workers=max_workers
+        )
         if result["finished"] == result["planned"]:
             atomic_json(
                 directory / "control_status.json",

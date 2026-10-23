@@ -224,7 +224,11 @@ def main():
     parser.add_argument("--directory", type=Path, required=True)
     parser.add_argument("--model", choices=sorted(MODELS), required=True)
     parser.add_argument("--trials", type=int, default=50)
-    parser.add_argument("--max-workers", type=int, default=32)
+    parser.add_argument(
+        "--max-workers",
+        type=int,
+        help="concurrent trials (default 32); on --resume, overrides the manifest",
+    )
     parser.add_argument("--workers-per-gpu", type=int, default=48)
     parser.add_argument("--worker-memory-mb", type=int, default=128)
     parser.add_argument("--cell", action="append", help="smoke runs only")
@@ -238,14 +242,18 @@ def main():
             directory,
             model_name=args.model,
             trials=args.trials,
-            max_workers=args.max_workers,
+            max_workers=args.max_workers or 32,
             workers_per_gpu=args.workers_per_gpu,
             worker_memory_mb=args.worker_memory_mb,
             cells=args.cell,
             methods=args.method,
         )
     if not args.create_only:
-        result = execute(directory, resume=args.resume)
+        result = execute(
+            directory,
+            resume=args.resume,
+            max_workers=args.max_workers if args.resume else None,
+        )
         print(
             json.dumps(
                 {

@@ -17,6 +17,7 @@ from .config import ModelConfig, RunConfig
 class BatchTests(unittest.TestCase):
     def test_serial_parallel_parity_and_completed_resume(self):
         import numpy as np
+
         from synthesis.cfg.recordings import load_traces
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -116,6 +117,28 @@ class BatchTests(unittest.TestCase):
             row = next(r for r in summary["trials"] if r["job_id"] == first)
             self.assertEqual(row["status"], "interrupted")
             self.assertFalse((root / "trials" / first / "worker_result.json").exists())
+
+    def test_resume_records_overridden_worker_limit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "batch"
+            create_batch(
+                root,
+                RunConfig(num_blocks=1, save_video=False, prompt_version="typed_v3"),
+                ModelConfig(),
+                methods=("cap_method_1",),
+                modes=("dsl_only",),
+                trials=2,
+                max_workers=1,
+                responses=["Pick(b0)"],
+                fixture=True,
+            )
+            with contextlib.redirect_stdout(io.StringIO()):
+                summary = execute_batch(root, resume=True, max_workers=2)
+            self.assertEqual(summary["finished"], 2)
+            metadata = json.loads((root / "execution_metadata.json").read_text())
+            self.assertEqual(metadata["sessions"][-1]["max_workers"], 2)
+            self.assertEqual(metadata["requested_workers"], 1)
+            self.assertEqual(metadata["peak_active_workers"], 2)
 
     def test_recovery_comparison_keeps_six_groups_and_all_attempt_usage(self):
         with tempfile.TemporaryDirectory() as tmp:

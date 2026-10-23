@@ -433,7 +433,7 @@ def write_report(directory, manifest, schedule):
     temporary.replace(directory / "report.md")
 
 
-def _execute_batch(directory, *, resume=False, dispatch_gate=None):
+def _execute_batch(directory, *, resume=False, dispatch_gate=None, max_workers=None):
     directory = Path(directory).resolve()
     if (
         hashlib.sha256((directory / "manifest.json").read_bytes()).hexdigest()
@@ -508,7 +508,14 @@ def _execute_batch(directory, *, resume=False, dispatch_gate=None):
             "sessions": [],
         }
     )
-    metadata["sessions"].append({"started_epoch": time.time(), "resume": resume})
+    # Concurrency is a scheduling choice, not part of a trial's definition, so a
+    # resumed session may change it; each session records the value it used.
+    if max_workers is not None and max_workers < 1:
+        raise ValueError("max_workers must be positive")
+    workers = max_workers or manifest["max_workers"]
+    metadata["sessions"].append(
+        {"started_epoch": time.time(), "resume": resume, "max_workers": workers}
+    )
     atomic_json(metadata_path, metadata)
     blocked_since = None
     saved_gpu_sample = None
@@ -534,15 +541,13 @@ def _execute_batch(directory, *, resume=False, dispatch_gate=None):
                     saved_gpu_sample = gpu.latest_sample["epoch"]
                 atomic_json(metadata_path, metadata)
             if not monitoring_error:
-                renders.tick(manifest["max_workers"] - len(active))
+                renders.tick(workers - len(active))
             metadata["peak_combined_workers"] = max(
                 metadata.get("peak_combined_workers", 0),
                 len(active) + len(renders.active),
             )
             admission_blocked = False
-            while (
-                pending and len(active) + len(renders.active) < manifest["max_workers"]
-            ):
+            while pending and len(active) + len(renders.active) < workers:
                 if monitoring_error:
                     break
                 if dispatch_gate is not None and not dispatch_gate(
@@ -734,11 +739,16 @@ def _execute_batch(directory, *, resume=False, dispatch_gate=None):
     return json.loads((directory / "summary.json").read_text())
 
 
-def execute_batch(directory, *, resume=False, dispatch_gate=None):
+def execute_batch(directory, *, resume=False, dispatch_gate=None, max_workers=None):
     directory = Path(directory).resolve()
     with (directory / ".batch.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        return _execute_batch(directory, resume=resume, dispatch_gate=dispatch_gate)
+        return _execute_batch(
+            directory,
+            resume=resume,
+            dispatch_gate=dispatch_gate,
+            max_workers=max_workers,
+        )
 
 
 def main():
