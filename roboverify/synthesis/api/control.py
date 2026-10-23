@@ -10,6 +10,7 @@ from math import isfinite
 
 import numpy as np
 
+from synthesis.environment.goal_layout import GoalRef
 from synthesis.util.actions import bound_delta_action
 from synthesis.util.on import BLOCK_LENGTH
 
@@ -96,12 +97,14 @@ class PrimitiveController:
         return self.observation[10 + 12 * box_id : 13 + 12 * box_id].copy()
 
     def reference_position(self, reference):
-        """Resolve a block center or a table support reference for Move/Release.
+        """Resolve a block/goal center or a table support reference for Move/Release.
 
         Table XY is its physical frame origin. Its reference Z is half a block
         below the surface, so adding one block length places a block center on
         either kind of support. Pick still requires a physical block ID.
         """
+        if isinstance(reference, GoalRef):
+            return np.asarray(self.env.goal_layout.get(reference).position, dtype=float)
         if reference != "tbl":
             return self.box_position(reference)
         inner = self.env.unwrapped if hasattr(self.env, "unwrapped") else self.env

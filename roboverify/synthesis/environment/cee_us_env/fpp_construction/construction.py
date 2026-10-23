@@ -8,6 +8,7 @@ from gym.envs.robotics import fetch_env, rotations, utils
 from mujoco_py.generated import const
 
 from .colors import get_colors
+from synthesis.environment.goal_layout import positive_size, pyramid_layers
 from synthesis.util.actions import bound_delta_action
 from synthesis.util.on import BLOCK_LENGTH
 
@@ -29,6 +30,7 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
         visualize_mocap=True,
         grid_rows=None,
         grid_cols=None,
+        bottom_row_blocks=3,
     ):
         # Different parameters for the construction task:
         #   num_blocks: int (default: 1)
@@ -43,19 +45,15 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
         if case == "RoboVerifyGrid":
             if grid_rows is None or grid_cols is None:
                 raise ValueError("RoboVerifyGrid requires grid_rows and grid_cols.")
-            grid_rows = int(grid_rows)
-            grid_cols = int(grid_cols)
-            if grid_rows < 1 or grid_cols < 1:
-                raise ValueError("grid_rows and grid_cols must be positive.")
+            grid_rows = positive_size(grid_rows, "grid_rows")
+            grid_cols = positive_size(grid_cols, "grid_cols")
             num_blocks = grid_rows * grid_cols
             self.grid_rows = grid_rows
             self.grid_cols = grid_cols
         if case == "RoboVerifyPyramid":
-            from synthesis.environment.cee_us_env.fpp_construction_env import (
-                ROBOVERIFY_PYRAMID_NUM_BLOCKS,
-            )
-
-            num_blocks = ROBOVERIFY_PYRAMID_NUM_BLOCKS
+            self.pyramid_layer_sizes = pyramid_layers(bottom_row_blocks)
+            self.bottom_row_blocks = self.pyramid_layer_sizes[0]
+            num_blocks = sum(self.pyramid_layer_sizes)
 
         self.num_blocks = num_blocks
         initial_qpos = {
@@ -95,11 +93,6 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
             from synthesis.environment.cee_us_env.fpp_construction.xml_gen_grid import (
                 generate_xml_grid as generate_xml,
             )
-            from synthesis.environment.cee_us_env.fpp_construction_env import (
-                ROBOVERIFY_PYRAMID_NUM_BLOCKS,
-            )
-
-            num_blocks = ROBOVERIFY_PYRAMID_NUM_BLOCKS
         elif case in (
             "RoboVerifyStack",
             "RoboVerifyUnstack",
@@ -426,7 +419,7 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
                 ROBOVERIFY_GRID_WORKSPACE_X_OFFSET,
             )
 
-            spacing = BLOCK_LENGTH + 0.3 * BLOCK_LENGTH
+            spacing = 2 * BLOCK_LENGTH
             grid_width = max(0, self.grid_cols - 1) * spacing
             workspace_x = self.initial_gripper_xpos[0] + ROBOVERIFY_GRID_WORKSPACE_X_OFFSET
             origin_x = workspace_x - 0.5 * grid_width
@@ -448,16 +441,15 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
             from synthesis.environment.cee_us_env.fpp_construction_env import (
                 ROBOVERIFY_GRID_GOAL_Y_OFFSET,
                 ROBOVERIFY_GRID_WORKSPACE_X_OFFSET,
-                ROBOVERIFY_PYRAMID_LAYER_SIZES,
             )
 
             row_spacing = BLOCK_LENGTH + 0.3 * BLOCK_LENGTH
-            base_width = (ROBOVERIFY_PYRAMID_LAYER_SIZES[0] - 1) * row_spacing
+            base_width = (self.pyramid_layer_sizes[0] - 1) * row_spacing
             workspace_x = self.initial_gripper_xpos[0] + ROBOVERIFY_GRID_WORKSPACE_X_OFFSET
             origin_x = workspace_x - 0.5 * base_width
             origin_y = self.robot_base_xy[1] + ROBOVERIFY_GRID_GOAL_Y_OFFSET
             block_id = 0
-            for layer_idx, layer_size in enumerate(ROBOVERIFY_PYRAMID_LAYER_SIZES):
+            for layer_idx, layer_size in enumerate(self.pyramid_layer_sizes):
                 z = self.height_offset + layer_idx * BLOCK_LENGTH
                 layer_width = (layer_size - 1) * row_spacing
                 start_x = origin_x + 0.5 * (base_width - layer_width)
@@ -741,6 +733,14 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
         action = np.concatenate([pos_ctrl, rot_ctrl, gripper_ctrl])
 
         # Apply action to simulation.
+        if self.sim.model.nmocap > 1:
+            # Goal-marker mocaps are visual references, not robot actuators.
+            # Gym expects seven entries for every mocap before finger controls.
+            mocap_action = np.zeros((self.sim.model.nmocap, 7))
+            robot_body = self.sim.model.body_name2id("robot0:mocap")
+            robot_mocap = self.sim.model.body_mocapid[robot_body]
+            mocap_action[robot_mocap] = action[:7]
+            action = np.concatenate((mocap_action.ravel(), action[7:]))
         utils.ctrl_set_action(self.sim, action)
         utils.mocap_set_action(self.sim, action)
 

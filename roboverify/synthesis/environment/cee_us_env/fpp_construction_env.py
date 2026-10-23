@@ -12,13 +12,11 @@ import synthesis.environment.cee_us_env.torch_helpers as torch_helpers
 from synthesis.environment.cee_us_env.abstract_environments import MaskedGoalSpaceEnvironmentInterface
 from synthesis.environment.cee_us_env.fpp_construction.construction import FetchBlockConstructionEnv
 from synthesis.environment.cee_us_env.robotics import GymRoboticsGroundTruthSupportEnv
+from synthesis.environment.goal_layout import GoalLayout, occupancy
 from synthesis.environment.stack_reset import sample_stack_xy
 from synthesis.environment.tower_reset import sample_tower_xy
 from synthesis.util.actions import bound_delta_action
 from synthesis.util.on import BLOCK_LENGTH, on as on_relation
-
-ROBOVERIFY_PYRAMID_NUM_BLOCKS = 6
-ROBOVERIFY_PYRAMID_LAYER_SIZES = (3, 2, 1)
 
 ROBOVERIFY_GRID_WORKSPACE_X_OFFSET = 0.0
 ROBOVERIFY_GRID_BASE_Y_CLEARANCE = 0.08
@@ -83,6 +81,10 @@ class FetchPickAndPlaceConstruction(
             self.symbolic_name_to_box_id = {"b0": self.roboverify_base_block_id}
         else:
             self.roboverify_base_block_id = None
+        if self.case in ("RoboVerifyGrid", "RoboVerifyPyramid"):
+            self.symbolic_name_to_box_id = {}
+            self.symbolic_name_to_goal = {}
+            self.table_surface_height = float(self.sim.data.get_geom_xpos("table0")[2])
 
         self.store_init_arguments(locals())
         EzPickle.__init__(
@@ -574,6 +576,8 @@ class FetchPickAndPlaceConstruction(
 
     def _roboverify_grid_block_accept(self, candidate: np.ndarray) -> bool:
         base_x, base_y = self.robot_base_xy
+        if np.linalg.norm(candidate - self.robot_base_xy) > self.manipulability_r:
+            return False
         if np.linalg.norm(candidate - self.initial_gripper_xpos[:2]) < GRIPPER_XY_CLEARANCE:
             return False
         if candidate[1] >= base_y - ROBOVERIFY_GRID_BASE_Y_CLEARANCE:
@@ -627,8 +631,17 @@ class FetchPickAndPlaceConstruction(
             count,
             center_xy,
             cols=max(2, int(np.ceil(np.sqrt(count)))),
-            jitter=0.03,
+            sep=2 * BLOCK_LENGTH + 0.005,
+            jitter=0.0,
         )
+        if any(
+            np.any(np.abs(p - center_xy) > np.array([x_half_range, y_half_range]) + 1e-7)
+            or (accept_candidate is not None and not accept_candidate(p))
+            for p in fallback
+        ):
+            raise ValueError(
+                f"Cannot fit {count} scattered blocks in the goal-task workspace"
+            )
         order = np.random.permutation(count)
         return [fallback[int(i)] for i in order]
 
@@ -674,7 +687,8 @@ class FetchPickAndPlaceConstruction(
         )
 
     def _roboverify_grid_block_center_xy(self) -> np.ndarray:
-        workspace_x = self.initial_gripper_xpos[0] + ROBOVERIFY_GRID_WORKSPACE_X_OFFSET
+        # Keep the ten-block source layout within the arm's nominal XY workspace.
+        workspace_x = self.initial_gripper_xpos[0] - 0.10
         return np.array(
             [
                 workspace_x,
@@ -685,7 +699,7 @@ class FetchPickAndPlaceConstruction(
 
     def _roboverify_pyramid_goal_origin_xy(self) -> np.ndarray:
         row_spacing = self._roboverify_pyramid_row_spacing()
-        base_width = (ROBOVERIFY_PYRAMID_LAYER_SIZES[0] - 1) * row_spacing
+        base_width = (self.pyramid_layer_sizes[0] - 1) * row_spacing
         workspace_x = self.initial_gripper_xpos[0] + ROBOVERIFY_GRID_WORKSPACE_X_OFFSET
         return np.array(
             [
@@ -705,10 +719,10 @@ class FetchPickAndPlaceConstruction(
     def _roboverify_pyramid_goal_positions(self) -> np.ndarray:
         row_spacing = self._roboverify_pyramid_row_spacing()
         origin_x, origin_y = self._roboverify_pyramid_goal_origin_xy()
-        base_width = (ROBOVERIFY_PYRAMID_LAYER_SIZES[0] - 1) * row_spacing
+        base_width = (self.pyramid_layer_sizes[0] - 1) * row_spacing
         goals = np.zeros((self.num_blocks, 3), dtype=np.float32)
         block_id = 0
-        for layer_idx, layer_size in enumerate(ROBOVERIFY_PYRAMID_LAYER_SIZES):
+        for layer_idx, layer_size in enumerate(self.pyramid_layer_sizes):
             z = self.height_offset + layer_idx * BLOCK_LENGTH
             layer_width = (layer_size - 1) * row_spacing
             start_x = float(origin_x) + 0.5 * (base_width - layer_width)
@@ -722,7 +736,8 @@ class FetchPickAndPlaceConstruction(
         return np.concatenate([goals.reshape(-1), np.zeros(3, dtype=np.float32)])
 
     def _roboverify_grid_cell_spacing(self) -> float:
-        return self._roboverify_layout_cell_spacing()
+        # Leave room for the fingers when approaching a later tabletop row.
+        return 2 * BLOCK_LENGTH
 
     def _roboverify_grid_goal_positions(self) -> np.ndarray:
         spacing = self._roboverify_grid_cell_spacing()
@@ -749,16 +764,26 @@ class FetchPickAndPlaceConstruction(
     ) -> bool:
         achieved_goal = np.asarray(achieved_goal, dtype=np.float32)
         desired_goal = np.asarray(desired_goal, dtype=np.float32)
-        dists = self.subgoal_distances(achieved_goal, desired_goal)
-        return all(float(d) <= float(self.threshold) for d in dists)
+        blocks = achieved_goal[..., :-3].reshape(
+            *achieved_goal.shape[:-1], self.num_blocks, 3
+        )
+        goals = desired_goal[..., :-3].reshape(
+            *desired_goal.shape[:-1], self.num_blocks, 3
+        )
+        return occupancy(blocks, goals).any(axis=-2).all(axis=-1)
 
     def _reset_sim_roboverify_workspace_blocks(self) -> None:
         """Scatter blocks to the left of the robot base in the shared workspace."""
+        cols = max(2, int(np.ceil(np.sqrt(self.num_blocks))))
+        rows = int(np.ceil(self.num_blocks / cols))
+        spacing = 2 * BLOCK_LENGTH + 0.005
         left_positions = self._roboverify_random_scattered_layout(
             self.num_blocks,
             self._roboverify_grid_block_center_xy(),
-            x_half_range=self.obj_range,
-            y_half_range=ROBOVERIFY_GRID_BLOCK_Y_HALF_RANGE,
+            x_half_range=max(self.obj_range, (cols - 1) * spacing / 2 + 0.005),
+            y_half_range=max(
+                ROBOVERIFY_GRID_BLOCK_Y_HALF_RANGE, (rows - 1) * spacing / 2 + 0.005
+            ),
             accept_candidate=self._roboverify_grid_block_accept,
         )
         for obj_name, object_xypos in zip(self.object_names, left_positions):
@@ -778,7 +803,7 @@ class FetchPickAndPlaceConstruction(
         self.sim.set_state(self.initial_state)
 
         self.roboverify_grid_origin_xy = self._roboverify_grid_goal_origin_xy()
-        self.roboverify_goal_marker_positions = self._roboverify_grid_goal_positions()
+        self._install_goal_layout(self._roboverify_grid_goal_positions())
         self._reset_sim_roboverify_workspace_blocks()
         self._update_roboverify_goal_markers()
         return True
@@ -786,15 +811,32 @@ class FetchPickAndPlaceConstruction(
     def _reset_sim_roboverify_pyramid(self):
         """
         RoboVerifyPyramid init:
-        - Scatter six blocks on the left of the robot base.
-        - Show a 3+2+1 pyramid goal marker layout on the right of the robot base.
+        - Scatter the triangular block count on the lower-Y side.
+        - Show bottom_row_blocks, ..., 1 goal layers on the higher-Y side.
         """
         self.sim.set_state(self.initial_state)
 
-        self.roboverify_goal_marker_positions = self._roboverify_pyramid_goal_positions()
+        self._install_goal_layout(self._roboverify_pyramid_goal_positions())
         self._reset_sim_roboverify_workspace_blocks()
         self._update_roboverify_goal_markers()
         return True
+
+    def _install_goal_layout(self, positions, *, reset_bindings=True):
+        rows = (
+            (self.grid_cols,) * self.grid_rows
+            if self.case == "RoboVerifyGrid"
+            else self.pyramid_layer_sizes
+        )
+        radii = np.linalg.norm(
+            np.asarray(positions)[:, :2] - self.robot_base_xy, axis=1
+        )
+        if np.any(radii > self.manipulability_r):
+            raise ValueError("Goal layout exceeds the robot's nominal XY workspace")
+        self.goal_layout = GoalLayout.from_positions(positions, rows)
+        self.roboverify_goal_marker_positions = self.goal_layout.positions
+        if reset_bindings:
+            self.symbolic_name_to_box_id = {}
+            self.symbolic_name_to_goal = {"h0": self.goal_layout.head, "null": None}
 
     def _update_roboverify_goal_markers(self):
         """Move brown goal-marker mocap bodies to the target layout."""
@@ -832,6 +874,11 @@ class FetchPickAndPlaceConstruction(
         mj_state = state[: -self.goal_space_size]
         self.goal = state[-self.goal_space_size :]
         super().set_GT_state(mj_state)
+        if self.case in ("RoboVerifyGrid", "RoboVerifyPyramid"):
+            self._install_goal_layout(
+                self.goal[:-3].reshape(self.num_blocks, 3), reset_bindings=False
+            )
+            self._update_roboverify_goal_markers()
 
     def set_state_from_observation(self, observation):
         """Compatibility alias for approximate visualization, not segment reset."""
@@ -1327,7 +1374,7 @@ class FetchPickAndPlaceConstruction(
             achieved_goal = self.achieved_goal_from_observation(obs_np)
             desired_goal = self.goal_from_observation(obs_np)
             ok = self._roboverify_goal_layout_complete(achieved_goal, desired_goal)
-            return float(self.num_blocks) if ok else 0.0
+            return np.asarray(ok, dtype=float) * self.num_blocks
 
         if self.case in ROBOVERIFY_CASES:
             # Return format matches existing semantics: `num_blocks` when success else 0.

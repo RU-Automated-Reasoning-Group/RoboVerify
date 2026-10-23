@@ -8,6 +8,7 @@ from copy import deepcopy
 
 import z3
 
+from synthesis.environment.goal_layout import GoalRef, occupancy
 from synthesis.predicates.scene import Scene, evaluate, scene_from_obs
 from synthesis.predicates.term import Term
 from synthesis.util import on
@@ -37,13 +38,31 @@ def replay_guard_choices(choices):
         _guard_replay.reset(token)
 
 
-def evaluate_z3(expr, scene, bindings=None):
+def evaluate_z3(expr, scene, bindings=None, *, goal_layout=None, goal_bindings=None):
     env = dict(scene.bindings, **(bindings or {}))
+    goals = dict(goal_bindings or {})
+
+    def is_goal_sort(sort):
+        return str(sort) == "Goal"
+
+    def domain(sort):
+        if is_goal_sort(sort):
+            if goal_layout is None:
+                raise ValueError("Goal guards require a goal layout")
+            return [None] + [GoalRef(i) for i in range(len(goal_layout.goals))]
+        return scene.positions
+
+    occupied = None
+    if goal_layout is not None:
+        physical = {k: v for k, v in scene.positions.items() if not on.is_table(v)}
+        block_ids = list(physical)
+        occupied = occupancy(list(physical.values()), goal_layout.positions)
 
     def term(node, bound):
         if z3.is_var(node):
             return bound[z3.get_var_index(node)]
-        return env[str(node.decl().name())]
+        mapping = goals if is_goal_sort(node.sort()) else env
+        return mapping[str(node.decl().name())]
 
     def ev(node, bound=()):
         if isinstance(node, bool):
@@ -55,7 +74,9 @@ def evaluate_z3(expr, scene, bindings=None):
         if z3.is_quantifier(node):
             values = (
                 ev(node.body(), tuple(reversed(combo)) + bound)
-                for combo in itertools.product(scene.positions, repeat=node.num_vars())
+                for combo in itertools.product(
+                    *(domain(node.var_sort(i)) for i in range(node.num_vars()))
+                )
             )
             return all(values) if node.is_forall() else any(values)
         if z3.is_and(node):
@@ -74,6 +95,18 @@ def evaluate_z3(expr, scene, bindings=None):
             values = [term(a, bound) for a in node.children()]
             return len(set(values)) == len(values)
         name = str(node.decl().name())
+        if name in ("AtGoal", "HasBlock"):
+            if occupied is None:
+                raise ValueError(f"{name} requires a goal layout")
+            value = term(node.arg(0), bound)
+            if name == "AtGoal":
+                return value in block_ids and bool(
+                    occupied[block_ids.index(value)].any()
+                )
+            if value is None:
+                return False
+            goal_layout.get(value)
+            return bool(occupied[:, value.index].any())
         predicates = {
             "ON_star": on.on_star_implementation,
             "ON_star_zero": on.on_star_implementation,
@@ -104,6 +137,15 @@ def find_and_bind(instruction, env, traj):
         str(v.decl().name()) if hasattr(v, "decl") else str(v)
         for v in instruction.guard_exists_vars
     ]
+    if any(
+        hasattr(v, "sort") and str(v.sort()) == "Goal"
+        for v in instruction.guard_exists_vars
+    ):
+        raise TypeError(
+            "Runtime guard witnesses must be physical blocks; traverse goals with cursors"
+        )
+    if set(names) & set(getattr(env, "symbolic_name_to_goal", {})):
+        raise ValueError("Block witness conflicts with a goal alias")
     condition = getattr(instruction, "guard_term", None)
     condition = instruction.instantiated_cond if condition is None else condition
     pending = _guard_replay.get()
@@ -126,7 +168,13 @@ def find_and_bind(instruction, env, traj):
         holds = (
             evaluate(condition, scene, bindings)
             if isinstance(condition, Term)
-            else evaluate_z3(condition, scene, bindings)
+            else evaluate_z3(
+                condition,
+                scene,
+                bindings,
+                goal_layout=getattr(env, "goal_layout", None),
+                goal_bindings=getattr(env, "symbolic_name_to_goal", None),
+            )
         )
         if holds:
             mapping.update((name, bindings[name]) for name in names)

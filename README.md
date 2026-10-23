@@ -124,11 +124,12 @@ relocation, quantified assertions and conditional program partial correctness.
 The Python attachment-only dispatcher and physical refinement remain separate
 correspondence obligations; this does not change the verification status above.
 
-Grid and Pyramid have physical goal-marker layouts and a separate symbolic
-nested mark-all example, but no integrated executable goal-traversal program.
-Only goals carry traversal links. Their shared reference program and the gaps
-in occupancy semantics, runtime goal references, nested-loop collection and
-verification are recorded in [discrepancy 40](PAPER-DISCREPANCIES.md#40-grid-and-pyramid-goal-traversal-is-not-connected-to-physical-execution).
+Grid and Pyramid execute the shared reference program using nested loops over
+goal-only links. Pyramid accepts `bottom_row_blocks=k` for k+(k−1)+...+1 blocks;
+Grid accepts row/column dimensions. `synthesis.entry.execute_goal_program`
+validates placements and optionally saves video. Goal-aware synthesis and
+verification remain separate work. See the commands and execution evidence in
+[discrepancy 40](PAPER-DISCREPANCIES.md#40-grid-and-pyramid-execution-and-verification-have-separate-support).
 
 The supported scope is structured chains and flat loops for the tower tasks;
 the integrated synthesis CLI exposes Stack and Unstack. A successful

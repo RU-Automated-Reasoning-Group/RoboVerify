@@ -68,6 +68,12 @@ Payload-aware placement remains diagnostic only: the user deferred adoption
 because it strengthens primitive capabilities and needs a review of motion
 contracts and verification assumptions. See the
 [workspace investigation](roboverify/synthesis/experiment/TOWER-WORKSPACE.md).
+Grid and Pyramid support goal-only pointer traversal and execution of the shared
+reference program. Pyramid takes `bottom_row_blocks=k` and creates k,...,1 layers;
+Grid takes rows/columns. Run `synthesis.entry.execute_goal_program` for execution
+and optional video. Goal occupancy is independent of block identity. Goal-aware
+synthesis, collection archives and verification remain outside the supported
+pipeline; see [discrepancy 40](PAPER-DISCREPANCIES.md#40-grid-and-pyramid-execution-and-verification-have-separate-support).
 Stack collection holds the initial gripper position for 50 steps before
 recording; the settled full snapshot becomes state zero. Synthesis, candidate
 verification, and standalone MCMC restore archived states without repeating
@@ -242,11 +248,15 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
     `env.symbolic_name_to_box_id`) implement `eval()` to drive a MuJoCo env, and
     `register_trainable_parameter`/`update_trainable_parameter` to expose float offsets
     (`Parameter`) as a flat vector for MCMC/CEM optimization. Verification-only instructions
-    (`Put`, `GoalAssign`, `MarkGoal`, `MoveRight`, `MoveDown`) raise on `eval()` and
-    must be lowered to physical instructions before execution. `Assign` updates
+    (`Put`, `MarkGoal`) raise on `eval()` and
+    must be lowered to physical instructions before execution. `GoalAssign`,
+    `MoveRight` and `MoveDown` execute using separate goal bindings. Move/Release
+    accept goal-center references; Pick accepts only physical blocks. `Assign` updates
     runtime aliases, and `Get` finds an object satisfying its binding condition.
     `While` evaluates a restricted subset of Z3 formulas against concrete block
     positions to find/bind existential guard variables each loop iteration.
+    Runtime goal guards also support Goal equality/null and geometric AtGoal/HasBlock;
+    the synthesis predicate language is unchanged.
   - `program.py`: `Program` (holds a list of instructions plus trainable parameters), the
     weakest-precondition machinery (`wp`, `VC_aux`) and the `rewrite_for_put_for_*`/
     `rewrite_for_put_on_tbl_for_*` family that specializes VC generation for each predicate
@@ -361,8 +371,19 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   Unstack/Reverse/Partial standalone verifiers consume `--demos` via the in-memory
   inference adapter; Reverse/Partial still report unsupported motion in those
   entry points. The historical Reverse verifier also has the wrong symbolic task
-  (39); it does not verify the new physical example. The 2D entry point remains
-  outside tower scope.
+  (39); it does not verify the new physical example. `execute_goal_program.py`
+  executes the shared Grid/Pyramid example through Program.eval with nested While
+  loops, checks primitive convergence and occupancy, and optionally saves video.
+  It does not create synthesis archives or invoke verification. The historical
+  2D verifier remains a separate symbolic mark-all example.
+
+- **`synthesis/environment/goal_layout.py`** — immutable goal graphs with XYZ,
+  r links within rows and d links between row heads. Only goals have these links.
+  Runtime goal bindings are separate from physical block IDs. Shared 20 mm
+  occupancy semantics drive guards and task completion. Pyramid traverses bottom
+  to top; Grid uses 10 cm tabletop spacing for finger clearance. Goal-marker
+  mocaps stay fixed when robot actions are applied. The source-layout fallback
+  preserves Scattered and rejects layouts outside the nominal workspace.
 
 - **`synthesis/environment/tower_reset.py`** — shared lateral Unstack/Reverse
   reset geometry. Both sample X in [0.54, 0.70] m ahead of the robot base and

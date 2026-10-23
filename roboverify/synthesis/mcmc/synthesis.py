@@ -879,12 +879,18 @@ def make_roboverify_grid_env(
 
 def make_roboverify_pyramid_env(
     render_mode: str = "rgb_array",
+    *,
+    bottom_row_blocks: int = 3,
 ) -> GymToGymnasium:
-    """Create the RoboVerifyPyramid env with six blocks in a 3+2+1 goal pyramid."""
+    """Create layers k, k-1, ..., 1 from bottom_row_blocks=k."""
+    from synthesis.environment.goal_layout import pyramid_layers
+
+    num_blocks = sum(pyramid_layers(bottom_row_blocks))
     return GymToGymnasium(
         FetchPickAndPlaceConstruction(
-            name="roboverify_pyramid_6",
-            num_blocks=6,
+            name=f"roboverify_pyramid_{bottom_row_blocks}",
+            num_blocks=num_blocks,
+            bottom_row_blocks=bottom_row_blocks,
             **ROBOVERIFY_PYRAMID_ENV_KWARGS,
         ),
         render_mode=render_mode,

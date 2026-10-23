@@ -10,6 +10,7 @@ from synthesis.api.control import (
     ControlConfig,
     PrimitiveController,
 )
+from synthesis.environment.goal_layout import goal_bindings, resolve_reference
 from synthesis.util import on as on_util
 
 
@@ -311,9 +312,9 @@ class MoveByName(Instruction):
             return_image,
             "move_relative",
             (
-                self._resolve(env)[self.target_box_name_x],
-                self._resolve(env)[self.target_box_name_y],
-                self._resolve(env)[self.target_box_name_z],
+                resolve_reference(env, self.target_box_name_x),
+                resolve_reference(env, self.target_box_name_y),
+                resolve_reference(env, self.target_box_name_z),
             ),
             [p.numeric_val() for p in self.target_offset],
         )
@@ -426,7 +427,7 @@ class ReleaseByName(Instruction):
             traj,
             return_image,
             "release",
-            self._resolve(env)[self.release_box_name],
+            resolve_reference(env, self.release_box_name),
             self.target_z_offset.numeric_val(),
         )
 
@@ -897,7 +898,7 @@ class Assign(Instruction):
 
 
 class GoalAssign(Instruction):
-    """Verification-only assignment over GoalSort symbols."""
+    """Assignment over goal symbols, kept separate from physical block aliases."""
 
     def __init__(self, left, right):
         self.left = left
@@ -907,10 +908,13 @@ class GoalAssign(Instruction):
         return f"{self.left} <- {self.right} (goal)"
 
     def eval(self, env, traj, return_image=False) -> List:
-        raise RuntimeError(
-            "GoalAssign.eval() is verification-only. "
-            "Use concrete low-level instructions for execution."
-        )
+        mapping = goal_bindings(env)
+        if self.left in getattr(env, "symbolic_name_to_box_id", {}):
+            raise ValueError(f"Goal alias conflicts with a block alias: {self.left}")
+        if self.left in ("h0", "null"):
+            raise ValueError("Cannot reassign the goal head or null constant")
+        mapping[self.left] = mapping[self.right]
+        return []
 
 
 class MarkGoal(Instruction):
@@ -930,7 +934,7 @@ class MarkGoal(Instruction):
 
 
 class MoveRight(Instruction):
-    """Verification-only nondeterministic update x := x.r."""
+    """Advance a goal cursor within its row."""
 
     def __init__(self, var_name):
         self.var_name = var_name
@@ -939,14 +943,15 @@ class MoveRight(Instruction):
         return f"{self.var_name} := {self.var_name}.r"
 
     def eval(self, env, traj, return_image=False) -> List:
-        raise RuntimeError(
-            "MoveRight.eval() is verification-only. "
-            "Use concrete low-level instructions for execution."
-        )
+        mapping = goal_bindings(env)
+        if self.var_name in ("h0", "null"):
+            raise ValueError("Cannot advance the goal head or null constant")
+        mapping[self.var_name] = env.goal_layout.get(mapping[self.var_name]).r
+        return []
 
 
 class MoveDown(Instruction):
-    """Verification-only nondeterministic update x := x.d."""
+    """Advance a goal cursor to the next row head (upward for a Pyramid)."""
 
     def __init__(self, var_name):
         self.var_name = var_name
@@ -955,10 +960,11 @@ class MoveDown(Instruction):
         return f"{self.var_name} := {self.var_name}.d"
 
     def eval(self, env, traj, return_image=False) -> List:
-        raise RuntimeError(
-            "MoveDown.eval() is verification-only. "
-            "Use concrete low-level instructions for execution."
-        )
+        mapping = goal_bindings(env)
+        if self.var_name in ("h0", "null"):
+            raise ValueError("Cannot advance the goal head or null constant")
+        mapping[self.var_name] = env.goal_layout.get(mapping[self.var_name]).d
+        return []
 
 
 class Seq:
