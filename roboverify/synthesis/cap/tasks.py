@@ -35,7 +35,8 @@ def prepare_environment(config, initial_snapshot=None):
             f"Simulator prerequisites are unavailable: {type(exc).__name__}: {exc}"
         ) from exc
 
-    task = "partial_stack" if config.task == "restack" else config.task
+    # Upstream replaced PartialStack with a Restack environment (2026-10-23).
+    task = config.task
     previous_rng = np.random.get_state()
     env = None
     try:

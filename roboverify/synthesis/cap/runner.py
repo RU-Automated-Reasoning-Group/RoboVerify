@@ -282,7 +282,7 @@ def run_once(
                     if not 0 <= trace_index < len(traces):
                         raise ValueError("Initial-state trace index is out of range")
                     trace = traces[trace_index]
-                    aliases = {"restack": "partial_stack"}
+                    aliases = {"partial_stack": "restack"}  # archives before Restack
                     if trace.num_blocks != config.num_blocks or aliases.get(
                         trace.task, trace.task
                     ) != aliases.get(config.task, config.task):
