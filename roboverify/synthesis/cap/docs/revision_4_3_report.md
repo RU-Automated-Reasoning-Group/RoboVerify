@@ -1,6 +1,6 @@
 # Revision 4.3: experiment report
 
-**Status: prompt factorial running; feedback ablation not started.** Pending trials are not observed failures.
+**Status: prompt factorial running (Qwen3.8 27B only); feedback ablation not started.** Pending trials are not observed failures.
 
 - **Prompt factorial:** [plan](revision_4_3_prompt_ablation_plan.md). Full 2⁴ factorial over the four primitive prompt blocks; 50 trials per cell × 16 cells × 3 methods × 2 models = 4,800 trials.
 - **Feedback ablation:** [plan](revision_4_3_ablation_experiment_plan.md). Runs after the prompt study, with the selected prompt set fixed.
@@ -47,7 +47,20 @@ Shared settings:
   - The aborted directories are kept, each with an `ABORTED.md` note, and are excluded from all analyses.
   - Expected completion: about 13 hours for the 27B batch, about 16 hours for the 9B batch including the GPU 6 handover.
 
-### 1.3 Results
+### 1.3 Qwen3.5 9B stopped (2026-10-22)
+
+- **Decision:** stop the 9B batch and move its GPU to the 27B. The 9B is also dropped from the feedback ablation ([plan, Section 6](revision_4_3_ablation_experiment_plan.md#6-model-and-local-serving)).
+- **Reason: floor effect.** Over 291 completed trials:
+  - round-0 success in 1 trial, so the primary outcome cannot separate the 16 cells;
+  - 20 of 290 initially failed trials recovered (about 7%);
+  - 96 trials stopped with `preparation_failure_no_rollout`.
+- **State of the batch:** 291 trials completed, 56 were running when the launcher was stopped, and 2,053 were never started. The batch is not resumed, and its data are excluded from prompt selection. They are kept as a descriptive record.
+- **27B move to two GPUs.**
+  - The 27B batch was drained, not interrupted. A placeholder reservation in the shared GPU ledger lowered the slot limit on GPUs 6 and 7 to 1, so no new trials were dispatched while running ones finished.
+  - Port 8106 then becomes a least-in-flight balancer over two 27B instances (GPU 6 on port 8126, GPU 7 on port 8127), with identical checkpoint, template and server flags.
+  - The batch resumes with 64 concurrent trials, using a resume-time override that each session records in `execution_metadata.json`. Trial definitions are unchanged.
+
+### 1.4 Results
 
 Pending.
 

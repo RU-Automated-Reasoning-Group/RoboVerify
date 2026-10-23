@@ -1,6 +1,7 @@
 # Revision 4.3: ablation experiment plan
 
-- **Status:** design in progress; no experiment authorized yet. Decisions agreed so far are marked **Decided**. Section 8 lists the open points.
+- **Status:** design agreed except the open points in Section 10. The experiment starts after the [prompt factorial](revision_4_3_prompt_ablation_plan.md) has finished and its selected prompt set is recorded in the [report](revision_4_3_report.md); every Stage A and Stage B job uses that prompt set.
+- **Model:** Qwen3.8 27B only (Section 6). The Qwen3.5 9B was dropped on 2026-10-22.
 - **Implementation it evaluates:** [Revision 4.3: configurable feedback and full executed-policy history](revision_4_3_configurable_feedback_and_full_policy_history.md).
 - **Question:** which recovery-feedback items, and which history mode, change the chance that a failed policy is repaired?
 
@@ -33,7 +34,7 @@
 **Decided.** Remove the largest source of variance, "which program round 0 produced", by pairing every profile on the same failed program.
 
 1. **Stage A: failure pool.**
-   - For each model × method, generate fresh round-0 attempts from the saved initial state.
+   - For each method, generate fresh round-0 attempts from the saved initial state.
    - The selected prompt set is used; the initial prompt is identical across profiles.
    - Keep every attempt; classify each failed one (Section 3).
 2. **Stage B: branched recovery.**
@@ -143,26 +144,31 @@
   - Proposed: 200k tokens per recovery round and 900k per trial; call and time limits unchanged.
   - Record the values; any token-budget stop is reported per profile.
 
-## 6. Models and local serving
+## 6. Model and local serving
 
-**Decided:** two local models served by vLLM on dbar.
+**Decided (2026-10-22):** one local model, Qwen3.8 27B, served by vLLM on dbar.
 
-| Model | Checkpoint (pinned revision) | Precision | GPU |
+| Model | Checkpoint (pinned revision) | Precision | GPUs |
 | --- | --- | --- | --- |
-| Qwen3.8 27B | `Qwen/Qwen3.8-27B-FP8` @ `017b9c7a` | Official FP8, weight-only Marlin kernels on A100 | 6 (`GPU-4e45a91e…`) |
-| Qwen3.5 9B | `Qwen/Qwen3.5-9B` @ `c2022362` | Official BF16; no official FP8 exists | 7 (`GPU-9e9f9166…`) |
+| Qwen3.8 27B | `Qwen/Qwen3.8-27B-FP8` @ `017b9c7a` | Official FP8, weight-only Marlin kernels on A100 | 6 and 7 (`GPU-4e45a91e…`, `GPU-9e9f9166…`), one instance per GPU behind a local least-in-flight balancer |
+
+- **Why the 9B was dropped.** In the prompt factorial (stopped after 291 completed trials), the Qwen3.5 9B succeeded in round 0 in 1 of 291 trials and recovered 20 of 290 initially failed trials (about 7%).
+  - At that recovery rate, 50 seeds per method give about 3 recoveries per profile, so no profile difference is detectable.
+  - 96 of its 291 trials stopped with `preparation_failure_no_rollout`: 32k-token length stops, SyntaxErrors and similar errors.
+  - The Qwen3.8 27B recovered 57–71% of its initially failed trials, far from both floor and ceiling.
+- **Consequence:** results are for one model. Cross-model generality is not claimed.
+- **A second model may be added later,** only after a short pilot (for example 30 trials per method) shows round-0 success of about 20–60% and recovery away from the floor. It would form a separate stratum with its own seeds.
 
 - **Server:**
   - vLLM 0.32.0 in a separate virtual environment; OpenAI-compatible endpoint on localhost only, protected by an API key stored outside the repository.
-  - `--max-model-len 65536`.
+  - `--max-model-len 98304`.
   - `--gpu-memory-utilization 0.85`, leaving room for MuJoCo EGL workers.
   - Prefix caching on.
   - Qwen reasoning parser.
   - Image/video inputs disabled.
 - **Generation:**
-  - Thinking enabled through the chat template.
-  - Qwen has no effort levels, so "medium" does not apply.
-  - 16,384 output tokens.
+  - Thinking enabled through the chat template, with `reasoning_effort=medium`. The template default, `xhigh`, exhausted the output cap without code in every smoke round 0 ([report](revision_4_3_report.md#12-pre-run-findings)).
+  - 32,768 output tokens; no thinking-token budget.
   - Sampling from the checkpoint's generation config; resolved values recorded.
 - **Client changes:** a local provider mode with no request pacing or free-quota admission. vLLM version, checkpoint revision and sampling parameters are recorded in every call's provenance.
 - **Comparability:** local results form new cohorts. They are not comparable with the OpenRouter Qwen3.8 27B batch, which differs in serving precision, sampling defaults and reasoning control.
@@ -178,25 +184,26 @@
   - physical, logical and DSL outcomes, reported separately.
 - **Analysis:**
   - Paired comparisons of each profile against `full` on the same seeds: McNemar's test, with Holm correction across the 14 contrasts.
-  - Pooled model: mixed-effects logistic regression `recovered ~ profile + method + model + failure_class + (1 | seed)`, rather than dozens of separate 2×2 tests.
+  - Pooled model: mixed-effects logistic regression `recovered ~ profile + method + failure_class + (1 | seed)`, rather than dozens of separate 2×2 tests.
   - Per-class results are descriptive unless a class has enough seeds.
 - **Claims of "no effect" need an equivalence test (TOST)** with a margin fixed before the run. Non-significance alone is reported as "not detected".
 - **Precision guide.**
   - Power in a paired design depends on discordant pairs.
   - With roughly 20% discordance, about 160 seeds detect a 10-point pooled difference.
-  - Pooled over 3 methods × 2 models with 50 seeds each, every profile has 300 seeds. Per model × method stratum, 50 seeds detect only differences of roughly 25 points or more.
+  - Pooled over 3 methods with 50 seeds each, every profile has 150 seeds, slightly fewer than the roughly 160 needed for a 10-point pooled difference. Per method, 50 seeds detect only differences of roughly 25 points or more.
+  - Dropping the 9B halved the pooled seeds from 300. Whether to raise the seed count is open (Section 10).
 
 ## 8. Decided details
 
 | Item | Decision |
 | --- | --- |
-| Seeds | 50 failed round-0 attempts per model × method. Seeds are method-specific. |
+| Seeds | 50 failed round-0 attempts per method (Qwen3.8 27B). Seeds are method-specific. |
 | Class quotas | Move 15, Pick 8, Release 8, execution/query budget 6, no-witness `get` up to 5, goal failure 4, other runtime 4. Shortfalls are refilled proportionally from the other classes; actual counts are reported. |
-| Stage A limit | At most 300 round-0 attempts per model × method, stopping early once quotas are met |
+| Stage A limit | At most 300 round-0 attempts per method, stopping early once quotas are met. Round-0 attempts from the selected prompt-factorial cell are imported first. |
 | Replicates | One recovery chain per seed × profile |
-| Equivalence margin | 10 percentage points, for pooled (all models and methods) TOST claims only |
+| Equivalence margin | 10 percentage points, for TOST claims pooled over methods only |
 | Token budgets | 200k per recovery round, 900k per trial; call and time limits unchanged |
-| Pilot | Stage A 30 round-0 attempts per model × method, then Stage B 3 seeds per stratum under all 15 profiles (270 chains). Pilot data are excluded from the main analysis. |
+| Pilot | Stage A 30 round-0 attempts per method, then Stage B 3 seeds per method under all 15 profiles (135 chains). Pilot data are excluded from the main analysis. The seeded-branch validation ([report §2.2](revision_4_3_report.md#22-seeded-branch-validation-2026-10-22)) already checked the mechanics with 9B seeds. |
 | Sampling | Checkpoint `generation_config` defaults; resolved values recorded per call |
 | Output cap | 32,768 tokens per request, doubled from 16,384. The server context length must cover the largest input plus 32,768. |
 
@@ -206,7 +213,7 @@
 
 | Subcommand | Behavior |
 | --- | --- |
-| `stage-a` | Round-0-only batch (recovery on, `max_rounds=0`) for one model and all three methods, with a fixed prompt set (`--prompt-flags 1010` or JSON) |
+| `stage-a` | Round-0-only batch (recovery on, `max_rounds=0`) for the model and all three methods, with a fixed prompt set (`--prompt-flags 1010` or JSON) |
 | `select-seeds` | Reads round-0 attempts from Stage A or existing batches (`--source BATCH[:VARIANT]`, read only), filters by model and prompt set, classifies them (Section 3; preparation failures counted and excluded), samples per method with seeded quotas and proportional refill, and writes a read-only manifest plus its SHA-256 |
 | `stage-b` | One job per seed × profile (15 profiles, `fixed_items`, supporting events `--supporting-events 40`, guard `--evidence-guard 32768`); every job starts from its seed through the Revision 4.3 seed loader |
 | `audit` | Checks that all branches of a seed share one round-0 attempt and initial state, that profile settings match, and that every enabled item was delivered complete |
@@ -219,3 +226,4 @@
 ## 10. Open points
 
 1. **Supporting events:** N = 40 with a 32 KiB guard (proposed), or N = 80 with a 48 KiB guard.
+2. **Seed count with one model:** keep 50 per method (150 pooled, 2,250 Stage B chains), or raise it, e.g. to 70 per method (210 pooled, 3,150 chains), to restore 10-point pooled sensitivity.

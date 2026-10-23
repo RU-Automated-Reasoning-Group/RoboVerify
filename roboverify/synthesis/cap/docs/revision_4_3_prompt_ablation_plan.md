@@ -26,7 +26,7 @@ The four Boolean switches under `RunConfig.primitive_prompt` ([Revision 4.2, Sec
 ## 2. Scale
 
 **Decided.**
-- 50 trials per cell × 16 cells × 3 methods × 2 models = **4,800 trials**.
+- 50 trials per cell × 16 cells × 3 methods × 2 models = **4,800 trials** as planned. The 9B half was stopped on 2026-10-22 because its round-0 success was at the floor (1 of 291); the factorial is completed for the Qwen3.8 27B only (2,400 trials). See the [report](revision_4_3_report.md#13-qwen35-9b-stopped).
 - Models and serving are as in the [feedback ablation plan](revision_4_3_ablation_experiment_plan.md#6-models-and-local-serving):
   - Qwen3.8 27B FP8 on GPU 6;
   - Qwen3.5 9B BF16 on GPU 7;
