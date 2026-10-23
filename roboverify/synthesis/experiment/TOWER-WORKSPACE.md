@@ -20,8 +20,9 @@ their mutual alignment look better.
 
 The [experiment module](tower_workspace.py) patches only the shared reset sampler
 within each trial, then executes the existing complete program with the production
-controllers. Unstack uses the existing scoped extrema references from
-`unstack_lateral.py`; Reverse uses `examples/reverse.py`. No primitive budget,
+controllers. Unstack originally used scoped extrema references in `unstack_lateral.py`.
+Those references now execute in shared controllers via `examples/unstack.py`;
+the old module is a compatibility entry point. Reverse uses `examples/reverse.py`. No primitive budget,
 collision mask, task predicate or success tolerance was changed.
 
 | Candidate-region executions | Unstack | Reverse |

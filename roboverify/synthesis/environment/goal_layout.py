@@ -139,6 +139,13 @@ def decode_goal_bindings(mapping, layout):
 
 
 def resolve_reference(env, name):
+    from synthesis.environment.motion_reference import (
+        OBSERVATION_REFERENCE_NAMES,
+        ObservationReference,
+    )
+
+    if name in OBSERVATION_REFERENCE_NAMES:
+        return ObservationReference(name)
     blocks = getattr(env, "symbolic_name_to_box_id", {})
     goals = getattr(env, "symbolic_name_to_goal", {})
     if name in blocks and name in goals:

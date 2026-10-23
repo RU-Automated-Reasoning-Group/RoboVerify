@@ -1,6 +1,6 @@
 """Collect tower, Grid or Pyramid DSL demonstrations, with optional videos.
 
-Stack/Restack/Grid/Pyramid hold the gripper for 50 settling steps; Reverse records
+Stack/Restack/Grid/Pyramid hold the gripper for 50 settling steps; Unstack/Reverse record
 the lateral tower reset directly.
 """
 
@@ -78,15 +78,17 @@ def build_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--program",
-        help="module:factory or path/to/program.py:factory; defaults to the provided Restack/Grid/Pyramid groundtruth",
+        help="module:factory or path/to/program.py:factory; defaults to the task's provided groundtruth",
     )
     parser.add_argument(
-        "--task", choices=["stack", "reverse", "restack", *GOAL_TASKS], default="stack"
+        "--task",
+        choices=["stack", "unstack", "reverse", "restack", *GOAL_TASKS],
+        default="stack",
     )
     parser.add_argument(
         "--num-blocks",
         type=int,
-        help="Defaults to 4 for Restack, 3 for Stack/Reverse; derived from goal layouts",
+        help="Defaults to 4 for Restack, 3 for other tower tasks; derived from goal layouts",
     )
     parser.add_argument(
         "--initial-tower-blocks",
@@ -170,8 +172,9 @@ def collect(args, parser):
                 args.program = (
                     args.program or "synthesis.examples.restack:build_program"
                 )
-            if not args.program:
-                raise ValueError("--program is required for Stack and Reverse")
+            args.program = (
+                args.program or f"synthesis.examples.{args.task}:build_program"
+            )
         if (
             args.num_blocks < (1 if goal_task else 2)
             or args.max_loop_iterations < 1
@@ -183,10 +186,14 @@ def collect(args, parser):
         if args.save_video:
             VideoRecorder.check_available()
         context = HighLevelContext(
-            mode="declare", use_tbl=args.task in ("reverse", "restack")
+            mode="declare", use_tbl=args.task in ("unstack", "reverse", "restack")
         )
         reference = load_program(
-            args.program, context, args.num_blocks, allow_goal_program=goal_task
+            args.program,
+            context,
+            args.num_blocks,
+            allow_goal_program=goal_task,
+            allow_observation_references=True,
         )
         output = output_directory(args, len(seeds))
     except (ValueError, FileExistsError, ImportError, AttributeError, TypeError) as exc:
@@ -207,7 +214,11 @@ def collect(args, parser):
         # Rebuild for every seed; reject factories that change the executable.
         try:
             definition = load_program(
-                args.program, context, args.num_blocks, allow_goal_program=goal_task
+                args.program,
+                context,
+                args.num_blocks,
+                allow_goal_program=goal_task,
+                allow_observation_references=True,
             )
             if definition.metadata["fingerprint"] != reference.metadata["fingerprint"]:
                 raise ValueError("Program factory changed between seeds")

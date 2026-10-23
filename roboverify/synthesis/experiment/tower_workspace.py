@@ -24,7 +24,6 @@ from synthesis.cfg.reset import inner_env
 from synthesis.experiment.run_logger import RunLogger
 from synthesis.experiment.unstack_lateral import (
     build_program,
-    dynamic_targets,
     positions,
 )
 from synthesis.mcmc.synthesis import make_roboverify_env, preserved_global_rng
@@ -170,10 +169,6 @@ def run_trial(args, *, seed, point=None, snapshot=None, variant="baseline", vide
         else nullcontext()
     )
     with reset_patch, (
-        dynamic_targets(args.num_blocks, [])
-        if args.task == "unstack"
-        else nullcontext()
-    ), (
         payload_xy_feedback(include_z=variant == "payload_xyz")
         if variant.startswith("payload_")
         else nullcontext()

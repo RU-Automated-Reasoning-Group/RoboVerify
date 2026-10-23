@@ -29,6 +29,10 @@ from synthesis.api.instructions import (
 from synthesis.api.program import Program
 from synthesis.cfg.physical import name_operands
 from synthesis.environment.goal_layout import GOAL_REFERENCE_MODE, GOAL_TOLERANCE
+from synthesis.environment.motion_reference import (
+    OBSERVATION_REFERENCE_MODE,
+    OBSERVATION_REFERENCE_NAMES,
+)
 from synthesis.predicates.term import free_names, from_z3
 from synthesis.util.actions import CARTESIAN_ACTION_MODE
 from synthesis.util.symbols import fresh_name
@@ -96,6 +100,10 @@ def describe_program(program):
                 result["release_offset"] = i.target_z_offset.numeric_val()
             if table_reference and isinstance(i, (MoveByName, ReleaseByName)):
                 result["table_reference"] = TABLE_REFERENCE_MODE
+            if isinstance(i, (MoveByName, ReleaseByName)) and any(
+                o["val"] in OBSERVATION_REFERENCE_NAMES for o in i.get_operand()
+            ):
+                result["observation_reference"] = OBSERVATION_REFERENCE_MODE
         else:
             raise ValueError(
                 f"Unsupported instruction {type(i).__name__}; use explicit Pick/Move/Release primitives"
@@ -133,7 +141,14 @@ class ProgramDefinition:
         )
 
 
-def prepare_program(program, num_blocks, source="", *, allow_goal_program=False):
+def prepare_program(
+    program,
+    num_blocks,
+    source="",
+    *,
+    allow_goal_program=False,
+    allow_observation_references=False,
+):
     if not isinstance(program, Program):
         raise TypeError("Program factory must return synthesis.api.program.Program")
     goal_program = uses_goals(program)
@@ -141,7 +156,19 @@ def prepare_program(program, num_blocks, source="", *, allow_goal_program=False)
         raise ValueError(
             "Goal programs support execution/collection only; synthesis and verification are unsupported"
         )
-    describe_program(program)
+    description = describe_program(program)
+
+    def has_observation_references(rows):
+        return any(
+            "observation_reference" in row
+            or has_observation_references(row.get("body", []))
+            for row in rows
+        )
+
+    if has_observation_references(description) and not allow_observation_references:
+        raise ValueError(
+            "Observation-relative operands support execution/collection only; integrated synthesis and verification are unsupported"
+        )
     occupied, ids = {"b0", "tbl"}, set()
 
     def inspect(rows, depth=0):
@@ -196,7 +223,14 @@ def prepare_program(program, num_blocks, source="", *, allow_goal_program=False)
     )
 
 
-def load_program(source, context, num_blocks, *, allow_goal_program=False):
+def load_program(
+    source,
+    context,
+    num_blocks,
+    *,
+    allow_goal_program=False,
+    allow_observation_references=False,
+):
     module_name, separator, factory_name = source.rpartition(":")
     if not separator or not module_name or not factory_name.isidentifier():
         raise ValueError("Use --program module:factory or path/to/program.py:factory")
@@ -215,6 +249,7 @@ def load_program(source, context, num_blocks, *, allow_goal_program=False):
         num_blocks,
         source,
         allow_goal_program=allow_goal_program,
+        allow_observation_references=allow_observation_references,
     )
     if context.use_tbl:
         definition.initial_bindings["tbl"] = "tbl"

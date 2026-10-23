@@ -11,6 +11,7 @@ from math import isfinite
 import numpy as np
 
 from synthesis.environment.goal_layout import GoalRef
+from synthesis.environment.motion_reference import ObservationReference
 from synthesis.util.actions import bound_delta_action
 from synthesis.util.on import BLOCK_LENGTH
 
@@ -103,6 +104,17 @@ class PrimitiveController:
         below the surface, so adding one block length places a block center on
         either kind of support. Pick still requires a physical block ID.
         """
+        if isinstance(reference, ObservationReference):
+            if reference is ObservationReference.GRIPPER:
+                return self.observation[:3].copy()
+            count = (len(self.observation) - 13) // 15
+            positions = np.array([self.box_position(i) for i in range(count)])
+            index = (
+                np.argmin(positions[:, 1])
+                if reference is ObservationReference.MIN_Y
+                else np.argmax(positions[:, 2])
+            )
+            return positions[index].copy()
         if isinstance(reference, GoalRef):
             return np.asarray(self.env.goal_layout.get(reference).position, dtype=float)
         if reference != "tbl":
