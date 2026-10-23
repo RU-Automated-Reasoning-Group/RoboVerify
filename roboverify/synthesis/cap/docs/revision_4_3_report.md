@@ -112,6 +112,8 @@ Each block is a fixed text in [`prompts/primitive_v1.json`](../prompts/primitive
 
 #### 1.5.3 Secondary outcomes (motion-planning block off → on)
 
+- **Caveat for final success.** The factorial ran before the reasoning-termination guard ([Revision 4.3.1, Section 10](revision_4_3_1_inference_backend_optimization.md#10-empty-answers-reasoning-that-ends-the-turn-2026-10-23)). About 10% of recovery calls ended with an empty answer, cutting the recovery chain short. This affected 183 of 815 initially failed trials without the motion-planning block and 57 of 342 with it, so final success is understated in both groups, more so without the block. Round-0 success, which decided the selection, was affected in 11 of 2,400 trials.
+
 - **Round-0 primitive nonconvergence:** 49.2% → 19.1% of trials. By primitive, Move 314 → 105, Pick 155 → 69, Release 121 → 55 trials.
 - **Round-0 execution-budget exhaustion:** 12.4% → 2.4%.
 - **Preparation stops** (`preparation_failure_no_rollout`, any round): 15.6% → 5.0% of trials.

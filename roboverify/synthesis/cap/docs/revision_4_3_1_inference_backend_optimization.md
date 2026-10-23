@@ -1,6 +1,6 @@
 # Revision 4.3.1: inference backend optimization
 
-- **Scope:** every change to local model serving and batch dispatch made for the Revision 4.3 experiments (2026-10-22 to 2026-10-23). Experiment design and results are in the [Revision 4.3 report](revision_4_3_report.md).
+- **Scope:** every change to local model serving and batch dispatch made for the Revision 4.3 experiments (2026-10-22 to 2026-10-23), including the reasoning-termination guard (Section 10). Experiment design and results are in the [Revision 4.3 report](revision_4_3_report.md).
 - **Rule kept throughout:** serving changes may alter speed and capacity, never a trial's definition. Checkpoint, chat template, sampling and budgets are identical across instances and over time. Every scheduling change is recorded in the batch artifacts.
 - **Location:** the serving scripts live outside the repository in `~/vllm-serve/` on dbar, next to their logs. The repository holds the launcher-side changes. The API key is read from a file outside the repository and passed as `VLLM_API_KEY`; it is never on a command line or in an artifact.
 
@@ -19,6 +19,7 @@
 | 9 | Six GPUs behind one balancer | Spare GPUs 0–3 | 6 instances, about 16 requests each |
 | 10 | Stage A request limit | Limit below the per-trial reservation capped concurrency at 14 | 88 concurrent trials |
 | 11 | Live dispatch limit and GPU release procedure | Lab may ask to free GPUs mid-experiment | Shrink from 6 to 2 GPUs without interrupting trials |
+| 12 | Reasoning-termination guard (vLLM logits processor) | About 10% of recovery calls ended the turn inside `<think>` with an empty answer | Empty answers 9/40 → 0/40 on previously failed prompts |
 
 ## 2. Serving stack
 
@@ -38,6 +39,7 @@
   - `--enable-prefix-caching`: hit rate is about 60% in practice, since all trials share the system prompt.
   - `--reasoning-parser qwen3`.
   - `--limit-mm-per-prompt '{"image":0,"video":0}'`.
+  - From 2026-10-23 12:13 EDT: `--logits-processors synthesis.cap.serving.think_close_guard:ThinkCloseGuard`, with `roboverify/` on `PYTHONPATH` (Section 10). `serve.sh` includes it; `serve_unguarded.sh` keeps the earlier configuration.
   - `--host 127.0.0.1`, with an API key.
 - **Client:** provider `vllm` in `ModelConfig`.
   - It has no request pacing and no free-quota admission.
@@ -142,3 +144,70 @@ Trials per hour depend on the mix of round-0 successes and recovery chains, so r
 - **Background Python ignores SIGINT.** A non-interactive shell sets SIGINT to ignored for `&` jobs, so `kill -INT` does not run the batch's cleanup. Stop a batch by draining it (Section 6), not by signals.
 - **Anchor `pkill`/`pgrep` patterns** (for example `'^\.venv/bin/python -m synthesis\.cap\.…'`). Unanchored patterns matched the invoking shell's own command line and killed it.
 - **Count failures from parsed fields, not `grep` on JSON.** A substring search for "503" matched token counts.
+
+## 10. Empty answers: reasoning that ends the turn (2026-10-23)
+
+### 10.1 Symptom
+
+- The pilot Stage B showed 20 of 219 recovery calls ending with `ModelError: Incomplete/empty model response: stop`: `finish_reason=stop`, an empty answer, and all text in the reasoning field. The trial then stops with `preparation_failure_no_rollout`.
+- The same pattern runs through the whole prompt factorial:
+
+  | Source | Round-0 calls | Recovery calls |
+  | --- | --- | --- |
+  | Local 27B, prompt factorial | 11 / 2,356 (0.5%) | 235 / 2,300 (10.2%) |
+  | Local 27B, pilot Stage B | — | 20 / 219 (9.1%) |
+  | OpenRouter 27B, Revision 4.2 (16k output cap) | 0 / 61 | 0 / 28 (3 hit the cap) |
+
+- **Not the request.** No stop strings are sent, and `stop_reason` is empty, so the model sampled its end-of-turn token `<|im_end|>`. Every affected request is a single user message under 8k tokens.
+- **Reasoning length.** Affected responses are long (median 17.9k completion tokens against 9.9k for other recovery calls) and stop mid-line, often in the middle of code drafted inside the reasoning.
+
+### 10.2 Diagnosis
+
+The failure points were re-scored by sending the original prompt plus the generated reasoning and reading the next-token distribution (`max_tokens=1`, `logprobs=20`).
+
+| Check | Result |
+| --- | --- |
+| End-of-turn probability at the 6 failure points (FP8, production) | 0.51, 0.81, 0.47, 0.31, 0.08, 0.11; e.g. 0.81 right after `\|2(g` |
+| Same, with prefix caching off | Identical. Prefix caching of the hybrid model's linear-attention state (`mamba_cache_mode=align`) is not the cause. |
+| Same, with the official BF16 checkpoint (`Qwen/Qwen3.8-27B` @ `1d4bf0f2`) | 0.33, 0.59, 0.18, 0.11, 0.01, 0.07. Present without quantization, but FP8 raises it 1.5–8× |
+| Along the reasoning (prompt log-probabilities) | Near 0 in the first half of long reasoning, rising after roughly 8–10k tokens (up to 0.27 mid-text) |
+| Same text under the `xhigh` effort template | Lower: positions above 0.05 fall from 18 to 2 |
+
+- **Conclusion.** This is the model's behavior: at `medium` effort, long reasoning ends with `<|im_end|>` instead of `</think>`. FP8 quantization amplifies it.
+- **Serving BF16 instead would not remove it** and would cut KV capacity about 3× (176k vs about 590k tokens per A100).
+- The 27B is a hybrid model: Gated DeltaNet linear-attention layers, with full attention every fourth layer.
+
+### 10.3 Fix: `ThinkCloseGuard`
+
+- **Code:** [`synthesis/cap/serving/think_close_guard.py`](../serving/think_close_guard.py), a vLLM 0.32 logits processor for the V2 model runner, with unit tests in `test_think_close_guard.py`. The tests run in the serving environment and are skipped in the project environment.
+- **Phase 1 (reasoning open).** When an admitted request's prompt ends inside an open `<think>` block, the probability of the stop tokens (`<|im_end|>`, `<|endoftext|>`) is moved onto `</think>`:
+
+  ```
+  logit[</think>] <- logsumexp(logit[</think>], logit[stop tokens]);  logit[stop tokens] <- -inf
+  ```
+
+  The model's decision to stop reasoning is kept; only the token that expresses it changes.
+- **Phase 2 (awaiting the answer).** After `</think>`, stop tokens stay blocked until the first non-whitespace answer token. Without this phase, one probe closed the reasoning and then immediately ended the turn, leaving the answer empty again.
+- **Otherwise unchanged.** All other probabilities are left alone, and the processor does nothing once the answer has started or when a prompt has no open reasoning block.
+  - It tracks state per request slot on the GPU from each step's input token, so there is no per-step host synchronization.
+  - It reads a prompt once at admission, including the output so far for preempted requests.
+- **Logged log-probabilities are raw.** vLLM reports log-probabilities from the raw logits, before logits processors. The guard's effect therefore shows in sampled tokens, not in logged log-probabilities.
+
+### 10.4 Validation
+
+- **Greedy continuation at three failure points.** Unguarded: end of turn, end of turn, code. Guarded: `</think>` followed by a `python` block; `</think>` followed by an answer; unchanged.
+- **Sampling replay** of 40 recovery requests that had ended empty in the prompt factorial, with the original messages and sampling settings, once per server:
+
+  | Server | Empty answer | Answer contains `Move`/`Pick`/`Release` | Length stop | Median completion tokens |
+  | --- | --- | --- | --- | --- |
+  | Unguarded | 9 / 40 | 31 / 40 | 0 | 12.4k |
+  | Guarded | 0 / 40 | 40 / 40 | 0 | 14.8k |
+
+- **Rollout:** all six 27B instances were restarted with the guard at 12:13 EDT on 2026-10-23. Feedback-ablation plans record it under `serving.logits_processors`, and batches also hash its source.
+
+### 10.5 Effect on earlier results
+
+- **Prompt factorial (unguarded).**
+  - Round 0, the primary outcome: 11 of 2,400 trials (0.5%) ended this way. The prompt selection stands.
+  - Final success, a secondary outcome: of the trials that failed round 0, 183 of 815 without the motion-planning block (22%) and 57 of 342 with it (17%) ended on an empty answer during recovery. Final success is understated in both groups, more so without the block. The report notes this next to the final-success numbers.
+- **Feedback-ablation pilot (unguarded):** mechanics only; excluded from all analyses. The main Stage A and Stage B run with the guard.
