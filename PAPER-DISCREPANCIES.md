@@ -183,6 +183,12 @@ runner and videos are recorded
 This establishes empirical validity for the tested scenes, not a formal proof;
 production extrema support and Unstack collector integration remain separate work.
 
+**Environment consolidation, 2026-10-23.** The right-side tower reset is now the
+only production Unstack reset. The lateral runner uses that shared factory,
+with no instance-specific reset override. Reverse retains its existing reset;
+archived simulator states still restore exactly. This promotes the environment
+layout, without changing the experimental program or its verification scope.
+
 Keep end-to-end Unstack invocations within **60 seconds**; exhausted budgets and
 inconclusive proofs are unsuccessful results.
 

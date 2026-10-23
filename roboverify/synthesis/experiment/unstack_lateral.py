@@ -1,10 +1,10 @@
-"""Test the supplied Unstack program with a right-side tower and leftward placement.
+"""Test the supplied Unstack program in the standard right-to-left environment.
 
 Higher Y is right and lower Y is left in the existing Grid/Pyramid convention.
 This isolated experiment resolves current minimum-Y, maximum-Z and gripper-Z
 operands at execution time; these are not implemented in the symbolic/motion DSL.
 The sideways transfer freezes the gripper height reached by the preceding lift.
-The supplied invariant is ignored. Controllers and production resets are unchanged.
+The supplied invariant is ignored. The environment uses the production Unstack reset.
 Run from roboverify with the MuJoCo environment and an external 55-second timeout.
 """
 
@@ -13,7 +13,6 @@ import json
 from contextlib import contextmanager
 from dataclasses import asdict
 from pathlib import Path
-from types import MethodType
 from unittest.mock import patch
 
 import numpy as np
@@ -30,10 +29,9 @@ from synthesis.api.program import Program
 from synthesis.cfg.collection import record_execution, validate_trace
 from synthesis.cfg.program_source import prepare_program
 from synthesis.cfg.recordings import save_traces
-from synthesis.cfg.reset import inner_env
 from synthesis.cfg.tasks import task_identity, task_spec
 from synthesis.experiment.run_logger import RunLogger
-from synthesis.mcmc.synthesis import make_roboverify_unstack_env
+from synthesis.mcmc.synthesis import make_roboverify_unstack_env as lateral_env
 from synthesis.predicates.scene import evaluate, scene_from_obs
 from synthesis.util.on import get_block_pos
 from synthesis.verification_lib.highlevel_verification_lib import HighLevelContext
@@ -147,33 +145,6 @@ def dynamic_targets(count, audit):
         PickByName, "eval", wrap(PickByName)
     ), patch.object(ReleaseByName, "eval", wrap(ReleaseByName)):
         yield
-
-
-def lateral_env(count):
-    env = make_roboverify_unstack_env(num_blocks=count)
-    inner = inner_env(env)
-
-    def reset_tower(self):
-        self.sim.set_state(self.initial_state)
-        # Higher Y is right in the repository's Grid/Pyramid convention.
-        # Center the final 15 cm row on the base's Y coordinate.
-        tower_xy = self.robot_base_xy + np.array(
-            [
-                np.random.uniform(0.54, 0.58),
-                0.075 * (count - 1) + np.random.uniform(-0.01, 0.01),
-            ]
-        )
-        for level, block_id in enumerate(self._roboverify_canonical_tower_order()):
-            name = self.object_names[block_id]
-            qpos = self.sim.data.get_joint_qpos(f"{name}:joint")
-            qpos[:2] = tower_xy
-            qpos[2] = self.height_offset + 0.05 * level
-            self.sim.data.set_joint_qpos(f"{name}:joint", qpos)
-        self.sim.forward()
-        return True
-
-    inner._reset_sim_roboverify_tower = MethodType(reset_tower, inner)
-    return env
 
 
 def run(args, logger):

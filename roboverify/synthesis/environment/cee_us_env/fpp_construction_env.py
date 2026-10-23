@@ -456,19 +456,28 @@ class FetchPickAndPlaceConstruction(
         """
         RoboVerifyUnstack / RoboVerifyReverse init:
         - Place all blocks in a single tower with `base_block_id` (b0) at the bottom.
+        - Unstack starts on the higher-Y side for right-to-left placement.
         """
         self.sim.set_state(self.initial_state)
 
-        base_id = self.roboverify_base_block_id
         tower_order = self._roboverify_canonical_tower_order()
         block_height = BLOCK_LENGTH
 
-        while True:
-            tower_xy = self.initial_gripper_xpos[:2] + np.random.uniform(
-                -self.obj_range, self.obj_range, size=2
+        if self.case == "RoboVerifyUnstack":
+            # Center the final 15 cm-spaced row on the robot base's Y coordinate.
+            tower_xy = self.robot_base_xy + np.array(
+                [
+                    np.random.uniform(0.54, 0.58),
+                    0.075 * (self.num_blocks - 1) + np.random.uniform(-0.01, 0.01),
+                ]
             )
-            if np.linalg.norm(tower_xy - self.initial_gripper_xpos[:2]) >= 0.1:
-                break
+        else:
+            while True:
+                tower_xy = self.initial_gripper_xpos[:2] + np.random.uniform(
+                    -self.obj_range, self.obj_range, size=2
+                )
+                if np.linalg.norm(tower_xy - self.initial_gripper_xpos[:2]) >= 0.1:
+                    break
 
         for level, block_id in enumerate(tower_order):
             obj_name = self.object_names[block_id]

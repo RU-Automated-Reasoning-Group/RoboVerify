@@ -818,7 +818,7 @@ def make_roboverify_unstack_env(
     num_blocks: int = 4,
     render_mode: str = "rgb_array",
 ) -> GymToGymnasium:
-    """Create the RoboVerifyUnstack env for unstack demo rollouts and MCMC eval."""
+    """Create the standard right-to-left Unstack env for rollouts and MCMC eval."""
     return GymToGymnasium(
         FetchPickAndPlaceConstruction(
             name=f"roboverify_unstack_{num_blocks}",

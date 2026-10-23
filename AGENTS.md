@@ -56,6 +56,10 @@ Read [README.md](README.md#project-status) for current project status and
 reasoning and remaining actions. Collection and supplied-program verification
 are implemented; full synthesis acceptance is resolved. Stack reset bounds initial
 blocks to 0.70 m XY from the robot base.
+Unstack has one production reset: the lateral layout starts its tower at
+base-relative X in [0.54, 0.58] m and Y = 0.075*(N-1) +/- 0.01 m for right-to-left
+placement. The lateral experiment uses the shared factory. Reverse retains its
+separate tower reset; archived full states still restore exactly.
 Stack collection holds the initial gripper position for 50 steps before
 recording; the settled full snapshot becomes state zero. Synthesis, candidate
 verification, and standalone MCMC restore archived states without repeating

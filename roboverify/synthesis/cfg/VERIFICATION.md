@@ -580,7 +580,7 @@ controllers; it does not add extrema operands to the production DSL or verifier.
 Caching `X_m` at loop entry would describe a different program: the descent
 would target the old maximum X instead of the carried block's new maximum X.
 
-Each row below uses seeds 0–4 with ordinary Unstack resets, the unchanged
+Each row below uses seeds 0–4 with the pre-lateral Unstack reset, the unchanged
 50-step primitive budgets and 2 mm convergence tolerance. All 15 initial states
 satisfy the task precondition. Unlike Stack collection, the existing Unstack
 recording path performs no extra settling before state zero.
@@ -677,7 +677,7 @@ specified workspace, not symbolic or motion verification.
 
 The environment's existing Grid/Pyramid convention calls higher Y the right side
 and lower Y the left side; X controls forward distance from the robot base.
-The experiment starts the tower at:
+All Unstack entry points now start the tower at:
 
 ```text
 X = base_X + Uniform(0.54, 0.58) m
@@ -686,8 +686,17 @@ Y = base_Y + 0.075*(N-1) + Uniform(-0.01, 0.01) m
 
 This places the tower to the right and centers the intended final 15 cm-spaced
 row across the base's Y coordinate. It retains the current tower ordering and
-initial heights. The reset override applies only to the experiment's environment
-instance; ordinary Unstack/Reverse resets and archived states are unchanged.
+initial heights. Since 2026-10-23 this is the only production Unstack reset,
+including `make_roboverify_unstack_env()` and `make_roboverify_env("unstack")`.
+The experiment's `lateral_env` name aliases the production factory; there is no
+separate reset override or legacy Unstack layout option. Reverse retains its
+existing reset. Archived full simulator states still restore exactly.
+
+The 2026-10-23 consolidation recheck passed all 15 executions (five seeds each
+at 2–4 blocks) through the production factory, plus 25 reset, replay and collection
+regression tests. Each execution batch completed within its 55-second cap. Runs
+under `runs/unstack-lateral/` are `20261023-095818-702d11e-2-blocks`,
+`20261023-095914-702d11e-3-blocks`, and `20261023-095934-702d11e-4-blocks`.
 
 The guard and first three instructions are unchanged. The revised last three
 instructions are:

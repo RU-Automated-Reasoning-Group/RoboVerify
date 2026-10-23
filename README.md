@@ -95,6 +95,13 @@ verification. Stack is
 implemented with an adapter interface for future environments. See the
 [counterexample-learning experiment](roboverify/synthesis/experiment/invariant_learning/README.md).
 
+Unstack uses a single right-to-left environment: its initial tower is placed
+54–58 cm ahead of the robot base and on the higher-Y side, leaving room for
+successive 15 cm leftward placements. All Unstack factories use this layout;
+the [lateral experiment](roboverify/synthesis/cfg/VERIFICATION.md#right-to-left-unstack-revision)
+uses the same factory. Reverse retains its separate single-tower environment,
+whose goal is the reversed initial block order.
+
 A [Lean mechanization of WP soundness](roboverify/proofs/wp_soundness/README.md)
 checks the complete, separated-chain model, including guarded top-to-top
 relocation, quantified assertions and conditional program partial correctness.
