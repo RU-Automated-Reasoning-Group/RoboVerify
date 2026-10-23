@@ -67,5 +67,15 @@ def task_spec(task):
 
 
 def task_identity(task):
+    if task in ("grid", "pyramid"):
+        from synthesis.environment.goal_layout import GOAL_TOLERANCE
+
+        return dict(
+            task=task,
+            semantics="goal-occupancy-v1",
+            goal_tolerance=GOAL_TOLERANCE,
+            precondition="All goals empty; physical blocks pairwise Scattered; one block per goal available",
+            postcondition="Every goal occupied by a physical block",
+        )
     pre, post = task_spec(task)
     return {"task": task, "precondition": str(pre), "postcondition": str(post)}

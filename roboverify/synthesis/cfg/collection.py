@@ -12,6 +12,12 @@ import numpy as np
 from synthesis.api.control import get_move_action
 from synthesis.cfg.demo_validation import validate_demonstrations
 from synthesis.cfg.demos import DemoSegment, DemoTrace
+from synthesis.cfg.goal_collection import (
+    GOAL_TASKS,
+    environment_configuration,
+    make_goal_env,
+    validate_goal_trace,
+)
 from synthesis.cfg.reset import (
     Recording,
     collect_recording,
@@ -162,10 +168,11 @@ def record_execution(
     video_path=None,
     render=False,
     guard_choices=None,
+    environment_config=None,
 ):
-    """Record a program from a settled Stack reset or an exact saved snapshot.
+    """Record a program from its task reset or an exact saved snapshot.
 
-    Fresh Stack collection holds the reset gripper position for 50 steps before
+    Fresh Stack/Grid/Pyramid collection holds the gripper for 50 steps before
     recording. A supplied snapshot is already the requested start: never reset
     or settle it again. Settling is outside demo actions, events, and video.
     Optional guard_choices replay an enabled binding prefix for counterexamples;
@@ -218,11 +225,17 @@ def record_execution(
             set_np_seed(seed)
             env = (
                 env_factory
-                or (lambda: make_roboverify_env(task, num_blocks=num_blocks))
+                or (
+                    lambda: (
+                        make_goal_env(task, environment_config or {})
+                        if task in GOAL_TASKS
+                        else make_roboverify_env(task, num_blocks=num_blocks)
+                    )
+                )
             )()
             if initial_snapshot is None:
                 first = env.reset()[0]
-                if task == "stack":
+                if task in ("stack", *GOAL_TASKS):
                     target = first[:3].copy()
                     inner = inner_env(env)
                     for _ in range(STACK_SETTLING_STEPS):
@@ -231,6 +244,13 @@ def record_execution(
                         first = inner.flatten_observation(inner._get_obs())
             else:
                 first = restore(env, initial_snapshot)
+            if task in GOAL_TASKS:
+                inner = inner_env(env)
+                if inner.num_blocks != num_blocks:
+                    raise ValueError(
+                        "Goal environment block count does not match the collection"
+                    )
+                metadata["environment"] = environment_configuration(inner)
             inner_env(env).symbolic_name_to_box_id.update(definition.initial_bindings)
             collect_recording(
                 definition.program,
@@ -286,11 +306,14 @@ def validate_trace(trace):
             reason=f"Controller step limit at {event['path']}: {event['control']}",
         )
         return False
-    pre, post = task_spec(trace.task)
-    segment = DemoSegment(
-        0, 0, len(trace.states) - 1, trace, trace.metadata["initial_bindings"]
-    )
-    result = validate_demonstrations([segment], pre, post)
+    if trace.task in GOAL_TASKS:
+        result = validate_goal_trace(trace)
+    else:
+        pre, post = task_spec(trace.task)
+        segment = DemoSegment(
+            0, 0, len(trace.states) - 1, trace, trace.metadata["initial_bindings"]
+        )
+        result = validate_demonstrations([segment], pre, post)
     trace.metadata["validation"] = result.as_dict()
     trace.metadata["status"] = "valid" if result else "invalid"
     if not result:

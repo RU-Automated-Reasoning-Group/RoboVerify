@@ -70,10 +70,12 @@ contracts and verification assumptions. See the
 [workspace investigation](roboverify/synthesis/experiment/TOWER-WORKSPACE.md).
 Grid and Pyramid support goal-only pointer traversal and execution of the shared
 reference program. Pyramid takes `bottom_row_blocks=k` and creates k,...,1 layers;
-Grid takes rows/columns. Run `synthesis.entry.execute_goal_program` for execution
-and optional video. Goal occupancy is independent of block identity. Goal-aware
-synthesis, collection archives and verification remain outside the supported
-pipeline; see [discrepancy 40](PAPER-DISCREPANCIES.md#40-grid-and-pyramid-execution-and-verification-have-separate-support).
+Grid takes rows/columns. `collect_demos --task grid|pyramid` defaults to the
+provided groundtruth, settles for 50 steps, and saves full-state archives with
+goal topology, cursor bindings and nested-loop events. `execute_goal_program`
+remains the execution-only entry point. Goal occupancy is independent of block
+identity. Goal-aware synthesis and verification remain unsupported; see
+[discrepancy 40](PAPER-DISCREPANCIES.md#40-grid-and-pyramid-execution-and-verification-have-separate-support).
 Stack collection holds the initial gripper position for 50 steps before
 recording; the settled full snapshot becomes state zero. Synthesis, candidate
 verification, and standalone MCMC restore archived states without repeating
@@ -357,10 +359,15 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
 - **`synthesis/entry/`** — runnable pipelines.
   `collect_demos.py` loads `--program module:factory` or `path.py:factory`, runs
   distinct seeds, validates pre/post transitions, and writes current archives to
-  `demos/<task>/<blocks>-blocks-<count>-trajectories/` for Stack and Reverse.
+  `demos/<task>/<blocks>-blocks-<count>-trajectories/` for Stack and Reverse;
+  Grid/Pyramid directory names also include layout dimensions. Goal tasks default
+  to `synthesis.examples.grid:build_program` / `synthesis.examples.pyramid:build_program`;
+  `--grid-rows`, `--grid-cols` and `--bottom-row-blocks` determine their block counts.
   Optional MP4s run at 20 FPS. Reverse uses `synthesis.examples.reverse:build_program`;
   its validation compares current ON* with transposed frozen entry ON*.
-  It requires primitive DSL programs; PickPlace and nested loops are rejected.
+  It requires primitive DSL programs; PickPlace is rejected. The collection loader
+  opts into nested goal programs; synthesis/verification loading keeps that mode
+  disabled. `cfg.goal_collection` validates real goal occupancy without proof VCs.
   `synthesize_cfg.py` requires `--demos`. `--mode full` searches first;
   `--mode verify --program ...` starts with the matching supplied program.
   Both execute the actual candidate for inference, then perform symbolic and
@@ -472,6 +479,10 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
 
   `recordings.py` owns the current full-state NPZ format, `collection.py` executes
   bounded recorded programs, and `program_source.py` loads/fingerprints factories.
+  Goal recordings extend version 2 with a per-trace immutable layout and per-state
+  cursor bindings; tower archives remain compatible. Snapshot and action replay
+  restore goal cursors; event cursor bindings describe logical changes between
+  actions. Goal traces are explicitly rejected by the block-only inference adapter.
   Fresh Stack collection holds the initial gripper position for 50 steps before
   recording. Supplied snapshots bypass reset and settling; all recorded indices,
   frozen entry geometry, and video start at the saved settled state. Standalone

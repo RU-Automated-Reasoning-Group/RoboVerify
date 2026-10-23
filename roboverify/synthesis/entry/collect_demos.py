@@ -1,6 +1,6 @@
-"""Collect Stack or Reverse DSL demonstrations, with optional 20 FPS videos.
+"""Collect Stack, Reverse, Grid or Pyramid DSL demonstrations, with optional videos.
 
-Stack holds its initial gripper position for 50 settling steps; Reverse records
+Stack/Grid/Pyramid hold the initial gripper position for 50 settling steps; Reverse records
 the lateral tower reset directly.
 """
 
@@ -9,6 +9,11 @@ import json
 from pathlib import Path
 
 from synthesis.cfg.collection import VideoRecorder, record_execution, validate_trace
+from synthesis.cfg.goal_collection import (
+    GOAL_TASKS,
+    PROVIDED_PROGRAMS,
+    resolve_goal_configuration,
+)
 from synthesis.cfg.program_source import load_program
 from synthesis.cfg.recordings import save_traces
 from synthesis.cfg.tasks import task_identity
@@ -49,7 +54,16 @@ def output_directory(args, count):
         path = Path(args.output_dir)
         path.mkdir(parents=True, exist_ok=False)
         return path
-    base = Path("demos") / args.task / f"{args.num_blocks}-blocks-{count}-trajectories"
+    layout = ""
+    if args.task == "grid":
+        layout = f"{args.grid_rows}x{args.grid_cols}-"
+    elif args.task == "pyramid":
+        layout = f"{args.bottom_row_blocks}-bottom-row-"
+    base = (
+        Path("demos")
+        / args.task
+        / f"{layout}{args.num_blocks}-blocks-{count}-trajectories"
+    )
     index = 1
     while True:
         path = base if index == 1 else base.with_name(base.name + f"-{index}")
@@ -63,10 +77,24 @@ def output_directory(args, count):
 def build_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--program", required=True, help="module:factory or path/to/program.py:factory"
+        "--program",
+        help="module:factory or path/to/program.py:factory; defaults to the provided Grid/Pyramid groundtruth",
     )
-    parser.add_argument("--task", choices=["stack", "reverse"], default="stack")
-    parser.add_argument("--num-blocks", type=int, default=3)
+    parser.add_argument(
+        "--task", choices=["stack", "reverse", *GOAL_TASKS], default="stack"
+    )
+    parser.add_argument(
+        "--num-blocks",
+        type=int,
+        help="Defaults to 3 for tower tasks; derived from the goal layout otherwise",
+    )
+    parser.add_argument("--grid-rows", type=int, help="Grid rows (default 3)")
+    parser.add_argument("--grid-cols", type=int, help="Grid columns (default 2)")
+    parser.add_argument(
+        "--bottom-row-blocks",
+        type=int,
+        help="Pyramid bottom-row width (default 3); creates k+(k-1)+...+1 blocks",
+    )
     parser.add_argument(
         "--num-trajectories",
         type=int,
@@ -102,18 +130,42 @@ def main(argv=None):
 def collect(args, parser):
     try:
         seeds = resolve_seeds(args)
+        goal_task = args.task in GOAL_TASKS
+        environment_config = None
+        if goal_task:
+            args.num_blocks, environment_config = resolve_goal_configuration(
+                args.task,
+                grid_rows=args.grid_rows,
+                grid_cols=args.grid_cols,
+                bottom_row_blocks=args.bottom_row_blocks,
+                num_blocks=args.num_blocks,
+            )
+            for name, value in environment_config.items():
+                setattr(args, name, value)
+            args.program = args.program or PROVIDED_PROGRAMS[args.task]
+        else:
+            if any(
+                value is not None
+                for value in (args.grid_rows, args.grid_cols, args.bottom_row_blocks)
+            ):
+                raise ValueError("Goal layout options require --task grid or pyramid")
+            args.num_blocks = 3 if args.num_blocks is None else args.num_blocks
+            if not args.program:
+                raise ValueError("--program is required for Stack and Reverse")
         if (
-            args.num_blocks < 2
+            args.num_blocks < (1 if goal_task else 2)
             or args.max_loop_iterations < 1
             or not 0 < args.trajectory_timeout_seconds < float("inf")
         ):
             raise ValueError(
-                "Block count must be >=2 and execution budgets must be positive and finite"
+                "Invalid block count; execution budgets must be positive and finite"
             )
         if args.save_video:
             VideoRecorder.check_available()
         context = HighLevelContext(mode="declare", use_tbl=args.task == "reverse")
-        reference = load_program(args.program, context, args.num_blocks)
+        reference = load_program(
+            args.program, context, args.num_blocks, allow_goal_program=goal_task
+        )
         output = output_directory(args, len(seeds))
     except (ValueError, FileExistsError, ImportError, AttributeError, TypeError) as exc:
         parser.error(str(exc))
@@ -126,11 +178,15 @@ def collect(args, parser):
         trajectories=[],
         status="collecting",
     )
+    if environment_config is not None:
+        report["environment"] = environment_config
     accepted = []
     for seed in seeds:
         # Rebuild for every seed; reject factories that change the executable.
         try:
-            definition = load_program(args.program, context, args.num_blocks)
+            definition = load_program(
+                args.program, context, args.num_blocks, allow_goal_program=goal_task
+            )
             if definition.metadata["fingerprint"] != reference.metadata["fingerprint"]:
                 raise ValueError("Program factory changed between seeds")
             trace = record_execution(
@@ -146,6 +202,7 @@ def collect(args, parser):
                     else None
                 ),
                 render=args.render,
+                environment_config=environment_config,
             )
         except Exception as exc:
             from synthesis.cfg.demos import DemoTrace

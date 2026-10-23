@@ -793,7 +793,7 @@ contracts to a verifier remains open. See the
 
 ## 40. Grid and Pyramid execution and verification have separate support
 
-**Environment/runtime gaps addressed; synthesis and verification deferred.**
+**Environment, runtime and collection gaps addressed; synthesis and verification deferred.**
 The 2026-10-23 review compared Fig. 10, Appendix B/Table 8 and Figs. 17–18 in
 [POPL2027.pdf](POPL2027.pdf) with the implementation. The user clarified that
 only goals have traversal pointers, then scoped implementation to environments
@@ -893,11 +893,44 @@ Recorded seed-2 executions passed for default Grid and the ten-block Pyramid:
 - [Grid video](roboverify/runs/goal-execution/20261023-121327-54185cf-grid-seed2/artifacts/execution.mp4)
 - [4+3+2+1 Pyramid video](roboverify/runs/goal-execution/20261023-121208-54185cf-pyramid-seed2/artifacts/execution.mp4)
 
+**Groundtruth collection added at the user's request.** The shared
+`collect_demos` entry point now supports Grid/Pyramid and selects their provided
+factories by default. Layout options determine block counts. The loader opts into
+nested goal programs only for collection, retaining the synthesis/verification
+restriction. Goal fingerprints include cursor operations, Z3 guards, goal-center
+reference semantics and occupancy tolerance. Existing tower fingerprints remain
+unchanged.
+
+Archives extend the current version-2 format with a per-trace immutable goal
+layout and per-snapshot goal bindings. Nested events retain cursor bindings,
+invocation IDs and frozen entry indices. Snapshot restoration and action replay
+restore both sorts of bindings, including logical event changes between actions;
+wrong row layouts fail explicitly. The numeric validator checks scattered/empty
+entry conditions, converged primitives, actual released-payload occupancy,
+preservation of previously occupied goals, and final coverage. Release's operand
+is a height reference and is not treated as a placement-XY specification.
+Existing tower archives remain readable. The block-only inference adapter rejects
+goal archives explicitly.
+
+All 15 requested batch demonstrations passed on seeds 0–4, with videos:
+
+- `demos/grid/3x2-6-blocks-5-trajectories/`
+- `demos/pyramid/3-bottom-row-6-blocks-5-trajectories/`
+- `demos/pyramid/4-bottom-row-10-blocks-5-trajectories/`
+
+Maximum final goal errors were 9.57, 8.51 and 10.16 mm respectively; no primitive
+used more than 21 of its 50 steps. The requested 3×3 Grid also passed on seed 0:
+nine transfers, 54 converged primitives, at most 9.05 mm final goal error and
+18 primitive steps. Its [video](roboverify/demos/grid/3x3-9-blocks-1-trajectories/videos/seed_0000.mp4)
+and `demonstrations.npz` are in `demos/grid/3x3-9-blocks-1-trajectories/`.
+All 77 focused collection/replay, runtime/controller, task and existing inference
+tests passed. See the [collection commands and archive contract](roboverify/synthesis/inference_lib/README.md#collect-grid-and-pyramid-demonstrations).
+
 **Deferred scope:** `entry/verify_2d_with_learned_invariant.py` remains a separate
 symbolic mark-all example using synthetic states. It neither selects blocks nor
-certifies the executable above. The collector, CFG loader, synthesis predicate
-language, partition learner inputs, nested quotient recovery and motion
-contracts have not gained goal-task integration. In particular, Pyramid support
+certifies the executable above. The synthesis predicate language, partition
+learner inputs, nested quotient recovery and motion contracts have not gained
+goal-task integration. In particular, Pyramid support
 across two lower blocks is not modeled by the single-column tower contracts.
 The canonical goal diagram still draws vertical links in every column, unlike
 the row-head-only nested axioms; this illustration mismatch is unresolved.

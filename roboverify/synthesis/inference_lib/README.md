@@ -27,8 +27,9 @@ and Release primitives. Its transfer and placement waypoints use the base block
 `--program module:factory` or
 `--program path/to/program.py:factory` must return a `Program` from
 `factory(context, *, num_blocks)`. Named and numeric physical operands, Assign,
-Get, Skip, and flat While loops are supported. PickPlace and nested loops are
-rejected. Numeric operands get fixed aliases; their identities are not learned.
+Get, Skip, and flat While loops are supported for tower tasks. PickPlace is
+rejected. Grid/Pyramid collection additionally accepts nested goal loops as
+described below. Numeric operands get fixed aliases; their identities are not learned.
 
 Collection runs exactly N distinct seeds, defaulting to five seeds starting at
 zero. Use `--seed-start 10` for another consecutive range or `--seeds 3 8 12`
@@ -160,6 +161,66 @@ These results validate the tested simulator executions. The integrated
 synthesis CLI still exposes Stack and Unstack. The historical standalone Reverse
 verifier encodes a different task and is not a verifier for this program; see
 [discrepancy 39](../../../PAPER-DISCREPANCIES.md#39-the-historical-reverse-verifier-encodes-unstack-rather-than-reversal).
+
+## Collect Grid and Pyramid demonstrations
+
+The collector now uses the provided goal-traversal groundtruth by default for
+these tasks. Configure dimensions, rather than specifying a conflicting total
+block count:
+
+```bash
+uv run python -m synthesis.entry.collect_demos --task grid --grid-rows 3 --grid-cols 2 --save-video
+uv run python -m synthesis.entry.collect_demos --task pyramid --bottom-row-blocks 3 --save-video
+uv run python -m synthesis.entry.collect_demos --task pyramid --bottom-row-blocks 4 --save-video
+```
+
+These create five trajectories each unless `--num-trajectories` or `--seeds` is
+specified. Pyramid widths 3 and 4 create 3+2+1 and 4+3+2+1 layers respectively.
+For the requested nine-block Grid, use `--task grid --grid-rows 3 --grid-cols 3`.
+Explicit `--program synthesis.examples.grid:build_program` and
+`--program synthesis.examples.pyramid:build_program` select the same defaults;
+custom factories use the existing `module:factory` / `path.py:factory` interface.
+
+Both programs execute ordinary nested While loops, with r links within goal
+rows and d links between row heads. Only goals have traversal pointers. The
+collector holds the initial gripper for 50 settling steps, then records the
+actual primitive execution. Accepted demonstrations start with scattered blocks
+and empty goals, finish with every goal occupied, and have converged primitives.
+Release checks use the payload's actual goal occupancy and preserve earlier
+occupied goals; the Release reference itself supplies only retreat height.
+An incomplete or invalid seed prevents publication of the combined archive,
+while diagnostic archives retain completed and failed attempts.
+
+Default output directories include dimensions:
+
+```text
+demos/grid/3x2-6-blocks-5-trajectories/
+demos/pyramid/3-bottom-row-6-blocks-5-trajectories/
+demos/pyramid/4-bottom-row-10-blocks-5-trajectories/
+```
+
+Each contains `demonstrations.npz`, `collection.json` and optional `videos/`.
+Goal archives retain full simulator snapshots/actions, immutable goal coordinates
+and topology, and separate block/goal bindings. Events preserve outer/inner loop
+paths, invocation IDs, entry indices and logical cursor changes between actions.
+Exact snapshot restoration and action replay restore goal bindings, including
+event bindings supplied via `DemoSegment.goal_bindings`. Mismatched row layouts
+are rejected. These optional version-2 fields preserve existing tower archives.
+
+**2026-10-23 collection validation:** all 15 demonstrations passed on seeds 0–4
+for the three layouts above, with all videos saved. Maximum final goal errors
+were 9.57 mm (Grid), 8.51 mm (six-block Pyramid), and 10.16 mm (ten-block Pyramid),
+within the shared 20 mm occupancy tolerance. The requested 3×3 Grid also passed
+on seed 0, with nine transfers and at most 9.05 mm final goal error; its archive
+is `demos/grid/3x3-9-blocks-1-trajectories/demonstrations.npz`.
+The aggregate is `demos/goal-collection-validation.json`. All 77 focused
+collection, replay, runtime/controller, task and existing inference tests passed.
+
+The collector explicitly opts into goal programs in the shared loader. The
+synthesis/verification entry points retain their existing restrictions, and
+`DemoStore.from_archive` / `loop_store` reject goal traces rather than dropping
+their goal state. Collection support does not establish goal-aware synthesis,
+invariant learning or formal verification.
 
 ## Higher height tolerance
 

@@ -7,9 +7,11 @@ import numpy as np
 
 from synthesis.cfg.demos import DemoTrace
 from synthesis.cfg.reset import Snapshot
+from synthesis.environment.goal_layout import GoalLayout, decode_goal_bindings
 
 FORMAT = "roboverify-demonstrations"
 VERSION = 2
+# Goal-only fields extend this format; existing tower archives need no migration.
 
 
 def _json(value):
@@ -41,6 +43,21 @@ def check_trace(trace):
             raise ValueError("Event points outside the recording")
         if "entry_index" in event and not 0 <= event["entry_index"] <= event["index"]:
             raise ValueError("Invalid frozen loop-entry index")
+    layout = trace.snapshots[0].goal_layout
+    if trace.task in ("grid", "pyramid") and layout is None:
+        raise ValueError(
+            "Goal demonstrations require a goal layout and cursor bindings"
+        )
+    for snapshot in trace.snapshots:
+        if snapshot.goal_layout != layout:
+            raise ValueError("Goal layout must remain fixed throughout a recording")
+        if layout is not None:
+            decode_goal_bindings(snapshot.goal_bindings, layout)
+    if layout is not None:
+        if len(layout.goals) != trace.num_blocks:
+            raise ValueError("Goal and physical block counts must match")
+        for event in trace.events:
+            decode_goal_bindings(event.get("goal_bindings"), layout)
 
 
 def save_traces(path, traces):
@@ -71,6 +88,11 @@ def save_traces(path, traces):
                 metadata=trace.metadata,
             )
         )
+        if trace.snapshots[0].goal_layout is not None:
+            metadata[-1].update(
+                goal_layout=trace.snapshots[0].goal_layout.as_dict(),
+                goal_bindings=[s.goal_bindings for s in trace.snapshots],
+            )
     arrays["metadata"] = np.asarray(
         json.dumps(
             dict(format=FORMAT, version=VERSION, traces=metadata),
@@ -104,6 +126,11 @@ def load_traces(path, *, require_valid=False):
             traces = []
             for i, row in enumerate(meta["traces"]):
                 key = f"d{i}"
+                layout = (
+                    GoalLayout.from_dict(row["goal_layout"])
+                    if "goal_layout" in row
+                    else None
+                )
                 # NPZ indexing decompresses the entire member. Read each array
                 # once per trajectory rather than once per observation.
                 snapshot_arrays = {
@@ -117,6 +144,8 @@ def load_traces(path, *, require_valid=False):
                             for name, values in snapshot_arrays.items()
                         },
                         row["bindings"][t],
+                        layout,
+                        row["goal_bindings"][t] if layout is not None else None,
                     )
                     for t, gt in enumerate(data[key + "_gt"])
                 )
@@ -142,7 +171,7 @@ def load_traces(path, *, require_valid=False):
             if not traces:
                 raise ValueError("Empty demonstration archive")
             return traces
-    except (KeyError, TypeError, AttributeError) as exc:
+    except (KeyError, TypeError, AttributeError, IndexError) as exc:
         raise ValueError(
             "Invalid demonstration archive; recollect with synthesis.entry.collect_demos"
         ) from exc
@@ -158,6 +187,10 @@ def loop_store(traces, *, loop_id=None, names=None):
 
     store = DemoStore()
     for trace in traces:
+        if trace.task in ("grid", "pyramid"):
+            raise ValueError(
+                "Goal demonstration collection is supported; goal invariant inference is not yet supported"
+            )
         for event in trace.events:
             if event["kind"] not in ("loop_head", "loop_exit") or (
                 loop_id is not None and event["path"] != loop_id

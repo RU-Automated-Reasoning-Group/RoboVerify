@@ -126,9 +126,12 @@ correspondence obligations; this does not change the verification status above.
 
 Grid and Pyramid execute the shared reference program using nested loops over
 goal-only links. Pyramid accepts `bottom_row_blocks=k` for k+(k−1)+...+1 blocks;
-Grid accepts row/column dimensions. `synthesis.entry.execute_goal_program`
-validates placements and optionally saves video. Goal-aware synthesis and
-verification remain separate work. See the commands and execution evidence in
+Grid accepts row/column dimensions. `collect_demos --task grid|pyramid` uses the
+provided groundtruth by default and saves full-state archives with goal topology,
+cursor bindings and nested-loop events; see the
+[collection guide](roboverify/synthesis/inference_lib/README.md#collect-grid-and-pyramid-demonstrations).
+Goal-aware synthesis and verification remain separate work. Execution and
+collection evidence is recorded in
 [discrepancy 40](PAPER-DISCREPANCIES.md#40-grid-and-pyramid-execution-and-verification-have-separate-support).
 
 The supported scope is structured chains and flat loops for the tower tasks;

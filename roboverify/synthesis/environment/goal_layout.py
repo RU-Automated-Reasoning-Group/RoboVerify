@@ -6,6 +6,7 @@ from numbers import Integral
 import numpy as np
 
 GOAL_TOLERANCE = 0.02
+GOAL_REFERENCE_MODE = "goal-center-xyz-v1"
 
 
 def positive_size(value, name):
@@ -34,6 +35,22 @@ class Goal:
 class GoalLayout:
     goals: tuple[Goal, ...]
     row_lengths: tuple[int, ...]
+
+    def as_dict(self):
+        return dict(
+            row_lengths=list(self.row_lengths),
+            positions=self.positions.tolist(),
+            head=self.head.index,
+            r=[None if g.r is None else g.r.index for g in self.goals],
+            d=[None if g.d is None else g.d.index for g in self.goals],
+        )
+
+    @classmethod
+    def from_dict(cls, value):
+        layout = cls.from_positions(value["positions"], value["row_lengths"])
+        if layout.as_dict() != value:
+            raise ValueError("Goal topology does not match its row layout")
+        return layout
 
     @classmethod
     def from_positions(cls, positions, row_lengths):
@@ -94,6 +111,31 @@ def goal_bindings(env):
     if not isinstance(mapping, dict):
         raise ValueError("Goal execution requires symbolic_name_to_goal")
     return mapping
+
+
+def encode_goal_bindings(mapping):
+    return {
+        name: None if value is None else value.index for name, value in mapping.items()
+    }
+
+
+def decode_goal_bindings(mapping, layout):
+    if (
+        not isinstance(mapping, dict)
+        or mapping.get("h0") != 0
+        or "null" not in mapping
+        or mapping["null"] is not None
+    ):
+        raise ValueError("Goal bindings require the fixed h0 and null constants")
+    result = {}
+    for name, index in mapping.items():
+        if not isinstance(name, str):
+            raise ValueError("Goal aliases must be names")
+        reference = None if index is None else GoalRef(index)
+        if reference is not None:
+            layout.get(reference)
+        result[name] = reference
+    return result
 
 
 def resolve_reference(env, name):
