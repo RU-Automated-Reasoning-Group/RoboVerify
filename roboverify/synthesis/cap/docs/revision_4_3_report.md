@@ -62,3 +62,17 @@ Pending.
   - This profile therefore measures the value of all program source in the request (latest and earlier) relative to `full`, with earlier failures still listed as one-line summaries.
   - It is not a test of the latest source alone. (Decided 2026-10-22.)
 - **`minimal`** keeps the always-on core: latest outcome, missing-field markers, scene metadata and DSL diagnostics. It adds the current source and uses history `none`.
+
+### 2.2 Seeded-branch validation (2026-10-22)
+
+End-to-end check of the Stage B path on spare capacity of GPU 0, with requests served by the 9B balancer. Artifacts: `runs/cap-revision43-validation/20261022-seeded-check` (excluded from all results).
+
+- **Design:** 6 round-0 failures from 9B cell `p1100` (two per method: four goal failures, one Move nonconvergence, one execution-budget exhaustion) × profiles `full`, `no_current_source`, `minimal` = 18 chains.
+- **Mechanics: passed.** All 18 chains completed and the audit reported no issues. Round 0 is identical across the branches of each seed. Item delivery and history mode match each profile:
+  - `full`: every applicable item, history `executed_programs` with the source registry;
+  - `no_current_source`: current source disabled, history `summaries`;
+  - `minimal`: current source only, history `none` (about 1.8 KB per feedback, against 2.9–24 KB for the other two).
+- **Outcomes:** 0 of 18 chains recovered.
+  - 12 chains used all four rounds.
+  - 6 stopped with `preparation_failure_no_rollout`: three responses hit the 32,768-token output cap, two raised SyntaxErrors, and one raised a KeyError. These stops occurred under all three profiles.
+  - With six seeds, this does not compare profiles.
