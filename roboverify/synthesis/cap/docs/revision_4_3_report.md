@@ -5,6 +5,7 @@
 - **Prompt factorial:** [plan](revision_4_3_prompt_ablation_plan.md). Full 2⁴ factorial over the four primitive prompt blocks; 50 trials per cell × 16 cells × 3 methods × 2 models = 4,800 trials.
 - **Feedback ablation:** [plan](revision_4_3_ablation_experiment_plan.md). Runs after the prompt study, with the selected prompt set fixed.
 - **Implementation under test:** [Revision 4.3 design and validation](revision_4_3_configurable_feedback_and_full_policy_history.md).
+- **Inference backend:** [Revision 4.3.1: inference backend optimization](revision_4_3_1_inference_backend_optimization.md) records serving, scheduling and failure-handling changes.
 
 ## 1. Prompt factorial
 
