@@ -32,6 +32,7 @@ from .revision43_prompt_experiment import (
     SWITCHES,
     HealthGate,
     configuration,
+    serving_record,
 )
 
 CLASSES = (
@@ -250,6 +251,7 @@ def create_stage_a(directory, *, model_name, flags, trials, max_workers=32, gpu=
         extra={
             "experiment": "revision43_feedback_stage_a",
             "model": model.model,
+            "serving": serving_record(model.model),
             "prompt_flags": flags,
             "max_rounds": 0,
             "snapshot_sha256": manifest["snapshot_sha256"],
@@ -502,6 +504,7 @@ def create_stage_b(
         extra={
             "experiment": "revision43_feedback_stage_b",
             "model": model.model,
+            "serving": serving_record(model.model),
             "seed_manifest": str(Path(seed_manifest).resolve()),
             "seed_manifest_sha256": file_sha256(seed_manifest),
             "prompt_flags": manifest["prompt_flags"],

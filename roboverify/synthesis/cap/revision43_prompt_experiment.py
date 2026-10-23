@@ -36,6 +36,11 @@ MODELS = {
         # The template defaults to xhigh, which exceeded 32k output tokens on
         # every smoke round 0; medium matches the OpenRouter reasoning lengths.
         "template": {"enable_thinking": True, "reasoning_effort": "medium"},
+        # Served with this vLLM logits processor from 2026-10-23 on (Revision
+        # 4.3.1, Section 10); earlier batches ran without it.
+        "logits_processors": [
+            "synthesis.cap.serving.think_close_guard:ThinkCloseGuard"
+        ],
     },
     "qwen3.5-9b": {
         # Local least-in-flight balancer; GPU 7 first, GPU 6 added after the 27B run.
@@ -125,6 +130,19 @@ class HealthGate:
 def health_gate(model_name):
     url = f"http://127.0.0.1:{MODELS[model_name]['port']}/v1/models"
     return lambda gate: HealthGate(gate, url)
+
+
+def serving_record(model_name):
+    server = MODELS[model_name]
+    return {
+        "engine": "vllm",
+        "endpoint": f"http://127.0.0.1:{server['port']}/v1",
+        "checkpoint": server["checkpoint"],
+        "revision": server["revision"],
+        "sampling": "checkpoint generation_config defaults",
+        "chat_template_kwargs": server["template"],
+        "logits_processors": server.get("logits_processors", []),
+    }
 
 
 def cell_name(flags):
