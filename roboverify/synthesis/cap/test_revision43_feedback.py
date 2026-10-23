@@ -22,6 +22,7 @@ from .revision43_feedback_experiment import (
     profile_settings,
     prompt_flags,
     sample,
+    scaled_quotas,
     select_seeds,
     stage_b_variants,
 )
@@ -396,6 +397,27 @@ class AuditTests(unittest.TestCase):
         self.assertEqual(mcnemar_exact(0, 0), 1.0)
         self.assertAlmostEqual(mcnemar_exact(0, 6), 2 / 64)
         self.assertEqual(mcnemar_exact(3, 3), 1.0)
+
+
+class ScaledQuotaTest(unittest.TestCase):
+    def test_scaled_quotas_keep_total_and_proportions(self):
+        self.assertEqual(scaled_quotas(50), QUOTAS)
+        self.assertEqual(sum(scaled_quotas(70).values()), 70)
+        self.assertEqual(scaled_quotas(70)["move_nonconvergence"], 21)
+        self.assertEqual(
+            scaled_quotas(3),
+            {
+                k: int(
+                    k
+                    in {
+                        "move_nonconvergence",
+                        "pick_nonconvergence",
+                        "release_nonconvergence",
+                    }
+                )
+                for k in QUOTAS
+            },
+        )
 
 
 class StageARequestLimitTest(unittest.TestCase):

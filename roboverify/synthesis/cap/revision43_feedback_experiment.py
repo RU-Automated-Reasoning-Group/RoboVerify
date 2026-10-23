@@ -52,6 +52,24 @@ QUOTAS = {
     "goal_failure": 4,
     "other_runtime": 4,
 }
+
+
+def scaled_quotas(total, base=QUOTAS):
+    """Scale the per-method class quotas to ``total`` seeds (largest remainder).
+
+    Ties go to the class listed first in ``base``, so the result is deterministic.
+    """
+    if total < 1:
+        raise ValueError("Seed total must be positive")
+    scale = total / sum(base.values())
+    exact = {k: v * scale for k, v in base.items()}
+    quotas = {k: math.floor(v) for k, v in exact.items()}
+    order = sorted(base, key=lambda k: -(exact[k] - quotas[k]))
+    for name in order[: total - sum(quotas.values())]:
+        quotas[name] += 1
+    return quotas
+
+
 ENRICHMENTS = ("target_derivation", "controller_phases", "action_context")
 SUPPORTING_EVENTS = 40
 EVIDENCE_GUARD = 32768
@@ -668,6 +686,12 @@ def main():
     s.add_argument("--model", choices=sorted(MODELS), required=True)
     s.add_argument("--prompt-flags", required=True)
     s.add_argument("--rng-seed", type=int, default=43)
+    s.add_argument(
+        "--seeds-per-method",
+        type=int,
+        default=sum(QUOTAS.values()),
+        help="class quotas are scaled proportionally",
+    )
 
     b = commands.add_parser("stage-b")
     b.add_argument("--directory", type=Path, required=True)
@@ -692,6 +716,7 @@ def main():
             args.source,
             model=args.model,
             flags=prompt_flags(args.prompt_flags),
+            quotas=scaled_quotas(args.seeds_per_method),
             rng_seed=args.rng_seed,
         )
         print(json.dumps(manifest["strata"], indent=2))
