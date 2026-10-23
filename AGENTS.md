@@ -68,12 +68,16 @@ CLI exposes Stack/Unstack/Reverse. Current Unstack and Reverse supplied programs
 now pass inference and unbounded symbolic verification through the shared pipeline,
 using all 60/75 states from 15 archived starts. Unstack observation-relative motion
 now uses independent extrema witnesses and instruction-entry gripper coordinates;
-all collision, release/placement, frame and predicate-effect checks pass under
-the existing supported-tower premises after strengthening the guard with
-`b_prime != b0`. A rerun with 120-second query limits resolves both geometric
-entry checks to SAT; all five remaining entry/preservation checks are now
-refuted. Concrete counterexamples distinguish insufficient entry premises from
+the strengthened `b_prime != b0` guard removes the singleton release failure.
+Unstack now omits the auxiliary exact-column invariant, removing both its checks
+and its assumptions at loop body/exit boundaries; Stack retains it. Concrete
+SAT scenes remain for arm clearance at entry, arm-clearance preservation and
+tower-height preservation. These distinguish insufficient entry premises from
 extra motions admitted by finite extrema witnesses; there is no full motion proof.
+Earlier passing transfer-body results used exact-column loop premises and must
+not be transferred to the weaker current configuration without rechecking.
+The recheck passes all 12 symbolic VCs but exhausts its 600-second motion budget;
+a shorter diagnostic leaves two collision checks and the Higher effect UNKNOWN.
 Reverse table-relative operands remain unsupported; the other four tasks are
 outside integrated proof support. See the
 [tower verification commands](roboverify/synthesis/cfg/VERIFICATION.md#provided-unstack-and-reverse-verification).

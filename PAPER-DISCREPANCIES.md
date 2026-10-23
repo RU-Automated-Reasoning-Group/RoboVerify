@@ -271,6 +271,15 @@ that the actual global-extrema execution collides. The program, controllers,
 premises and quantifier treatment were not changed for this diagnosis. See the
 [SAT scenes, timings and scope](roboverify/synthesis/cfg/VERIFICATION.md#unstack-motion-counterexamples-and-longer-timeouts).
 
+**Unstack column-invariant removal, 2026-10-23.** Exact XY column alignment was
+an auxiliary invariant inherited from the Stack proof, not the ordinary ON*
+interpretation or an Unstack task requirement. At the user's request, the
+integrated Unstack verifier now removes both its entry/preservation checks and
+its assumptions at fresh body/exit states. Stack retains them. The three other
+geometric counterexamples remain possible; removing an unnecessary invariant
+does not resolve the extrema abstraction or establish a full motion proof. See
+[the current configuration and results](roboverify/synthesis/cfg/VERIFICATION.md#unstack-without-exact-column-alignment).
+
 Figure 14's supplied invariant refers to an undefined b. The separately named
 `unstack_paper_base` interpretation substitutes b0, but the final checker finds
 an unbounded preservation countermodel consisting only of tbl with b0=tbl.

@@ -65,11 +65,21 @@ entry checks time out. The full result remains `motion_unverified` (107.3 s).
 See the [strengthened-guard results](roboverify/synthesis/cfg/VERIFICATION.md#strengthened-unstack-guard).
 
 Increasing the motion-query budget to 120 seconds resolved both UNKNOWN entry
-checks to SAT: the latest shared run has 12 valid symbolic checks and 29 valid /
+checks to SAT: that shared run has 12 valid symbolic checks and 29 valid /
 5 refuted motion checks (122.3 s total). Small explicit scenes satisfy each failed
 VC. Entry clearance and exact alignment exceed the initial premises; preservation
 counterexamples exploit unnamed objects omitted by the finite extrema candidates.
 See the [counterexamples and longer-timeout run](roboverify/synthesis/cfg/VERIFICATION.md#unstack-motion-counterexamples-and-longer-timeouts).
+
+Unstack now removes the auxiliary exact-column invariant, including both its
+checks and its assumptions at loop body/exit boundaries. Stack retains it.
+Concrete SAT scenes still refute entry arm clearance, arm-clearance preservation
+and tower-height preservation. Earlier passing body checks depended on the
+stronger premises; they do not establish a proof for this weaker configuration.
+The current rerun passes all 12 symbolic checks but exhausts its 600-second motion
+budget. A shorter diagnostic leaves two collision queries and the Higher-effect
+query UNKNOWN. Stack still passes all 12 symbolic and 40 motion checks.
+See the [current alignment policy and results](roboverify/synthesis/cfg/VERIFICATION.md#unstack-without-exact-column-alignment).
 
 After the extrema encoding changes, revision `4f734bf` passed the full Python
 regression suite: **475 tests across 68 modules**, with no failures, errors or

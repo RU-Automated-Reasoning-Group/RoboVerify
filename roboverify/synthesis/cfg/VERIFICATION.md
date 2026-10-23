@@ -797,6 +797,9 @@ the archive audit and two independent pipeline configurations also overlapped.
 
 ### Unstack motion counterexamples and longer timeouts
 
+The five-check result below predates the removal of Unstack's exact-column
+invariant; see [the current configuration](#unstack-without-exact-column-alignment).
+
 The two UNKNOWN entry checks above were rerun through the shared pipeline with
 `--motion-timeout-ms 120000` instead of 10000. Use the strengthened-guard command
 above with that substitution and `--run-name unstack-base-guard-motion-120s`;
@@ -877,6 +880,64 @@ explicit scene restrictions, and a SAT `-model.smt2` result. The one-off capture
 script stayed in `/tmp`; no diagnostic runner was added to the project. Existing
 archives still match the groundtruth fingerprint. Quantifier handling and the
 remaining proof-model changes remain deferred.
+
+### Unstack without exact-column alignment
+
+The integrated Unstack task now passes `exact_column_alignment=False` to
+`verify_cfg_motion`. This removes `column_alignment_entry` and
+`column_alignment_preserved`, **and** removes exact-column assumptions from fresh
+loop-body and exit states. Removing only the checks would leave an unjustified
+premise in the motion proof. Stack retains the API default (`True`). Ordinary
+geometric ON* still allows per-axis offsets below L/2; the separate tight input
+alignment premise is unchanged.
+
+The remaining known SAT obligations are `arm_clearance_entry`,
+`arm_clearance_preserved`, and `tower_height_preserved`. The numerical scenes in
+the preceding section still apply after dropping exact columns. In particular,
+the five-block arm-clearance scene moves the top block to the table; an unnamed
+remaining block has center Z=0.575, while the represented maximum is only 0.425.
+The encoded retreat is 0.575 instead of the true global-extrema retreat of 0.725,
+violating the required height of 0.600. This is an extra trace admitted by the
+extrema overapproximation, not a reproduced simulator failure.
+The actual `ReleaseByName("Z_m", target_z=0.15)` resolves `Z_m` over every
+physical block in the observation at instruction entry, then adds 0.15 to that
+block-center height. It does retract above the true global maximum; the lower
+retreat in this countermodel comes solely from the finite candidate abstraction.
+
+The three scene queries were reconstructed from the newly learned invariant in
+`runs/cfg/20261023-193438-a9a483d-unstack-without-exact-columns` and returned SAT
+in 0.205, 2.633 and 0.314 s respectively. Original quantified VCs, restricted
+scene queries and SAT models are under
+`runs/diagnostics/20261023-unstack-without-exact-columns-current/`.
+Finite scene restrictions are only diagnostic witness choices; their SAT results
+refute the original queries, but finite UNSAT could not establish validity.
+No diagnostic runner was added to the repository.
+
+The focused suite passed **23 tests in 30.7 s**, including a regression that
+finds offset tower models at both fresh loop boundaries when the option is off.
+Stack's shared pipeline retains all column checks and passed **12 symbolic and
+40 motion checks in 25.8 s** (`runs/cfg/20261023-193438-a9a483d-stack-column-policy-regression`).
+The full Python suite was not rerun for this scoped change.
+
+The Unstack shared run relearned from all 60 states and passed all 12 symbolic
+checks. Its motion stage did **not** finish within the requested 600-second wall
+budget with 120-second query limits. The Python alarm and external TERM did not
+end the native solver call promptly, so the process was explicitly killed;
+the wrapper returned 124. No complete motion report was saved. See the run's
+`budget-observation.json` for the external termination record; its stale logger
+status is not evidence of a live or successful run. To retry with a hard outer
+limit, use `timeout --kill-after=5s 610s` around the strengthened-guard supported
+command, with `--motion-timeout-ms 120000` and
+`--run-name unstack-without-exact-columns`.
+
+The separate 10-second-query diagnostic using the new learned invariant completed
+with 26 valid checks. Two collision queries (`collision_1_sym`, `collision_5_sym`)
+and `effect_Higher` returned UNKNOWN after removing the exact-column premise.
+The remaining three geometric queries have the concrete SAT scenes above,
+although their unrestricted solver calls did not resolve in that diagnostic
+(the entry query was captured without an unrestricted retry). Do not present
+these combined diagnostic observations as a completed shared-pipeline proof or
+promote UNKNOWN to SAT/UNSAT. No additional body SAT failure was established.
 
 ### Paper invariant controls
 
@@ -1389,8 +1450,9 @@ motion options. Table placements require `--table-surface-height`.
 The current execution tasks are Stack, Unstack, Reverse, Restack, Grid, Pyramid
 and Build3D; PartialStack has been removed. The integrated CLI accepts supplied
 Stack/Unstack/Reverse programs. Unstack/Reverse invariant learning and symbolic
-verification pass; their observation/table-relative motion encoding remains
-incomplete. Reverse search, Restack and goal-task proof integration, branch
+verification pass. Unstack observation-relative motion is encoded, but geometric
+loop obligations remain unproved; Reverse table-relative motion is unsupported.
+Reverse search, Restack and goal-task proof integration, branch
 synthesis, nested/starred quotient, total-termination proofs
 and controller refinement remain outside the supported pipeline scope. Existing
 execution code and passing demonstrations do not establish formal verification.
@@ -1407,10 +1469,14 @@ fixture. Missing premises can cause rejection of otherwise valid motion;
 failed/unknown checks are never silently accepted.
 
 With this flag, every loop also checks entry and preservation of the height
-consequences, empty-arm clearance (at least L/2 above every center), and exact XY
-alignment of ON*-related blocks. The latter two are checked loop invariants, not
-new input assumptions. In Stack, pairwise scattering establishes column alignment
-at entry and ideal root-aligned placement preserves it. A slightly offset placement
+consequences and empty-arm clearance (at least L/2 above every center). Exact XY
+alignment of ON*-related blocks is an additional optional invariant, controlled
+by `verify_cfg_motion(..., exact_column_alignment=True)`. The integrated Unstack
+task disables it: neither column checks nor column assumptions at loop body/exit
+boundaries remain. Stack retains it. These auxiliary invariants must be established
+and preserved before their loop-boundary assumptions justify an overall proof.
+In Stack, pairwise scattering establishes column alignment at entry and ideal
+root-aligned placement preserves it. A slightly offset placement
 can fail this check even if it satisfies the older L/4 bound. This matters for
 Scattered at its sharp 2L threshold. Noiseless proof does not certify nonzero error.
 

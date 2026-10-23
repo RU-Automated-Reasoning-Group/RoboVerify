@@ -352,6 +352,9 @@ def _run(args, logger):
             "timeout_ms": args.motion_timeout_ms,
             "table_surface_height": args.table_surface_height,
             "supported_tower_model": args.supported_towers,
+            # Unstack permits offset towers under the ordinary ON* geometry.
+            # Remove the auxiliary exact-column premise together with its checks.
+            "exact_column_alignment": args.task != "unstack",
         },
         max_refinements=args.refinements,
         language=Language(timeout_seconds=args.predicate_seconds),

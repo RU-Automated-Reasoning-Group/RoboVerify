@@ -122,10 +122,14 @@ witness is constrained by the instantiated axioms/invariants; finite instantiati
 alone is not a reason to call it spurious. Supplied geometric premises may still
 admit scenes outside the agreed supported-height model (discrepancy 16). The CFG
 verifier's opt-in `supported_tower_model=True` (`--supported-towers`) adds explicit
-height consequences and checks height, arm-clearance and exact-column loop
-invariants at entry and after the body. Exact columns and arm clearance are not
-assumed at program entry. Only consistency queries may use a finite SAT witness;
-safety queries stay unbounded. See the
+height consequences and checks height and arm-clearance loop invariants at entry
+and after the body. The API additionally checks and assumes exact columns when
+`exact_column_alignment=True` (the default). The integrated Unstack task sets this
+to `False`, removing both column checks and the corresponding assumptions at body
+and exit boundaries. Stack retains the exact-column invariant. Ordinary geometric
+ON* and the tight input alignment radius are unchanged. Exact columns and arm
+clearance are not assumed at program entry. Only consistency queries may use a
+finite SAT witness; safety queries stay unbounded. See the
 [Stack configuration](../cfg/VERIFICATION.md#provided-stack-verification). Each
 physical object's canonical name is given by `bindings`;
 multiple symbolic names may share a position and refer to the same object.
@@ -283,6 +287,7 @@ The current Unstack runtime also accepts observation-relative `Y_min`, `Z_m`
 and `gripper` coordinates. Their targets are fixed at instruction entry. They
 are fingerprinted execution features. Supplied-program verification now opts in
 for candidate execution, inference and symbolic checking. Ordinary synthesis
-loading rejects them; the motion encoding remains incomplete. Reverse's physical
-table-coordinate references are likewise not encoded. See the
+loading rejects them; motion encoding uses the independent extrema witnesses
+described above, but geometric loop obligations still prevent a complete proof.
+Reverse's physical table-coordinate references are not encoded. See the
 [project support matrix](../../../README.md#project-status).

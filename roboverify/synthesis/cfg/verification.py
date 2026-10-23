@@ -188,13 +188,16 @@ def verify_cfg_motion(
     initial_arm=None,
     table_surface_height=None,
     supported_tower_model=False,
+    exact_column_alignment=True,
     entry_conditions=None,
 ):
     """Thread geometry/arm/held state through blocks; fresh states at loop boundaries.
 
     Each loop body is checked from invariant + witnessed guard, and continuation
     starts from a fresh invariant + guard-false state. A failed/unknown premise or
-    unsupported primitive is never a successful proof.
+    unsupported primitive is never a successful proof. With supported towers,
+    exact_column_alignment controls both the auxiliary column invariant checks
+    and its loop-boundary assumptions; disabling it removes both.
     """
     from synthesis.verification_lib.tower_geometry import (
         arm_clearance,
@@ -248,7 +251,9 @@ def verify_cfg_motion(
         if supported_tower_model:
             assume_tower_geometry(p, table_surface_height)
             if clear_arm:
-                p.solver.add(arm_clearance(p), column_alignment(p))
+                p.solver.add(arm_clearance(p))
+                if exact_column_alignment:
+                    p.solver.add(column_alignment(p))
         p.root_context = RootContext(context, z3.And(*conditions), timeout_ms)
         assume_input_alignment(p, p.root_context.initial_roots(available))
         p.check("initial_consistency")
@@ -301,10 +306,11 @@ def verify_cfg_motion(
                     p.check(
                         "arm_clearance_entry", z3.Not(arm_clearance(p, fields=p.fields))
                     )
-                    p.check(
-                        "column_alignment_entry",
-                        z3.Not(column_alignment(p, fields=p.fields)),
-                    )
+                    if exact_column_alignment:
+                        p.check(
+                            "column_alignment_entry",
+                            z3.Not(column_alignment(p, fields=p.fields)),
+                        )
                     p.check(
                         "tower_height_entry",
                         z3.Not(tower_height_invariant(p, fields=p.fields)),
@@ -337,10 +343,11 @@ def verify_cfg_motion(
                         "arm_clearance_preserved",
                         z3.Not(arm_clearance(child, fields=child.fields)),
                     )
-                    child.check(
-                        "column_alignment_preserved",
-                        z3.Not(column_alignment(child, fields=child.fields)),
-                    )
+                    if exact_column_alignment:
+                        child.check(
+                            "column_alignment_preserved",
+                            z3.Not(column_alignment(child, fields=child.fields)),
+                        )
                     child.check(
                         "tower_height_preserved",
                         z3.Not(tower_height_invariant(child, fields=child.fields)),
