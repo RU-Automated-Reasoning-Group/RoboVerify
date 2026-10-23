@@ -64,7 +64,18 @@ def run(args, logger):
 
 
 def _run(args, logger):
-    context = HighLevelContext(use_tbl=args.task == "unstack")
+    invariant_factory = None
+    if getattr(args, "loop_invariant", None):
+        import importlib
+
+        module, separator, name = args.loop_invariant.rpartition(":")
+        if not separator or not name.isidentifier():
+            raise ValueError("Use --loop-invariant module:factory")
+        invariant_factory = getattr(importlib.import_module(module), name)
+    context = HighLevelContext(
+        use_tbl=args.task in ("unstack", "reverse"),
+        exists_top=args.task in ("unstack", "reverse"),
+    )
     traces = load_traces(args.demos, require_valid=True)
     if any(t.metadata.get("task_spec") != task_identity(args.task) for t in traces):
         raise ValueError(
@@ -108,9 +119,12 @@ def _run(args, logger):
         segments, pre, post, ("b0", "tbl") if context.use_tbl else ("b0",)
     )
     if args.mode == "verify":
-        if args.task != "stack":
-            raise ValueError("The supplied-program mode currently supports Stack")
-        definition = load_program(args.program, context, args.num_blocks)
+        definition = load_program(
+            args.program,
+            context,
+            args.num_blocks,
+            allow_observation_references=True,
+        )
         if any(
             t.metadata.get("fingerprint") != definition.metadata["fingerprint"]
             for t in traces
@@ -303,6 +317,8 @@ def _run(args, logger):
         context,
         quotient=quotient_fn,
         initial_candidate=args.mode == "verify",
+        verification_level=getattr(args, "verification_level", "both"),
+        fixed_invariants=invariant_factory is not None,
         prepare=lambda candidate, revision: prepare_candidate(
             candidate,
             context,
@@ -312,6 +328,7 @@ def _run(args, logger):
             timeout_seconds=args.trajectory_timeout_seconds,
             logger=logger,
             revision=revision,
+            invariant_factory=invariant_factory,
         ),
         demo_provider=provide_demos,
         repair_motion=repair,
@@ -343,7 +360,7 @@ def _run(args, logger):
     import json
 
     logger.write_artifact("cfg.json", json.dumps(describe_cfg(cfg), indent=2))
-    if result:
+    if result or result.status == "verified_symbolic":
         program = lower(cfg, context, physical=True)
         logger.write_artifact("program.txt", str(program))
     logger.finish(
@@ -356,12 +373,26 @@ def _run(args, logger):
         demonstration_checks=demo_checks,
         task=args.task,
     )
-    return 0 if result else 2
+    return 0 if result or result.status == "verified_symbolic" else 2
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--task", choices=("stack", "unstack"), default="stack")
+    parser.add_argument(
+        "--task", choices=("stack", "unstack", "reverse"), default="stack"
+    )
+    parser.add_argument(
+        "--verification-level", choices=("symbolic", "both"), default="both"
+    )
+    parser.add_argument(
+        "--loop-invariant",
+        help="Fixed invariant factory(context) for verification-only controls",
+    )
+    parser.add_argument(
+        "--wall-timeout-seconds",
+        type=float,
+        help="Total run budget; Unstack defaults to 60 seconds",
+    )
     parser.add_argument("--mode", choices=("full", "verify"), default="full")
     parser.add_argument("--program", help="DSL factory required by --mode verify")
     parser.add_argument(
@@ -440,6 +471,19 @@ def main(argv=None):
     )
     parser.add_argument("--smoke", action="store_true")
     args = parser.parse_args(argv)
+    if args.task == "reverse" and args.mode != "verify":
+        parser.error("Reverse currently supports supplied-program verification only")
+    if args.loop_invariant and args.mode != "verify":
+        parser.error("--loop-invariant requires --mode verify")
+    if args.task == "reverse" and args.invariant_relations is None:
+        args.invariant_relations = ["ON_star", "ON_star_zero", "equality"]
+    if args.wall_timeout_seconds is None and args.task == "unstack":
+        args.wall_timeout_seconds = 60
+    if (
+        args.wall_timeout_seconds is not None
+        and not 0 < args.wall_timeout_seconds < float("inf")
+    ):
+        parser.error("Wall-clock budget must be positive and finite")
     motion_noise_from_args(parser, args)
     if args.synthesis_approach == "id-first":
         args.quotient = True
@@ -470,7 +514,9 @@ def main(argv=None):
         parser.error("Invalid block, slot, or iteration budget")
 
     def deadline(signum, frame):
-        raise TimeoutError("Unstack end-to-end 60-second budget exhausted")
+        raise TimeoutError(
+            f"End-to-end {args.wall_timeout_seconds:g}-second budget exhausted"
+        )
 
     previous = signal.signal(signal.SIGALRM, deadline)
     with RunLogger(
@@ -480,8 +526,8 @@ def main(argv=None):
         slug=args.run_name or f"{args.task}-{args.mode}",
     ) as logger:
         logger.progress_line(f"CFG run: {logger.run_dir}")
-        if args.task == "unstack":
-            signal.alarm(60)
+        if args.wall_timeout_seconds is not None:
+            signal.setitimer(signal.ITIMER_REAL, args.wall_timeout_seconds)
         try:
             code = run(args, logger)
         except TimeoutError as exc:
@@ -492,7 +538,7 @@ def main(argv=None):
             logger.finish("failed", reason=str(exc))
             raise
         finally:
-            signal.alarm(0)
+            signal.setitimer(signal.ITIMER_REAL, 0)
             signal.signal(signal.SIGALRM, previous)
     print(f"Read: uv run python -m synthesis.experiment.report --run {logger.run_dir}")
     return code

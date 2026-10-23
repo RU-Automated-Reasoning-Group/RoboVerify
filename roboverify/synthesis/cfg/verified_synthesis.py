@@ -5,7 +5,6 @@ from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 
 import z3
-
 from synthesis.api.instructions import While
 from synthesis.cfg.demo_validation import validate_demonstrations
 from synthesis.cfg.graph import RelationalCFG
@@ -161,6 +160,8 @@ def verified_synthesis(
     logger=None,
     initial_candidate=False,
     prepare=None,
+    verification_level="both",
+    fixed_invariants=False,
 ):
     """Both modes share symbolic feedback and motion repair on the same CFG.
 
@@ -169,6 +170,9 @@ def verified_synthesis(
     """
     from synthesis.cfg.candidate_traces import CandidateTraceError
     from synthesis.cfg.lower import lower_with_locations
+
+    if verification_level not in ("symbolic", "both"):
+        raise ValueError("verification_level must be symbolic or both")
 
     history, stores, pen = [], {}, PenStore()
     options = dict(motion_options or {})
@@ -271,6 +275,12 @@ def verified_synthesis(
             if result.symbolic:
                 break
             failure = result.symbolic.failure
+            if fixed_invariants:
+                result.status = "supplied_invariant_" + failure.status
+                result.reason = (
+                    f"Supplied invariant failed {failure.vc.kind}: {failure.reason}"
+                )
+                return result
             if failure.status != "invalid":
                 result.status, result.reason = failure.status, failure.reason
                 return result
@@ -396,6 +406,10 @@ def verified_synthesis(
                     candidate.sexpr(),
                 )
             event("invariant_refined", iteration=iteration, loop_id=failure.vc.loop_id)
+
+        if verification_level == "symbolic":
+            result.status = "verified_symbolic"
+            return result
 
         signature = str(lower(cfg, context))
         result.motion = verify_cfg_motion(cfg, context, **options)

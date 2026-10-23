@@ -8,7 +8,6 @@ Unsupported summary shapes remain explicit failures.
 from copy import deepcopy
 
 import z3
-
 from synthesis.api.instructions import (
     Assign,
     Get,
@@ -26,6 +25,7 @@ from synthesis.cfg.bindings import require_closed
 from synthesis.cfg.lower import lower, lower_region
 from synthesis.cfg.region import BlockRegion, LoopRegion
 from synthesis.cfg.scope import scope
+from synthesis.environment.motion_reference import OBSERVATION_REFERENCE_NAMES
 from synthesis.predicates.term import to_z3
 from synthesis.verification_lib.lowlevel_verification_lib import LowLevelContext
 from synthesis.verification_lib.motion_verification import (
@@ -92,8 +92,8 @@ def propose_summaries(cfg, context):
                 held = i.grab_box_name
                 last_move = None
             elif isinstance(i, ReleaseByName):
-                if held is None or held != i.release_box_name:
-                    raise ValueError("Release must refer to the currently held object")
+                if held is None:
+                    raise ValueError("Release requires a currently held object")
                 if post.op in ("Higher", "Scattered"):
                     if any(arg.op != "ref" for arg in post.args) or held not in (
                         post.args[0].value,
@@ -115,7 +115,9 @@ def propose_summaries(cfg, context):
                     # This is only a proposed abstraction. The motion stage must
                     # prove all its effects even when the edge is a global goal.
                     target = last_move.target_box_name_z
-                    if target == held and context.use_tbl:
+                    if context.use_tbl and (
+                        target == held or last_move.target_offset[2].numeric_val() == 0
+                    ):
                         target = "tbl"
                 else:
                     raise ValueError(
@@ -164,7 +166,10 @@ def _all_names(cfg):
                     names.update((inst.left, inst.right))
                 else:
                     names.update(
-                        o["val"] for o in inst.get_operand() if o["type"] == "BoxName"
+                        o["val"]
+                        for o in inst.get_operand()
+                        if o["type"] == "BoxName"
+                        and o["val"] not in OBSERVATION_REFERENCE_NAMES
                     )
     return names
 
@@ -490,7 +495,13 @@ def symbolic_problem(cfg, original_context, size=None):
     context = HighLevelContext(
         mode="declare" if size is None else "enum",
         num_blocks=size,
+        enum_names=(
+            [f"o{i}" for i in range(size)] + ["table_object"]
+            if size is not None and original_context.use_tbl
+            else None
+        ),
         use_tbl=original_context.use_tbl,
+        exists_top=original_context.exists_top,
         sort_name="Box" if size is None else "CFGBox_" + uuid4().hex,
     )
     clone = deepcopy(cfg)

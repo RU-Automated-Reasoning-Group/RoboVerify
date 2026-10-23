@@ -12,6 +12,7 @@ from synthesis.api.instructions import (
 )
 from synthesis.api.program import Program
 from synthesis.cfg.physical import name_operands
+from synthesis.environment.motion_reference import OBSERVATION_REFERENCE_NAMES
 from synthesis.predicates.term import atom, boolean, free_names, negate, ref, to_z3
 from z3.z3util import get_vars
 
@@ -35,7 +36,12 @@ def require_closed(instructions, available):
             operands = instruction.get_operand()
             if any(o["type"] == "Box" for o in operands):
                 raise ValueError("Numeric object IDs must be closed before export")
-            used = {o["val"] for o in operands if o["type"] == "BoxName"}
+            used = {
+                o["val"]
+                for o in operands
+                if o["type"] == "BoxName"
+                and o["val"] not in OBSERVATION_REFERENCE_NAMES
+            }
             defined = set()
         missing = used - names
         if missing:

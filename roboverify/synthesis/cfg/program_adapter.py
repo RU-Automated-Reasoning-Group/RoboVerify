@@ -95,6 +95,12 @@ def program_to_cfg(definition, segments, pre, post):
     import itertools
 
     alias_facts = []
+    if "tbl" in definition.initial_bindings:
+        alias_facts.extend(
+            negate(atom("eq", ref(name), ref("tbl")))
+            for name, value in definition.initial_bindings.items()
+            if value != "tbl"
+        )
     for (left, left_id), (right, right_id) in itertools.combinations(
         definition.initial_bindings.items(), 2
     ):

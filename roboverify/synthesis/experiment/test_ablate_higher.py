@@ -40,7 +40,7 @@ class HigherAblationTests(unittest.TestCase):
             )
             self.assertTrue(state_holds(self.invariant, state))
 
-    def test_second_tower_exposes_attachment_preservation_mismatch(self):
+    def test_second_tower_relocation_now_agrees_with_physical_detachment(self):
         # This is the three-clause invariant observed in the no-Higher run:
         # clear top, root, and separation. It omits the single-tower clause.
         weak = z3.And(
@@ -61,9 +61,9 @@ class HigherAblationTests(unittest.TestCase):
         body = to_seq([Put("b_prime", "b"), Assign("b", "b_prime")])
         self.assertTrue(state_holds(weak, state))
         self.assertTrue(state_holds(guard, state))
-        self.assertFalse(state_holds(wp(body, weak, self.context), state))
+        self.assertTrue(state_holds(wp(body, weak, self.context), state))
         self.assertFalse(state_holds(self.invariant, state))
-        # Real detachment loses ON*(c,d); the abstract attachment WP retains it.
+        # Both the public relocation WP and physical detachment lose ON*(c,d).
         successor = LoopHeadState(
             "1",
             stacks_to_positions([["a", "c"], ["d"]]),
@@ -162,7 +162,16 @@ class HigherAblationTests(unittest.TestCase):
             verification.check_abstract_effects(problem)
         self.assertIs(problem.initial_condition, original_conditions)
         self.assertEqual(
-            set(goals), {"effect_ON_star", "effect_Higher", "effect_Scattered"}
+            set(goals),
+            {
+                "effect_ON_star",
+                "effect_Higher",
+                "effect_Scattered",
+                "put_source_physical",
+                "put_source_clear_sym",
+                "put_distinct_support",
+                "put_support_clear_sym",
+            },
         )
         self.assertGreater(quantifier_count([goals["effect_Higher"]]), 0)
 
