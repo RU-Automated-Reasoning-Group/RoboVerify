@@ -1,6 +1,6 @@
 # Revision 4.3: experiment report
 
-**Status: prompt factorial running (Qwen3.8 27B only); feedback ablation not started.** Pending trials are not observed failures.
+**Status: prompt factorial completed except for the rerun of 192 trials invalidated by a server failure (Section 1.4); feedback ablation not started.** Pending trials are not observed failures.
 
 - **Prompt factorial:** [plan](revision_4_3_prompt_ablation_plan.md). Full 2⁴ factorial over the four primitive prompt blocks; 50 trials per cell × 16 cells × 3 methods × 2 models = 4,800 trials.
 - **Feedback ablation:** [plan](revision_4_3_ablation_experiment_plan.md). Runs after the prompt study, with the selected prompt set fixed.
@@ -61,7 +61,23 @@ Shared settings:
   - The batch resumes with 64 concurrent trials, using a resume-time override that each session records in `execution_metadata.json`. Trial definitions are unchanged.
   - Outcome: the drain ended without interrupted trials, and the batch resumed at 22:29 EDT. In the first hour on two GPUs it completed 225 trials, compared with 114 per hour on one GPU. Expected completion is about 07:00 EDT on 2026-10-23.
 
-### 1.4 Results
+### 1.4 Server failure and rerun (2026-10-23)
+
+- **Failure.** At 06:08:16 EDT, both 27B vLLM instances (GPUs 6 and 7) stopped in the same second with `CUDA error: unspecified launch failure`.
+  - The simultaneous failure on two independent processes points to a host-level GPU fault. Kernel logs are not readable to us, so the cause is not confirmed.
+  - The batch then kept dispatching, and every new request failed with `TransportError: Model HTTP status 503: no backend available`. It finished at 06:29.
+- **Affected trials: 192 of 2,400.** These are all trials that ended after the failure.
+  - 161 lost round 0 itself.
+  - 31 had a valid round-0 failure, but their recovery was cut off.
+  - No transport errors occurred before the failure.
+- **Treatment.** All 192 trials are excluded, and their exact job definitions are rerun as fresh trials in `runs/cap-revision43/20261023-prompt-factorial-qwen38-27b-rerun`, with the same identifiers, cells and methods.
+  - All 192 are excluded because trials in flight at the failure are biased toward slow, mostly failing trials. Keeping only the 31 with a valid round 0 would bias the estimate.
+  - Every trial in the rerun batch is a complete draw under the same configuration. The analysis combines the 2,208 unaffected trials with the rerun.
+  - This is a documented infrastructure replacement, not a replacement of model failures.
+- **Serving for the rerun.** Six 27B instances (GPUs 0, 1, 2, 3, 6, 7; ports 8120–8123, 8126, 8127) with identical checkpoint, template and flags, all behind the balancer on port 8106. The rerun uses 96 concurrent trials.
+- **Safeguard.** Dispatch now checks the model endpoint (`GET /v1/models`) every 10 seconds. If the endpoint fails, the batch stops dispatching and pauses, so pending trials are not consumed (commit `bcd80f5`).
+
+### 1.5 Results
 
 Pending.
 
