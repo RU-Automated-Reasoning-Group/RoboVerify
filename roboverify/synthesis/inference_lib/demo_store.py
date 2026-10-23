@@ -153,8 +153,6 @@ def tower_vocabulary(task):
         return InferenceVocabulary(
             2, ("ON_star", "ON_star_zero", "equality"), ("b0", "b", "tbl")
         )
-    if task == "partial":
-        return InferenceVocabulary(2, ("ON_star", "equality"), ("b0", "b"))
     raise ValueError(f"Unknown tower task: {task!r}")
 
 

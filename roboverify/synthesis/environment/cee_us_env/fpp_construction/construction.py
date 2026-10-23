@@ -97,7 +97,6 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
             "RoboVerifyStack",
             "RoboVerifyUnstack",
             "RoboVerifyReverse",
-            "RoboVerifyPartialStack",
             "RoboVerifyRestack",
         ):
             # Uses the same block XML/layout as other stacking-style tower cases.
@@ -391,7 +390,6 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
             "RoboVerifyStack",
             "RoboVerifyUnstack",
             "RoboVerifyReverse",
-            "RoboVerifyPartialStack",
             "RoboVerifyRestack",
             "RoboVerifyGrid",
             "RoboVerifyPyramid",
@@ -410,7 +408,6 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
             "RoboVerifyStack",
             "RoboVerifyUnstack",
             "RoboVerifyReverse",
-            "RoboVerifyPartialStack",
             "RoboVerifyRestack",
         ):
             # Dummy desired goal. Reward/success for these cases must be computed

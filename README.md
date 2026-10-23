@@ -145,6 +145,8 @@ lateral waypoint adaptations are documented in
 See the [collection guide](roboverify/synthesis/inference_lib/README.md#collect-restack-demonstrations).
 Execution/collection is supported; Restack synthesis and formal verification
 have not been added.
+The legacy PartialStack environment, factory, standalone verifier and inference
+option have been removed; Restack is the supported task.
 
 The supported scope is structured chains and flat loops for the tower tasks;
 the integrated synthesis CLI exposes Stack and Unstack. A successful

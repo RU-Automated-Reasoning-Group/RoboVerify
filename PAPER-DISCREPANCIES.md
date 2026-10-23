@@ -996,8 +996,9 @@ higher-Y side. Distinct columns have at least 105 mm separation along an axis,
 with 100 mm clearance from the initial gripper. Bounded sampling rejects layouts
 that cannot fit; this region accommodates at most three source columns.
 There is no 2–4-block restriction in the program, but arbitrary counts/heights
-are not a reachability guarantee. The historical PartialStack factory remains
-separate and unchanged.
+are not a reachability guarantee. The historical PartialStack environment, factory, standalone verifier and
+inference option were subsequently removed at the user's request; Restack is
+the only current task for this behavior.
 
 `collect_demos --task restack` defaults to the new reference program, accepts
 `--initial-tower-blocks`, settles for 50 steps, and records both loop traces,

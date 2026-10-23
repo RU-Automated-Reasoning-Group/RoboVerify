@@ -31,7 +31,6 @@ ROBOVERIFY_CASES = (
     "RoboVerifyStack",
     "RoboVerifyUnstack",
     "RoboVerifyReverse",
-    "RoboVerifyPartialStack",
     "RoboVerifyRestack",
 )
 
@@ -298,7 +297,6 @@ class FetchPickAndPlaceConstruction(
             "RoboVerifyStack",
             "RoboVerifyUnstack",
             "RoboVerifyReverse",
-            "RoboVerifyPartialStack",
             "RoboVerifyRestack",
             "RoboVerifyGrid",
             "RoboVerifyPyramid",
@@ -441,8 +439,6 @@ class FetchPickAndPlaceConstruction(
     def _reset_sim(self):
         if self.case == "RoboVerifyStack":
             return self._reset_sim_roboverify_stack()
-        if self.case == "RoboVerifyPartialStack":
-            return self._reset_sim_roboverify_partial_stack()
         if self.case == "RoboVerifyRestack":
             return self._reset_sim_roboverify_restack()
         if self.case == "RoboVerifyGrid":
@@ -496,92 +492,6 @@ class FetchPickAndPlaceConstruction(
             object_qpos[:2] = tower_xy
             object_qpos[2] = self.height_offset + level * block_height
             self.sim.data.set_joint_qpos(f"{obj_name}:joint", object_qpos)
-
-        self.sim.forward()
-        return True
-
-    def _roboverify_random_tower_partition(self, num_towers: int) -> list[list[int]]:
-        if num_towers < 2:
-            raise ValueError("partial stack requires at least two towers.")
-        if num_towers > self.num_blocks:
-            raise ValueError("cannot have more towers than blocks.")
-
-        order = np.random.permutation(self.num_blocks)
-        split_points = sorted(
-            np.random.choice(np.arange(1, self.num_blocks), size=num_towers - 1, replace=False)
-        )
-        towers: list[list[int]] = []
-        prev = 0
-        for split in split_points:
-            towers.append(order[prev:split].tolist())
-            prev = int(split)
-        towers.append(order[prev:].tolist())
-        return towers
-
-    def _roboverify_order_partial_tower_blocks(self, blocks: list[int]) -> list[int]:
-        """Allow ``b0`` to appear in the middle of a multi-block tower when possible."""
-        base_id = self.roboverify_base_block_id
-        ordered = list(blocks)
-        if base_id not in ordered or len(ordered) < 3:
-            return ordered
-
-        internal_positions = list(range(1, len(ordered) - 1))
-        pos = int(np.random.choice(internal_positions))
-        ordered.remove(base_id)
-        ordered.insert(pos, base_id)
-        return ordered
-
-    def _sample_scattered_tower_xy_positions(self, num_towers: int) -> list[np.ndarray]:
-        scattered_sep = 2.0 * BLOCK_LENGTH
-        tower_xypos: list[np.ndarray] = []
-
-        while len(tower_xypos) < num_towers:
-            candidate = self.initial_gripper_xpos[:2] + np.random.uniform(
-                -self.obj_range, self.obj_range, size=2
-            )
-            if np.linalg.norm(candidate - self.initial_gripper_xpos[:2]) < 0.1:
-                continue
-
-            ok = True
-            for other_xypos in tower_xypos:
-                dx = abs(candidate[0] - other_xypos[0])
-                dy = abs(candidate[1] - other_xypos[1])
-                if not (dx >= scattered_sep or dy >= scattered_sep):
-                    ok = False
-                    break
-
-            if ok:
-                tower_xypos.append(candidate)
-
-        return tower_xypos
-
-    def _reset_sim_roboverify_partial_stack(self):
-        """
-        RoboVerifyPartialStack init:
-        - Partition blocks into at least two partial towers (height >= 1 each).
-        - ``b0`` may appear in the middle of a multi-block tower.
-        """
-        if self.num_blocks < 2:
-            raise ValueError("RoboVerifyPartialStack requires at least two blocks.")
-
-        self.sim.set_state(self.initial_state)
-
-        num_towers = int(np.random.randint(2, self.num_blocks + 1))
-        towers = self._roboverify_random_tower_partition(num_towers)
-        tower_xypos = self._sample_scattered_tower_xy_positions(len(towers))
-        block_height = BLOCK_LENGTH
-
-        for tower_blocks, tower_xy in zip(towers, tower_xypos):
-            if self.roboverify_base_block_id in tower_blocks:
-                tower_blocks = self._roboverify_order_partial_tower_blocks(tower_blocks)
-
-            for level, block_id in enumerate(tower_blocks):
-                obj_name = self.object_names[block_id]
-                object_qpos = self.sim.data.get_joint_qpos(f"{obj_name}:joint")
-                assert object_qpos.shape == (7,)
-                object_qpos[:2] = tower_xy
-                object_qpos[2] = self.height_offset + level * block_height
-                self.sim.data.set_joint_qpos(f"{obj_name}:joint", object_qpos)
 
         self.sim.forward()
         return True
@@ -1339,7 +1249,7 @@ class FetchPickAndPlaceConstruction(
         return True
 
     def _roboverify_task_complete(self, positions: np.ndarray) -> bool:
-        if self.case in ("RoboVerifyStack", "RoboVerifyPartialStack", "RoboVerifyRestack"):
+        if self.case in ("RoboVerifyStack", "RoboVerifyRestack"):
             return self._roboverify_stack_tower_complete(positions)
         if self.case == "RoboVerifyUnstack":
             return self._roboverify_unstack_all_on_ground(positions)

@@ -86,7 +86,8 @@ lateral waypoint adaptations are documented in
 [discrepancy 41](PAPER-DISCREPANCIES.md#41-restack-needs-a-terminating-first-loop-and-an-executable-lateral-layout).
 See the [collection guide](roboverify/synthesis/inference_lib/README.md#collect-restack-demonstrations).
 Execution/collection is supported; Restack synthesis and formal verification
-have not been added.
+have not been added. Legacy PartialStack environment/factory/verifier and its
+inference option have been removed; use Restack.
 
 Stack collection holds the initial gripper position for 50 steps before
 recording; the settled full snapshot becomes state zero. Synthesis, candidate
@@ -334,7 +335,7 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
     MuJoCo env, mutates programs (`mutate_program`), scores candidates by trajectory
     divergence from demos (via `cost_func`) combined with BMC feasibility checks
     (`check_bmc_candidate`/`score_candidate_program`), and drives the outer `MCMC(...)` search
-    loop. Also has the `make_roboverify_*_env` factories (stack/unstack/reverse/restack/partial/grid/
+    loop. Also has the `make_roboverify_*_env` factories (stack/unstack/reverse/restack/grid/
     pyramid) and video/frame saving utilities.
   - `decision_tree.py`: a compatibility alias only. `ON_feature` now resolves to
     `predicates.atoms.GroundON`; the shallow-tree feature learner it used to hold was
@@ -390,8 +391,8 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   Experiment results stay in `runs/`; `--output-dir` changes that root and
   `--run-name` adds a label. `main.py` forwards to this driver.
   `verified_synthesis.py` and the Stack verifier CLI forward to verify mode.
-  Unstack/Reverse/Partial standalone verifiers consume `--demos` via the in-memory
-  inference adapter; Reverse/Partial still report unsupported motion in those
+  Unstack/Reverse standalone verifiers consume `--demos` via the in-memory
+  inference adapter; Reverse still reports unsupported motion in those
   entry points. The historical Reverse verifier also has the wrong symbolic task
   (39); it does not verify the new physical example. `execute_goal_program.py`
   executes the shared Grid/Pyramid example through Program.eval with nested While

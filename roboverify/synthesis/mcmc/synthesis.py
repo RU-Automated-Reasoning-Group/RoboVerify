@@ -768,11 +768,11 @@ ROBOVERIFY_REVERSE_ENV_KWARGS = {
     "base_block_id": 0,
 }
 
-ROBOVERIFY_PARTIAL_STACK_ENV_KWARGS = {
+ROBOVERIFY_RESTACK_ENV_KWARGS = {
     "sparse": False,
     "shaped_reward": False,
     "reward_type": "sparse",
-    "case": "RoboVerifyPartialStack",
+    "case": "RoboVerifyRestack",
     "visualize_mocap": False,
     "simple": True,
     "base_block_id": 0,
@@ -856,22 +856,7 @@ def make_roboverify_restack_env(
             name=f"roboverify_restack_{num_blocks}",
             num_blocks=num_blocks,
             initial_tower_blocks=initial_tower_blocks,
-            **{**ROBOVERIFY_PARTIAL_STACK_ENV_KWARGS, "case": "RoboVerifyRestack"},
-        ),
-        render_mode=render_mode,
-    )
-
-
-def make_roboverify_partial_stack_env(
-    num_blocks: int = 4,
-    render_mode: str = "rgb_array",
-) -> GymToGymnasium:
-    """Create the RoboVerifyPartialStack env for partial-stack rollouts and MCMC eval."""
-    return GymToGymnasium(
-        FetchPickAndPlaceConstruction(
-            name=f"roboverify_partial_stack_{num_blocks}",
-            num_blocks=num_blocks,
-            **ROBOVERIFY_PARTIAL_STACK_ENV_KWARGS,
+            **ROBOVERIFY_RESTACK_ENV_KWARGS,
         ),
         render_mode=render_mode,
     )
@@ -939,10 +924,6 @@ def make_roboverify_env(
         )
     if task == "reverse":
         return make_roboverify_reverse_env(
-            num_blocks=num_blocks, render_mode=render_mode
-        )
-    if task in ("partial_stack", "partial"):
-        return make_roboverify_partial_stack_env(
             num_blocks=num_blocks, render_mode=render_mode
         )
     if task in ("grid", "2dgrid"):
