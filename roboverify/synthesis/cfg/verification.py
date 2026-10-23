@@ -8,6 +8,7 @@ Unsupported summary shapes remain explicit failures.
 from copy import deepcopy
 
 import z3
+
 from synthesis.api.instructions import (
     Assign,
     Get,
@@ -39,7 +40,10 @@ from synthesis.verification_lib.motion_verification import (
     check_frame_preservation,
     prepare_alignment,
 )
-from synthesis.verification_lib.primitive_motion import PrimitiveMotionProblem
+from synthesis.verification_lib.primitive_motion import (
+    PrimitiveMotionProblem,
+    count_extrema_references,
+)
 from synthesis.verification_lib.root_selection import RootContext
 
 
@@ -200,6 +204,18 @@ def verify_cfg_motion(
     )
 
     constants = sorted(_all_names(cfg))
+
+    def extrema_count(graph):
+        return sum(
+            (
+                extrema_count(node.region.body_cfg)
+                if isinstance(node.region, LoopRegion)
+                else count_extrema_references(node.region.physical)
+            )
+            for node in graph.nodes.values()
+        )
+
+    witness_count = extrema_count(cfg)
     low = LowLevelContext(default_L=0.05, use_tbl=context.use_tbl)
     checks = []
     count = 0
@@ -227,6 +243,7 @@ def verify_cfg_motion(
             initial_positions=positions,
             initial_arm=arm,
             enforce_source=False,
+            extrema_witness_count=witness_count,
         )
         if supported_tower_model:
             assume_tower_geometry(p, table_surface_height)

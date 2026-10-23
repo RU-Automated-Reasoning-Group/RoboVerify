@@ -17,7 +17,8 @@ from synthesis.api.instructions import (
     ReleaseByName,
     Skip,
 )
-from synthesis.util.symbols import fresh_const
+from synthesis.environment.motion_reference import OBSERVATION_REFERENCE_NAMES
+from synthesis.util.symbols import fresh_const, fresh_name
 from synthesis.verification_lib.motion_verification import (
     MotionCheck,
     MotionProblem,
@@ -25,9 +26,51 @@ from synthesis.verification_lib.motion_verification import (
 )
 
 
+def count_extrema_references(body):
+    """One independent witness per instruction/extremum, even across basic blocks."""
+    return sum(
+        len(
+            {
+                o["val"]
+                for o in instruction.get_operand()
+                if o["type"] == "BoxName" and o["val"] in ("Y_min", "Z_m")
+            }
+        )
+        for instruction in body
+    )
+
+
 class PrimitiveMotionProblem(MotionProblem):
-    def __init__(self, *args, initial_arm=None, enforce_source=True, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self,
+        context,
+        initial_condition,
+        constants,
+        *args,
+        initial_arm=None,
+        enforce_source=True,
+        extrema_witness_count=0,
+        **kwargs,
+    ):
+        if not isinstance(extrema_witness_count, int) or extrema_witness_count < 0:
+            raise ValueError("Extrema witness count must be a nonnegative integer")
+        constants = list(constants)
+        occupied = set(constants) | {"sym"}
+        self.extrema_witnesses = tuple(
+            fresh_name(f"sym{i + 2}", occupied) for i in range(extrema_witness_count)
+        )
+        # Allocate before translating entry conditions: these witnesses need the
+        # same relational instances and alias/frame semantics as the obstacle sym.
+        super().__init__(
+            context,
+            initial_condition,
+            constants + list(self.extrema_witnesses),
+            *args,
+            **kwargs,
+        )
+        self.solver.add(*(self.physical(name) for name in self.extrema_witnesses))
+        self._reference_cache = {}
+        self._extrema_evaluations = set()
         self.enforce_source = enforce_source
         self.arm = tuple(fresh_const(z3.RealSort(), "arm_" + a) for a in "xyz")
         if initial_arm is not None:
@@ -77,6 +120,62 @@ class PrimitiveMotionProblem(MotionProblem):
             ),
         )
 
+    def reference_position(self, name):
+        """Freeze runtime coordinates at instruction entry, including sym2 extrema.
+
+        The finite extremum ranges over named blocks, the independent collision
+        witness sym, and preallocated extrema witnesses sym2, sym3, ... . Every
+        real finite-scene trace is represented by assigning each extra witness
+        to its instruction's true extremizer. Other assignments overapproximate
+        motion, so SAT failures/consistency are not exact-realizability evidence.
+        Witnesses may alias; no closed finite domain is asserted. All extrema
+        witnesses are allocated up front so snapshots and frame updates cover them.
+
+        TODO(motion-quantifiers): this reference encoding and the swept collision
+        expression add no quantifiers. Whole VCs still contain quantified height/
+        alignment premises (tower_geometry.py) and exact predicate-effect checks
+        (check_abstract_effects). Their elimination is a separate investigation;
+        do not drop them or label the complete motion proof quantifier-free.
+        """
+        if name not in OBSERVATION_REFERENCE_NAMES:
+            return self.current[self.bindings[name]]
+        key = (self.step, name)
+        if key in self._reference_cache:
+            return self._reference_cache[key]
+        if name == "gripper":
+            result = self.arm
+        else:
+            if len(self._extrema_evaluations) >= len(self.extrema_witnesses):
+                raise NotImplementedError(
+                    "Extrema reference requires an independent preallocated witness"
+                )
+            self._extrema_evaluations.add(key)
+            axis = 1 if name == "Y_min" else 2
+            # This initial candidate is physical even if program names alias tbl.
+            result = self.current[self.extrema_witnesses[0]]
+            for other, point in self.current.items():
+                better = (
+                    point[axis] < result[axis]
+                    if axis == 1
+                    else point[axis] > result[axis]
+                )
+                # Runtime breaks ties by object ID. IDs are absent from this
+                # model, so admit either tied block, preserving its full vector.
+                tie = fresh_const(
+                    z3.BoolSort(),
+                    "extremum_tie",
+                    avoid=(*point, *result, *self.solver.assertions()),
+                )
+                take = z3.And(
+                    self.physical(other),
+                    z3.Or(better, z3.And(point[axis] == result[axis], tie)),
+                )
+                result = tuple(
+                    z3.If(take, value, old) for value, old in zip(point, result)
+                )
+        self._reference_cache[key] = result
+        return result
+
     def endpoint(self, names, offsets, kind):
         error = (
             (0, 0, 0)
@@ -86,7 +185,7 @@ class PrimitiveMotionProblem(MotionProblem):
             )
         )
         return tuple(
-            self.current[self.bindings[name]][i] + z3.RealVal(str(offset)) + error[i]
+            self.reference_position(name)[i] + z3.RealVal(str(offset)) + error[i]
             for i, (name, offset) in enumerate(zip(names, offsets))
         )
 
@@ -173,10 +272,15 @@ class PrimitiveMotionProblem(MotionProblem):
                 self.solver.add(self.at(condition))
                 continue
             self.used_bindings.update(
-                o["val"] for o in instruction.get_operand() if o["type"] == "BoxName"
+                o["val"]
+                for o in instruction.get_operand()
+                if o["type"] == "BoxName"
+                and o["val"] not in OBSERVATION_REFERENCE_NAMES
             )
             if isinstance(instruction, (MoveByName, ReleaseByName)) and any(
-                self.bindings[o["val"]] == "tbl" for o in instruction.get_operand()
+                o["val"] not in OBSERVATION_REFERENCE_NAMES
+                and self.bindings[o["val"]] == "tbl"
+                for o in instruction.get_operand()
             ):
                 self.checks.append(
                     MotionCheck(
@@ -224,7 +328,15 @@ class PrimitiveMotionProblem(MotionProblem):
                 ]
                 self.check(
                     f"physical_{self.step}",
-                    z3.Not(z3.And(*(self.physical(self.bindings[n]) for n in names))),
+                    z3.Not(
+                        z3.And(
+                            *(
+                                self.physical(self.bindings[n])
+                                for n in names
+                                if n not in OBSERVATION_REFERENCE_NAMES
+                            )
+                        )
+                    ),
                 )
                 end = self.endpoint(
                     names,
@@ -239,7 +351,6 @@ class PrimitiveMotionProblem(MotionProblem):
                     self.transport(self.held_name, end)
                 self.arm = end
             elif isinstance(instruction, ReleaseByName):
-                name = self.bindings[instruction.release_box_name]
                 if self.held_name is None:
                     self.checks.append(
                         MotionCheck(
@@ -249,9 +360,30 @@ class PrimitiveMotionProblem(MotionProblem):
                         )
                     )
                     return
+                reference = instruction.release_box_name
                 self.check(
                     f"release_object_{self.step}",
-                    z3.Not(self.same(name, self.held_name)),
+                    z3.Not(
+                        z3.And(
+                            self.physical(self.held_name),
+                            (
+                                True
+                                if reference in OBSERVATION_REFERENCE_NAMES
+                                else self.physical(self.bindings[reference])
+                            ),
+                        )
+                    ),
+                )
+                # Release's operand supplies retreat Z, not payload identity.
+                # The controller freezes gripper XY and reference Z before opening.
+                end = self.endpoint(
+                    ["gripper", "gripper", instruction.release_box_name],
+                    [
+                        0,
+                        0,
+                        instruction.target_z_offset.concrete_float("primitive release"),
+                    ],
+                    "release",
                 )
                 point = self.current[self.held_name]
                 support = [
@@ -282,21 +414,12 @@ class PrimitiveMotionProblem(MotionProblem):
                         z3.If(self.same(other, self.held_name), q, old)
                         for q, old in zip(fallen, p)
                     )
-                obj = z3.Var(0, self.constants[name].sort())
+                obj = z3.Var(0, self.constants[self.held_name].sort())
                 alias = self.context.lowlevel_box_equal(
                     obj, self.constants[self.held_name]
                 )
                 self.fields = tuple(
                     z3.If(alias, q, old) for q, old in zip(fallen, self.fields)
-                )
-                end = self.endpoint(
-                    [instruction.release_box_name] * 3,
-                    [
-                        0,
-                        0,
-                        instruction.target_z_offset.concrete_float("primitive release"),
-                    ],
-                    "release",
                 )
                 self.sweep(self.arm, end, contact=self.held_name)
                 self.arm, self.held_name, self.released = end, None, True

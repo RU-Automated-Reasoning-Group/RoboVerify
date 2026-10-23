@@ -11,6 +11,7 @@ from time import perf_counter
 from typing import Optional
 
 import z3
+
 from synthesis.api.instructions import Assign, PickPlaceByName, Skip
 from synthesis.util.symbols import fresh_const
 from synthesis.verification_lib.bmc_lib import NoiseSpec, bounded_noise
@@ -752,13 +753,23 @@ def verify_motion_block(
         )
     context = context or LowLevelContext(default_L=0.05, use_tbl="tbl" in constants)
     from synthesis.api.instructions import Get, MoveByName, PickByName, ReleaseByName
-    from synthesis.verification_lib.primitive_motion import PrimitiveMotionProblem
+    from synthesis.verification_lib.primitive_motion import (
+        PrimitiveMotionProblem,
+        count_extrema_references,
+    )
 
     primitive = any(
         isinstance(i, (Get, PickByName, MoveByName, ReleaseByName)) for i in body
     )
     problem_type = PrimitiveMotionProblem if primitive else MotionProblem
-    options = {"initial_arm": initial_arm} if primitive else {}
+    options = (
+        {
+            "initial_arm": initial_arm,
+            "extrema_witness_count": count_extrema_references(body),
+        }
+        if primitive
+        else {}
+    )
     problem = problem_type(
         context,
         initial_condition,

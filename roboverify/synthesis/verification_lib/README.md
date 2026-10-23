@@ -61,6 +61,42 @@ the saved motion-counterexample penalties used by CEGIS and CFG repair.
 That replay is a Z3 check of saved geometry; it is not a MuJoCo execution or
 an unrestricted proof of the repaired program.
 
+### Observation-relative motion references
+
+Named primitive motion supports `Y_min`, `Z_m` and `gripper`, with targets
+captured at instruction entry, as in the controller. `Y_min` selects the position
+of a minimum-Y physical block; `Z_m` selects a maximum-Z block. The held block
+participates, while the table and gripper do not. A later instruction recomputes
+the reference. Ties admit either extremizing block and preserve its complete XYZ
+vector. Release captures gripper XY and reference Z before opening; its operand
+specifies the retreat reference, not the identity of the held block.
+
+`PrimitiveMotionProblem` implements the independent `sym2` approach. It takes
+each extremum over named physical objects, the arbitrary obstacle `sym`, and
+extra arbitrary physical witnesses. The shared APIs preallocate one extra witness
+per instruction/extremum evaluation: Unstack needs three, normally named
+`sym2`, `sym3`, `sym4`, for its two minimum-Y references and maximum-Z retreat.
+All receive the same entry-condition instances and alias/frame updates as `sym`.
+They can alias one another or named objects; this does not require extra blocks
+or impose a block-count limit. Programs without extrema, including Stack, add
+no witnesses.
+
+For any real finite-scene trace, choose each witness to denote the corresponding
+true extremizer and choose `sym` independently as the obstacle under examination.
+This includes the real motion. Other witness assignments can give different
+targets, so the encoding conservatively admits additional motions. Consequently,
+valid universal safety/effect checks cover the real traces, but a SAT failure or
+premise-consistency witness alone does not establish a realizable execution or
+an exact global extremum. This distinction applies beyond collision checks.
+
+The extrema expressions and swept-collision expressions add no quantifiers.
+Complete motion VCs still contain quantified supported-height/alignment premises
+and exact predicate-effect checks. Their quantifier treatment is deliberately
+deferred; `TODO(motion-quantifiers)` in `primitive_motion.py` records that boundary.
+See the [Unstack pipeline results](../cfg/VERIFICATION.md#provided-unstack-and-reverse-verification).
+
+### Obligations and model scope
+
 The checks cover consistency, collision sweeps, release/support, direct placement,
 frame preservation, complete ON*/Higher/Scattered effects and root alignment.
 They also prove Put's enabling conditions at transfer entry: a clear physical
@@ -112,7 +148,7 @@ This convention is separate from relational tbl and is not yet encoded by
 `PrimitiveMotionProblem`. A resolved table operand there returns `unsupported`
 explicitly, rather than inventing coordinates or claiming a proof.
 
-Named Pick/Release primitives explicitly permit contact with their selected
+Named Pick/Release primitives explicitly permit contact with the picked/released
 object. Empty-gripper sweeps use a point; carried payloads use a cube. Primitive
 Release proves support and treats unsupported positions as arbitrary falls.
 These semantics differ from the legacy BMC Release formula described below.
@@ -176,7 +212,8 @@ The integrated CFG CLI and all four standalone tower entry points accept:
 Omitting `--motion-noise` keeps noise off. The standalone Unstack verifier
 requires `--table-surface-height`; integrated Unstack motion checking also needs
 that value for table-placement contracts. Read it from the environment; the bundled tower environments
-use `0.4`. Keep Unstack end-to-end invocations under `timeout 60s`.
+use `0.4`. The current inference/motion feasibility investigation uses the user's
+explicit 600-second override; the CLI's Unstack default remains 60 seconds.
 
 The BMC APIs accept the same optional `noise`. `bmc_verify` returns a
 `BMCVerificationResult` with boolean truthiness, `status`, `mode`, `model`, and
@@ -200,7 +237,8 @@ From `roboverify/`, with the environment variables in `AGENTS.md` configured:
 uv run python -m unittest synthesis.verification_lib.test_bmc_lib \
   synthesis.verification_lib.test_bmc_noise \
   synthesis.verification_lib.test_motion_verification \
-  synthesis.verification_lib.test_primitive_motion -v
+  synthesis.verification_lib.test_primitive_motion \
+  synthesis.verification_lib.test_motion_extrema -v
 uv run python -m synthesis.entry.benchmark_motion_verification
 ```
 
