@@ -53,6 +53,17 @@ expressions add no quantifiers; the full motion VCs retain their quantified
 premises and effect checks. See the
 [encoding and remaining obligations](roboverify/synthesis/cfg/VERIFICATION.md#independent-extrema-witness-recheck).
 
+Unstack's guard now additionally requires **`b_prime != b0`**. The strengthened
+program collected and audited 15 seeds each for 1–4 blocks (60 demonstrations);
+single-block scenes exit without actions, and all four-block actions/observations
+match the previous guard exactly. Fresh archives are under
+`roboverify/demos/unstack-base-guard-20261023/`. Learning and all 12 symbolic checks
+pass. With the existing supported-tower premises, release support and table
+placement now pass along with collision, frame and predicate effects: 29 motion
+checks are valid, three geometric preservation checks are SAT, and two geometric
+entry checks time out. The full result remains `motion_unverified` (107.3 s).
+See the [strengthened-guard results](roboverify/synthesis/cfg/VERIFICATION.md#strengthened-unstack-guard).
+
 After the extrema encoding changes, revision `4f734bf` passed the full Python
 regression suite: **475 tests across 68 modules**, with no failures, errors or
 skips, including the optional real-solver baseline tests. On the current machine

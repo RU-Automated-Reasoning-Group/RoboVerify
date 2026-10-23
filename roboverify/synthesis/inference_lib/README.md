@@ -145,19 +145,46 @@ timeout --signal=TERM --kill-after=2s 55s \
   --num-blocks 4 --num-trajectories 15 --trajectory-timeout-seconds 12
 ```
 
-The default is `synthesis.examples.unstack:build_program`. It retains the source
-base and moves each clear upper block 15 cm toward decreasing Y. `Y_min` and
+The default is `synthesis.examples.unstack:build_program`. Its guard explicitly
+requires `b_prime != b0`, retaining the source base and moving each clear upper
+block 15 cm toward decreasing Y. `--num-blocks 1` is supported by the collector:
+the already-unstacked scene exits with zero iterations and no primitive actions.
+`Y_min` and
 `Z_m` select physical block coordinates at instruction entry; `gripper` captures
 the current gripper position. Each Move freezes its target throughout execution.
 These are coordinate references for Move/Release, not physical Pick operands.
 The reference semantics enter fingerprints. Collection and supplied-program
 verification opt in for execution/inference; ordinary synthesis loading rejects
-them and motion encoding remains incomplete. The shared pipeline now learns an
+them. Motion checking encodes them with independent extrema witnesses, with
+remaining geometric proof obligations documented in the verification guide.
+The shared pipeline now learns an
 invariant and proves the current Unstack abstraction; see the
 [tower verification guide](../cfg/VERIFICATION.md#provided-unstack-and-reverse-verification).
 Direct reset, controller tolerances and step budgets are unchanged. The old
 experiment wrapper has been removed. Use smaller seed batches when rendering
 so each Unstack invocation remains within the 60-second wall-clock limit.
+
+The strengthened-guard recheck collected **60 valid demonstrations**, 15 seeds
+(0–14) each for 1, 2, 3 and 4 blocks, under
+`demos/unstack-base-guard-20261023/{N}-blocks/`. Each directory contains
+`demonstrations.npz`, `collection.json` and `audit.json`. Every trajectory passed
+exact action replay and retained physical task success after 50 extra steps;
+iteration counts are respectively 0, 1, 2 and 3. All 15 four-block executions
+have identical actions and observations to the previous guard's archived starts;
+the comparison is in `guard-comparison.json` at the collection root. The new guard
+changes executable fingerprints, so use these fresh archives with the current
+factory rather than the earlier collection-audit Unstack archive.
+
+Reproduce for each N in 1, 2, 3, 4 (choose a fresh output directory):
+
+```bash
+uv run python -m synthesis.entry.collect_demos --task unstack --num-blocks 4 \
+  --num-trajectories 15 --seed-start 0 \
+  --output-dir demos/unstack-base-guard-20261023/4-blocks
+uv run python -m synthesis.entry.audit_demos \
+  --demos demos/unstack-base-guard-20261023/4-blocks/demonstrations.npz \
+  --output demos/unstack-base-guard-20261023/4-blocks/audit.json
+```
 
 ## Collect Reverse demonstrations
 

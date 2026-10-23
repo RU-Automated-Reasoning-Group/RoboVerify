@@ -68,8 +68,10 @@ CLI exposes Stack/Unstack/Reverse. Current Unstack and Reverse supplied programs
 now pass inference and unbounded symbolic verification through the shared pipeline,
 using all 60/75 states from 15 archived starts. Unstack observation-relative motion
 now uses independent extrema witnesses and instruction-entry gripper coordinates;
-all collision checks pass under the existing supported-tower premises, but release/
-placement and geometric loop obligations still prevent a full motion proof.
+all collision, release/placement, frame and predicate-effect checks pass under
+the existing supported-tower premises after strengthening the guard with
+`b_prime != b0`. Three geometric preservation checks remain SAT and two entry
+checks remain UNKNOWN; there is no full motion proof.
 Reverse table-relative operands remain unsupported; the other four tasks are
 outside integrated proof support. See the
 [tower verification commands](roboverify/synthesis/cfg/VERIFICATION.md#provided-unstack-and-reverse-verification).
@@ -79,7 +81,12 @@ high approach; the original failed batch and replay video are retained.
 Unstack and Reverse share one lateral source workspace: base-relative X in
 [0.54, 0.70] m and Y in [0.15, 0.25] m, independent of block count. The Unstack
 provided program uses shared observation-relative coordinates and collection;
-the old lateral experiment and compatibility wrapper have been removed. Reverse's
+the old lateral experiment and compatibility wrapper have been removed. Its
+guard now explicitly excludes b0; single-block collection exits with no actions.
+Fresh 15-seed collections for each of 1–4 blocks passed exact replay and 50-step
+settling audits under `demos/unstack-base-guard-20261023/`. The changed guard changes
+the executable fingerprint; use the new archive for current Unstack verification.
+Reverse's
 supplied primitive program starts with `b <- tbl` and uses one loop for all N
 transfers. Table-relative Move offsets position the new tower on the lower-Y side
 and remain trainable.

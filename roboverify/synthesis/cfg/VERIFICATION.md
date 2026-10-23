@@ -576,7 +576,7 @@ Run from `roboverify/` with the simulator environment in AGENTS.md configured:
 ```bash
 uv run python -m synthesis.entry.synthesize_cfg \
   --task unstack --mode verify --program synthesis.examples.unstack:build_program \
-  --num-blocks 4 --demos demos/pipeline-audit-20261023/unstack/demonstrations.npz \
+  --num-blocks 4 --demos demos/unstack-base-guard-20261023/4-blocks/demonstrations.npz \
   --invariant-minimizer pyeda --verification-level symbolic \
   --verification-timeout-ms 30000 --wall-timeout-seconds 600 \
   --symbolic-iterations 0 --motion-iterations 0 --run-name unstack-learned
@@ -590,7 +590,10 @@ uv run python -m synthesis.entry.synthesize_cfg \
 
 If an archive is absent, collect it with `collect_demos --task TASK --num-blocks 4
 --num-trajectories 15 --seed-start 0 --output-dir demos/pipeline-audit-20261023/TASK`.
-Use the collector's printed archive path. Unstack defaults to ON*/Higher/Scattered/
+For current Unstack, use `--output-dir demos/unstack-base-guard-20261023/4-blocks`;
+the earlier Unstack archive has the previous guard's fingerprint and cannot be
+used with the current factory. Use the collector's printed archive path.
+Unstack defaults to ON*/Higher/Scattered/
 equality; Reverse to ON*/frozen ON*_zero/equality. All 15 seeds are used, yielding
 60 Unstack and 75 Reverse states. Both contexts retain the top-existence axioms.
 Finite checks use 2–4 physical blocks plus the table marker, followed by an
@@ -647,7 +650,9 @@ entry too. Release uses its operand for retreat Z, with gripper XY and reference
 Z captured before opening. Stack has no extrema operands and allocates no extra
 witnesses. See the [encoding and scope](../verification_lib/README.md#observation-relative-motion-references).
 
-Reproduce from `roboverify/` with the usual simulator environment:
+The following records the pre-strengthening run configuration; its guard and
+archive match revision `4f734bf`. For the current executable, use the
+[strengthened-guard command](#strengthened-unstack-guard) below.
 
 ```bash
 timeout 610s uv run python -u -m synthesis.entry.synthesize_cfg \
@@ -711,6 +716,80 @@ The extrema and swept-collision expressions introduce no quantifiers, but full
 VCs retain quantified geometry and predicate effects. Their quantifier treatment
 is deferred by request and recorded as `TODO(motion-quantifiers)` in
 `primitive_motion.py`; no quantified premise or conclusion was discarded.
+
+### Strengthened Unstack guard
+
+Revision `a2e789d` adds `b_prime != b0` to the existing guard. The loop body's six
+primitives, controllers, offsets, reset workspace, task conditions and motion
+premises are unchanged. The guard is used by runtime collection, symbolic VCs
+and the motion loop-head constraints (`invariant AND guard`). It prevents the
+previous singleton-world counterexample without requiring a minimum of two
+physical blocks as a proof assumption.
+
+Fresh collection and replay/settling audits passed 15 seeds (0–14) each for 1,
+2, 3 and 4 blocks under `demos/unstack-base-guard-20261023/{N}-blocks/`. The loop
+executes N−1 times; singleton traces have zero primitive actions. Every replay
+has zero observation error and remains successful after 50 extra steps. The 15
+four-block action/observation sequences are identical to the old guard's archived
+executions. See the [collection commands](../inference_lib/README.md#collect-unstack-demonstrations).
+The guard's fingerprint changed, so the shared pipeline uses the new archive.
+
+```bash
+timeout 610s uv run python -u -m synthesis.entry.synthesize_cfg \
+  --task unstack --mode verify --program synthesis.examples.unstack:build_program \
+  --num-blocks 4 --demos demos/unstack-base-guard-20261023/4-blocks/demonstrations.npz \
+  --invariant-minimizer pyeda --verification-level both \
+  --supported-towers --table-surface-height 0.4 \
+  --initial-arm 1.3446426 0.74911606 0.5314612 \
+  --verification-timeout-ms 30000 --motion-timeout-ms 10000 \
+  --wall-timeout-seconds 600 --symbolic-iterations 0 --motion-iterations 0 \
+  --run-name unstack-base-guard-supported
+```
+
+To reproduce the comparison without additional tower geometry, omit
+`--supported-towers` and `--initial-arm ...`, and use
+`--run-name unstack-base-guard`. These are shared pipeline runs: all 15 starts
+are reexecuted, the invariant is learned from all 60 heads/exits, and symbolic
+verification precedes motion. There is no supplied invariant or refinement.
+
+| Run under `runs/cfg/` | Total | Symbolic | Motion |
+| --- | ---: | --- | --- |
+| `20261023-184247-a2e789d-unstack-base-guard-supported` | 107.3 s | 12 valid, including unbounded | 29 valid, 3 SAT, 2 UNKNOWN |
+| `20261023-184248-a2e789d-unstack-base-guard` | 66.9 s | 12 valid, including unbounded | 19 valid, 9 SAT |
+
+With supported towers, **release support and the table-placement contract now
+pass**. All seven collision checks, Move support, frame preservation, Put enabling
+conditions and exact ON*/Higher/Scattered effects also pass. The remaining checks
+are:
+
+| Obligation | Result |
+| --- | --- |
+| `arm_clearance_entry` | UNKNOWN, 10 s timeout |
+| `column_alignment_entry` | UNKNOWN, 10 s timeout |
+| `arm_clearance_preserved` | SAT |
+| `column_alignment_preserved` | SAT |
+| `tower_height_preserved` | SAT |
+
+The arm-preservation countermodel now has a supported placement; it is no longer
+the arbitrary-fall consequence of the singleton release. All three preservation
+checks quantify over objects beyond the finite extrema candidates. A selected
+`Z_m` witness can miss a higher unnamed block after removing the source, and
+`Y_min` witnesses can miss an unnamed object relevant to column/height
+preservation. The extra behaviors admitted by this conservative encoding remain
+subject to the deferred quantifier investigation. The full result is still
+`motion_unverified`; passing body checks conditional on geometric premises does
+not establish their entry and preservation obligations.
+
+Without supported-tower premises, the same nine obligation categories remain
+SAT as before (approach/descent/lift collisions, release support, placement, source
+clearance and three predicate effects). The stronger guard removes base aliasing
+but supplies neither supported heights nor arm clearance by itself.
+
+The focused regression run passed 33 tests in 6.1 s, covering symbolic singleton/
+finished/tower guards, real singleton collection and auditing, collection contracts
+and extrema motion. The previous 475-test full-suite result predates this guard
+change; it was not rerun for this focused experiment. Collections ran in parallel;
+the archive audit and two independent pipeline configurations also overlapped.
 
 ### Paper invariant controls
 

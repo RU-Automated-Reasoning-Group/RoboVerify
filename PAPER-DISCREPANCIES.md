@@ -233,6 +233,27 @@ model counterexamples, not reproduced simulator failures. The complete motion
 VCs retain quantifiers; their treatment remains a separate investigation.
 See the [current results and reproduction commands](roboverify/synthesis/cfg/VERIFICATION.md#independent-extrema-witness-recheck).
 
+**Explicit base exclusion, 2026-10-23.** The supplied Unstack program now conjoins
+`b_prime != b0` with its previous guard. The previous condition did exclude the
+base after other blocks were placed elsewhere, but admitted it when only one
+physical block existed in the entire scene. The motion verifier already included
+the guard; the correction is to the executable condition. The collector now
+accepts one-block Unstack, with zero iterations and no actions. All 60 fresh
+demonstrations (15 seeds each for 1–4 blocks) passed validation, exact replay and
+50 extra settling steps. All 15 four-block action/observation traces match the
+previous program exactly.
+
+The shared pipeline relearned from all 60 four-block states and passed all 12
+symbolic checks. Under the existing supported-tower premises, the corrected guard
+eliminates the release-support and table-placement failures: all transfer-body
+checks pass. Three globally quantified geometric preservation checks remain SAT,
+including arm clearance with a different countermodel now that release is
+supported. Extrema witnesses can still omit an unnamed block relevant to those
+global checks. Two geometric entry checks return UNKNOWN at 10 seconds. These
+remaining model/quantifier issues are separate from the guard correction;
+no controller or motion-premise change was made. See the
+[strengthened-guard results](roboverify/synthesis/cfg/VERIFICATION.md#strengthened-unstack-guard).
+
 Figure 14's supplied invariant refers to an undefined b. The separately named
 `unstack_paper_base` interpretation substitutes b0, but the final checker finds
 an unbounded preservation countermodel consisting only of tbl with b0=tbl.
