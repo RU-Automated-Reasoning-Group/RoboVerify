@@ -72,15 +72,16 @@ high approach; the original failed batch and replay video are retained.
 Unstack and Reverse share one lateral source workspace: base-relative X in
 [0.54, 0.70] m and Y in [0.15, 0.25] m, independent of block count. The Unstack
 provided program uses shared observation-relative coordinates and collection;
-the old lateral experiment is only a compatibility forwarder. Reverse's supplied primitive
-program starts with `b <- tbl` and uses one loop for all N transfers. Table-relative
-Move offsets position the new tower on the lower-Y side and remain trainable.
+the old lateral experiment and compatibility wrapper have been removed. Reverse's
+supplied primitive program starts with `b <- tbl` and uses one loop for all N
+transfers. Table-relative Move offsets position the new tower on the lower-Y side
+and remain trainable.
 `collect_demos --task reverse --program synthesis.examples.reverse:build_program`
 validates frozen-entry order reversal for 2–4 blocks. Archived full states still
 restore exactly.
-Payload-aware placement remains diagnostic only: the user deferred adoption
-because it strengthens primitive capabilities and needs a review of motion
-contracts and verification assumptions. See the
+Payload-aware placement remains a documented idea; its diagnostic runner was
+retired. The user deferred adoption because it strengthens primitive capabilities
+and needs a review of motion contracts and verification assumptions. See the
 [workspace investigation](roboverify/synthesis/experiment/TOWER-WORKSPACE.md).
 Grid and Pyramid support goal-only pointer traversal and execution of the shared
 reference program. Pyramid takes `bottom_row_blocks=k` and creates k,...,1 layers;
@@ -192,6 +193,12 @@ and accepted demonstrations must actually satisfy their pre/postconditions.
 
 - All real work lives under `roboverify/`; the repository root holds project
   guidance, the paper and review decisions.
+- Keep maintained experiment code only when needed to reproduce current results or
+  provide an actively used diagnostic. Put one-off investigation scripts outside
+  the repository (for example, in `/tmp`). Retire superseded runners and their
+  diagnostic-only tests; preserve useful regressions in the owning subsystem and
+  settled findings in the relevant documentation. Historical reproducibility
+  alone does not justify retaining a script or compatibility wrapper.
 - Commit in meaningful increments, one coherent change per commit, rather than one large
   commit at the end.
 - Work on a topic branch; do not commit directly to `main`.

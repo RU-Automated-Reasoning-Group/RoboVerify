@@ -153,9 +153,8 @@ These are coordinate references for Move/Release, not physical Pick operands.
 The reference semantics enter fingerprints, and ordinary synthesis/verification
 loading rejects them until they have proof support. Collection opts in explicitly.
 Direct reset, controller tolerances and step budgets are unchanged. The old
-`experiment.unstack_lateral` entry point is a compatibility forwarder to this
-collector. Use smaller seed batches when rendering so each Unstack invocation
-remains within the 60-second wall-clock limit.
+experiment wrapper has been removed. Use smaller seed batches when rendering
+so each Unstack invocation remains within the 60-second wall-clock limit.
 
 ## Collect Reverse demonstrations
 
@@ -464,9 +463,9 @@ Controller settings and the action-scaling version are preserved during
 ID-to-name conversion and included in program descriptions/fingerprints. Archives
 from the earlier component-clipping controller must be recollected for matching
 supplied-program verification. The later head-contact/Release update adds no new
-version mechanism. Existing local demonstration archives have been deleted;
-no replacement collection was requested. These are fixed settings, separate from the
-waypoint offsets optimized by CEM. Scaling improves direction fidelity; it does
+version mechanism. The current [15-seed collections](#cross-environment-audit)
+use these settings. These are fixed settings, separate from the waypoint offsets
+optimized by CEM. Scaling improves direction fidelity; it does
 not establish physical refinement of the motion proof (review entry 36).
 
 Each instruction retains `last_control_result` (convergence, steps, final phase,
@@ -494,65 +493,18 @@ See [review entry 24](../../../PAPER-DISCREPANCIES.md#24-the-first-stack-placeme
 for the saved-state policy. Recollect after changing controller settings;
 program fingerprints identify the executable used by each archive.
 
-### Measuring physical path straightness
+### Controller findings and current validation
 
-The backend uniformly scales XYZ, preserving the requested direction. The
-previous component-clipping backend could change direction above 50 mm axis
-error at gain 20. Endpoint convergence still does not guarantee a straight
-physical path. The historical Stack discrepancy and scope are recorded in
-[entry 36](../../../PAPER-DISCREPANCIES.md#36-component-wise-saturation-bends-the-physical-gripper-path).
+Uniform XYZ scaling preserves the requested command direction; endpoint
+convergence does not guarantee a straight physical path or exact carried-block
+centering. The adopted settings and limitations are recorded in the
+[controller findings](../experiment/CONTROLLER-PATHS.md). Historical controller
+comparison, tuning and video-rendering runners have been retired.
 
-Compare the previous uniform-scaling controller (10 mm Pick, head contacts,
-Z-only Release) with the combined production changes (2 mm Pick, no head contacts,
-fixed-XY Release) using complete programs from identical full settled starts:
-
-```bash
-uv run python -m synthesis.experiment.compare_stack_control --num-seeds 200
-uv run python -m synthesis.experiment.report --run runs/stack-control/latest
-```
-
-This writes path/payload metrics and a standalone HTML report, without saving
-demonstration archives. See [measurement definitions](../experiment/CONTROLLER-PATHS.md).
-
-To isolate component clipping versus uniform XYZ scaling under the **current**
-Pick/Release/collision defaults, configure the simulator environment
-as above, then run from `roboverify/`:
-
-```bash
-uv run python -m synthesis.experiment.compare_stack_paths \
-  --num-blocks 4 --num-seeds 100 --compare-uniform
-uv run python -m synthesis.experiment.report --run runs/controller-paths/latest
-```
-
-This serial diagnostic observes each fixed-target motion phase and temporarily
-patches raw action generation and clipping/scaling inside the diagnostic. It does not change the
-production controller. Both variants are checked against the current task's
-pre/postconditions; failed seeds remain in the results. Artifacts include a
-phase table, raw commands and gripper paths, execution outcomes and `paths.png`.
-Bend measures distance from the original phase line at control-step boundaries;
-it excludes intentional waypoint turns and does not bound substep or held-block
-motion. Opening/closing and the initial settling period are not motion phases.
-These commands now use 2 mm Pick and fixed-XY Release with head contacts disabled;
-their results should not be labeled as the older entry-36 controller cohort.
-
-For a newly generated four-block paired measurement, generate annotated
-side-by-side videos using its `artifacts/phases.json` (replace the example run path
-with your own). Earlier measurements must be rendered with their original code
-revision; the renderer checks replay equality and refuses mismatched paths:
-
-```bash
-uv run python -m synthesis.experiment.render_stack_paths \
-  --measurements runs/controller-paths/latest/artifacts/phases.json
-uv run python -m synthesis.experiment.report --run runs/controller-videos/latest
-```
-
-This reproduces the first seed and the measured largest-bend seed, validates both
-controller executions, and checks that their paths match the measurements before
-rendering saved snapshots. Complete videos share simulation time at half speed;
-the detail clip aligns phase starts at one-tenth speed. Both include measured XY
-paths and 3D line-deviation readouts. MP4 frame counts and full decoding are checked.
-The saved rollout archive is marked diagnostic, including the uniform-scaling
-trials, rather than published as pipeline demonstrations.
+Reproduce current executions with `collect_demos` and validate their snapshots,
+actions and settled task success with `audit_demos`, following the
+[cross-environment audit](#cross-environment-audit). Use `--save-video` during
+collection for current demonstration videos.
 
 ## Run either pipeline mode
 

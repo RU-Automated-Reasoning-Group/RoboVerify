@@ -16,14 +16,18 @@ moves within its grasp. All placements command the same table-relative XY;
 block's actual landing position. Similar offsets among the upper blocks make
 their mutual alignment look better.
 
+The workspace survey, feedback intervention runner and Unstack compatibility
+wrapper have been retired. This note retains the adopted bounds, placement
+diagnosis and deferred skill proposal. Current execution results are reproduced
+through [shared collection and auditing](../inference_lib/README.md#cross-environment-audit).
+
 ## Workspace evidence
 
-The [experiment module](tower_workspace.py) patches only the shared reset sampler
-within each trial, then executes the existing complete program with the production
-controllers. Unstack originally used scoped extrema references in `unstack_lateral.py`.
-Those references now execute in shared controllers via `examples/unstack.py`;
-the old module is a compatibility entry point. Reverse uses `examples/reverse.py`. No primitive budget,
-collision mask, task predicate or success tolerance was changed.
+The historical experiment patched only the shared reset sampler within each
+trial, then executed the complete program with production controllers.
+Unstack now executes observation-relative references through shared controllers
+via `examples/unstack.py`; Reverse uses `examples/reverse.py`. No primitive
+budget, collision mask, task predicate or success tolerance was changed.
 
 | Candidate-region executions | Unstack | Reverse |
 | --- | ---: | ---: |
@@ -164,37 +168,7 @@ production primitives, their contracts and default execution remain unchanged.
 [original video for the same seed](../../demos/reverse/4-blocks-table-loop-video/videos/seed_0000.mp4),
 [standalone SVG comparison](../../runs/tower-workspace/20261023-110734-d3fbc5e-investigation-summary/artifacts/placement-comparison.svg).
 
-## Reproduction and artifacts
-
-Use the simulator environment from [AGENTS.md](../../../AGENTS.md), then run
-from `roboverify/`. Each workspace command below is one bounded batch. Repeat
-the grid command with `--task unstack` and block counts 2 and 3 for the full grid.
-
-```bash
-timeout --signal=TERM --kill-after=2s 55s uv run python -m synthesis.experiment.tower_workspace \
-  --task reverse --num-blocks 4 --x .54 .58 .62 .66 .70 \
-  --y .15 .175 .20 .225 .25 --run-name candidate-grid
-
-timeout --signal=TERM --kill-after=2s 55s uv run python -m synthesis.experiment.tower_workspace \
-  --task unstack --num-blocks 4 --x .54 .70 --y .15 .25 \
-  --samples 25 --seeds 73 --run-name candidate-random
-
-uv run python -m synthesis.experiment.tower_workspace --task reverse --num-blocks 4 \
-  --x .54 .62 .66 .70 --y 0 .05 .10 .15 .25 --initial-only --run-name clearance
-
-timeout --signal=TERM --kill-after=2s 55s uv run python -m synthesis.experiment.tower_workspace \
-  --task reverse --num-blocks 4 --seeds 0 1 2 3 4 \
-  --archive demos/reverse/4-blocks-5-trajectories-table-loop/demonstrations.npz \
-  --variants baseline tight_pick payload_xy payload_xyz --save-traces --run-name placement-final
-
-uv run python -m synthesis.experiment.report --glob 'runs/tower-workspace/*' --table
-```
-
-The paired command uses an existing current archive; collect fresh Reverse demos
-first if it is absent. Tests generate their own traces instead of reading saved
-demos. Seven focused tests passed across `test_tower_workspace`, `test_reverse`
-and `test_unstack_reset`, including exact replay, scoped intervention cleanup,
-distinct executable identity and the centerline contact probe.
+## Historical artifacts
 
 The [aggregate summary](../../runs/tower-workspace/20261023-110734-d3fbc5e-investigation-summary/artifacts/summary.json)
 lists the eight candidate-region runs and the paired run. Every execution run

@@ -8,7 +8,6 @@ from synthesis.cfg.reset import inner_env
 from synthesis.environment.cee_us_env.fpp_construction_env import (
     FetchPickAndPlaceConstruction,
 )
-from synthesis.experiment.unstack_lateral import lateral_env
 from synthesis.mcmc.synthesis import (
     ROBOVERIFY_UNSTACK_ENV_KWARGS,
     make_roboverify_env,
@@ -43,7 +42,6 @@ class UnstackResetTests(unittest.TestCase):
         self.assertTrue(inner._roboverify_task_complete(row))
 
     def test_all_factories_use_the_same_seeded_lateral_layout(self):
-        self.assertIs(lateral_env, make_roboverify_unstack_env)
         for count in (2, 3, 4):
             expected = {}
             for factory in (

@@ -1,52 +1,48 @@
-# Experiment inventory and current workflow
+# Maintained experiments and diagnostics
+
+This package contains runners needed for current research results and reusable
+diagnostics. Temporary investigation scripts belong outside the repository;
+historical reproducibility alone is not a reason to retain a runner.
+
+## Current tools
+
+| Tools | Purpose |
+| --- | --- |
+| `mcmc/`, `config.py` | Instrumented MCMC search, checked against the shared search implementation. |
+| `run_logger.py`, `report.py` | Logging used by the main pipeline and bounded inspection of run artifacts. |
+| `invariant_learning/` | Fixed-program counterexample learning; see its [guide](invariant_learning/README.md). |
+| `ablate_higher.py`, `motion_premise_ablation.py` | Current vocabulary and motion-premise ablations; see the [verification guide](../cfg/VERIFICATION.md#higher-removal-ablation). |
+| `compare_stack_heights.py` | Inspect predicate discrepancies in saved traces; see the [height comparison guide](../inference_lib/README.md#higher-height-tolerance). |
+
+Tests here cover these maintained tools. Environment regressions live in
+`synthesis/environment/test_*.py`; collection, replay and task-program
+regressions live in `synthesis/cfg/test_*.py`.
 
 Routine demonstrations use `synthesis.entry.collect_demos --task TASK`, with a
 provided groundtruth for Stack, Unstack, Reverse, Restack, Grid and Pyramid.
-Use `synthesis.entry.audit_demos` to check saved archives, replay their actions
-and test final physical success after settling. See the
+`synthesis.entry.audit_demos` checks saved archives, replays their actions and
+checks final physical success after settling. See the
 [105-demonstration audit](../inference_lib/README.md#cross-environment-audit)
-and [pipeline support matrix](../../../README.md#project-status). Execution and
-collection support do not imply synthesis or formal verification support.
+and [pipeline support matrix](../../../README.md#project-status).
+Execution and collection support do not imply synthesis or formal verification.
 
-## Removed or consolidated
+## Retired investigations
 
-| Former implementation | Current state |
-| --- | --- |
-| PartialStack environment/factory/reset helpers | Removed at the user's request. Use the lateral Restack environment. The old `partial` and `partial_stack` task names are rejected. |
-| `entry.verify_partial_with_learned_invariant` and its inference option/unused fixture | Removed with the legacy task. There is no replacement Restack proof claim. |
-| `entry.verify_reverse_with_learned_invariant` | Removed because it encoded Unstack, not reversal. The physical Reverse program and its frozen-entry reversal validation remain supported. |
-| `unstack_lateral.py` execution wrapper and separate collection loop | Replaced by `examples/unstack.py`, shared observation-relative coordinate resolution, and `collect_demos`. The short module retains compatibility imports and forwards CLI calls to collection. |
+The old controller comparisons, tolerance sweeps, drift diagnosis, path-video
+renderer, workspace interventions, manual ID-first continuation and local finite
+Unstack proof adapter have been removed, together with their diagnostic-only
+tests. The Unstack compatibility wrapper is also gone; use the shared collector
+and production factory directly. No alternate demonstration runner remains here.
 
-Unstack's `Y_min`, `Z_m` and `gripper` references are evaluated once at instruction
-entry. Shared execution produced exactly the same actions and states as saved
-pre-migration two- and four-block executions. Their semantics enter current
-fingerprints, so historical archives do not automatically match the new source
-identity. Keep the original program artifacts with historical proof results;
-the current integrated loader explicitly rejects these unencoded references.
+The [controller findings](CONTROLLER-PATHS.md) and
+[workspace and placement findings](TOWER-WORKSPACE.md) retain the rationale for
+current settings and the deferred payload-aware placement idea. Historical
+reports and videos remain evidence, not current reproduction requirements.
+The current controllers and motion contracts are unchanged.
 
-## Retained tools
-
-| Tools | Why retained / scope |
-| --- | --- |
-| `mcmc/`, `run_logger.py`, `report.py`, `config.py` | Instrumented search and bounded reporting infrastructure, not one-off demonstrations. |
-| `invariant_learning/` | The fixed-program counterexample-learning experiment; see its [guide](invariant_learning/README.md). |
-| `ablate_higher.py`, `motion_premise_ablation.py` | Reproduce proof-premise and vocabulary findings; neither changes production verification defaults. |
-| `compare_stack_heights.py` | Diagnose predicate interpretation on saved traces without rerunning the simulator. |
-| `compare_stack_paths.py`, `render_stack_paths.py` | Inspect and visualize primitive paths; used by controller investigations and their tests. |
-| `compare_stack_control.py`, `controller_baseline.py`, `tune_pick_tolerance.py`, `diagnose_release_drift.py` | Reproduce historical controller comparisons and explain the adopted settings. They are diagnostic tools, not the current demonstration collectors; see [controller measurements](CONTROLLER-PATHS.md). |
-| `tower_workspace.py` | Reproduce the workspace survey and deferred payload-feedback investigation. It now uses shared Unstack execution; feedback variants remain diagnostic only. See the [workspace findings](TOWER-WORKSPACE.md). |
-| `id_first_continuation.py` | Diagnose continuation/folding with supplied straight-line candidates. It does not establish end-to-end synthesis success. |
-| Historical Unstack and 2D symbolic verification examples | Keep their abstraction/proof-regression role separate from current physical programs. The 2D mark-all example is not Grid/Pyramid physical verification. |
-
-The local `verify_unstack_lateral.py` diagnostic and its test predate this audit
-and remain separate local work. Their reported proof results retain their
-original executable/fingerprint, reset and geometric-premise scope. The audit
-did not rerun those proofs or merge them into the main pipeline.
-
-Generated demos and run artifacts remain outside source commits. Historical
-reports and videos are retained as evidence. The pre-existing plotting helper's
-`partial_stack` log key denotes historical experiment data, not an active task;
-the environment figure helper now imports Restack.
+PartialStack and the incorrect historical Reverse verifier remain removed.
+Use Restack for that task and the shared Reverse collector for reversal demos;
+neither has integrated formal verification support yet.
 
 ## Rechecking a collection
 

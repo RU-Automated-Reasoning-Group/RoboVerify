@@ -1041,15 +1041,20 @@ The reference semantics enter fingerprints. Collection explicitly opts in, while
 the normal synthesis/verification loader rejects these unencoded references.
 
 `collect_demos --task TASK` now selects a provided groundtruth for all six tasks.
-The old `unstack_lateral` module retains only compatibility imports and a CLI
-forwarder; its separate runner and monkey-patched controllers were removed.
+The old `unstack_lateral` runner, monkey-patched controllers and compatibility
+wrapper have been removed; callers use the shared collector and factory.
 The user explicitly retired PartialStack, so its environment, factory, reset
 helpers, standalone verifier, inference option and unused golden fixture were
 removed. The figure helper was migrated to Restack. The obsolete Reverse
 verifier was also removed: it encoded Unstack rather than the current reversal
-specification (entry 39). Useful controller, workspace, invariant and search
-diagnostics remain, with their purpose and limitations listed in the
-[experiment inventory](roboverify/synthesis/experiment/README.md).
+specification (entry 39). The subsequent cleanup retired historical controller
+comparisons, tolerance/drift studies, workspace interventions, manual ID-first
+continuation and the local finite Unstack proof adapter. Their diagnostic-only
+tests were removed; environment and collection regressions now live in those
+packages. Current search, invariant-learning and proof-ablation runners remain;
+see the [experiment inventory](roboverify/synthesis/experiment/README.md).
+Retained findings explain current decisions without requiring obsolete runners
+to remain executable in the final repository.
 
 **Pyramid defect found by seed expansion:** the original bottom-row-4 run failed
 on seed 12 at the highest-goal approach to the last source block. At the far,

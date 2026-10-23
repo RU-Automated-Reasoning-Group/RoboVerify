@@ -124,8 +124,8 @@ Unstack and Reverse both sample their initial tower 54–70 cm ahead of the robo
 base and 15–25 cm on its higher-Y side, independent of block count. All Unstack
 factories use this single right-to-left layout. The
 [provided Unstack program](roboverify/synthesis/examples/unstack.py) retains
-15 cm leftward placements and executes through the shared controller; the old
-lateral experiment is now a compatibility entry point. Reverse rebuilds
+15 cm leftward placements and executes through the shared controller. The old
+lateral experiment and compatibility wrapper have been removed. Reverse rebuilds
 the reversed tower on the lower-Y side using trainable table-relative Move
 offsets. The supplied
 [`synthesis.examples.reverse`](roboverify/synthesis/examples/reverse.py) program
@@ -141,7 +141,8 @@ validated 200 executions in the now-adopted larger source region; fresh
 production-factory rechecks passed all 30 executions across both tasks and
 2–4 blocks. The user deferred the investigated payload-feedback placement skill
 because it would strengthen the primitive and require reviewing its verification
-assumptions. Production controllers and motion contracts remain unchanged.
+assumptions. The investigation runners have been retired; their findings remain
+documented. Production controllers and motion contracts remain unchanged.
 Historical Unstack motion checks cover their original narrower source region.
 
 A [Lean mechanization of WP soundness](roboverify/proofs/wp_soundness/README.md)

@@ -9,6 +9,12 @@ appearance and explicit inertial properties remain. Gain 20 and 50-step budgets
 are unchanged. These choices improve agreement but do not certify physical
 refinement of the motion model.
 
+The comparison, tolerance-sweep and drift-replay scripts have been retired.
+This document retains the measurements that explain current controller settings;
+reproducing superseded controller cohorts is no longer a maintained workflow.
+Use [collection and auditing](../inference_lib/README.md#cross-environment-audit)
+to reproduce current task executions.
+
 The four historical demonstration archives were deleted by request; their reports
 and videos remain. This controller investigation predates the current 15-seed
 collections; see the [collection audit](../inference_lib/README.md#cross-environment-audit).
@@ -17,7 +23,7 @@ diagnostic paths, metrics and plots under `runs/`. See review entries
 [36](../../../PAPER-DISCREPANCIES.md#36-component-wise-saturation-bends-the-physical-gripper-path)
 and [37](../../../PAPER-DISCREPANCIES.md#37-release-drift-and-pick-stopping-tolerance-after-uniform-scaling).
 
-## Current combined validation
+## Historical combined validation
 
 Seeds 0–199 were executed in pairs: previous uniform-scaling behavior (10 mm Pick,
 head contacts enabled, Z-only Release) versus the updated production behavior.
@@ -63,11 +69,6 @@ Artifacts:
 `summary.json`, `executions.json`, and embedded/exportable plots in the same
 directory. The run's source metadata records the pre-commit SHA with dirty changes;
 production behavior was subsequently committed as `69a440a`.
-
-```bash
-uv run python -m synthesis.experiment.compare_stack_control --num-seeds 200
-uv run python -m synthesis.experiment.report --run runs/stack-control/latest
-```
 
 ## Historical diagnosis of Release drift
 
@@ -153,20 +154,7 @@ must not be equated with the stopping tolerance. All 1,800 default-tolerance
 phase position sequences exactly matched the earlier uniform experiment,
 checking that the instrumentation did not alter those executions.
 
-## Historical diagnostic commands and artifacts
-
-From `roboverify/`, with the simulator environment in AGENTS.md. The tolerance
-tool now uses the current Release/collision defaults; reproducing the historical
-tolerance sweep exactly requires its original revision (`7bdffaa`). The Release
-diagnosis tool explicitly reconstructs the old 10 mm/head-contact/Z-only baseline:
-
-```bash
-uv run python -m synthesis.experiment.tune_pick_tolerance --num-seeds 100
-uv run python -m synthesis.experiment.tune_pick_tolerance \
-  --seed-start 100 --num-seeds 100 --tolerances-mm 2 --run-name holdout-2mm
-uv run python -m synthesis.experiment.diagnose_release_drift \
-  --seeds 0 1 9 52 62 63 98
-```
+## Historical artifacts
 
 Use `synthesis.experiment.report --run <directory>` for status. Measurements are
 JSON and Markdown in each run's `artifacts/`:

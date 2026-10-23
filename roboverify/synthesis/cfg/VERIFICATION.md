@@ -699,8 +699,8 @@ for both Unstack and Reverse: **base-relative X in [0.54, 0.70] m and Y in
 [0.15, 0.25] m**, independent of block count. Tower order and initial heights
 are unchanged. All Unstack factories use this single reset, including
 `make_roboverify_unstack_env()` and `make_roboverify_env("unstack")`.
-The experiment's `lateral_env` name aliases the production factory; there is no
-separate reset override or legacy Unstack layout option. Reverse uses the same
+The old experiment wrapper has been removed; there is no separate reset
+override or legacy Unstack layout option. Reverse uses the same
 source bounds and keeps its table-relative destination.
 Archived full simulator states still restore exactly.
 The [workspace investigation](../experiment/TOWER-WORKSPACE.md) records 200
@@ -737,8 +737,8 @@ The current runnable implementation is
 [`synthesis.examples.unstack`](../examples/unstack.py), through the shared
 collector and controller. `Y_min`, `Z_m` and `gripper` are resolved from the
 observation once per instruction, and their semantics enter program fingerprints.
-The older experiment entry point forwards to collection and retains compatibility
-imports; it no longer patches instruction execution or has a separate runner.
+The older experiment entry point and compatibility imports have been removed.
+Use the shared collector and production environment factory directly.
 These operands remain outside integrated synthesis and motion verification.
 Run with the usual MuJoCo environment from `roboverify/`:
 
@@ -858,41 +858,10 @@ search or later named body search does not prove the generalized loop; the share
 inference and verification pipeline still has to accept that returned candidate.
 The selected ID-first policy is retained for any later whole-task resynthesis.
 
-### Manual continuation experiment
-
-To replace MCMC with supplied placement candidates while retaining real simulator
-execution, refinement, and quotienting, use recordings from the current Stack
-example. Recollect after changing controller settings or waypoints; the diagnostic
-checks the source fingerprint. For example:
-
-```bash
-uv run python -m synthesis.experiment.id_first_continuation \
-  --demos demos/stack/3-blocks-5-trajectories/demonstrations.npz
-uv run python -m synthesis.experiment.report --run runs/id-first-continuation/latest
-```
-
-Use `--num-blocks 4` with four-block recordings to repeat the experiment with
-an additional intermediate placement:
-
-```bash
-uv run python -m synthesis.entry.collect_demos \
-  --program synthesis.examples.stack:build_program --task stack \
-  --num-blocks 4 --num-trajectories 5 --seed-start 0 --save-video \
-  --max-loop-iterations 3 \
-  --output-dir demos/stack/4-blocks-5-trajectories
-uv run python -m synthesis.experiment.id_first_continuation \
-  --num-blocks 4 \
-  --demos demos/stack/4-blocks-5-trajectories/demonstrations.npz
-```
-
-This diagnostic requires three- or four-block recordings from the current Stack
-example, with `b0` bound to physical ID 0. It saves `artifacts/summary.json`, named
-programs, and complete replay archives.
-The script distinguishes automatic continuation from isolated calls to quotient
-and from replaying rejected candidate loops; none is a formal verification result.
-If folding succeeds, it also supplies a candidate for the new named body-search
-call and records its actual per-iteration rollouts in `post_quotient_oracle_calls`.
-That diagnostic replaces MCMC in both phases; the integrated CLI runs real MCMC.
+The former manual continuation diagnostic substituted supplied placements for
+MCMC and has been retired. Its findings remain in
+[review entry 22](../../../PAPER-DISCREPANCIES.md#22-id-first-continuation-exposes-placement-and-loop-exit-boundary-limits).
+Use the integrated command above to exercise current ID-first synthesis.
 
 ## Finite checks and unbounded proof
 
