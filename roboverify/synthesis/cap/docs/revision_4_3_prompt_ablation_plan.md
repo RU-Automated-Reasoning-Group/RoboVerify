@@ -1,6 +1,6 @@
 # Revision 4.3: primitive prompt ablation plan
 
-- **Status:** design agreed except the open point in Section 8; no experiment run yet.
+- **Status:** completed on 2026-10-23 (Qwen3.8 27B). The selected prompt set is `p0001` (motion-planning limits only); see the [report, Section 1.5](revision_4_3_report.md#15-results).
 - **Purpose:** decide which of the four Revision 4.2 primitive prompt blocks to keep.
 - **Order of experiments:**
   1. This prompt study runs first, with feedback fixed.
@@ -88,6 +88,6 @@ The four Boolean switches under `RunConfig.primitive_prompt` ([Revision 4.2, Sec
 - The token budgets of the feedback ablation apply: 200k per recovery round and 900k per trial; call and time limits unchanged.
 - Round-0 success stays the primary outcome. Final success and recovery of initially failed trials are secondary and are not used for selection.
 
-## 8. Open point
+## 8. Outcome
 
-- Confirmation of the selection rule in Section 5.
+- The selection rule in Section 5 was applied unchanged: `p0001` ([report, Section 1.5.4](revision_4_3_report.md#154-selected-prompt-set)).

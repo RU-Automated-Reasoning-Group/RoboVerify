@@ -2,6 +2,7 @@
 
 - **Status:** design agreed except the open points in Section 10. The experiment starts after the [prompt factorial](revision_4_3_prompt_ablation_plan.md) has finished and its selected prompt set is recorded in the [report](revision_4_3_report.md); every Stage A and Stage B job uses that prompt set.
 - **Model:** Qwen3.8 27B only (Section 6). The Qwen3.5 9B was dropped on 2026-10-22.
+- **Prompt set:** `p0001`, i.e. only `explain_motion_planning_limits` on (`--prompt-flags 0001`), selected by the prompt factorial ([report, Section 1.5.4](revision_4_3_report.md#154-selected-prompt-set)).
 - **Implementation it evaluates:** [Revision 4.3: configurable feedback and full executed-policy history](revision_4_3_configurable_feedback_and_full_policy_history.md).
 - **Question:** which recovery-feedback items, and which history mode, change the chance that a failed policy is repaired?
 

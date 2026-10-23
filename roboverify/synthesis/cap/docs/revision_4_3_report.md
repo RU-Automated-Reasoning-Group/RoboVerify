@@ -1,6 +1,6 @@
 # Revision 4.3: experiment report
 
-**Status: prompt factorial completed except for the rerun of 192 trials invalidated by a server failure (Section 1.4); feedback ablation not started.** Pending trials are not observed failures.
+**Status: prompt factorial completed; selected prompt set `p0001` (motion-planning limits only, Section 1.5.4). Feedback ablation not started.** Pending trials are not observed failures.
 
 - **Prompt factorial:** [plan](revision_4_3_prompt_ablation_plan.md). Full 2⁴ factorial over the four primitive prompt blocks; 50 trials per cell × 16 cells × 3 methods × 2 models = 4,800 trials.
 - **Feedback ablation:** [plan](revision_4_3_ablation_experiment_plan.md). Runs after the prompt study, with the selected prompt set fixed.
@@ -79,7 +79,75 @@ Shared settings:
 
 ### 1.5 Results
 
-Pending.
+**Data:** 2,400 trials (Qwen3.8 27B): the 2,208 unaffected trials of the main batch plus the 192 reruns (Section 1.4). Every cell × method has exactly 50 trials, and no rerun trial had a transport error. Primary outcome: round-0 task success. Analysis: logistic regression with method as a covariate.
+
+#### 1.5.1 Prompt blocks under test
+
+Each block is a fixed text in [`prompts/primitive_v1.json`](../prompts/primitive_v1.json). It is appended after the header "Additional primitive contract explanations:" to the initial and recovery prompts of all methods. Each example below is the actual round-0 prompt of a Baseline trial in the cell where only that block is on; the block starts at the linked line. Prompt files live under `runs/`, which git ignores, so these links work only in a checkout that has the run folders.
+
+| Block (switch) | Content | Text | Example prompt |
+| --- | --- | --- | --- |
+| Target offsets (`explain_target_offsets`) | Offset = desired gripper coordinate − reference coordinate; carried-block compensation; numeric example (X 1.30 → 1.40 needs dx = 0.10, not 1.40) | [line 5](../prompts/primitive_v1.json#L5) | [p1000 Baseline trial 1, round 0](../../../runs/cap-revision43/20261022b-prompt-factorial-qwen38-27b/trials/cap_google_baseline-dsl_only-001-recovery-on-p1000/cap/20261022-212230-b1a6ea9-cap_google_baseline-recovery-95c7aa74/attempts/round_000/cap/20261022-212234-b1a6ea9-cap_google_baseline-stack-2110d9fd/artifacts/trial_001/lmp/call_0001/prompt.txt#L107) |
+| Convergence criteria (`explain_convergence_criteria`) | Pick/Move/Release phase-completion tests, tolerances, the shared 50-step budget | [line 6](../prompts/primitive_v1.json#L6) | [p0100 Baseline trial 1, round 0](../../../runs/cap-revision43/20261022b-prompt-factorial-qwen38-27b/trials/cap_google_baseline-dsl_only-001-recovery-on-p0100/cap/20261022-212231-b1a6ea9-cap_google_baseline-recovery-3446aaaf/attempts/round_000/cap/20261022-212235-b1a6ea9-cap_google_baseline-stack-52aaf61a/artifacts/trial_001/lmp/call_0001/prompt.txt#L107) |
+| Partial execution (`explain_partial_execution`) | A primitive may change the scene before it fails; nothing is rolled back; later statements do not run | [line 7](../prompts/primitive_v1.json#L7) | [p0010 Baseline trial 1, round 0](../../../runs/cap-revision43/20261022b-prompt-factorial-qwen38-27b/trials/cap_google_baseline-dsl_only-001-recovery-on-p0010/cap/20261022-212842-b1a6ea9-cap_google_baseline-recovery-75223e0f/attempts/round_000/cap/20261022-212844-b1a6ea9-cap_google_baseline-stack-e1ecbe9a/artifacts/trial_001/lmp/call_0001/prompt.txt#L107) |
+| Motion-planning limits (`explain_motion_planning_limits`) | Move has no obstacle avoidance or inserted waypoints; lift, transfer and descent must be explicit; no universal safe height | [line 8](../prompts/primitive_v1.json#L8) | [p0001 Baseline trial 1, round 0](../../../runs/cap-revision43/20261022b-prompt-factorial-qwen38-27b/trials/cap_google_baseline-dsl_only-001-recovery-on-p0001/cap/20261022-212231-b1a6ea9-cap_google_baseline-recovery-b7347428/attempts/round_000/cap/20261022-212236-b1a6ea9-cap_google_baseline-stack-29c36dad/artifacts/trial_001/lmp/call_0001/prompt.txt#L107) |
+| All four blocks | — | — | [p1111 Baseline trial 1, round 0](../../../runs/cap-revision43/20261022b-prompt-factorial-qwen38-27b/trials/cap_google_baseline-dsl_only-001-recovery-on-p1111/cap/20261022-212229-b1a6ea9-cap_google_baseline-recovery-3cd90c78/attempts/round_000/cap/20261022-212234-b1a6ea9-cap_google_baseline-stack-62a84497/artifacts/trial_001/lmp/call_0001/prompt.txt#L107) |
+
+#### 1.5.2 Main effects
+
+| Block | Round-0 success off → on | Odds ratio (95% CI) | p | Final success off → on |
+| --- | --- | --- | --- | --- |
+| Target offsets | 51.2% → 52.3% | 1.05 (0.88–1.25) | 0.56 | 84.0% → 83.7% |
+| Convergence criteria | 51.8% → 51.8% | 1.00 (0.84–1.20) | 0.97 | 84.8% → 82.8% |
+| Partial execution | 52.4% → 51.2% | 0.94 (0.79–1.12) | 0.51 | 83.8% → 83.8% |
+| **Motion-planning limits** | **32.1% → 71.5%** | **5.32 (4.47–6.33)** | **< 0.001** | **74.3% → 93.3%** |
+
+- **Block × block interactions:** none (likelihood-ratio test p = 0.50 for round-0 success, 0.82 for final success; the smallest single term is P:M, p = 0.09).
+- **Block × method:** significant for round-0 success (p = 0.039), and entirely due to the size of the motion-planning effect (M × method p = 0.007; the other three blocks p ≥ 0.17).
+  - Its odds ratio is about 3.7 for Baseline, 5.6 for Method 1 and 7.4 for Method 2. It is strongly positive in every method.
+  - Round-0 success without → with the block: Baseline 36.2% → 68.0%, Method 1 32.5% → 72.8%, Method 2 27.5% → 73.8%.
+  - Final success shows no block × method interaction (p = 0.70).
+- **The other three blocks show no effect,** whether the motion-planning block is on or off. Among the 1,200 trials with it on, their odds ratios are 0.95–1.10, all p ≥ 0.44.
+
+#### 1.5.3 Secondary outcomes (motion-planning block off → on)
+
+- **Round-0 primitive nonconvergence:** 49.2% → 19.1% of trials. By primitive, Move 314 → 105, Pick 155 → 69, Release 121 → 55 trials.
+- **Round-0 execution-budget exhaustion:** 12.4% → 2.4%.
+- **Preparation stops** (`preparation_failure_no_rollout`, any round): 15.6% → 5.0% of trials.
+- **Median tokens per trial:** 31.0k → 11.8k, mainly because fewer recovery rounds are needed.
+
+#### 1.5.4 Selected prompt set
+
+Under the [selection rule](revision_4_3_prompt_ablation_plan.md#5-selection-rule-fixed-before-the-run), the selected set is **`p0001`**: only `explain_motion_planning_limits` on.
+
+- **Rule 1:** keep motion-planning limits. Its pooled effect is positive, and its confidence interval excludes harm.
+- **Rule 2:** drop target offsets, convergence criteria and partial execution. Their effects are near zero, and dropping them gives a shorter prompt.
+- **Rule 3:** does not apply; no block × block interaction is significant.
+- **Rule 4:** one set for all methods. The method interaction changes only the size of the motion-planning benefit, not its direction, so no exception is needed.
+- For reference, round-0 success by method (Baseline / M1 / M2): `p0000` 34 / 32 / 32%, `p0001` 70 / 64 / 76%, `p1111` 72 / 78 / 76%. The extra three blocks in `p1111` have no significant effect when motion-planning limits is on (Section 1.5.2).
+
+**Limitation:** one model, one task and one initial scene (see the plan).
+
+### 1.6 Cell table (round-0 and final success, 150 trials per cell)
+
+| Cell (T C P M) | Round 0 | Final |
+| --- | ---: | ---: |
+| p1111 | 75.3% | 94.0% |
+| p0011 | 74.0% | 92.7% |
+| p0111 | 72.0% | 93.3% |
+| p0101 | 72.0% | 93.3% |
+| p1101 | 70.7% | 94.0% |
+| p0001 | 70.0% | 92.7% |
+| p1001 | 69.3% | 94.7% |
+| p1011 | 68.7% | 92.0% |
+| p1000 | 38.0% | 74.0% |
+| p0100 | 34.0% | 70.7% |
+| p0000 | 32.7% | 78.0% |
+| p1010 | 32.7% | 76.7% |
+| p1100 | 32.7% | 73.3% |
+| p1110 | 31.3% | 70.7% |
+| p0010 | 28.7% | 78.0% |
+| p0110 | 26.7% | 73.3% |
 
 ## 2. Feedback ablation
 
