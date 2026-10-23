@@ -790,3 +790,108 @@ This is empirical evidence, not a symbolic/motion proof or controller refinement
 Connecting the correct Reverse abstraction, invariant learning and motion
 contracts to a verifier remains open. See the
 [program, collection and evidence](roboverify/synthesis/inference_lib/README.md#collect-reverse-demonstrations).
+
+## 40. Grid and Pyramid goal traversal is not connected to physical execution
+
+**Implementation gaps and paper clarifications; review only.** The 2026-10-23
+review compared Fig. 10, Appendix B/Table 8 and Figs. 17–18 in
+[POPL2027.pdf](POPL2027.pdf) with the simulator, DSL and verification pipeline.
+The user clarified that only goals have traversal pointers; physical blocks do
+not. This review changes documentation, not environments or primitive contracts.
+
+The two reference programs are identical except for their names (the paper
+labels them synthesized programs). In the paper, `d` and `r` are goal cursors,
+and the pointer fields are `next_c` and `next_r`:
+
+```text
+d <- h0
+while d != null:
+    r <- d
+    while r != null and exists physical block b: not AtGoal(b):
+        Move(b, b, r, (0, 0, 0.15))
+        Pick(b)
+        Move(b, b, r, (0, 0, 0.15))
+        Move(r, r, r, (0, 0, 0.15))
+        Move(r, r, r, (0, 0, 0))
+        Release(r, 0.15)
+        r <- r.next_r
+    d <- d.next_c
+```
+
+Move's three operands supply X, Y and Z respectively. Goal coordinates denote
+desired block centers, so the final Move has zero Z offset. This differs from
+placing on a block/table support reference. Goal traversal does not require a
+stronger grasp or payload-feedback controller (37).
+
+**Existing pieces and missing connections:**
+
+- `environment/cee_us_env/fpp_construction_env.py` already creates Grid goal
+  coordinates in the XY plane and Pyramid coordinates in the XZ plane. Grid
+  dimensions are configurable, defaulting to 3 rows by 2 columns. Pyramid is
+  fixed to six blocks, with layers 3+2+1, constant Y, 65 mm horizontal spacing
+  and 50 mm layer height. Both scatter source blocks separately from the goals.
+  Brown goal markers have collision disabled. There is no runtime goal graph.
+- A concrete immutable goal layout should supply stable goal IDs, XYZ, a head,
+  `next_r` within each row and `next_c` between row heads, with null successors
+  at the ends. This topology agrees with the existing nested goal axioms. For
+  Pyramid, the first row is the bottom layer and the next row is physically
+  higher; a logical `d` link does not mean decreasing physical Z. Generalizing
+  Pyramid needs a layer-count parameter, triangular block count, and workspace
+  validation. Neither links nor goal identities belong to physical blocks.
+- `_roboverify_goal_layout_complete` currently compares block i with goal i,
+  using a 20 mm position tolerance. The paper's `HasBlock(g)` accepts any block
+  at g. Introduce shared occupancy semantics, for example `Occupies(b,g)`,
+  `AtGoal(b) = exists g. Occupies(b,g)` and
+  `HasBlock(g) = exists b. Occupies(b,g)`. Runtime guards, task success/reward,
+  learning and verification must agree, including tolerance and uniqueness.
+  Goal occupancy must follow actual geometry rather than an unconditional mark.
+- `HighLevelContext(verification_mode="goals")` already has a separate
+  `GoalSort`, `d_star`, `r_star`, `l0`, null and `Mark`. However, `GoalAssign`,
+  `MoveRight`, `MoveDown` and `MarkGoal` are verification-only. Named physical
+  instructions resolve block aliases, and `PrimitiveController.reference_position`
+  accepts only block IDs or tbl. Add typed goal aliases and coordinate lookup,
+  executable goal assignment/successor operations, and mixed block/goal guard
+  evaluation. Pick must continue to accept only physical blocks. Grid/Pyramid
+  also need runtime block bindings, currently initialized only for tower tasks.
+- `entry/verify_2d_with_learned_invariant.py` checks a nested **mark-all**
+  program. Its examples in `inference.py` are literal synthetic states, not
+  physical recordings. It neither selects unused blocks nor checks the above
+  primitive sequence. Its symbolic result is not a Grid/Pyramid robot proof.
+- The collector exposes Stack/Reverse, the integrated CLI Stack/Unstack, and
+  `cfg.tasks` has no goal task. `predicates/term.py` has no goal/occupancy
+  vocabulary, and `prepare_program` explicitly rejects nested loops.
+  The CFG adapter itself already recurses into loop bodies; that does not remove
+  the loader, typed binding, task or trace restrictions. Add goal-aware task
+  conditions, executable examples, fingerprints, archive/replay metadata and
+  inner/outer invocation traces to the shared pipeline. Extend the intended
+  partition learner's input/vocabulary rather than adding a separate learner.
+  Supplied nested-program verification and full nested-loop synthesis are
+  distinct milestones: current quotient recovery is explicitly flat.
+- Connect successful physical placement to a block/goal occupancy effect,
+  including preservation of other occupied goals. Symbolic verification must
+  cover traversal, block availability and completion of both loops. Motion
+  verification must establish the placement effect, frame preservation and
+  collision freedom under their entry conditions. Goals are coordinate
+  references, not obstacles or physical supports. Grid uses table support;
+  Pyramid's upper blocks straddle two lower blocks. Existing aligned,
+  single-column tower support assumptions do not model that geometry.
+  Reuse arbitrary-obstacle reasoning instead of restricting the proof to an
+  unrolling of six blocks. Any geometric support/clearance assumptions must be
+  explicit and preserved; simulator size/reach limits are a separate concern.
+
+**Paper/model clarifications before integration:** Table 8's Grid row quantifies
+`g` but writes `reach(h0,x)`; its Grid/Pyramid Scattered clauses omit the
+distinct-block restriction. The displayed `reach` definition also omits closure
+stars: interpreting both edges as immediate successors cannot describe all
+visited goals. Specify closure-inclusive row traversal, including h0, explicitly.
+The task needs an explicit sufficient-block premise: otherwise the physical
+inner guard can stop with goals unfilled, unlike the mark-all abstraction.
+Finite runtime graphs should be acyclic and cover every intended goal; the
+existing partial-correctness VCs alone do not establish termination (15).
+Separately, `goal_model_diagram.draw_canonical_2d_grid` draws vertical links in
+every column, inconsistent with the row-head-only nested axioms. Fix the
+illustration to the agreed topology when integrating, not the axioms merely to
+match the illustration.
+
+No Grid/Pyramid physical execution, integrated synthesis or two-level proof was
+performed in this review. The implementation work above remains open.

@@ -124,6 +124,12 @@ relocation, quantified assertions and conditional program partial correctness.
 The Python attachment-only dispatcher and physical refinement remain separate
 correspondence obligations; this does not change the verification status above.
 
+Grid and Pyramid have physical goal-marker layouts and a separate symbolic
+nested mark-all example, but no integrated executable goal-traversal program.
+Only goals carry traversal links. Their shared reference program and the gaps
+in occupancy semantics, runtime goal references, nested-loop collection and
+verification are recorded in [discrepancy 40](PAPER-DISCREPANCIES.md#40-grid-and-pyramid-goal-traversal-is-not-connected-to-physical-execution).
+
 The supported scope is structured chains and flat loops for the tower tasks;
 the integrated synthesis CLI exposes Stack and Unstack. A successful
 `verified_model` result establishes partial correctness in the documented
