@@ -541,24 +541,32 @@ fixtures are not injected into production learning.
 
 ## 30. Stack invariant vocabulary and attachment semantics
 
-**Default bootstrap passes; attachment/replay model limit remains.** A larger
+**Public Put relocation corrected, 2026-10-23.** A larger
 vocabulary need not strengthen the partition learner's minimum separating
 features. ON*/Scattered/equality can admit a second tower.
 
-For a singleton a=b=b0 and c=b_prime above d in another tower, attachment WP
+Historically, for a singleton a=b=b0 and c=b_prime above d in another tower, attachment WP
 adds c above a while retaining c above d:
 `ON_new(x,y) = ON_old(x,y) or (ON_old(x,c) and ON_old(b,y))`.
 After b:=c, `ON*(b,x) => ON*(x,b0)` fails for d. Geometric replay detaches c
 from d instead, so it cannot provide that failing successor for enlargement.
-The resulting no-progress diagnosis is not successful refinement. This mismatch
-outside source-singleton states remains unresolved.
+The resulting no-progress diagnosis was not successful refinement.
 
 The agreed public Put contract requires both operands to be distinct, clear
 physical blocks before execution. The [Lean formalization](roboverify/proofs/wp_soundness/README.md)
 proves the guarded general-relocation WP and its deletion/attachment
 decomposition under that contract, and checks a counterexample to using the
-additive rule on a supported source. The production dispatcher is unchanged;
-implementing and establishing correspondence to the proved rule remains open.
+additive rule on a supported source. The production dispatcher now composes
+source deletion with attachment for ON*, rather than retaining the source's old
+support edges. It requires a clear physical source and, for a block destination,
+a distinct clear support. A table destination needs only the source condition.
+Dispatch follows the destination's value, so Reverse's `b <- tbl` selects the
+table WP before later iterations select the block WP. Frozen ON*_zero is unchanged.
+Motion checking proves enabling conditions separately from predicate effects;
+an unavailable action does not make every successor atom false. Regression tests
+cover supported-source relocation, both table spellings, frozen relations and
+occupied operands. These checks do not mechanically certify the Python translator
+against Lean or establish physical controller refinement.
 
 **Higher-removal ablation, 2026-10-01.** On the five current four-block
 demonstrations, ON*/Scattered/equality learned the clear-top, root and
@@ -573,7 +581,9 @@ premises remained; removing those too refuted transport collision and arm-cleara
 checks. Higher is therefore not indispensable for this Stack proof, but the current
 learner did not recover the necessary replacement in that vocabulary. The structural
 control is explicitly supplied, not a new learner or production fallback; the
-attachment rule remains unchanged. See the [ablation results and reproduction](roboverify/synthesis/cfg/VERIFICATION.md#higher-removal-ablation).
+attachment rule was still additive in that historical ablation. Those results
+have not been rerun with the corrected relocation rule. See the
+[ablation results and reproduction](roboverify/synthesis/cfg/VERIFICATION.md#higher-removal-ablation).
 
 ON*/equality alone can learn a one-tower invariant and pass symbolic verification,
 but lacks motion separation facts. Under exact height comparison, the full

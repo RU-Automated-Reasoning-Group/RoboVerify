@@ -6,6 +6,29 @@ from pathlib import Path
 from typing import List, Optional, Sequence, Union
 
 import numpy as np
+import synthesis.inference_lib.inference
+import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
+import synthesis.verification_lib.lowlevel_verification_lib as lowlevel_verification_lib
+from synthesis.api.instructions import (
+    Assign,
+    Get,
+    GoalAssign,
+    Instruction,
+    MarkGoal,
+    Move,
+    MoveByName,
+    MoveDown,
+    MoveRight,
+    Pick,
+    PickByName,
+    Put,
+    Release,
+    ReleaseByName,
+    Seq,
+    Skip,
+    While,
+)
+from synthesis.util.symbols import fresh_const, rewrite_quantifier
 from z3 import (
     Z3_OP_UNINTERPRETED,
     And,
@@ -31,30 +54,6 @@ from z3 import (
     substitute_vars,
     unsat,
 )
-
-import synthesis.inference_lib.inference
-import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
-import synthesis.verification_lib.lowlevel_verification_lib as lowlevel_verification_lib
-from synthesis.api.instructions import (
-    Assign,
-    Get,
-    GoalAssign,
-    Instruction,
-    MarkGoal,
-    Move,
-    MoveByName,
-    MoveDown,
-    MoveRight,
-    Pick,
-    PickByName,
-    Put,
-    Release,
-    ReleaseByName,
-    Seq,
-    Skip,
-    While,
-)
-from synthesis.util.symbols import fresh_const, rewrite_quantifier
 
 
 def _outer_while_direct_body_move_down_var(
@@ -1222,6 +1221,60 @@ def to_seq(instructions):
         assert False, "unable to convert to seq for empty instructions"
 
 
+def put_precondition(instruction, context, *, avoid=()):
+    """Enabled public Put: a clear physical source and a clear distinct support."""
+    source = context.get_consts(instruction.upper_block)
+    target = context.get_consts(instruction.base_block)
+    witness = fresh_const(context.BoxSort, "put_clear", avoid=(*avoid, source, target))
+
+    def clear(block):
+        return ForAll(
+            [witness], Implies(context.ON_star(witness, block), witness == block)
+        )
+
+    source_guard = And(
+        clear(source), source != context.get_consts("tbl") if context.use_tbl else True
+    )
+    if _put_base_is_tbl(instruction):
+        return source_guard
+    block_guard = And(
+        clear(target), source != target, Not(context.ON_star(target, source))
+    )
+    if context.use_tbl:
+        block_guard = Implies(target != context.get_consts("tbl"), block_guard)
+    return And(source_guard, block_guard)
+
+
+def put_effect(instruction, postcondition, context):
+    """Pure predicate transformer under put_precondition, with value-based support.
+
+    Separate enabling conditions from effects: a failed precondition does not
+    mean that every relation in the successor becomes false.
+    """
+    source = context.get_consts(instruction.upper_block)
+    table_post = None
+    if context.use_tbl or _put_base_is_tbl(instruction):
+        table_post = rewrite_for_put_on_tbl_for_ON_star(postcondition, source, context)
+        table_post = rewrite_for_put_on_tbl_for_Higher(table_post, source, context)
+        table_post = rewrite_for_put_on_tbl_for_scattered(table_post, source, context)
+    if _put_base_is_tbl(instruction):
+        return table_post
+    target = context.get_consts(instruction.base_block)
+    block_post = rewrite_for_put_on_tbl_for_ON_star(
+        rewrite_for_put_for_ON_star(postcondition, source, target, context),
+        source,
+        context,
+    )
+    block_post = rewrite_for_put_for_higher(block_post, source, target, context)
+    block_post = rewrite_for_put_for_scattered(block_post, source, target, context)
+    if context.use_tbl:
+        return And(
+            Implies(target == context.get_consts("tbl"), table_post),
+            Implies(target != context.get_consts("tbl"), block_post),
+        )
+    return block_post
+
+
 def wp(seq_instruction, Q, context):
     """calculate weakest precondition"""
     from synthesis.api.relational_summary import RelationalSummary, summary_wp
@@ -1283,20 +1336,10 @@ def wp(seq_instruction, Q, context):
             ForAll([z], Implies(context.dtot(curr, z), substitute(Q, (curr, z)))),
         )
     elif isinstance(seq_instruction, Put):
-        placed = context.get_consts(seq_instruction.upper_block)
-        if _put_base_is_tbl(seq_instruction):
-            # put(upper, tbl): e.g. Put("b", "tbl") places block b on the table.
-            Q = rewrite_for_put_on_tbl_for_ON_star(Q, placed, context)
-            Q = rewrite_for_put_on_tbl_for_Higher(Q, placed, context)
-            return rewrite_for_put_on_tbl_for_scattered(Q, placed, context)
-        b = context.get_consts(seq_instruction.base_block)
-        b_prime = placed
-        Q = And(
-            Not(context.ON_star(b, b_prime)),
-            rewrite_for_put_for_ON_star(Q, b_prime, b, context),
+        return And(
+            put_precondition(seq_instruction, context, avoid=(Q,)),
+            put_effect(seq_instruction, Q, context),
         )
-        Q = rewrite_for_put_for_higher(Q, b_prime, b, context)
-        return rewrite_for_put_for_scattered(Q, b_prime, b, context)
     assert (
         False
     ), f"Unrecognized seq instruction {type(seq_instruction)} to calculate wp"

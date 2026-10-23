@@ -3,7 +3,6 @@
 import unittest
 
 import z3
-
 from synthesis.api.instructions import Put
 from synthesis.api.program import wp
 from synthesis.verification_lib.highlevel_verification_lib import HighLevelContext
@@ -19,6 +18,10 @@ class HigherPutRuleTwo(unittest.TestCase):
         zb, zc = z3.Ints("base_level other_level")
         solver = z3.Solver()
         solver.add(z3.Distinct(a, b, c), z3.Not(high.ON_star(b, a)))
+        x = z3.FreshConst(high.BoxSort)
+        solver.add(
+            *(z3.ForAll([x], z3.Implies(high.ON_star(x, n), x == n)) for n in (a, b))
+        )
         for left, zl in ((a, za), (b, zb), (c, zc)):
             for right, zr in ((a, za), (b, zb), (c, zc)):
                 solver.add(high.Higher(left, right) == (zl >= zr))
@@ -76,6 +79,13 @@ class HigherPutRuleSix(unittest.TestCase):
                         solver.set(timeout=5000)
                         solver.add(
                             *binding, z3.Not(high.ON_star(blocks["b"], blocks["a"]))
+                        )
+                        x = z3.FreshConst(high.BoxSort)
+                        solver.add(
+                            *(
+                                z3.ForAll([x], z3.Implies(high.ON_star(x, n), x == n))
+                                for n in (blocks["a"], blocks["b"])
+                            )
                         )
                         for left in names:
                             for right in names:

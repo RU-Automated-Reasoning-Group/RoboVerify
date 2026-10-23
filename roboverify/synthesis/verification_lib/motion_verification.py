@@ -11,7 +11,6 @@ from time import perf_counter
 from typing import Optional
 
 import z3
-
 from synthesis.api.instructions import Assign, PickPlaceByName, Skip
 from synthesis.util.symbols import fresh_const
 from synthesis.verification_lib.bmc_lib import NoiseSpec, bounded_noise
@@ -511,7 +510,7 @@ def check_abstract_effects(problem):
     translation is necessary here: weakening under an equivalence is unsound.
     """
     from synthesis.api.instructions import Put
-    from synthesis.api.program import wp
+    from synthesis.api.program import put_effect
     from synthesis.verification_lib.highlevel_verification_lib import HighLevelContext
 
     problem.solver.push()
@@ -527,6 +526,35 @@ def check_abstract_effects(problem):
         )
         high = HighLevelContext(use_tbl=problem.context.use_tbl)
         put = Put(problem.contract.source, problem.contract.target)
+        # Prove the public action's enabling conditions at transfer entry.
+        # These are separate obligations, not part of an atom's truth value.
+        current = problem.current
+        try:
+            problem.current = problem.initial
+            source, target = problem.contract.source, problem.contract.target
+            problem.check("put_source_physical", z3.Not(problem.physical(source)))
+            problem.check_obstacles(
+                "put_source_clear",
+                lambda point: _on_star(
+                    point, problem.initial[source], problem.context.L
+                ),
+                exclude=(source,),
+            )
+            if target != "tbl":
+                problem.check(
+                    "put_distinct_support",
+                    z3.And(problem.physical(target), problem.same(source, target)),
+                )
+                problem.check_obstacles(
+                    "put_support_clear",
+                    lambda point: z3.And(
+                        problem.physical(target),
+                        _on_star(point, problem.initial[target], problem.context.L),
+                    ),
+                    exclude=(target,),
+                )
+        finally:
+            problem.current = current
         names = list(problem.constants)
         source = problem.contract.source
         # Include source/other in both directions, plus unchanged named pairs.
@@ -546,14 +574,14 @@ def check_abstract_effects(problem):
                 )
                 if hasattr(problem, "effect_entry_fields"):
                     expected = problem.at(
-                        wp(put, atom, high),
+                        put_effect(put, atom, high),
                         fields=problem.effect_entry_fields,
                         resolve=False,
                     )
                     actual = problem.at(atom, resolve=False)
                 else:
                     expected = problem.context.translate_exact(
-                        wp(put, atom, high), problem.constants
+                        put_effect(put, atom, high), problem.constants
                     )
                     before = problem.context.translate_exact(atom, problem.constants)
                     actual = z3.substitute(before, *replacements)
