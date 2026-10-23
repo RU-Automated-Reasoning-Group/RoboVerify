@@ -290,6 +290,15 @@ model retain their documented scope. Initial arm clearance remains refutable,
 and solver UNKNOWNs still prevent full motion verification. See
 [the VC formulas and results](roboverify/synthesis/cfg/VERIFICATION.md#global-extrema-motion-vcs).
 
+The subsequent descent-collision investigation establishes the missing unbounded
+proof from Y separation alone. Ground instances of the existing universal
+premises suffice; dropping the other quantified conjuncts produces a weaker query
+that is UNSAT in 0.020 s, with no domain closure or added geometric assumption.
+The shared checker now tries this sufficient proof route and proves the descent
+in 0.081 s. Initial arm clearance is still refuted, and the full motion result
+remains unverified. See the
+[proof and integrated results](roboverify/synthesis/cfg/VERIFICATION.md#unstack-descent-proof-from-universal-instances).
+
 Figure 14's supplied invariant refers to an undefined b. The separately named
 `unstack_paper_base` interpretation substitutes b0, but the final checker finds
 an unbounded preservation countermodel consisting only of tbl with b0=tbl.

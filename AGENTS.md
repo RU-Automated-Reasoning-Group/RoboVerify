@@ -72,12 +72,15 @@ at instruction entry. The strengthened `b_prime != b0` guard removes the singlet
 release failure. Unstack omits the auxiliary exact-column invariant and its loop
 assumptions; Stack retains them. Global extrema resolve the previous arm-clearance
 and tower-height preservation counterexamples: both unbounded violations are UNSAT.
-The shared recheck passes all 12 symbolic VCs and 28 motion checks, with four
-UNKNOWN queries at 30 seconds (212.1 seconds overall). A separate unbounded
-diagnostic refutes initial arm clearance; it has not been repaired by changing
-later references. Longer replays resolve the first collision and Higher-effect
-queries, while the descent-collision query remains UNKNOWN at 300 seconds. There is no full
-motion proof. See the recorded global-extrema results for query budgets and scope.
+The descent collision now also has an unbounded proof: a necessary condition
+built from ground universal instances is UNSAT in 0.020 s (0.081 s in the shared
+pipeline). This adds no domain bound or geometric assumption. The shared recheck
+passes all 12 symbolic VCs and all seven collision checks; its full motion report
+has 29 valid, one SAT (initial arm clearance), and two UNKNOWN at 30 seconds
+(Higher effects and tower-height preservation, both proved in earlier runs).
+It finishes in 128.5 seconds and is still `motion_unverified`. The remaining SAT
+entry condition has not been repaired by proving later motion. See the recorded
+universal-instance proof for the argument, solver comparison and result scope.
 Reverse table-relative operands remain unsupported; the other four tasks are
 outside integrated proof support. See the
 [tower verification commands](roboverify/synthesis/cfg/VERIFICATION.md#provided-unstack-and-reverse-verification).
@@ -408,6 +411,12 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
     Missing physical programs in a verifier and uncovered instructions fail closed.
     The obsolete Reverse verifier was removed because it encoded Unstack (39).
     See [motion verification semantics](roboverify/synthesis/verification_lib/README.md).
+  - `universal_instances.py`: a sufficient unbounded proof for quantifier-free
+    motion violations. Retain quantifier-free premise conjuncts and instances of
+    positive top-level universals; drop other quantified conjuncts. Only UNSAT
+    proves the original VC. No domain closure is added; SAT/UNKNOWN fall back to
+    the original solver. Negative/nested quantifiers are never finitely rewritten.
+    Instance and preliminary-query limits bound proof effort, not block count.
   - `primitive_motion.py`: named primitive waypoint encoding, including `Y_min`,
     `Z_m` and `gripper` references frozen at instruction entry. Independent extrema
     witnesses (`sym2`, etc.) coexist with collision witness `sym`, receive the same

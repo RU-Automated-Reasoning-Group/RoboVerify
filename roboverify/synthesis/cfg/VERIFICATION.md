@@ -948,6 +948,10 @@ promote UNKNOWN to SAT/UNSAT. No additional body SAT failure was established.
 
 ### Global-extrema motion VCs
 
+The original global-extrema run below predates the
+[universal-instance descent proof](#unstack-descent-proof-from-universal-instances).
+Its 300-second UNKNOWN is retained as the baseline, not the current descent result.
+
 The primitive checker now selects one physical extremizing block m_i for each
 instruction-entry reference. Write S_i for that entry state and Phys(c) for
 `c != tbl`. The added constraints are:
@@ -1044,6 +1048,83 @@ The affected primitive/CFG regression suite passed **72 tests in 57.5 s**.
 An existing offset-scene test now uses a closed finite SAT witness to avoid an
 unrelated open-domain SAT timeout; finite UNSAT still proves nothing about the
 unbounded premises. The full Python suite was not rerun for this change.
+
+### Unstack descent proof from universal instances
+
+`collision_5_sym` is the carried-block descent in the fifth primitive. It has a
+short proof in the current noiseless cube model, independent of exact XY tower
+alignment. Let a be the carried block, o any other physical block, and m the
+global minimum Y immediately before the fourth, lateral move. Then:
+
+\[
+m\leq Y(o),\qquad y_{\mathrm{start}}=m-0.15.
+\]
+
+Nonmovers keep their coordinates. The fifth move recomputes the global minimum n,
+which includes the carried block, so its endpoint satisfies
+`y_end = n <= y_start`. For every interpolation parameter t in [0,1]:
+
+\[
+y(t)=(1-t)y_{\mathrm{start}}+ty_{\mathrm{end}}
+\leq y_{\mathrm{start}}\leq Y(o)-0.15.
+\]
+
+Hence `Y(o)-y(t) >= 0.15`. The swept-cube collision predicate requires absolute
+center separation below L=0.05 on **all** axes, which is impossible on Y alone.
+This proof does not even need to establish that the second minimum equals the
+carried block's Y; its upper bound suffices. The argument is for noiseless motion;
+noisy calls retain their actual noise constraints and must pass their own VCs.
+
+The exported original query contains quantified learned/height/clearance premises,
+alias-dependent coordinate updates, global extrema, and nonlinear swept-segment
+arithmetic (`t * coordinate`). A diagnostic kept 99 quantifier-free premise
+conjuncts and generated 168 instances from 12 positive universal conjuncts, dropping
+one other quantified conjunct. With the **unchanged collision violation**, Z3
+returned UNSAT in **0.0196 s**. Adding those same instances while retaining the
+full quantified query still returned UNKNOWN at 10 s; the original baseline
+had timed out at 300 s. An unsat core uses only ordinary type/guard facts,
+minimum-reference instances, L=0.05, and the collision violation.
+
+This establishes that Z3 can prove the property, while its search on the full
+quantified formula was ineffective under the tested budgets. It does not identify
+a single internal heuristic responsible for the timeout. The simpler query
+exposes sufficient arithmetic facts and avoids the remaining quantifier search.
+
+The proof is unbounded: every retained conjunct and ground universal instance
+is a consequence of the original premises. Removing the other conjuncts weakens
+the query. UNSAT for that weaker query implies UNSAT for the original one.
+**No finite-domain closure or exact-column premise was added.** SAT on the weaker
+query would be inconclusive and could not be reported as a counterexample.
+
+The shared motion checker now uses this UNSAT-only route for quantifier-free
+violations, with bounded instance generation and a short preliminary solver
+budget; otherwise it falls back to the original query. Consistency checks and
+quantified postconditions retain their prior semantics. See the
+[implementation contract](../verification_lib/README.md#proving-safety-from-universal-instances).
+The one-off comparison stayed outside the repository. Queries, timings and core
+terms are under `runs/diagnostics/20261023-unstack-descent-proof/`.
+
+The shared pipeline recheck
+`runs/cfg/20261023-202317-74b859f-unstack-universal-instance-proof` finished in
+**128.5 s**, using the same guarded archive, 30-second motion query budgets and
+600-second wall budget as the command above. Use
+`--run-name unstack-universal-instance-proof` to reproduce the configuration.
+It relearned from all 60 states and passed all **12 symbolic checks**. Motion
+returned **29 valid, one SAT, two UNKNOWN**. All seven collision checks passed;
+`collision_5_sym` was proved through universal instances in **0.0809 s**.
+Initial arm clearance remains SAT (0.666 s). `effect_Higher` and
+`tower_height_preserved` timed out at 30 seconds in this particular run; their
+original formulas are unchanged and prior unbounded proofs remain recorded above.
+Skipping full-solver calls changes later incremental solver state, so timings and
+UNKNOWN outcomes need not reproduce earlier runs. This is still `motion_unverified`,
+not a full motion proof. No controller, precondition or geometric assumption was
+strengthened to obtain the descent result.
+
+Stack's shared regression returned `verified_model` with **12 symbolic and 40
+motion checks in 22.9 s** (`runs/cfg/20261023-202318-74b859f-stack-universal-instance-regression`).
+The focused suite passed **79 tests in 70.2 s**, including seven tests for the
+new unbounded relaxation, quantifier polarity, fallback behavior, nonvacuity and
+lateral descent. The full Python suite was not rerun for this scoped change.
 
 ### Paper invariant controls
 

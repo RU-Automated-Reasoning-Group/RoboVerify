@@ -100,6 +100,34 @@ effects. `TODO(motion-quantifiers)` in `primitive_motion.py` records the remaini
 quantifier-elimination investigation; the complete checks are not quantifier-free.
 See the [Unstack pipeline results](../cfg/VERIFICATION.md#provided-unstack-and-reverse-verification).
 
+### Proving safety from universal instances
+
+For a quantifier-free violation, the shared checker first tries a necessary
+condition of the original premises. It keeps quantifier-free conjuncts,
+instantiates positive top-level universal conjuncts whose bodies are
+quantifier-free at known object terms (including the arbitrary obstacle sym),
+and drops other quantified conjuncts. It never substitutes finite instances
+inside a negative universal, disjunction, or nested quantified body.
+
+If P is the original premise and R the resulting formula, P implies R.
+Therefore `R and violation` UNSAT proves `P and violation` UNSAT for the original
+unbounded domain. **There is no domain-closure assertion.** This differs from
+finite-world enumeration, whose UNSAT cannot establish unbounded validity.
+SAT/UNKNOWN from R are inconclusive and always fall back to the untouched
+original solver; they never produce counterexamples or a successful result.
+Quantified violations also use the original solver. Existing consistency checks
+continue to use the original premises and their separate SAT-only witness path.
+
+The helper `universal_instances.py` caps generated instances at 256. This limits
+proof effort, not the number of blocks. The preliminary solver uses at most
+1 second or one tenth of the query timeout, whichever is smaller, and its elapsed
+time is deducted from the fallback budget. Successful checks record
+`UNSAT from universal instances; no domain restriction` in their reason.
+The original extrema semantics and remaining quantified obligations are retained;
+this is a sufficient proof route, not complete quantifier elimination.
+
+See the [Unstack descent proof](../cfg/VERIFICATION.md#unstack-descent-proof-from-universal-instances).
+
 ### Obligations and model scope
 
 The checks cover consistency, collision sweeps, release/support, direct placement,

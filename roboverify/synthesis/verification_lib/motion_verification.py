@@ -309,10 +309,36 @@ class MotionProblem:
 
     def check(self, obligation, violation=None):
         start = perf_counter()
+        reason = ""
+        instance_proof = False
+        shortcut_ms = 0
+        if violation is not None:
+            from synthesis.verification_lib.universal_instances import (
+                is_quantifier_free,
+                universal_instance_relaxation,
+            )
+
+            if is_quantifier_free(violation):
+                relaxed = universal_instance_relaxation(
+                    self.solver.assertions(), tuple(self.constants.values())
+                )
+                if relaxed is not None:
+                    # Only UNSAT is conclusive for this weaker, unbounded query.
+                    # Keep the actual quantified solver untouched for fallback,
+                    # counterexample extraction, and all consistency checks.
+                    instance_solver = z3.Solver(ctx=self.solver.ctx)
+                    instance_solver.set(
+                        timeout=max(1, min(1000, self.timeout_ms // 10))
+                    )
+                    instance_solver.add(*relaxed, violation)
+                    instance_proof = instance_solver.check() == z3.unsat
+                    shortcut_ms = int(1000 * (perf_counter() - start))
+                    if instance_proof:
+                        reason = "UNSAT from universal instances; no domain restriction"
         self.solver.push()
         if violation is not None:
             self.solver.add(violation)
-        answer = None
+        answer = z3.unsat if instance_proof else None
         candidates = getattr(self, "consistency_candidates", ())
         if (
             violation is None
@@ -321,9 +347,13 @@ class MotionProblem:
         ):
             answer = z3.sat
         if answer is None:
-            answer = self.solver.check()
+            remaining_ms = max(1, self.timeout_ms - shortcut_ms)
+            self.solver.set(timeout=remaining_ms)
+            try:
+                answer = self.solver.check()
+            finally:
+                self.solver.set(timeout=self.timeout_ms)
         counterexample = None
-        reason = ""
         if answer == z3.unknown:
             status = "unknown"
             reason = self.solver.reason_unknown()

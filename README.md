@@ -74,15 +74,15 @@ See the [counterexamples and longer-timeout run](roboverify/synthesis/cfg/VERIFI
 Unstack removes the auxiliary exact-column invariant, including both its checks
 and its assumptions at loop body/exit boundaries. Its extrema references now use
 physical witnesses bounded universally against **all** blocks at instruction entry.
-This resolves both the arm-clearance and tower-height preservation counterexamples;
-their unbounded violation queries return UNSAT. The current shared run passes all
-12 symbolic checks and 28 motion checks, with four UNKNOWN at 30-second query
-limits (212.1 s overall). A separate unbounded diagnostic refutes initial arm
-clearance. Longer replays resolve the first collision and Higher-effect queries;
-the descent collision remains UNKNOWN at 300 seconds, so there is no complete
-motion proof.
-Stack still passes all 12 symbolic and 40 motion checks.
-See the [global-extrema VC formulas and results](roboverify/synthesis/cfg/VERIFICATION.md#global-extrema-motion-vcs).
+This resolves both the arm-clearance and tower-height preservation counterexamples.
+The descent collision is now proved from ground universal instances in **0.081 s**
+through the shared pipeline, with no finite-domain restriction or new geometric
+assumption. All 12 symbolic checks and all seven collision checks pass. The latest
+shared run finishes in 128.5 s with **29 valid motion checks, one SAT** (initial
+arm clearance), and **two UNKNOWN** at 30 seconds (Higher effects and tower-height
+preservation, both proved in earlier runs). There is still no complete motion
+proof. Stack retains all 12 symbolic and 40 motion checks.
+See the [descent argument and solver comparison](roboverify/synthesis/cfg/VERIFICATION.md#unstack-descent-proof-from-universal-instances).
 
 After the extrema encoding changes, revision `4f734bf` passed the full Python
 regression suite: **475 tests across 68 modules**, with no failures, errors or
