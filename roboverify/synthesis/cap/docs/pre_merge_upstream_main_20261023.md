@@ -2,7 +2,7 @@
 
 - **Purpose:** bring `upstream/main` (RU-Automated-Reasoning-Group/RoboVerify) into `feature/cap` without disturbing running experiments or breaking the provenance of recorded results.
 - **Decision:** merge, not rebase. Prepare it in a separate worktree now; move `feature/cap` to the merge commit only after the running feedback ablation (Stage B) has finished. This is option A of the discussion on 2026-10-23.
-- **Status:** Section 7 records the outcome.
+- **Status:** merge prepared and validated on `merge/upstream-main-20261023` (Section 7). `feature/cap` moves to it after Stage B finishes.
 
 ## 1. State before the merge
 
@@ -89,4 +89,23 @@ A trial merge in a throwaway worktree (aborted, nothing committed) gave:
 
 ## 7. Outcome
 
-Pending.
+**Branch.** `merge/upstream-main-20261023` in the worktree `/common/home/lz729/RoboVerify-merge`, pushed to `origin`:
+
+| Commit | Content |
+| --- | --- |
+| `c6845a5` | `Merge upstream main (67d48dc) into feature/cap`. The only conflict was the `control.py` import block, resolved to upstream's imports; upstream's `reference_position` and CaP's observer hooks are both kept. |
+| `6233ef4` | CaP `restack` creates the upstream Restack environment. Archives recorded as `partial_stack` still match. |
+| `f28e9b5` | [DSL.md](DSL.md) and [Revision 5](revision_5_add_tasks.md) updated for Restack, the removed verifiers, and the shared Reverse/Restack `task_spec`. |
+
+**Checks (2026-10-23):**
+
+| Check | Result |
+| --- | --- |
+| Full unit suite (all `synthesis/**/test_*.py`) | 621 tests, OK (4 skipped), 269 s |
+| Guard tests in the vLLM environment | OK |
+| Stack replay: 30 Stage A round-0 attempts (5 successes and 5 failures per method) re-executed with their recorded responses, once on the pre-merge code (main worktree) and once on the merged code | Pre-merge replay = original recording: 30/30. Merged = pre-merge on status, reason, success flags and step counts: 30/30. Identical per-step action sequences: 30/30. Outcomes covered: 15 completed, 11 primitive failures, 3 goal failures, 1 budget exhaustion; 50–2,314 steps each. |
+| CaP Restack environment creation | `RoboVerifyRestack` created |
+
+- **Conclusion.** The merge leaves CaP Stack execution unchanged, so post-merge Stack results remain comparable with Revision 4.x results.
+- **Replay artifacts:** `runs/cap-merge-check/20261023-stack-replay/{old,new}`.
+- **Remaining step:** after Stage B finishes, fast-forward (or merge) `feature/cap` to this branch in the main worktree and push.
