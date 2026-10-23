@@ -60,9 +60,11 @@ Unstack has one production reset: the lateral layout starts its tower at
 base-relative X in [0.54, 0.58] m and Y = 0.075*(N-1) +/- 0.01 m for right-to-left
 placement. The lateral experiment uses the shared factory. Reverse starts at
 base-relative X in [0.54, 0.58] m and Y in [0.14, 0.16] m; its supplied primitive
-program rebuilds the reversed tower 0.30 m toward lower Y. `collect_demos --task
-reverse --program synthesis.examples.reverse:build_program` validates frozen-entry
-order reversal for 2–4 blocks. Archived full states still restore exactly.
+program starts with `b <- tbl` and uses one loop for all N transfers. Table-relative
+Move offsets position the new tower on the lower-Y side and remain trainable.
+`collect_demos --task reverse --program synthesis.examples.reverse:build_program`
+validates frozen-entry order reversal for 2–4 blocks. Archived full states still
+restore exactly.
 Stack collection holds the initial gripper position for 50 steps before
 recording; the settled full snapshot becomes state zero. Synthesis, candidate
 verification, and standalone MCMC restore archived states without repeating
@@ -228,6 +230,10 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
     Control settings and action-scaling semantics enter executable fingerprints;
     the existing fingerprint mechanism is unchanged by the combined update. Legacy
     PickPlace macros retain separate controllers and are not collection inputs.
+    Move/Release resolve `tbl` (including aliases) through the physical table
+    frame: XY is `table_position[:2]`, reference Z is surface minus half a block.
+    A +0.05 m placement offset then works for table and block supports. Pick
+    requires a physical block. Relational table predicates remain unchanged.
   - `instructions.py`: `Instruction` subclasses. Physical instructions (`Pick`, `Move`,
     `Release`, `PickPlace`, and their `...ByName` variants that resolve symbolic box names via
     `env.symbolic_name_to_box_id`) implement `eval()` to drive a MuJoCo env, and
@@ -358,8 +364,9 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
 - **`synthesis/environment/tower_reset.py`** — shared lateral Unstack/Reverse
   reset geometry. Both start 0.54–0.58 m ahead of the robot base. Unstack's Y
   offset centers the eventual row; Reverse uses a fixed +0.15 m offset with
-  ±0.01 m jitter. The Reverse example moves its first block 0.30 m left, then
-  stacks the remaining source tops above it using stationary destination aliases.
+  ±0.01 m jitter. The Reverse example uses `b <- tbl` and one loop for every block.
+  Table-relative XY offsets (default +0.45, -0.15 m) position the destination;
+  `b` supplies support height and becomes the newly placed block after each transfer.
 
 - **`synthesis/environment/stack_reset.py`** — Stack-only bounded reset sampling.
   Initial block centers have base-relative X in [0.54, 0.70] m, Y in [-0.20,
@@ -373,9 +380,10 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   fixed-width slots; the `10 + 12*i : 10 + 12*i + 3` box-position slice convention recurs
   across `instructions.py`, `on.py`, and the `While` guard evaluator — keep it in sync if the
   observation layout ever changes. The four tower tasks expose
-  `table_surface_height` separately (the world z of the simulator's table plane);
-  `height_offset` is the resting block-center height, and relational `tbl` has no
-  coordinates.
+  `table_surface_height` separately (the world z of the simulator's table plane)
+  and `table_position` (the physical frame origin). `height_offset` is the resting
+  block-center height; relational `tbl` still has no predicate coordinates.
+  Controller Move/Release references use a separate support-height convention.
 
 - **`synthesis/experiment/invariant_learning/`** — a fixed-program experiment runner
   and environment adapter protocol. `witness.py` builds finite initial-state

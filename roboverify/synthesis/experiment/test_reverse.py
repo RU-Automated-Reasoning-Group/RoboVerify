@@ -1,13 +1,19 @@
 """Lateral Reverse resets and top-first physical reversal of an entire tower."""
 
+import tempfile
 import unittest
+from pathlib import Path
 
 import numpy as np
 
+from synthesis.api.instructions import Assign, While
 from synthesis.cfg.collection import record_execution, validate_trace
+from synthesis.cfg.demos import DemoSegment
 from synthesis.cfg.program_source import load_program
-from synthesis.cfg.reset import inner_env
+from synthesis.cfg.recordings import load_traces, save_traces
+from synthesis.cfg.reset import inner_env, reset_segment
 from synthesis.environment.tower_reset import REVERSE_TOWER_Y_OFFSET
+from synthesis.examples.reverse import DESTINATION_OFFSET
 from synthesis.mcmc.synthesis import make_roboverify_env, make_roboverify_reverse_env
 from synthesis.util.on import BLOCK_LENGTH, get_block_pos
 from synthesis.verification_lib.highlevel_verification_lib import HighLevelContext
@@ -78,12 +84,22 @@ class ReverseTests(unittest.TestCase):
                 )
                 definition.initial_bindings["b0"] = base_id
                 self.assertEqual(definition.initial_bindings["tbl"], "tbl")
+                self.assertEqual(len(definition.program.instructions), 2)
+                initialization, loop = definition.program.instructions
+                self.assertIsInstance(initialization, Assign)
+                self.assertEqual(
+                    (initialization.left, initialization.right), ("b", "tbl")
+                )
+                self.assertIsInstance(loop, While)
+                geometry = {}
 
                 def factory():
                     env = make_roboverify_reverse_env(num_blocks=count)
                     inner = inner_env(env)
                     inner.roboverify_base_block_id = base_id
                     inner.symbolic_name_to_box_id = {"b0": base_id}
+                    geometry["table"] = inner.table_position
+                    geometry["base"] = inner.robot_base_xy.copy()
                     return env
 
                 trace = record_execution(
@@ -96,9 +112,6 @@ class ReverseTests(unittest.TestCase):
                     timeout_seconds=12,
                 )
                 self.assertTrue(validate_trace(trace), trace.metadata)
-                initial = np.array(
-                    [get_block_pos(trace.states[0], i) for i in range(count)]
-                )
                 final = np.array(
                     [get_block_pos(trace.states[-1], i) for i in range(count)]
                 )
@@ -113,14 +126,69 @@ class ReverseTests(unittest.TestCase):
                     and e.get("control", {}).get("phase") == "close"
                 ]
                 self.assertEqual(selected, expected_order)
-                destination_xy = initial[base_id, :2] - [0, 2 * REVERSE_TOWER_Y_OFFSET]
+                destination_xy = geometry["table"][:2] + DESTINATION_OFFSET
                 np.testing.assert_allclose(
                     final[:, :2], np.tile(destination_xy, (count, 1)), atol=0.01, rtol=0
                 )
+                self.assertTrue(np.all(final[:, 1] < geometry["base"][1]))
+                heads = [e for e in trace.events if e["kind"] == "loop_head"]
+                self.assertEqual(len(heads), count)
                 self.assertEqual(
-                    sum(e["kind"] == "loop_head" for e in trace.events), count - 1
+                    [e["bindings"]["b"] for e in heads], ["tbl", *expected_order[:-1]]
+                )
+                self.assertTrue(
+                    all(
+                        e["path"].startswith("1.")
+                        for e in trace.events
+                        if "control" in e
+                    )
                 )
                 self.assertEqual(sum(e["kind"] == "loop_exit" for e in trace.events), 1)
+
+    def test_archive_and_segment_replay_preserve_table_and_block_support_bindings(self):
+        definition = load_program(
+            "synthesis.examples.reverse:build_program",
+            HighLevelContext(use_tbl=True),
+            2,
+        )
+        trace = record_execution(
+            definition,
+            seed=0,
+            num_blocks=2,
+            task="reverse",
+            max_loop_iterations=2,
+            timeout_seconds=12,
+        )
+        self.assertTrue(validate_trace(trace), trace.metadata)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "reverse.npz"
+            save_traces(path, [trace])
+            loaded = load_traces(path, require_valid=True)[0]
+            env = make_roboverify_reverse_env(num_blocks=2)
+            try:
+                table = inner_env(env).table_position
+                heads = [e for e in loaded.events if e["kind"] == "loop_head"]
+                self.assertEqual([e["bindings"]["b"] for e in heads], ["tbl", 1])
+                for head in heads:
+                    segment = DemoSegment(
+                        0,
+                        head["index"],
+                        len(loaded.states) - 1,
+                        loaded,
+                        head["bindings"],
+                    )
+                    for mode in ("reset", "replay"):
+                        obs = reset_segment(env, segment, mode=mode)
+                        np.testing.assert_array_equal(obs, loaded.states[head["index"]])
+                        self.assertEqual(
+                            inner_env(env).symbolic_name_to_box_id["b"],
+                            head["bindings"]["b"],
+                        )
+                        np.testing.assert_array_equal(
+                            inner_env(env).table_position, table
+                        )
+            finally:
+                env.close()
 
 
 if __name__ == "__main__":

@@ -229,6 +229,11 @@ class FetchPickAndPlaceConstruction(
                 self.sim.data.set_joint_qpos(n, p)
                 self.sim.data.set_joint_qvel(n, v)
 
+    @property
+    def table_position(self):
+        """Physical table-frame origin; relational tbl remains a geometry-free marker."""
+        return self.sim.data.get_geom_xpos("table0").copy()
+
     @staticmethod
     def flatten_observation(obs):
         musk = np.array([1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0,

@@ -93,6 +93,14 @@ entry conditions for straight-line blocks; uncovered motion fails closed. The
 handwritten Reverse and Partial verification entry points have no lowered physical
 program and explicitly report unsupported motion verification.
 
+The physical controller additionally permits tbl (or an alias such as b initialized
+from tbl) as a Move/Release coordinate reference. Its XY comes from the environment's
+`table_position`; its reference Z is the physical surface minus half a block.
+Adding one block length then places a block center on either tbl or a block.
+This convention is separate from relational tbl and is not yet encoded by
+`PrimitiveMotionProblem`. A resolved table operand there returns `unsupported`
+explicitly, rather than inventing coordinates or claiming a proof.
+
 Named Pick/Release primitives explicitly permit contact with their selected
 object. Empty-gripper sweeps use a point; carried payloads use a cube. Primitive
 Release proves support and treats unsupported positions as arbitrary falls.

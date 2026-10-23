@@ -750,16 +750,26 @@ also explicitly reports unsupported motion; it must not be used to certify the
 new Reverse program.
 
 At the user's request, Reverse now resets its source tower 0.54–0.58 m ahead of
-the robot base and 0.14–0.16 m toward higher Y. `examples/reverse.py` moves the
-original top 0.30 m toward lower Y to seed the destination, then repeatedly
-stacks the remaining source top there, including the original base last.
-The program uses ordinary primitive instructions and stationary destination
-references, with the existing 50-step budgets and 2 mm tolerances.
+the robot base and 0.14–0.16 m toward higher Y. `examples/reverse.py` now starts
+with `b <- tbl` and handles all N transfers in one loop, including the first
+block and the original base last. After each placement it assigns `b <- b_prime`.
+Ordinary Move parameters choose the destination relative to the physical table
+frame; the groundtruth supplies (+0.45, -0.15) m XY offsets, exposed for later
+optimization. The physical table reference uses Z = surface minus half a block,
+so one +0.05 m placement offset works for both table and block supports.
+This controller reference does not change the isolated relational tbl marker.
+Missing table geometry fails explicitly, and the motion verifier reports these
+new table-coordinate operands as unsupported. The existing 50-step budgets and
+2 mm tolerances remain.
 
 `cfg.tasks.task_spec("reverse")` requires the final ON* relation to equal the
 transpose of frozen entry ON* on physical blocks. The shared collector now
-supports this task. All 15 executions passed on seeds 0–4 at 2–4 blocks,
-including primitive convergence, normal exit and final-state validation.
+supports this task. All 15 fresh single-loop executions passed on seeds 0–4 at
+2–4 blocks, including primitive convergence, N loop iterations, normal exit and
+final-state validation. All 54 focused controller, task execution, collection,
+replay and motion tests passed. Table-relative semantics enter fingerprints for
+programs using table references; earlier first-block-outside-loop archives remain
+historical artifacts.
 This is empirical evidence, not a symbolic/motion proof or controller refinement.
 Connecting the correct Reverse abstraction, invariant learning and motion
 contracts to a verifier remains open. See the

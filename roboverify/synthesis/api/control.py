@@ -11,6 +11,9 @@ from math import isfinite
 import numpy as np
 
 from synthesis.util.actions import bound_delta_action
+from synthesis.util.on import BLOCK_LENGTH
+
+TABLE_REFERENCE_MODE = "table-surface-minus-half-block-v1"
 
 
 @dataclass(frozen=True)
@@ -88,9 +91,25 @@ class PrimitiveController:
 
     def box_position(self, box_id):
         num_blocks = (len(self.observation) - 13) // 15
-        if not 0 <= box_id < num_blocks:
+        if not isinstance(box_id, (int, np.integer)) or not 0 <= box_id < num_blocks:
             raise ValueError(f"Unknown box ID {box_id}")
         return self.observation[10 + 12 * box_id : 13 + 12 * box_id].copy()
+
+    def reference_position(self, reference):
+        """Resolve a block center or a table support reference for Move/Release.
+
+        Table XY is its physical frame origin. Its reference Z is half a block
+        below the surface, so adding one block length places a block center on
+        either kind of support. Pick still requires a physical block ID.
+        """
+        if reference != "tbl":
+            return self.box_position(reference)
+        inner = self.env.unwrapped if hasattr(self.env, "unwrapped") else self.env
+        position = np.array(getattr(inner, "table_position", None), dtype=float)
+        if position.shape != (3,) or not np.all(np.isfinite(position)):
+            raise ValueError("Table-relative motion requires a finite table_position")
+        position[2] -= BLOCK_LENGTH / 2
+        return position
 
     def move(self, target, *, close_gripper=True, vertical_only=False, phase="move"):
         target = np.asarray(target, dtype=float).copy()
@@ -144,7 +163,7 @@ class PrimitiveController:
 
     def move_relative(self, reference_ids, offsets):
         target = [
-            self.box_position(box_id)[axis] + offsets[axis]
+            self.reference_position(box_id)[axis] + offsets[axis]
             for axis, box_id in enumerate(reference_ids)
         ]
         return self.move(target)
@@ -152,7 +171,7 @@ class PrimitiveController:
     def release(self, box_id, offset):
         # Freeze XY before opening; retreat feedback corrects opening/tracking drift.
         target = self.observation[:3].copy()
-        target[2] = self.box_position(box_id)[2] + offset
+        target[2] = self.reference_position(box_id)[2] + offset
         if not self.gripper(opened=True):
             return False
         return self.move(target, close_gripper=False, phase="retreat")

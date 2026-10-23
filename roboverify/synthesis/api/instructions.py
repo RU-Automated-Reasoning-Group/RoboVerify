@@ -93,7 +93,7 @@ class Instruction(ABC):
     def __str__(self):
         pass
 
-    def _resolve(self, env) -> Dict[str, int]:
+    def _resolve(self, env) -> Dict[str, int | str]:
         mapping = getattr(env, "symbolic_name_to_box_id", None)
         if mapping is None:
             raise ValueError(

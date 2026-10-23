@@ -10,7 +10,15 @@ from unittest.mock import patch
 import numpy as np
 
 from synthesis.api.control import ControlConfig, PrimitiveController, get_move_action
-from synthesis.api.instructions import Move, Pick, Release
+from synthesis.api.instructions import (
+    Assign,
+    Move,
+    MoveByName,
+    Pick,
+    PickByName,
+    Release,
+    ReleaseByName,
+)
 from synthesis.api.program import Program
 from synthesis.api.runtime import execute_instruction
 from synthesis.cfg.collection import record_execution, validate_trace
@@ -63,6 +71,60 @@ def placement(control):
 
 
 class ControlTests(unittest.TestCase):
+    def test_one_placement_uses_table_then_block_support_with_trainable_offsets(self):
+        env = ServoEnvironment()
+        env.table_position = np.array([0.8, 0.75, 0.4])
+        env.symbolic_name_to_box_id["tbl"] = "tbl"
+        Assign("b", "tbl").eval(env, [])
+        instruction = MoveByName("tbl", "tbl", "b", target_offset=[0.45, -0.15, 0.05])
+        instruction.eval(env, [])
+        self.assertTrue(instruction.last_control_result.converged)
+        np.testing.assert_allclose(env.obs[:3], [1.25, 0.6, 0.425], atol=0.002, rtol=0)
+        np.testing.assert_array_equal(env.table_position, [0.8, 0.75, 0.4])
+        env.obs[22:25] = [1.25, 0.6, 0.425]
+        Assign("b", "other").eval(env, [])
+        instruction.eval(env, [])
+        self.assertTrue(instruction.last_control_result.converged)
+        np.testing.assert_allclose(env.obs[:3], [1.25, 0.6, 0.475], atol=0.002, rtol=0)
+
+        program = Program(1, [instruction])
+        instruction = program.instructions[0]
+        parameters = program.register_trainable_parameter()
+        before = program_fingerprint(program)
+        parameters[instruction.target_offset[0].pos] += 0.02
+        parameters[instruction.target_offset[1].pos] -= 0.03
+        program.update_trainable_parameter(parameters)
+        instruction.eval(env, [])
+        np.testing.assert_allclose(env.obs[:3], [1.27, 0.57, 0.475], atol=0.002, rtol=0)
+        self.assertNotEqual(before, program_fingerprint(program))
+        self.assertIn("table_reference", describe_program(program)[0])
+        self.assertNotIn(
+            "table_reference", describe_program(Program(1, [Move(0, 0, 0)]))[0]
+        )
+
+    def test_table_reference_is_physical_frame_relative_and_rejects_missing_geometry(
+        self,
+    ):
+        env = ServoEnvironment()
+        env.symbolic_name_to_box_id.update(tbl="tbl", b="tbl")
+        move = MoveByName("b", "b", "b", target_offset=[0, 0, 0.05])
+        with self.assertRaisesRegex(ValueError, "table_position"):
+            move.eval(env, [])
+        for position in ([0.2, -0.1, 0.4], [0.3, 0.05, 0.5]):
+            env.table_position = np.array(position)
+            move.eval(env, [])
+            np.testing.assert_allclose(
+                env.obs[:3], np.array(position) + [0, 0, 0.025], atol=0.002, rtol=0
+            )
+        with self.assertRaisesRegex(ValueError, "Unknown box ID tbl"):
+            PickByName("b").eval(env, [])
+        env.obs[3:5] = 0.02
+        start_xy = env.obs[:2].copy()
+        release = ReleaseByName("b", target_z=0.20)
+        release.eval(env, [])
+        self.assertTrue(release.last_control_result.converged)
+        np.testing.assert_allclose(env.obs[:3], [*start_xy, 0.675], atol=0.002, rtol=0)
+
     def test_action_is_proportional_and_has_explicit_gripper_command(self):
         np.testing.assert_allclose(
             get_move_action([1, 2, 3], [1.1, 1.8, 3.3], gain=2, close_gripper=True),

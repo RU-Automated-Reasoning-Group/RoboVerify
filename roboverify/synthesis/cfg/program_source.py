@@ -9,6 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
+from synthesis.api.control import TABLE_REFERENCE_MODE
 from synthesis.api.instructions import (
     Assign,
     Get,
@@ -34,6 +35,16 @@ def guard_term(instruction):
 
 
 def describe_program(program):
+    def has_table_reference(rows):
+        return any(
+            (isinstance(i, Assign) and i.right == "tbl")
+            or (isinstance(i, While) and has_table_reference(i.body))
+            or any(o["val"] == "tbl" for o in i.get_operand())
+            for i in rows
+        )
+
+    table_reference = has_table_reference(program.instructions)
+
     def describe(i):
         result = {"instruction": type(i).__name__}
         if isinstance(i, While):
@@ -62,6 +73,8 @@ def describe_program(program):
                 result["offsets"] = [p.numeric_val() for p in i.target_offset]
             if hasattr(i, "target_z_offset"):
                 result["release_offset"] = i.target_z_offset.numeric_val()
+            if table_reference and isinstance(i, (MoveByName, ReleaseByName)):
+                result["table_reference"] = TABLE_REFERENCE_MODE
         else:
             raise ValueError(
                 f"Unsupported instruction {type(i).__name__}; use explicit Pick/Move/Release primitives"

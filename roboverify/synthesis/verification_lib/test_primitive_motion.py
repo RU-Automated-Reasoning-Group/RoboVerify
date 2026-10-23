@@ -2,7 +2,7 @@ import unittest
 
 import z3
 
-from synthesis.api.instructions import MoveByName, PickByName, ReleaseByName
+from synthesis.api.instructions import Assign, MoveByName, PickByName, ReleaseByName
 from synthesis.verification_lib.lowlevel_verification_lib import LowLevelContext
 from synthesis.verification_lib.motion_verification import (
     MotionContract,
@@ -24,6 +24,27 @@ def primitives(height=0.05):
 
 class PrimitiveMotionTests(unittest.TestCase):
     scene = {"a": [0.3, 0, -0.1], "b": [0, 0, 0], "b0": [0, 0, 0], "sym": [2, 2, 0]}
+
+    def test_table_reference_reports_unsupported_without_inventing_coordinates(self):
+        for instruction in (
+            MoveByName("tbl", "tbl", "b", target_offset=[0.45, -0.15, 0.05]),
+            MoveByName("b", "b", "b", target_offset=[0, 0, 0.05]),
+            ReleaseByName("b", target_z=0.20),
+        ):
+            with self.subTest(instruction=instruction):
+                problem = PrimitiveMotionProblem(
+                    LowLevelContext(default_L=0.05, use_tbl=True),
+                    [],
+                    ["a", "b", "tbl"],
+                    MotionContract("a", "tbl", table_surface_height=0.4),
+                    None,
+                    "table",
+                    1000,
+                )
+                problem.execute([Assign("b", "tbl"), instruction])
+                self.assertEqual(len(problem.checks), 1)
+                self.assertEqual(problem.checks[0].status, "unsupported")
+                self.assertIn("Table-relative", problem.checks[0].reason)
 
     def verify(self, body):
         return verify_motion_block(

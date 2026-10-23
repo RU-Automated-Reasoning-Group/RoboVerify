@@ -92,16 +92,35 @@ recording starts after the 50-step preparation.
 Reverse starts one tower to the robot's right (higher Y), with base-relative
 X in [0.54, 0.58] m and Y in [0.14, 0.16] m. The source order is the existing
 canonical order with b0 at the bottom. The physical program in
-[`synthesis.examples.reverse`](../examples/reverse.py) transfers the original
-top block 0.30 m left to become the destination base, then repeatedly moves the
-source top onto the destination top. The original base moves last. For example,
-bottom-to-top order [0, 1, 2, 3] becomes [3, 2, 1, 0] on the other side.
+[`synthesis.examples.reverse`](../examples/reverse.py) starts with `b <- tbl`.
+One While loop handles all N blocks, moving the original top first and the
+original base last. After every release, `b <- b_prime` updates the support
+for the next block. Bottom-to-top order [0, 1, 2, 3] becomes [3, 2, 1, 0].
 
-The program uses ordinary Get, Assign, While, Pick, Move and Release, with no
-runtime overrides. Transfers use a common clearance above the highest nominal
-tower level, referenced first to b0 and then to the stationary destination base.
-The physical program supports 2–4 blocks. Primitive limits remain 50 steps and
-position tolerances remain 2 mm.
+The guard selects a clear physical block ON* b0, excluding the current `b`.
+Initially `b` is the table. After the last transfer, b0 is also `b`, so the guard
+is false. There is no Get or physical transfer before the loop, and no separate
+first-iteration branch.
+
+The loop uses ordinary Pick, Move and Release primitives. Its destination Move
+is `Move(tbl, tbl, b, (dx, dy, 0.05))`: table XY positions the column and `b`
+supplies its support height. `dx` and `dy` are ordinary trainable parameters;
+the groundtruth supplies (+0.45, -0.15) m. With the current physical table origin
+(0.8, 0.75, 0.4), the commanded column is (1.25, 0.60), on the robot's other side.
+This change exposes the placement parameters for learning; no optimization run
+is claimed here.
+
+Move/Release resolve the physical table at its actual XY origin and use
+reference Z = table surface minus half a block (0.375 m here). Thus the same
++0.05 m placement offset yields 0.425 m for a table placement, or one full block
+above an existing block's center. This is a controller coordinate convention;
+relational tbl remains an isolated geometry-free marker in predicates. Pick
+still requires a physical block. Missing table geometry fails explicitly.
+The table-reference convention is recorded in table-using program fingerprints.
+
+Transfers and retreats reference tbl at `N*0.05 + 0.10` m above that support
+reference, 10 cm above the highest nominal block center. The physical program
+supports 2–4 blocks. Primitive limits remain 50 steps and tolerances remain 2 mm.
 
 Run from `roboverify/` with the MuJoCo environment configured:
 
@@ -122,17 +141,19 @@ Every primitive must converge and the loop must exit normally. The relational
 postcondition specifies block order; the regression tests also check leftward
 placement and top-first transfer order.
 
-**2026-10-23 validation:** all 15 executions passed, five seeds (0–4) each with
-2, 3 and 4 blocks. Each program made N transfers: the initial destination seed
-and N−1 loop iterations. The 25 focused reset, task, collection and replay tests
-also passed, including a nonzero physical base ID.
-Collections are under `demos/reverse/{2,3,4}-blocks-5-trajectories-lateral/`,
+**2026-10-23 single-loop validation:** all 15 fresh executions passed, five seeds
+(0–4) each with 2, 3 and 4 blocks. Each program made exactly N loop iterations;
+every physical control event occurred inside that loop. The 54 focused controller,
+Reverse/Unstack, collection, replay and motion tests also passed, including a
+nonzero physical base ID and archive/replay with `b = tbl` and `b = block`.
+Collections are under `demos/reverse/{2,3,4}-blocks-5-trajectories-table-loop/`,
 with `demonstrations.npz` and `collection.json` in each directory.
-The aggregate is `demos/reverse/lateral-validation.json`; all transfers occurred
-top-first and final XY error relative to the intended destination stayed below
-6.27 mm. The largest primitive budget use was 17/50 steps. A representative
-four-block seed-0 video is
-`demos/reverse/4-blocks-lateral-video/videos/seed_0000.mp4` (220 frames, 20 FPS).
+The aggregate is `demos/reverse/table-loop-validation.json`; all transfers were
+top-first and final XY error relative to the intended column stayed below
+9.72 mm. Maximum primitive budget use was 17/50 steps. A representative video is
+`demos/reverse/4-blocks-table-loop-video/videos/seed_0000.mp4`.
+The older `*-lateral` collections and video retain the previous program, which
+handled the first block outside its loop; their fingerprints differ.
 
 These results validate the tested simulator executions. The integrated
 synthesis CLI still exposes Stack and Unstack. The historical standalone Reverse
