@@ -87,6 +87,12 @@ class GoalEnvironmentTests(unittest.TestCase):
         finally:
             env.close()
 
+    def test_pyramid_seed_12_reaches_the_last_block_at_top_goal_clearance(self):
+        result = execute("pyramid", seed=12, bottom_row_blocks=4)
+        self.assertTrue(result["success"], result)
+        self.assertEqual(result["primitives"], 60)
+        self.assertEqual(len(result["placements"]), 10)
+
     def test_grid_and_pyramids_execute_each_transfer_and_exit_both_loops(self):
         cases = [
             ("grid", {}),

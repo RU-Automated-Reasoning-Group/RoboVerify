@@ -56,9 +56,23 @@ Read [README.md](README.md#project-status) for current project status and
 reasoning and remaining actions. Collection and supplied-program verification
 are implemented; full synthesis acceptance is resolved. Stack reset bounds initial
 blocks to 0.70 m XY from the robot base.
+The current tasks are Stack, Unstack, Reverse, Restack, Grid and Pyramid.
+`collect_demos --task TASK` defaults to a provided groundtruth for all six.
+The 2026-10-23 audit saved 15 seeds (0–14) for each of seven configurations,
+105 valid demonstrations including both five-block Restack layouts. Archives
+and audit reports are under `demos/pipeline-audit-20261023/`; see the
+[collection audit](roboverify/synthesis/inference_lib/README.md#cross-environment-audit).
+All final states replayed exactly and remained successful after 50 extra steps.
+This did not establish new synthesis or verification results. The integrated
+CLI exposes Stack/Unstack; current Unstack observation-relative operands and
+the other four tasks remain outside integrated proof support.
+The Pyramid source center moved 4 cm closer after seed 12 failed at its final
+high approach; the original failed batch and replay video are retained.
+
 Unstack and Reverse share one lateral source workspace: base-relative X in
 [0.54, 0.70] m and Y in [0.15, 0.25] m, independent of block count. The Unstack
-lateral experiment uses the shared factory. Reverse's supplied primitive
+provided program uses shared observation-relative coordinates and collection;
+the old lateral experiment is only a compatibility forwarder. Reverse's supplied primitive
 program starts with `b <- tbl` and uses one loop for all N transfers. Table-relative
 Move offsets position the new tower on the lower-Y side and remain trainable.
 `collect_demos --task reverse --program synthesis.examples.reverse:build_program`
@@ -304,7 +318,7 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
     obligations, counterexamples, and timings. `NoiseSpec` is opt-in, off by default;
     all tower verification CLIs accept `--motion-noise GRASP MOVE RELEASE`.
     Missing physical programs in a verifier and uncovered instructions fail closed.
-    The standalone Reverse verifier is not wired to the new physical example (39).
+    The obsolete Reverse verifier was removed because it encoded Unstack (39).
     See [motion verification semantics](roboverify/synthesis/verification_lib/README.md).
   - `lowlevel_verification_lib.py`: geometric low-level context, box-corner/cube drawing
     helpers used to visualize/verify concrete 3D placements.
@@ -381,6 +395,9 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   start loose. Restack uses the same 50-step settling policy and records both
   flat loops. Optional MP4s run at 20 FPS. Reverse uses `synthesis.examples.reverse:build_program`;
   its validation compares current ON* with transposed frozen entry ON*.
+  All six tasks default to their provided example when --program is omitted.
+  `audit_demos` independently checks current fingerprints, task validation,
+  snapshot/action replay and physical success after extra final settling.
   It requires primitive DSL programs; PickPlace is rejected. The collection loader
   opts into nested goal programs; synthesis/verification loading keeps that mode
   disabled. `cfg.goal_collection` validates real goal occupancy without proof VCs.
@@ -391,10 +408,9 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   Experiment results stay in `runs/`; `--output-dir` changes that root and
   `--run-name` adds a label. `main.py` forwards to this driver.
   `verified_synthesis.py` and the Stack verifier CLI forward to verify mode.
-  Unstack/Reverse standalone verifiers consume `--demos` via the in-memory
-  inference adapter; Reverse still reports unsupported motion in those
-  entry points. The historical Reverse verifier also has the wrong symbolic task
-  (39); it does not verify the new physical example. `execute_goal_program.py`
+  The historical Unstack verifier consumes `--demos` via the inference adapter
+  for its own abstraction. The obsolete Reverse verifier and legacy PartialStack
+  verifier have been removed. Neither certified the current physical programs. `execute_goal_program.py`
   executes the shared Grid/Pyramid example through Program.eval with nested While
   loops, checks primitive convergence and occupancy, and optionally saves video.
   It does not create synthesis archives or invoke verification. The historical
@@ -406,7 +422,14 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   occupancy semantics drive guards and task completion. Pyramid traverses bottom
   to top; Grid uses 10 cm tabletop spacing for finger clearance. Goal-marker
   mocaps stay fixed when robot actions are applied. The source-layout fallback
-  preserves Scattered and rejects layouts outside the nominal workspace.
+  preserves Scattered and rejects layouts outside the nominal workspace. Source
+  center X is initial-gripper X minus 0.10 m for Grid and 0.14 m for Pyramid,
+  keeping the latter reachable at its higher goal clearance.
+
+- **`synthesis/environment/motion_reference.py`** — typed runtime-only operands
+  Y_min, Z_m and gripper, resolved at instruction entry. The shared controller
+  freezes each target for its servo loop. Fingerprints include these semantics;
+  collection opts in and synthesis/verification loading rejects them.
 
 - **`synthesis/environment/tower_reset.py`** — shared lateral Unstack/Reverse
   reset geometry. Both sample X in [0.54, 0.70] m ahead of the robot base and

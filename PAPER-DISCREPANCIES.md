@@ -757,12 +757,12 @@ See [configuration and evidence](roboverify/synthesis/cfg/VERIFICATION.md#unsat-
 
 ## 39. The historical Reverse verifier encodes Unstack rather than reversal
 
-**Implementation discrepancy; separate executable now validated.**
-`entry/verify_reverse_with_learned_invariant.py` uses `Put(b_prime,tbl)` and an
+**Historical implementation discrepancy; obsolete verifier removed in the collection audit (42).**
+The former `entry/verify_reverse_with_learned_invariant.py` used `Put(b_prime,tbl)` and an
 unstacked/equal-height/scattered postcondition. It does not establish a tower
 whose order is the reverse of frozen entry ON*. That historical entry point
-also explicitly reports unsupported motion; it must not be used to certify the
-new Reverse program.
+also explicitly reported unsupported motion. It was removed rather than left
+as a misleading verifier for the new Reverse program.
 
 At the user's request, Reverse now resets its source tower 0.54–0.70 m ahead of
 the robot base and 0.15–0.25 m toward higher Y, sharing Unstack's expanded source
@@ -1025,3 +1025,58 @@ Archives, per-seed reports and videos are under:
 
 The aggregate diagnostic is `roboverify/demos/restack/validation.json`.
 These are empirical execution results, not a symbolic or motion proof.
+
+## 42. Cross-environment collection coverage is broader than synthesis and verification
+
+**Shared collection gaps addressed; proof boundaries retained.** The 2026-10-23
+audit found that Unstack still required an experiment-local execution wrapper,
+while the shared collector supported the other five paper tasks. The existing
+lateral program is now `examples/unstack.py`. The controller resolves minimum-Y,
+maximum-Z and instruction-entry gripper coordinates through typed observation
+references. A Move freezes its target before its servo loop; this preserves the
+original horizontal transfer. Two- and four-block seed-0 executions were compared
+against saved pre-migration executions: every action and observation was identical.
+No payload-feedback skill, tolerance change or relaxed step limit was introduced.
+The reference semantics enter fingerprints. Collection explicitly opts in, while
+the normal synthesis/verification loader rejects these unencoded references.
+
+`collect_demos --task TASK` now selects a provided groundtruth for all six tasks.
+The old `unstack_lateral` module retains only compatibility imports and a CLI
+forwarder; its separate runner and monkey-patched controllers were removed.
+The user explicitly retired PartialStack, so its environment, factory, reset
+helpers, standalone verifier, inference option and unused golden fixture were
+removed. The figure helper was migrated to Restack. The obsolete Reverse
+verifier was also removed: it encoded Unstack rather than the current reversal
+specification (entry 39). Useful controller, workspace, invariant and search
+diagnostics remain, with their purpose and limitations listed in the
+[experiment inventory](roboverify/synthesis/experiment/README.md).
+
+**Pyramid defect found by seed expansion:** the original bottom-row-4 run failed
+on seed 12 at the highest-goal approach to the last source block. At the far,
+lower-Y corner, the approach used all 50 steps and remained 5.714 mm from its
+target, above the unchanged 2 mm tolerance; the following Pick also exhausted
+its budget. The source layout's center is now 140 mm closer in X than the initial
+gripper, instead of 100 mm. Grid remains at 100 mm. The goal geometry and supplied
+program are unchanged. All original seeds 0–14 passed after this 40 mm workspace
+correction. The original failed archive and a replay video remain under
+`demos/pipeline-audit-20261023/pyramid/`; the replay differs from recorded
+observations by at most 2.33e-10. A seed-12 regression covers this approach.
+
+**105 accepted demonstrations:** 15 seeds each for four-block Stack, Unstack
+and Reverse, five-block Restack with initial tower heights three and four,
+3×3 Grid, and bottom-row-4 Pyramid. The reusable `synthesis.entry.audit_demos`
+checks the exact requested seed set, current task/program identities, validation,
+snapshot restoration, full action replay, physical final success and success
+after 50 additional settling steps. Every final replay error was zero; every
+primitive converged, with a maximum 24 of 50 steps across all tasks. Unstack
+collection and audit invocations each ran under a 55-second external timeout.
+The aggregate manifest is `demos/pipeline-audit-20261023/summary.json`.
+
+The 82 focused tests passed across reference semantics, archive auditing,
+collection/replay, controllers, task removal, inference entry points, goal
+layouts, Pyramid seed 12, Restack and Reverse. These are execution results and
+regressions. No new symbolic or motion verification result, and no full synthesis
+run, is claimed by this audit. The integrated CLI still exposes Stack/Unstack;
+current Unstack runtime references, Reverse/Restack integration and goal-aware
+synthesis/verification remain open. Historical proof evidence retains its
+recorded executable, premises and workspace scope.

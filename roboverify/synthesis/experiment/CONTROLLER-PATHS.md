@@ -9,9 +9,10 @@ appearance and explicit inertial properties remain. Gain 20 and 50-step budgets
 are unchanged. These choices improve agreement but do not certify physical
 refinement of the motion model.
 
-The four local demonstration archives were deleted by request; reports and videos
-remain. No additional versioning or replacement collection is included. The
-combined validation below keeps full execution traces in memory and writes only
+The four historical demonstration archives were deleted by request; their reports
+and videos remain. This controller investigation predates the current 15-seed
+collections; see the [collection audit](../inference_lib/README.md#cross-environment-audit).
+The combined validation below kept full execution traces in memory and wrote only
 diagnostic paths, metrics and plots under `runs/`. See review entries
 [36](../../../PAPER-DISCREPANCIES.md#36-component-wise-saturation-bends-the-physical-gripper-path)
 and [37](../../../PAPER-DISCREPANCIES.md#37-release-drift-and-pick-stopping-tolerance-after-uniform-scaling).

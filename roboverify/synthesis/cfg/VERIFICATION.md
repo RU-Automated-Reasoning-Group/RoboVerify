@@ -5,6 +5,14 @@ verification stages on the same candidate and task conditions.
 
 ## Collection and pipeline modes
 
+Collection supports all six current tasks: Stack, Unstack, Reverse, Restack,
+Grid and Pyramid. The integrated synthesis/verification CLI exposes Stack and
+Unstack only. Its ordinary loader rejects the current Unstack program's
+observation-relative extrema/gripper operands, which are execution/collection
+features. Goal programs remain collection-only as well. Do not interpret the
+cross-environment demo audit as six end-to-end synthesis/verification results;
+see the [support matrix](../../../README.md#project-status).
+
 First collect a supplied primitive DSL program using
 `synthesis.entry.collect_demos`. The [collection guide](../inference_lib/README.md)
 describes seeds, full-state archives, and optional 20 FPS videos. Demonstrations
@@ -719,28 +727,29 @@ Release(Z_m, 0.15)
 `Y_min` is the current minimum Y among all blocks, including the carried block;
 `Z_m` remains the current maximum Z. Commanded X stays anchored to b0. The
 transport captures the gripper Z at instruction entry, after the preceding lift,
-and holds that absolute target throughout the move. The experiment-only `gripper`
+and holds that absolute target throughout the move. The shared runtime `gripper`
 Z operand avoids another 15 cm rise and also avoids the small block-center/gripper
 height difference that a zero block-relative Z offset would introduce. The shared
 controller continues correcting all three coordinates toward the fixed target.
 Actual placed block X can differ slightly from the commanded gripper X.
 
-The runnable implementation is
-[`synthesis.experiment.unstack_lateral`](../experiment/unstack_lateral.py).
-It resolves extrema and gripper Z in a scoped execution wrapper and saves
-per-instruction targets, validation summaries, and full-state traces. These
-references remain outside the production symbolic/motion DSL. The shared
-collector supports Stack and Reverse; Unstack still uses this diagnostic runner.
+The current runnable implementation is
+[`synthesis.examples.unstack`](../examples/unstack.py), through the shared
+collector and controller. `Y_min`, `Z_m` and `gripper` are resolved from the
+observation once per instruction, and their semantics enter program fingerprints.
+The older experiment entry point forwards to collection and retains compatibility
+imports; it no longer patches instruction execution or has a separate runner.
+These operands remain outside integrated synthesis and motion verification.
 Run with the usual MuJoCo environment from `roboverify/`:
 
 ```bash
 timeout --signal=TERM --kill-after=2s 55s \
-  uv run python -m synthesis.experiment.unstack_lateral \
-  --num-blocks 4 --seeds 0 1 2 3 4
+  uv run python -m synthesis.entry.collect_demos --task unstack \
+  --num-blocks 4 --num-trajectories 15
 ```
 
-The tested scope is 2–4 blocks; the runner enforces it. The supplied invariant
-is ignored. No primitive tolerances or budgets were relaxed, and no extra
+The historical tested scope below is 2–4 blocks. The current shared collector
+also passed all seeds 0–14 at four blocks; the supplied invariant is ignored. No primitive tolerances or budgets were relaxed, and no extra
 initial settling was added. Each batch completed inside its 55-second cap.
 
 The five-seed horizontal-transfer runs under `runs/unstack-lateral/` are:
@@ -963,11 +972,13 @@ adds an explicit initial-arm condition; without it, all arm positions are checke
 `--motion-noise` and the associated bounds are available through the shared
 motion options. Table placements require `--table-surface-height`.
 
-The tower-task scope covers Stack, Unstack, Reverse and ReStack/Partial; the
-integrated CLI currently exposes Stack and Unstack. Branch synthesis,
-nested/starred quotient, Grid/Pyramid, total-termination proofs and controller
-refinement are outside scope. Existing code for other tasks is not evidence of
-verified physical execution.
+The current execution tasks are Stack, Unstack, Reverse, Restack, Grid and
+Pyramid; PartialStack has been removed. The integrated CLI exposes Stack and
+Unstack, with the current observation-relative Unstack groundtruth rejected
+until its operands have a proof encoding. Reverse/Restack and goal-task
+integration, branch synthesis, nested/starred quotient, total-termination proofs
+and controller refinement remain outside the supported pipeline scope. Existing
+execution code and passing demonstrations do not establish formal verification.
 
 Supported towers have uniform upright blocks of height L, a common flat table,
 exact support and complete layers. The tight XY input invariant and placement

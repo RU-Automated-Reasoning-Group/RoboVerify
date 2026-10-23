@@ -627,7 +627,10 @@ class FetchPickAndPlaceConstruction(
 
     def _roboverify_grid_block_center_xy(self) -> np.ndarray:
         # Keep the ten-block source layout within the arm's nominal XY workspace.
-        workspace_x = self.initial_gripper_xpos[0] - 0.10
+        # Pyramid sources must also be reachable at the highest goal clearance.
+        # The ten-block far/lower-Y corner otherwise stalls on the final approach.
+        offset = 0.14 if self.case == "RoboVerifyPyramid" else 0.10
+        workspace_x = self.initial_gripper_xpos[0] - offset
         return np.array(
             [
                 workspace_x,

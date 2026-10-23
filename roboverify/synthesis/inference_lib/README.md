@@ -9,6 +9,50 @@ at the user's request. A separate fresh four-block archive was collected for the
 The commands below describe collection when the requested archive is absent.
 Preserved historical reports and videos describe their original controller configurations.
 
+## Cross-environment audit
+
+The 2026-10-23 audit collected seeds **0–14** for each configuration below,
+using the shared `collect_demos` entry point. Directories are relative to
+`roboverify/demos/pipeline-audit-20261023/`; each accepted collection contains
+`demonstrations.npz`, `collection.json` and `audit.json`.
+
+| Task | Configuration | Valid / requested | Directory |
+| --- | --- | ---: | --- |
+| Stack | 4 blocks | 15/15 | `stack/` |
+| Unstack | 4 blocks | 15/15 | `unstack/` |
+| Reverse | 4 blocks | 15/15 | `reverse/` |
+| Restack | 5 blocks, initial tower 3 | 15/15 | `restack-3/` |
+| Restack | 5 blocks, initial tower 4 | 15/15 | `restack-4/` |
+| Grid | 3×3, 9 blocks | 15/15 | `grid/` |
+| Pyramid | 4+3+2+1, 10 blocks | 15/15 | `pyramid-recheck/` |
+
+All **105** accepted traces have converged primitives and valid pre/postconditions.
+The separate reusable archive audit checks seed coverage, current program/task
+identities, initial-state restoration, full action replay, simulator task success,
+and success after 50 additional final settling steps. Final action replay matched
+all observations exactly. Maximum primitive use was 24/50 steps.
+Run an audit on any of these provided-program archives with:
+
+```bash
+uv run python -m synthesis.entry.audit_demos \
+  --demos demos/pipeline-audit-20261023/stack/demonstrations.npz \
+  --output demos/pipeline-audit-20261023/stack/audit.json
+```
+
+It expects seeds 0–14 by default; use `--seeds` for a different exact set. Unstack
+audit invocations also require the external 55-second timeout shown above.
+`summary.json` in the audit root indexes every collection and audit report.
+These checks are empirical execution validation; synthesis and formal proof
+support are listed separately in the [project support matrix](../../../README.md#project-status).
+
+The original Pyramid batch in `pyramid/` rejected seed 12 after a high approach
+exhausted 50 steps, missing by 5.714 mm. Its diagnostic archive remains in
+`pyramid/diagnostics/seed_0012.npz`. The source region was moved 4 cm closer and
+all the same seeds were recollected in `pyramid-recheck/`. The
+[failed-run video](../../demos/pipeline-audit-20261023/pyramid/videos/seed_0012_failed_replay.mp4)
+replays the original saved actions and begins failing at 24.55 s. It was rendered
+from the archive, not from a new rollout. No failed seed was dropped or substituted.
+
 ## Collect Stack demonstrations
 
 Run from `roboverify/`:
@@ -21,7 +65,9 @@ uv run python -m synthesis.entry.collect_demos \
   --num-blocks 3 --num-trajectories 5 --save-video
 ```
 
-The editable factory in `synthesis/examples/stack.py` uses explicit Pick, Move,
+All six tasks have a default supplied program; `--program` is optional and
+selects a replacement factory. The editable factory in `synthesis/examples/stack.py`
+uses explicit Pick, Move,
 and Release primitives. Its transfer and placement waypoints use the base block
 `b0` for X/Y alignment and the current tower top `b` for Z. A custom
 `--program module:factory` or
@@ -87,6 +133,29 @@ required for videos. Encoding failures are reported separately and produce a
 nonzero command result without discarding valid trajectory data. Frames are
 streamed rather than retained in memory. Rendering adds no simulator steps;
 recording starts after the 50-step preparation.
+
+## Collect Unstack demonstrations
+
+The existing lateral groundtruth now runs through shared execution, without an
+experiment-specific wrapper:
+
+```bash
+timeout --signal=TERM --kill-after=2s 55s \
+  uv run python -m synthesis.entry.collect_demos --task unstack \
+  --num-blocks 4 --num-trajectories 15 --trajectory-timeout-seconds 12
+```
+
+The default is `synthesis.examples.unstack:build_program`. It retains the source
+base and moves each clear upper block 15 cm toward decreasing Y. `Y_min` and
+`Z_m` select physical block coordinates at instruction entry; `gripper` captures
+the current gripper position. Each Move freezes its target throughout execution.
+These are coordinate references for Move/Release, not physical Pick operands.
+The reference semantics enter fingerprints, and ordinary synthesis/verification
+loading rejects them until they have proof support. Collection opts in explicitly.
+Direct reset, controller tolerances and step budgets are unchanged. The old
+`experiment.unstack_lateral` entry point is a compatibility forwarder to this
+collector. Use smaller seed batches when rendering so each Unstack invocation
+remains within the 60-second wall-clock limit.
 
 ## Collect Reverse demonstrations
 
@@ -159,7 +228,7 @@ handled the first block outside its loop; their fingerprints differ.
 
 These results validate the tested simulator executions. The integrated
 synthesis CLI still exposes Stack and Unstack. The historical standalone Reverse
-verifier encodes a different task and is not a verifier for this program; see
+verifier encoded a different task and has been removed; see
 [discrepancy 39](../../../PAPER-DISCREPANCIES.md#39-the-historical-reverse-verifier-encodes-unstack-rather-than-reversal).
 
 ## Collect Restack demonstrations
@@ -214,6 +283,10 @@ primitives. Data and videos are in `demos/restack/4-blocks-5-trajectories/`,
 tests passed, including exact snapshot/action replay of both phases.
 
 ## Collect Grid and Pyramid demonstrations
+
+Pyramid source center X is initial-gripper X minus 0.14 m; Grid uses minus
+0.10 m. This preserves source separation while making the ten-block Pyramid
+source corner reachable at the top goal clearance.
 
 The collector now uses the provided goal-traversal groundtruth by default for
 these tasks. Configure dimensions, rather than specifying a conflicting total
