@@ -176,7 +176,7 @@ Same layout, one figure per method. Rows keep the pooled cell order above, so th
 
 ## 2. Feedback ablation
 
-**Status: not started.** It runs after the prompt factorial selects a prompt set.
+**Status: Stage B running (started 2026-10-23 13:19 EDT).** Prompt set `p0001`, Qwen3.8 27B with the reasoning-termination guard, 70 seeds per method.
 
 ### 2.1 Profile definitions that differ from a single-item removal
 
@@ -199,3 +199,32 @@ End-to-end check of the Stage B path on spare capacity of GPU 0, with requests s
   - 12 chains used all four rounds.
   - 6 stopped with `preparation_failure_no_rollout`: three responses hit the 32,768-token output cap, two raised SyntaxErrors, and one raised a KeyError. These stops occurred under all three profiles.
   - With six seeds, this does not compare profiles.
+
+### 2.3 Pilot (2026-10-23)
+
+- **Stage A:** 30 round-0 attempts per method (`runs/cap-revision43/20261023b-feedback-pilot-stage-a`). The first launch was aborted after 2 minutes because the request limit capped concurrency at 14 ([Revision 4.3.1, Section 7](revision_4_3_1_inference_backend_optimization.md#7-failure-handling)).
+- **Stage B:** 3 seeds per method × 15 profiles = 135 chains, run twice.
+
+  | Run | Empty-answer calls | Chains ended by them | Recovered within 4 rounds | Audit issues |
+  | --- | --- | --- | --- | --- |
+  | Without guard (`…-pilot-stage-b`) | 20 / 219 | 25 | 113 / 135 | 0 |
+  | With guard (`…-pilot-stage-b-guarded`) | 0 / 270 | 0 | 127 / 135 | 0 |
+
+- **Ceiling.** With the guard, 94% of chains recover within four rounds, which leaves little room for differences between profiles. Rounds to recovery spread more: round 1: 73, round 2: 30, round 3: 17, round 4: 7, not recovered: 8. Making "recovered in round 1" a primary outcome is proposed and awaiting a decision.
+- **The pilot is excluded from all analyses.** With 9 chains per profile, it says nothing about profile differences.
+
+### 2.4 Stage A and seeds
+
+- **Stage A:** 250 round-0 attempts per method (`runs/cap-revision43/20261023-feedback-stage-a`), with the guard and prompt set `p0001`. All 750 completed, and no call returned an empty answer.
+- **Seed pool:** Stage A plus the `p0001` cells of the prompt factorial and its rerun, about 304 round-0 attempts per method. Round-0 success was 206–217 per method; 3–6 per method were preparation failures, which are excluded.
+- **Seeds:** `runs/cap-revision43/20261023-feedback-seeds-70.json`, 70 per method. There were no no-witness failures, and Methods 1 and 2 had no other-runtime failures; these shortfalls were refilled proportionally from the other classes.
+
+  | Method | Move | Pick | Release | Budget | No-witness | Goal | Other runtime |
+  | --- | --- | --- | --- | --- | --- | --- | --- |
+  | Quota | 21 | 11 | 11 | 8 | 7 | 6 | 6 |
+  | Baseline | 24 | 14 | 10 | 9 | 0 | 7 | 6 |
+  | Method 1 | 24 | 16 | 9 | 8 | 0 | 13 | 0 |
+  | Method 2 | 28 | 16 | 12 | 6 | 0 | 8 | 0 |
+
+  Sources: Stage A 177 seeds, prompt factorial 30, rerun 3.
+- **Stage B:** `runs/cap-revision43/20261023-feedback-stage-b`, 210 seeds × 15 profiles = 3,150 chains. It uses 120 concurrent trials, six serving GPUs, and worker GPUs 6 and 7.
