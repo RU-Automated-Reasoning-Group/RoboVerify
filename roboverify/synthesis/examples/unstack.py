@@ -1,4 +1,9 @@
-"""The existing lateral Unstack program, using shared execution references."""
+"""Provided Unstack groundtruth: lateral transfers that never move the base.
+
+The guard strengthens the original condition with b_prime != b0 so a scene
+containing only the base exits immediately. Collection uses this factory by
+default; supplied-program verification loads the same executable.
+"""
 
 import z3
 

@@ -725,6 +725,10 @@ premises are unchanged. The guard is used by runtime collection, symbolic VCs
 and the motion loop-head constraints (`invariant AND guard`). It prevents the
 previous singleton-world counterexample without requiring a minimum of two
 physical blocks as a proof assumption.
+This is the adopted groundtruth at `synthesis.examples.unstack:build_program` and
+the default for `collect_demos --task unstack`. The previous guard is historical;
+there is no alternative groundtruth flag. The executable difference is exactly
+`new_guard = (b_prime != b0) AND old_guard`.
 
 Fresh collection and replay/settling audits passed 15 seeds (0–14) each for 1,
 2, 3 and 4 blocks under `demos/unstack-base-guard-20261023/{N}-blocks/`. The loop
@@ -790,6 +794,89 @@ finished/tower guards, real singleton collection and auditing, collection contra
 and extrema motion. The previous 475-test full-suite result predates this guard
 change; it was not rerun for this focused experiment. Collections ran in parallel;
 the archive audit and two independent pipeline configurations also overlapped.
+
+### Unstack motion counterexamples and longer timeouts
+
+The two UNKNOWN entry checks above were rerun through the shared pipeline with
+`--motion-timeout-ms 120000` instead of 10000. Use the strengthened-guard command
+above with that substitution and `--run-name unstack-base-guard-motion-120s`;
+the total wall budget stays 600 seconds. There was no program, controller, premise
+or quantifier change. All 15 starts were replayed and the invariant was relearned.
+
+Run `runs/cfg/20261023-184930-50662ed-unstack-base-guard-motion-120s` completed in
+122.3 s: **12 valid symbolic checks; 29 valid and 5 refuted motion checks; no
+UNKNOWN results**. The exact per-check times were:
+
+| Obligation | Result | Solver-query time |
+| --- | --- | ---: |
+| `arm_clearance_entry` | SAT | 0.562 s |
+| `column_alignment_entry` | SAT | 0.084 s |
+| `arm_clearance_preserved` | SAT | 1.252 s |
+| `column_alignment_preserved` | SAT | 3.546 s |
+| `tower_height_preserved` | SAT | 5.644 s |
+
+Both formerly UNKNOWN checks finished well below the new cap. This establishes
+counterexamples, not that either query inherently needs more than ten seconds;
+quantified solver behavior varies with the reconstructed formulas and solver state.
+The overall result remains `motion_unverified`.
+
+To explain the SAT results, the shared motion verifier was also reconstructed
+with the preceding run's saved learned invariant. Each of its five original
+quantified violation queries was exported, then constrained to a small scene.
+All five constrained queries returned SAT (0.16–1.30 s). The restrictions were
+diagnostic witness choices, not new production assumptions. A SAT model under
+additional restrictions is also a counterexample to the unrestricted VC; no
+finite UNSAT result was used to establish validity.
+
+Coordinates below are metres. Block side length is 0.05, table surface Z is 0.4,
+and the resting center is 0.425. XY coordinates are chosen for a simple abstract
+scene; these are not claims of simulator reachability. All extrema witnesses
+and `sym` alias b0, which the model permits. Additional objects in the full
+quantified domain are not inserted into the finite extrema candidate set.
+
+1. **Arm clearance at entry.** A complete three-block tower has centers at
+   Z = 0.425, 0.475, 0.525. The fixed initial gripper Z is 0.5314612, but the
+   requested invariant requires at least `0.525 + 0.025 = 0.550`. The requirement
+   concerns height above every block regardless of horizontal separation; failing
+   it is not itself evidence of an initial collision.
+2. **Column alignment at entry.** Put b0 at `(0, 0, 0.425)` and the upper block
+   at `(0.01, 0, 0.475)`. This satisfies the input alignment radius of `<0.0125`
+   per XY axis, but the candidate column invariant requires exactly equal XY.
+   Supported heights and the relational precondition do not close that gap.
+3. **Arm clearance after the body.** Start with a complete five-block tower at
+   Z = 0.425, 0.475, 0.525, 0.575, 0.625 and move the highest block. The represented
+   objects after placement are all at Z=0.425, so the encoded maximum gives
+   retreat Z=0.575. An unrepresented block remains at Z=0.575, requiring clearance
+   Z≥0.600. The actual global maximum would instead give retreat Z=0.725. This
+   example uses a complete tower, not a height gap admitted by the abstraction.
+4. **Column alignment after the body.** Start with b0 at `(0, 0, 0.425)`, source
+   at `(0, 0, 0.475)`, and an unrepresented loose block at `(0.01, -0.15, 0.425)`.
+   The represented minimum is Y=0, so the encoded placement is `(0, -0.15, 0.425)`.
+   The two blocks are horizontally close enough to satisfy geometric ON*, yet
+   differ in X by 0.01, violating exact alignment. The actual global minimum is
+   -0.15 and would place the source at Y=-0.30.
+5. **Supported height after the body.** Use the preceding scene with the loose
+   block at `(0, -0.15, 0.425)`. The encoded placement gives two distinct objects
+   exactly coincident centers. Their required vertical separation is 0.05, but
+   their actual separation is zero. Again, the real global minimum would choose
+   Y=-0.30 and avoid this placement.
+
+The preservation counterexamples explain how global geometric checks can fail
+while the collision VC passes: collision uses the arbitrary `sym` object, which
+also participates in the computed extremum. Choosing the loose block as `sym`
+changes the target to Y=-0.30. The global invariant separately quantifies over an
+object that can be absent from all extrema candidates. The encoding admits extra
+motions for such witness assignments; these examples do not refute the actual
+global-extrema primitive's behavior.
+
+Artifacts are under `runs/diagnostics/20261023-unstack-motion-vcs/`:
+`counterexamples.json` includes named and previously unrepresented objects,
+before/after coordinates, gripper positions and instruction-entry reference values.
+Each obligation has an unrestricted `.smt2` query, a `-scene.smt2` query with the
+explicit scene restrictions, and a SAT `-model.smt2` result. The one-off capture
+script stayed in `/tmp`; no diagnostic runner was added to the project. Existing
+archives still match the groundtruth fingerprint. Quantifier handling and the
+remaining proof-model changes remain deferred.
 
 ### Paper invariant controls
 

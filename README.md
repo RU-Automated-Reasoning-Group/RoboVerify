@@ -53,7 +53,7 @@ expressions add no quantifiers; the full motion VCs retain their quantified
 premises and effect checks. See the
 [encoding and remaining obligations](roboverify/synthesis/cfg/VERIFICATION.md#independent-extrema-witness-recheck).
 
-Unstack's guard now additionally requires **`b_prime != b0`**. The strengthened
+Unstack's adopted groundtruth now additionally requires **`b_prime != b0`**. The strengthened
 program collected and audited 15 seeds each for 1–4 blocks (60 demonstrations);
 single-block scenes exit without actions, and all four-block actions/observations
 match the previous guard exactly. Fresh archives are under
@@ -63,6 +63,13 @@ placement now pass along with collision, frame and predicate effects: 29 motion
 checks are valid, three geometric preservation checks are SAT, and two geometric
 entry checks time out. The full result remains `motion_unverified` (107.3 s).
 See the [strengthened-guard results](roboverify/synthesis/cfg/VERIFICATION.md#strengthened-unstack-guard).
+
+Increasing the motion-query budget to 120 seconds resolved both UNKNOWN entry
+checks to SAT: the latest shared run has 12 valid symbolic checks and 29 valid /
+5 refuted motion checks (122.3 s total). Small explicit scenes satisfy each failed
+VC. Entry clearance and exact alignment exceed the initial premises; preservation
+counterexamples exploit unnamed objects omitted by the finite extrema candidates.
+See the [counterexamples and longer-timeout run](roboverify/synthesis/cfg/VERIFICATION.md#unstack-motion-counterexamples-and-longer-timeouts).
 
 After the extrema encoding changes, revision `4f734bf` passed the full Python
 regression suite: **475 tests across 68 modules**, with no failures, errors or

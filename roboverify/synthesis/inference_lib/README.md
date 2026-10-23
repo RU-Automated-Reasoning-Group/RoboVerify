@@ -145,10 +145,14 @@ timeout --signal=TERM --kill-after=2s 55s \
   --num-blocks 4 --num-trajectories 15 --trajectory-timeout-seconds 12
 ```
 
-The default is `synthesis.examples.unstack:build_program`. Its guard explicitly
+The adopted groundtruth and default is `synthesis.examples.unstack:build_program`.
+Its guard explicitly
 requires `b_prime != b0`, retaining the source base and moving each clear upper
 block 15 cm toward decreasing Y. `--num-blocks 1` is supported by the collector:
 the already-unstacked scene exits with zero iterations and no primitive actions.
+This strengthens the original guard rather than defining a separate selectable
+program; the difference and proof scope are recorded in
+[discrepancy 10](../../../PAPER-DISCREPANCIES.md#10-the-historical-unstack-oracle-does-not-establish-its-final-task-condition).
 `Y_min` and
 `Z_m` select physical block coordinates at instruction entry; `gripper` captures
 the current gripper position. Each Move freezes its target throughout execution.

@@ -234,7 +234,9 @@ VCs retain quantifiers; their treatment remains a separate investigation.
 See the [current results and reproduction commands](roboverify/synthesis/cfg/VERIFICATION.md#independent-extrema-witness-recheck).
 
 **Explicit base exclusion, 2026-10-23.** The supplied Unstack program now conjoins
-`b_prime != b0` with its previous guard. The previous condition did exclude the
+`b_prime != b0` with its previous guard. This is the adopted groundtruth used by
+default collection and supplied-program verification, not an optional variant.
+The previous condition did exclude the
 base after other blocks were placed elsewhere, but admitted it when only one
 physical block existed in the entire scene. The motion verifier already included
 the guard; the correction is to the executable condition. The collector now
@@ -253,6 +255,21 @@ global checks. Two geometric entry checks return UNKNOWN at 10 seconds. These
 remaining model/quantifier issues are separate from the guard correction;
 no controller or motion-premise change was made. See the
 [strengthened-guard results](roboverify/synthesis/cfg/VERIFICATION.md#strengthened-unstack-guard).
+
+**Remaining motion VCs, 2026-10-23.** A shared-pipeline rerun with 120-second
+motion-query budgets returns SAT for both previously UNKNOWN entry checks;
+all five remaining geometric checks are now refuted, with 29 motion checks and
+all 12 symbolic checks valid. Independent small scenes satisfy the original
+quantified VCs with explicit coordinate/domain restrictions. At entry, the fixed
+gripper height is not above every allowed tower, and a permitted 10 mm column
+offset violates the requested exact XY invariant. For preservation, all extrema
+witnesses may alias the base while an unnamed block remains higher than the
+represented maximum or occupies the represented minimum-Y destination. These
+are failures of the stated geometric obligations/abstraction, not reproduced
+controller failures. They do not invalidate the strengthened guard or establish
+that the actual global-extrema execution collides. The program, controllers,
+premises and quantifier treatment were not changed for this diagnosis. See the
+[SAT scenes, timings and scope](roboverify/synthesis/cfg/VERIFICATION.md#unstack-motion-counterexamples-and-longer-timeouts).
 
 Figure 14's supplied invariant refers to an undefined b. The separately named
 `unstack_paper_base` interpretation substitutes b0, but the final checker finds
