@@ -68,6 +68,9 @@ class LoopHeadState:
                 if block_id != "tbl":
                     raise ValueError("tbl cannot alias a physical block")
                 continue
+            if isinstance(block_id, str) and block_id == "tbl":
+                constants[str(name)] = "tbl"
+                continue
             if (
                 not isinstance(block_id, (int, np.integer))
                 or not 0 <= block_id < num_blocks

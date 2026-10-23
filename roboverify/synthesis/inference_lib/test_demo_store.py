@@ -40,6 +40,25 @@ class MoveUp:
 
 
 class TraceCollection(unittest.TestCase):
+    def test_loop_cursor_can_alias_table_before_first_transfer(self):
+        obs = np.zeros(13 + 15 * 2)
+        obs[10:13] = [0, 0, 0.425]
+        obs[22:25] = [0, 0, 0.475]
+        entry = observation_positions(obs, 2)
+        row = LoopHeadState.from_observation(
+            "1", obs, entry, {"b0": 0, "b": "tbl", "tbl": "tbl"}, 2
+        )
+        context = HighLevelContext(use_tbl=True)
+        _, states, mappings = to_inference_inputs(
+            DemoStore([row]), "1", tower_vocabulary("reverse"), context
+        )
+        self.assertEqual(mappings[0][context.get_consts("b")], "tbl")
+        self.assertIs(states[0]["tbl"], on.TABLE)
+        with self.assertRaisesRegex(ValueError, "tbl cannot alias"):
+            LoopHeadState.from_observation("1", obs, entry, {"tbl": 0}, 2)
+        with self.assertRaisesRegex(ValueError, "Invalid block ID"):
+            LoopHeadState.from_observation("1", obs, entry, {"b": "unknown"}, 2)
+
     def setUp(self):
         self.context = HighLevelContext(mode="declare")
         self.obs = np.zeros(13 + 15 * 3)
