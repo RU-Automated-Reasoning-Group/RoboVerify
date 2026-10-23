@@ -9,11 +9,14 @@ from pathlib import Path
 
 from .batch import create_batch, variant_config
 from .config import FEEDBACK_ITEMS, ModelConfig, RunConfig
+from .request_control import dispatch_reservation, request_allowance
+from .revision42_experiment import PRIOR
 from .revision43_feedback_experiment import (
     PROFILES,
     QUOTAS,
     audit,
     classify,
+    create_stage_a,
     load_seed_manifest,
     mcnemar_exact,
     profile_settings,
@@ -393,6 +396,29 @@ class AuditTests(unittest.TestCase):
         self.assertEqual(mcnemar_exact(0, 0), 1.0)
         self.assertAlmostEqual(mcnemar_exact(0, 6), 2 / 64)
         self.assertEqual(mcnemar_exact(3, 3), 1.0)
+
+
+class StageARequestLimitTest(unittest.TestCase):
+    @unittest.skipUnless(PRIOR.exists(), "needs the archived Revision 4.2 batch")
+    def test_request_limit_admits_every_trial_concurrently(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / "stage_a"
+            manifest = create_stage_a(
+                directory,
+                model_name="qwen3.8-27b-fp8",
+                flags=prompt_flags("0001"),
+                trials=2,
+                max_workers=6,
+            )
+            jobs = manifest["jobs"]
+            limit = jobs[0]["transport_control"]["request_limit"]
+            for job in jobs:
+                others = [j for j in jobs if j is not job]
+                decision = dispatch_reservation(
+                    job, others, {}, request_limit=limit, free_remaining=limit
+                )
+                self.assertTrue(decision["allowed"])
+            self.assertEqual(limit, len(jobs) * request_allowance(jobs[0]))
 
 
 if __name__ == "__main__":

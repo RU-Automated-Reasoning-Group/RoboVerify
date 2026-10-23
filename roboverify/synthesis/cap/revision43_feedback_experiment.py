@@ -204,7 +204,9 @@ def create_stage_a(directory, *, model_name, flags, trials, max_workers=32, gpu=
     previous, job, config, model = configuration(model_name)
     config.recovery.max_rounds = 0
     planned = trials * len(METHODS)
-    request_limit = planned * config.max_model_calls
+    # Recovery stays enabled (max_rounds=0), so the request gate reserves the
+    # full recovery call allowance for every active trial.
+    request_limit = planned * config.recovery.total_calls
     manifest = create_batch(
         directory,
         config,
