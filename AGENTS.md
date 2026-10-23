@@ -58,8 +58,11 @@ are implemented; full synthesis acceptance is resolved. Stack reset bounds initi
 blocks to 0.70 m XY from the robot base.
 Unstack has one production reset: the lateral layout starts its tower at
 base-relative X in [0.54, 0.58] m and Y = 0.075*(N-1) +/- 0.01 m for right-to-left
-placement. The lateral experiment uses the shared factory. Reverse retains its
-separate tower reset; archived full states still restore exactly.
+placement. The lateral experiment uses the shared factory. Reverse starts at
+base-relative X in [0.54, 0.58] m and Y in [0.14, 0.16] m; its supplied primitive
+program rebuilds the reversed tower 0.30 m toward lower Y. `collect_demos --task
+reverse --program synthesis.examples.reverse:build_program` validates frozen-entry
+order reversal for 2–4 blocks. Archived full states still restore exactly.
 Stack collection holds the initial gripper position for 50 steps before
 recording; the settled full snapshot becomes state zero. Synthesis, candidate
 verification, and standalone MCMC restore archived states without repeating
@@ -266,7 +269,8 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
     swept-cube checks for lowered loop bodies. Results retain proof mode, failed
     obligations, counterexamples, and timings. `NoiseSpec` is opt-in, off by default;
     all tower verification CLIs accept `--motion-noise GRASP MOVE RELEASE`.
-    Missing physical programs (Reverse/Partial) and uncovered instructions fail closed.
+    Missing physical programs in a verifier and uncovered instructions fail closed.
+    The standalone Reverse verifier is not wired to the new physical example (39).
     See [motion verification semantics](roboverify/synthesis/verification_lib/README.md).
   - `lowlevel_verification_lib.py`: geometric low-level context, box-corner/cube drawing
     helpers used to visualize/verify concrete 3D placements.
@@ -334,7 +338,9 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
 - **`synthesis/entry/`** — runnable pipelines.
   `collect_demos.py` loads `--program module:factory` or `path.py:factory`, runs
   distinct seeds, validates pre/post transitions, and writes current archives to
-  `demos/stack/<blocks>-blocks-<count>-trajectories/`. Optional MP4s run at 20 FPS.
+  `demos/<task>/<blocks>-blocks-<count>-trajectories/` for Stack and Reverse.
+  Optional MP4s run at 20 FPS. Reverse uses `synthesis.examples.reverse:build_program`;
+  its validation compares current ON* with transposed frozen entry ON*.
   It requires primitive DSL programs; PickPlace and nested loops are rejected.
   `synthesize_cfg.py` requires `--demos`. `--mode full` searches first;
   `--mode verify --program ...` starts with the matching supplied program.
@@ -344,8 +350,16 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   `--run-name` adds a label. `main.py` forwards to this driver.
   `verified_synthesis.py` and the Stack verifier CLI forward to verify mode.
   Unstack/Reverse/Partial standalone verifiers consume `--demos` via the in-memory
-  inference adapter; Reverse/Partial still report unsupported motion because they
-  lack lowered physical programs. The 2D entry point remains outside tower scope.
+  inference adapter; Reverse/Partial still report unsupported motion in those
+  entry points. The historical Reverse verifier also has the wrong symbolic task
+  (39); it does not verify the new physical example. The 2D entry point remains
+  outside tower scope.
+
+- **`synthesis/environment/tower_reset.py`** — shared lateral Unstack/Reverse
+  reset geometry. Both start 0.54–0.58 m ahead of the robot base. Unstack's Y
+  offset centers the eventual row; Reverse uses a fixed +0.15 m offset with
+  ±0.01 m jitter. The Reverse example moves its first block 0.30 m left, then
+  stacks the remaining source tops above it using stationary destination aliases.
 
 - **`synthesis/environment/stack_reset.py`** — Stack-only bounded reset sampling.
   Initial block centers have base-relative X in [0.54, 0.70] m, Y in [-0.20,

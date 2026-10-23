@@ -99,8 +99,15 @@ Unstack uses a single right-to-left environment: its initial tower is placed
 54–58 cm ahead of the robot base and on the higher-Y side, leaving room for
 successive 15 cm leftward placements. All Unstack factories use this layout;
 the [lateral experiment](roboverify/synthesis/cfg/VERIFICATION.md#right-to-left-unstack-revision)
-uses the same factory. Reverse retains its separate single-tower environment,
-whose goal is the reversed initial block order.
+uses the same factory. Reverse now starts 14–16 cm on the higher-Y side and
+rebuilds the tower 30 cm toward lower Y, reversing the block order. The supplied
+[`synthesis.examples.reverse`](roboverify/synthesis/examples/reverse.py) program
+uses standard Get/Assign/While and Pick/Move/Release primitives. All 15 tested
+executions passed (five seeds each at 2–4 blocks); `collect_demos --task reverse`
+checks the reversal against frozen entry geometry. See the
+[Reverse collection guide](roboverify/synthesis/inference_lib/README.md#collect-reverse-demonstrations).
+This is empirical execution validation; the historical standalone Reverse
+verifier does not verify this program (discrepancy 39).
 
 A [Lean mechanization of WP soundness](roboverify/proofs/wp_soundness/README.md)
 checks the complete, separated-chain model, including guarded top-to-top

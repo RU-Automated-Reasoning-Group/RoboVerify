@@ -156,8 +156,11 @@ def load_program(source, context, num_blocks):
         source = str(path) + ":" + factory_name
     else:
         module = importlib.import_module(module_name)
-    return prepare_program(
+    definition = prepare_program(
         getattr(module, factory_name)(context, num_blocks=num_blocks),
         num_blocks,
         source,
     )
+    if context.use_tbl:
+        definition.initial_bindings["tbl"] = "tbl"
+    return definition

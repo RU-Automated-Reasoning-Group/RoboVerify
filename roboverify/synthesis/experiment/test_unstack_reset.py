@@ -12,7 +12,6 @@ from synthesis.experiment.unstack_lateral import lateral_env
 from synthesis.mcmc.synthesis import (
     ROBOVERIFY_UNSTACK_ENV_KWARGS,
     make_roboverify_env,
-    make_roboverify_reverse_env,
     make_roboverify_unstack_env,
 )
 from synthesis.util.on import BLOCK_LENGTH, get_block_pos
@@ -76,35 +75,6 @@ class UnstackResetTests(unittest.TestCase):
         obs = env.reset()
         self.assert_lateral_tower(env, obs, 4)
         self.assertEqual(env.symbolic_name_to_box_id, {"b0": 2})
-
-    def test_reverse_keeps_its_reset_and_reversed_order_goal(self):
-        env = make_roboverify_reverse_env(num_blocks=4)
-        self.addCleanup(env.close)
-        inner = inner_env(env)
-        for seed in (0, 4, 73):
-            with self.subTest(seed=seed):
-                rng = np.random.RandomState(seed)
-                while True:
-                    expected_xy = inner.initial_gripper_xpos[:2] + rng.uniform(
-                        -inner.obj_range, inner.obj_range, size=2
-                    )
-                    if (
-                        np.linalg.norm(expected_xy - inner.initial_gripper_xpos[:2])
-                        >= 0.1
-                    ):
-                        break
-                np.random.seed(seed)
-                obs, _ = env.reset()
-                xyz = np.array([get_block_pos(obs, i) for i in range(4)])
-                np.testing.assert_array_equal(
-                    xyz[:, :2], np.tile(expected_xy.astype(xyz.dtype), (4, 1))
-                )
-                self.assertFalse(inner._roboverify_task_complete(xyz))
-                order = inner._roboverify_canonical_tower_order()
-                xyz[order, 2] = inner.height_offset + BLOCK_LENGTH * np.arange(
-                    3, -1, -1
-                )
-                self.assertTrue(inner._roboverify_task_complete(xyz))
 
 
 if __name__ == "__main__":

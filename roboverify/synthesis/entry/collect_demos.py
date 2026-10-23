@@ -1,4 +1,8 @@
-"""Collect DSL demonstrations after 50 settling steps, with optional 20 FPS videos."""
+"""Collect Stack or Reverse DSL demonstrations, with optional 20 FPS videos.
+
+Stack holds its initial gripper position for 50 settling steps; Reverse records
+the lateral tower reset directly.
+"""
 
 import argparse
 import json
@@ -61,7 +65,7 @@ def build_parser():
     parser.add_argument(
         "--program", required=True, help="module:factory or path/to/program.py:factory"
     )
-    parser.add_argument("--task", choices=["stack"], default="stack")
+    parser.add_argument("--task", choices=["stack", "reverse"], default="stack")
     parser.add_argument("--num-blocks", type=int, default=3)
     parser.add_argument(
         "--num-trajectories",
@@ -74,7 +78,7 @@ def build_parser():
     parser.add_argument("--seeds", type=int, nargs="+")
     parser.add_argument(
         "--output-dir",
-        help="New collection directory; otherwise demos/stack/<blocks>-blocks-<count>-trajectories",
+        help="New collection directory; otherwise demos/<task>/<blocks>-blocks-<count>-trajectories",
     )
     parser.add_argument(
         "--save-video", action="store_true", help="Save one MP4 per seed at 20 FPS"
@@ -108,7 +112,7 @@ def collect(args, parser):
             )
         if args.save_video:
             VideoRecorder.check_available()
-        context = HighLevelContext(mode="declare")
+        context = HighLevelContext(mode="declare", use_tbl=args.task == "reverse")
         reference = load_program(args.program, context, args.num_blocks)
         output = output_directory(args, len(seeds))
     except (ValueError, FileExistsError, ImportError, AttributeError, TypeError) as exc:
@@ -193,7 +197,7 @@ def collect(args, parser):
     report["media_status"] = "failed" if video_failed else "complete"
     (output / "collection.json").write_text(json.dumps(report, indent=2) + "\n")
     print(f"Collection: {output}")
-    if success:
+    if success and args.task == "stack":
         import shlex
 
         archive = shlex.quote(str(output / "demonstrations.npz"))

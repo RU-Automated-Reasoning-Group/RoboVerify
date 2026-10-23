@@ -833,7 +833,7 @@ def make_roboverify_reverse_env(
     num_blocks: int = 4,
     render_mode: str = "rgb_array",
 ) -> GymToGymnasium:
-    """Create the RoboVerifyReverse env for reverse demo rollouts and MCMC eval."""
+    """Create Reverse with its source tower on the robot's higher-Y side."""
     return GymToGymnasium(
         FetchPickAndPlaceConstruction(
             name=f"roboverify_reverse_{num_blocks}",

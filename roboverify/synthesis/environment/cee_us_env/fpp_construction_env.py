@@ -13,6 +13,7 @@ from synthesis.environment.cee_us_env.abstract_environments import MaskedGoalSpa
 from synthesis.environment.cee_us_env.fpp_construction.construction import FetchBlockConstructionEnv
 from synthesis.environment.cee_us_env.robotics import GymRoboticsGroundTruthSupportEnv
 from synthesis.environment.stack_reset import sample_stack_xy
+from synthesis.environment.tower_reset import sample_tower_xy
 from synthesis.util.actions import bound_delta_action
 from synthesis.util.on import BLOCK_LENGTH, on as on_relation
 
@@ -456,28 +457,18 @@ class FetchPickAndPlaceConstruction(
         """
         RoboVerifyUnstack / RoboVerifyReverse init:
         - Place all blocks in a single tower with `base_block_id` (b0) at the bottom.
-        - Unstack starts on the higher-Y side for right-to-left placement.
+        - Start on the higher-Y side for right-to-left placement.
         """
         self.sim.set_state(self.initial_state)
 
         tower_order = self._roboverify_canonical_tower_order()
         block_height = BLOCK_LENGTH
 
-        if self.case == "RoboVerifyUnstack":
-            # Center the final 15 cm-spaced row on the robot base's Y coordinate.
-            tower_xy = self.robot_base_xy + np.array(
-                [
-                    np.random.uniform(0.54, 0.58),
-                    0.075 * (self.num_blocks - 1) + np.random.uniform(-0.01, 0.01),
-                ]
-            )
-        else:
-            while True:
-                tower_xy = self.initial_gripper_xpos[:2] + np.random.uniform(
-                    -self.obj_range, self.obj_range, size=2
-                )
-                if np.linalg.norm(tower_xy - self.initial_gripper_xpos[:2]) >= 0.1:
-                    break
+        tower_xy = sample_tower_xy(
+            self.num_blocks,
+            self.robot_base_xy,
+            task="unstack" if self.case == "RoboVerifyUnstack" else "reverse",
+        )
 
         for level, block_id in enumerate(tower_order):
             obj_name = self.object_names[block_id]

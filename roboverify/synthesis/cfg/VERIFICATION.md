@@ -689,8 +689,9 @@ row across the base's Y coordinate. It retains the current tower ordering and
 initial heights. Since 2026-10-23 this is the only production Unstack reset,
 including `make_roboverify_unstack_env()` and `make_roboverify_env("unstack")`.
 The experiment's `lateral_env` name aliases the production factory; there is no
-separate reset override or legacy Unstack layout option. Reverse retains its
-existing reset. Archived full simulator states still restore exactly.
+separate reset override or legacy Unstack layout option. Reverse has its own
+fixed side offset for the [reversal program](../inference_lib/README.md#collect-reverse-demonstrations).
+Archived full simulator states still restore exactly.
 
 The 2026-10-23 consolidation recheck passed all 15 executions (five seeds each
 at 2–4 blocks) through the production factory, plus 25 reset, replay and collection
@@ -720,8 +721,9 @@ The runnable implementation is
 [`synthesis.experiment.unstack_lateral`](../experiment/unstack_lateral.py).
 It resolves extrema and gripper Z in a scoped execution wrapper and saves
 per-instruction targets, validation summaries, and full-state traces. These
-references remain outside the production symbolic/motion DSL, and the Stack-only
-collector CLI is unchanged. Run with the usual MuJoCo environment from `roboverify/`:
+references remain outside the production symbolic/motion DSL. The shared
+collector supports Stack and Reverse; Unstack still uses this diagnostic runner.
+Run with the usual MuJoCo environment from `roboverify/`:
 
 ```bash
 timeout --signal=TERM --kill-after=2s 55s \

@@ -5,7 +5,7 @@ Algorithms 1–6, Appendix A/Table 7, associated proofs, and the Section 6.2
 experiment. Neither paper nor code automatically wins a disagreement, and paper
 experiment numbers are not correctness targets.
 
-Entry IDs **1–38 and their headings are stable**. Retain decisions, proof
+Entry IDs **1–39 and their headings are stable**. Retain decisions, proof
 arguments and unresolved limits here; implementation history belongs in Git.
 See [project status](README.md#project-status) and the
 [verification guide](roboverify/synthesis/cfg/VERIFICATION.md) for current workflows.
@@ -185,8 +185,9 @@ production extrema support and Unstack collector integration remain separate wor
 
 **Environment consolidation, 2026-10-23.** The right-side tower reset is now the
 only production Unstack reset. The lateral runner uses that shared factory,
-with no instance-specific reset override. Reverse retains its existing reset;
-archived simulator states still restore exactly. This promotes the environment
+with no instance-specific reset override. Reverse was unchanged by that
+consolidation; its subsequent lateral reset/program is recorded in entry 39.
+Archived simulator states still restore exactly. This promotes the environment
 layout, without changing the experimental program or its verification scope.
 
 Keep end-to-end Unstack invocations within **60 seconds**; exhausted budgets and
@@ -738,3 +739,28 @@ unknowns. The invariant was byte-identical across runs. Unbounded exit VCs took
 This is evidence of improved runtime and repeatability, not a guarantee of
 deciding every quantified VC or an isolation of every earlier unknown's cause.
 See [configuration and evidence](roboverify/synthesis/cfg/VERIFICATION.md#unsat-core-minimization).
+
+## 39. The historical Reverse verifier encodes Unstack rather than reversal
+
+**Implementation discrepancy; separate executable now validated.**
+`entry/verify_reverse_with_learned_invariant.py` uses `Put(b_prime,tbl)` and an
+unstacked/equal-height/scattered postcondition. It does not establish a tower
+whose order is the reverse of frozen entry ON*. That historical entry point
+also explicitly reports unsupported motion; it must not be used to certify the
+new Reverse program.
+
+At the user's request, Reverse now resets its source tower 0.54–0.58 m ahead of
+the robot base and 0.14–0.16 m toward higher Y. `examples/reverse.py` moves the
+original top 0.30 m toward lower Y to seed the destination, then repeatedly
+stacks the remaining source top there, including the original base last.
+The program uses ordinary primitive instructions and stationary destination
+references, with the existing 50-step budgets and 2 mm tolerances.
+
+`cfg.tasks.task_spec("reverse")` requires the final ON* relation to equal the
+transpose of frozen entry ON* on physical blocks. The shared collector now
+supports this task. All 15 executions passed on seeds 0–4 at 2–4 blocks,
+including primitive convergence, normal exit and final-state validation.
+This is empirical evidence, not a symbolic/motion proof or controller refinement.
+Connecting the correct Reverse abstraction, invariant learning and motion
+contracts to a verifier remains open. See the
+[program, collection and evidence](roboverify/synthesis/inference_lib/README.md#collect-reverse-demonstrations).

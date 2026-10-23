@@ -87,6 +87,58 @@ nonzero command result without discarding valid trajectory data. Frames are
 streamed rather than retained in memory. Rendering adds no simulator steps;
 recording starts after the 50-step preparation.
 
+## Collect Reverse demonstrations
+
+Reverse starts one tower to the robot's right (higher Y), with base-relative
+X in [0.54, 0.58] m and Y in [0.14, 0.16] m. The source order is the existing
+canonical order with b0 at the bottom. The physical program in
+[`synthesis.examples.reverse`](../examples/reverse.py) transfers the original
+top block 0.30 m left to become the destination base, then repeatedly moves the
+source top onto the destination top. The original base moves last. For example,
+bottom-to-top order [0, 1, 2, 3] becomes [3, 2, 1, 0] on the other side.
+
+The program uses ordinary Get, Assign, While, Pick, Move and Release, with no
+runtime overrides. Transfers use a common clearance above the highest nominal
+tower level, referenced first to b0 and then to the stationary destination base.
+The physical program supports 2–4 blocks. Primitive limits remain 50 steps and
+position tolerances remain 2 mm.
+
+Run from `roboverify/` with the MuJoCo environment configured:
+
+```bash
+timeout --signal=TERM --kill-after=2s 55s \
+  uv run python -m synthesis.entry.collect_demos \
+  --task reverse --program synthesis.examples.reverse:build_program \
+  --num-blocks 4 --seeds 0 1 2 3 4 --max-loop-iterations 4
+```
+
+Add `--save-video` to record the same execution at 20 FPS. Reverse starts directly
+from its reset, without Stack's 50-step settling phase. Saved full states replay
+exactly. The task precondition is one tower above b0 with frozen ON* equal to its
+entry geometry. Its final condition is
+`ON_star_final(x,y) iff ON_star_entry(y,x)` for every physical-block pair.
+An unchanged tower, scattered blocks, or an incomplete transfer is rejected.
+Every primitive must converge and the loop must exit normally. The relational
+postcondition specifies block order; the regression tests also check leftward
+placement and top-first transfer order.
+
+**2026-10-23 validation:** all 15 executions passed, five seeds (0–4) each with
+2, 3 and 4 blocks. Each program made N transfers: the initial destination seed
+and N−1 loop iterations. The 25 focused reset, task, collection and replay tests
+also passed, including a nonzero physical base ID.
+Collections are under `demos/reverse/{2,3,4}-blocks-5-trajectories-lateral/`,
+with `demonstrations.npz` and `collection.json` in each directory.
+The aggregate is `demos/reverse/lateral-validation.json`; all transfers occurred
+top-first and final XY error relative to the intended destination stayed below
+6.27 mm. The largest primitive budget use was 17/50 steps. A representative
+four-block seed-0 video is
+`demos/reverse/4-blocks-lateral-video/videos/seed_0000.mp4` (220 frames, 20 FPS).
+
+These results validate the tested simulator executions. The integrated
+synthesis CLI still exposes Stack and Unstack. The historical standalone Reverse
+verifier encodes a different task and is not a verifier for this program; see
+[discrepancy 39](../../../PAPER-DISCREPANCIES.md#39-the-historical-reverse-verifier-encodes-unstack-rather-than-reversal).
+
 ## Higher height tolerance
 
 `Higher(x,y)` evaluates `z(x) >= z(y) - tolerance`. The default tolerance is

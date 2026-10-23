@@ -7,7 +7,9 @@ import z3
 from synthesis.api.instructions import Assign
 from synthesis.api.program import wp
 from synthesis.cfg.tasks import task_spec
+from synthesis.predicates.scene import Scene, evaluate
 from synthesis.predicates.term import to_z3
+from synthesis.util.on import TABLE
 from synthesis.verification_lib.highlevel_verification_lib import HighLevelContext
 from synthesis.verification_lib.symbolic_verify import VC, discharge_vc
 
@@ -45,6 +47,40 @@ class StackTaskTests(unittest.TestCase):
             z3.Not(context.Higher(b0, top)),
         )
         self.assertEqual(solver.check(), z3.sat)
+
+
+class ReverseTaskTests(unittest.TestCase):
+    def test_postcondition_reverses_the_frozen_entry_order(self):
+        pre, post = task_spec("reverse")
+        initial = {
+            0: (0, 0.15, 0.425),
+            1: (0, 0.15, 0.475),
+            2: (0, 0.15, 0.525),
+            "tbl": TABLE,
+        }
+        bindings = {"b0": 0, "tbl": "tbl"}
+        self.assertTrue(evaluate(pre, Scene(initial, bindings)))
+        self.assertFalse(evaluate(post, Scene(initial, bindings)))
+        final = {
+            0: (0, -0.15, 0.525),
+            1: (0, -0.15, 0.475),
+            2: (0, -0.15, 0.425),
+            "tbl": TABLE,
+        }
+        reversed_scene = Scene(final, bindings, initial)
+        self.assertTrue(evaluate(post, reversed_scene))
+        self.assertFalse(evaluate(pre, reversed_scene))
+        self.assertFalse(evaluate(post, Scene(final, bindings, final)))
+        scattered = {
+            0: (0, -0.15, 0.425),
+            1: (0.15, -0.15, 0.425),
+            2: (0.30, -0.15, 0.425),
+            "tbl": TABLE,
+        }
+        self.assertFalse(evaluate(post, Scene(scattered, bindings, initial)))
+        partial = dict(final)
+        partial[0] = initial[0]
+        self.assertFalse(evaluate(post, Scene(partial, bindings, initial)))
 
 
 if __name__ == "__main__":
