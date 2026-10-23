@@ -7,6 +7,36 @@ learned invariants and counterexample-guided refinement.
 
 ## Project status
 
+The six current tasks are **Stack, Unstack, Reverse, Restack, Grid and Pyramid**.
+All have a provided groundtruth and use `collect_demos --task TASK`; `--program`
+optionally replaces that default. Collection support is broader than proof support:
+
+| Task | Shared execution and demo collection | Integrated synthesis / verification |
+| --- | --- | --- |
+| Stack | Supported | Supported in the documented model below |
+| Unstack | Supported, including current lateral groundtruth | CLI task exists; current extrema/gripper operands are not integrated into synthesis or motion verification |
+| Reverse | Supported | Not integrated; the obsolete verifier encoded Unstack and has been removed |
+| Restack | Supported | Not integrated |
+| Grid | Supported, nested goal loops | Not supported |
+| Pyramid | Supported, nested goal loops | Not supported |
+
+The **2026-10-23 collection audit passed all 105 demonstrations**: seeds 0–14
+for four-block Stack/Unstack/Reverse, both five-block Restack source layouts,
+3×3 Grid, and a 4+3+2+1 Pyramid. Every archive passed current program/task
+identity checks, task pre/postconditions, primitive convergence, full action
+replay, physical task success and 50 extra settling steps at the end. All final
+replay errors were zero. One original Pyramid seed failed at a far source corner;
+the source region was moved 4 cm closer and all the same seeds passed on recheck.
+The original failure and its replay video are retained. See the
+[archive and audit guide](roboverify/synthesis/inference_lib/README.md#cross-environment-audit)
+and [experiment inventory](roboverify/synthesis/experiment/README.md).
+This audit did not run synthesis or establish new formal verification results.
+
+After the experiment-script cleanup, revision `3537361` passed the full Python
+regression suite: **406 tests across 59 modules**, with no failures, errors or
+skips. On the current machine the tests took 171.5 seconds, or 176.1 seconds
+including module loading. The complete command is in [AGENTS.md](AGENTS.md#validation).
+
 The Stack workflow has a standalone multi-seed DSL demonstration collector,
 full-state archives, optional 20 FPS videos, and shared `full` / `verify` pipeline
 modes. Collection holds the initial gripper position for **50 settling steps**,
@@ -95,11 +125,69 @@ verification. Stack is
 implemented with an adapter interface for future environments. See the
 [counterexample-learning experiment](roboverify/synthesis/experiment/invariant_learning/README.md).
 
+Unstack and Reverse both sample their initial tower 54–70 cm ahead of the robot
+base and 15–25 cm on its higher-Y side, independent of block count. All Unstack
+factories use this single right-to-left layout. The
+[provided Unstack program](roboverify/synthesis/examples/unstack.py) retains
+15 cm leftward placements and executes through the shared controller. The old
+lateral experiment and compatibility wrapper have been removed. Reverse rebuilds
+the reversed tower on the lower-Y side using trainable table-relative Move
+offsets. The supplied
+[`synthesis.examples.reverse`](roboverify/synthesis/examples/reverse.py) program
+starts with `b <- tbl`; one While loop handles every block using ordinary
+Pick/Move/Release primitives and `b <- b_prime` after each placement. All 15 tested
+executions passed (five seeds each at 2–4 blocks); `collect_demos --task reverse`
+checks the reversal against frozen entry geometry. See the
+[Reverse collection guide](roboverify/synthesis/inference_lib/README.md#collect-reverse-demonstrations).
+This is empirical execution validation. The historical standalone Reverse
+verifier encoded a different task and has been removed (discrepancy 39).
+A [workspace and Reverse placement investigation](roboverify/synthesis/experiment/TOWER-WORKSPACE.md)
+validated 200 executions in the now-adopted larger source region; fresh
+production-factory rechecks passed all 30 executions across both tasks and
+2–4 blocks. The user deferred the investigated payload-feedback placement skill
+because it would strengthen the primitive and require reviewing its verification
+assumptions. The investigation runners have been retired; their findings remain
+documented. Production controllers and motion contracts remain unchanged.
+Historical Unstack motion checks cover their original narrower source region.
+
 A [Lean mechanization of WP soundness](roboverify/proofs/wp_soundness/README.md)
 checks the complete, separated-chain model, including guarded top-to-top
 relocation, quantified assertions and conditional program partial correctness.
 The Python attachment-only dispatcher and physical refinement remain separate
 correspondence obligations; this does not change the verification status above.
+
+A historical right-to-left Unstack result is recorded in the
+[retired verification diagnostic](roboverify/synthesis/cfg/VERIFICATION.md#verification-of-the-current-unstack-revision):
+its learned ON*/equality invariant passed all 12 symbolic checks (2–4 blocks and
+unbounded), under the recorded domain axioms. Actual-reset motion checking failed
+exact Release support because the base center starts slightly below 0.425 m.
+A separately labeled exact-resting-height model passed 182 noiseless motion
+checks across 2–4 blocks; this conditional result does not certify the unchanged
+simulator/controller or establish unbounded motion safety.
+
+Grid and Pyramid execute the shared reference program using nested loops over
+goal-only links. Pyramid accepts `bottom_row_blocks=k` for k+(k−1)+...+1 blocks;
+Grid accepts row/column dimensions. `collect_demos --task grid|pyramid` uses the
+provided groundtruth by default and saves full-state archives with goal topology,
+cursor bindings and nested-loop events; see the
+[collection guide](roboverify/synthesis/inference_lib/README.md#collect-grid-and-pyramid-demonstrations).
+Goal-aware synthesis and verification remain separate work. Execution and
+collection evidence is recorded in
+[discrepancy 40](PAPER-DISCREPANCIES.md#40-grid-and-pyramid-execution-and-verification-have-separate-support).
+
+Restack now supports a lateral source tower plus loose blocks and collection
+with an adapted version of the paper's two-phase program. `--num-blocks` sets
+the total and `--initial-tower-blocks` sets the source height; b0 starts inside
+the tower. Source blocks stay on the higher-Y side, leaving the lower-Y side for
+temporary placements and the rebuilt tower. `collect_demos --task restack`
+defaults to the supplied program. The printed guard's nontermination and the
+lateral waypoint adaptations are documented in
+[discrepancy 41](PAPER-DISCREPANCIES.md#41-restack-needs-a-terminating-first-loop-and-an-executable-lateral-layout).
+See the [collection guide](roboverify/synthesis/inference_lib/README.md#collect-restack-demonstrations).
+Execution/collection is supported; Restack synthesis and formal verification
+have not been added.
+The legacy PartialStack environment, factory, standalone verifier and inference
+option have been removed; Restack is the supported task.
 
 The supported scope is structured chains and flat loops for the tower tasks;
 the integrated synthesis CLI exposes Stack and Unstack. A successful

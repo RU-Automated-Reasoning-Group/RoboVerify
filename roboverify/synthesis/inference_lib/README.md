@@ -9,6 +9,50 @@ at the user's request. A separate fresh four-block archive was collected for the
 The commands below describe collection when the requested archive is absent.
 Preserved historical reports and videos describe their original controller configurations.
 
+## Cross-environment audit
+
+The 2026-10-23 audit collected seeds **0–14** for each configuration below,
+using the shared `collect_demos` entry point. Directories are relative to
+`roboverify/demos/pipeline-audit-20261023/`; each accepted collection contains
+`demonstrations.npz`, `collection.json` and `audit.json`.
+
+| Task | Configuration | Valid / requested | Directory |
+| --- | --- | ---: | --- |
+| Stack | 4 blocks | 15/15 | `stack/` |
+| Unstack | 4 blocks | 15/15 | `unstack/` |
+| Reverse | 4 blocks | 15/15 | `reverse/` |
+| Restack | 5 blocks, initial tower 3 | 15/15 | `restack-3/` |
+| Restack | 5 blocks, initial tower 4 | 15/15 | `restack-4/` |
+| Grid | 3×3, 9 blocks | 15/15 | `grid/` |
+| Pyramid | 4+3+2+1, 10 blocks | 15/15 | `pyramid-recheck/` |
+
+All **105** accepted traces have converged primitives and valid pre/postconditions.
+The separate reusable archive audit checks seed coverage, current program/task
+identities, initial-state restoration, full action replay, simulator task success,
+and success after 50 additional final settling steps. Final action replay matched
+all observations exactly. Maximum primitive use was 24/50 steps.
+Run an audit on any of these provided-program archives with:
+
+```bash
+uv run python -m synthesis.entry.audit_demos \
+  --demos demos/pipeline-audit-20261023/stack/demonstrations.npz \
+  --output demos/pipeline-audit-20261023/stack/audit.json
+```
+
+It expects seeds 0–14 by default; use `--seeds` for a different exact set. Unstack
+audit invocations also require the external 55-second timeout shown above.
+`summary.json` in the audit root indexes every collection and audit report.
+These checks are empirical execution validation; synthesis and formal proof
+support are listed separately in the [project support matrix](../../../README.md#project-status).
+
+The original Pyramid batch in `pyramid/` rejected seed 12 after a high approach
+exhausted 50 steps, missing by 5.714 mm. Its diagnostic archive remains in
+`pyramid/diagnostics/seed_0012.npz`. The source region was moved 4 cm closer and
+all the same seeds were recollected in `pyramid-recheck/`. The
+[failed-run video](../../demos/pipeline-audit-20261023/pyramid/videos/seed_0012_failed_replay.mp4)
+replays the original saved actions and begins failing at 24.55 s. It was rendered
+from the archive, not from a new rollout. No failed seed was dropped or substituted.
+
 ## Collect Stack demonstrations
 
 Run from `roboverify/`:
@@ -21,14 +65,17 @@ uv run python -m synthesis.entry.collect_demos \
   --num-blocks 3 --num-trajectories 5 --save-video
 ```
 
-The editable factory in `synthesis/examples/stack.py` uses explicit Pick, Move,
+All six tasks have a default supplied program; `--program` is optional and
+selects a replacement factory. The editable factory in `synthesis/examples/stack.py`
+uses explicit Pick, Move,
 and Release primitives. Its transfer and placement waypoints use the base block
 `b0` for X/Y alignment and the current tower top `b` for Z. A custom
 `--program module:factory` or
 `--program path/to/program.py:factory` must return a `Program` from
 `factory(context, *, num_blocks)`. Named and numeric physical operands, Assign,
-Get, Skip, and flat While loops are supported. PickPlace and nested loops are
-rejected. Numeric operands get fixed aliases; their identities are not learned.
+Get, Skip, and flat While loops are supported for tower tasks. PickPlace is
+rejected. Grid/Pyramid collection additionally accepts nested goal loops as
+described below. Numeric operands get fixed aliases; their identities are not learned.
 
 Collection runs exactly N distinct seeds, defaulting to five seeds starting at
 zero. Use `--seed-start 10` for another consecutive range or `--seeds 3 8 12`
@@ -86,6 +133,217 @@ required for videos. Encoding failures are reported separately and produce a
 nonzero command result without discarding valid trajectory data. Frames are
 streamed rather than retained in memory. Rendering adds no simulator steps;
 recording starts after the 50-step preparation.
+
+## Collect Unstack demonstrations
+
+The existing lateral groundtruth now runs through shared execution, without an
+experiment-specific wrapper:
+
+```bash
+timeout --signal=TERM --kill-after=2s 55s \
+  uv run python -m synthesis.entry.collect_demos --task unstack \
+  --num-blocks 4 --num-trajectories 15 --trajectory-timeout-seconds 12
+```
+
+The default is `synthesis.examples.unstack:build_program`. It retains the source
+base and moves each clear upper block 15 cm toward decreasing Y. `Y_min` and
+`Z_m` select physical block coordinates at instruction entry; `gripper` captures
+the current gripper position. Each Move freezes its target throughout execution.
+These are coordinate references for Move/Release, not physical Pick operands.
+The reference semantics enter fingerprints, and ordinary synthesis/verification
+loading rejects them until they have proof support. Collection opts in explicitly.
+Direct reset, controller tolerances and step budgets are unchanged. The old
+experiment wrapper has been removed. Use smaller seed batches when rendering
+so each Unstack invocation remains within the 60-second wall-clock limit.
+
+## Collect Reverse demonstrations
+
+Reverse starts one tower to the robot's right (higher Y), with base-relative
+X in [0.54, 0.70] m and Y in [0.15, 0.25] m, the same source workspace as Unstack.
+The source order is the existing
+canonical order with b0 at the bottom. The physical program in
+[`synthesis.examples.reverse`](../examples/reverse.py) starts with `b <- tbl`.
+One While loop handles all N blocks, moving the original top first and the
+original base last. After every release, `b <- b_prime` updates the support
+for the next block. Bottom-to-top order [0, 1, 2, 3] becomes [3, 2, 1, 0].
+
+The guard selects a clear physical block ON* b0, excluding the current `b`.
+Initially `b` is the table. After the last transfer, b0 is also `b`, so the guard
+is false. There is no Get or physical transfer before the loop, and no separate
+first-iteration branch.
+
+The loop uses ordinary Pick, Move and Release primitives. Its destination Move
+is `Move(tbl, tbl, b, (dx, dy, 0.05))`: table XY positions the column and `b`
+supplies its support height. `dx` and `dy` are ordinary trainable parameters;
+the groundtruth supplies (+0.45, -0.15) m. With the current physical table origin
+(0.8, 0.75, 0.4), the commanded column is (1.25, 0.60), on the robot's other side.
+This change exposes the placement parameters for learning; no optimization run
+is claimed here.
+
+Move/Release resolve the physical table at its actual XY origin and use
+reference Z = table surface minus half a block (0.375 m here). Thus the same
++0.05 m placement offset yields 0.425 m for a table placement, or one full block
+above an existing block's center. This is a controller coordinate convention;
+relational tbl remains an isolated geometry-free marker in predicates. Pick
+still requires a physical block. Missing table geometry fails explicitly.
+The table-reference convention is recorded in table-using program fingerprints.
+
+Transfers and retreats reference tbl at `N*0.05 + 0.10` m above that support
+reference, 10 cm above the highest nominal block center. The physical program
+supports 2–4 blocks. Primitive limits remain 50 steps and tolerances remain 2 mm.
+
+Run from `roboverify/` with the MuJoCo environment configured:
+
+```bash
+timeout --signal=TERM --kill-after=2s 55s \
+  uv run python -m synthesis.entry.collect_demos \
+  --task reverse --program synthesis.examples.reverse:build_program \
+  --num-blocks 4 --seeds 0 1 2 3 4 --max-loop-iterations 4
+```
+
+Add `--save-video` to record the same execution at 20 FPS. Reverse starts directly
+from its reset, without Stack's 50-step settling phase. Saved full states replay
+exactly. The task precondition is one tower above b0 with frozen ON* equal to its
+entry geometry. Its final condition is
+`ON_star_final(x,y) iff ON_star_entry(y,x)` for every physical-block pair.
+An unchanged tower, scattered blocks, or an incomplete transfer is rejected.
+Every primitive must converge and the loop must exit normally. The relational
+postcondition specifies block order; the regression tests also check leftward
+placement and top-first transfer order.
+
+**2026-10-23 single-loop validation:** all 15 fresh executions passed, five seeds
+(0–4) each with 2, 3 and 4 blocks. Each program made exactly N loop iterations;
+every physical control event occurred inside that loop. The 54 focused controller,
+Reverse/Unstack, collection, replay and motion tests also passed, including a
+nonzero physical base ID and archive/replay with `b = tbl` and `b = block`.
+Collections are under `demos/reverse/{2,3,4}-blocks-5-trajectories-table-loop/`,
+with `demonstrations.npz` and `collection.json` in each directory.
+The aggregate is `demos/reverse/table-loop-validation.json`; all transfers were
+top-first and final XY error relative to the intended column stayed below
+9.72 mm. Maximum primitive budget use was 17/50 steps. A representative video is
+`demos/reverse/4-blocks-table-loop-video/videos/seed_0000.mp4`.
+The older `*-lateral` collections and video retain the previous program, which
+handled the first block outside its loop; their fingerprints differ.
+
+These results validate the tested simulator executions. The integrated
+synthesis CLI still exposes Stack and Unstack. The historical standalone Reverse
+verifier encoded a different task and has been removed; see
+[discrepancy 39](../../../PAPER-DISCREPANCIES.md#39-the-historical-reverse-verifier-encodes-unstack-rather-than-reversal).
+
+## Collect Restack demonstrations
+
+Restack uses the two-phase program adapted from Fig. 16: free the designated b0,
+then build a complete tower on it. The source tower and loose blocks start on
+the higher-Y side of the robot. Temporary placements form a row toward lower Y;
+b0 is the last parked block and becomes the base of the new tower there.
+
+```bash
+uv run python -m synthesis.entry.collect_demos --task restack --num-blocks 4 --save-video
+uv run python -m synthesis.entry.collect_demos --task restack --num-blocks 5 --initial-tower-blocks 3 --save-video
+uv run python -m synthesis.entry.collect_demos --task restack --num-blocks 5 --initial-tower-blocks 4 --save-video
+```
+
+`--num-blocks` is the total (default four). `--initial-tower-blocks` specifies
+how many start in the tower (default max(2, N-1)); the others start loose.
+With five blocks, heights three and four produce respectively two and one loose
+blocks. Tower membership/order, its XY, loose-block XY and b0's interior level
+are randomized. A two-block source places b0 on top. The source tower shares
+Unstack/Reverse's base-relative X [0.54, 0.70] m, Y [0.15, 0.25] m workspace;
+loose blocks may extend to X = 0.40 m. The bounded sampler preserves at least
+105 mm separation between columns and refuses layouts that do not fit.
+At most three separate source columns fit this region; configuring a count
+is not a guarantee of physical success for arbitrary heights.
+
+The default factory is [`synthesis.examples.restack:build_program`](../examples/restack.py).
+Explicit `--program` accepts a replacement primitive program. Both phases run
+through ordinary While/Program execution; the collector saves both loops and
+full-state snapshots after 50 settling steps. Restore/replay uses those states
+without settling again. Accepted runs require primitive convergence, normal
+termination, separated/comparable source blocks, and all physical blocks ON* b0
+at the end. Budgets and failure/archive handling match the other collection tasks.
+
+The supplied program corrects the paper's first-loop guard, which would continue
+selecting b0 after placing it on the table. `p <- tbl` tracks the last parked
+block, the first guard excludes p, and `p <- b_prime` ends each iteration.
+Once p is b0 that loop exits. The second loop starts `b <- b0` and handles every
+remaining clear block. Table-relative XY offsets and clearance adapt the paper's
+waypoints to the lateral setup, using unchanged primitive controllers. These
+changes and the Table 8 precondition correction are documented in
+[discrepancy 41](../../../PAPER-DISCREPANCIES.md#41-restack-needs-a-terminating-first-loop-and-an-executable-lateral-layout).
+This is supplied-program execution/collection; Restack synthesis and formal
+verification have not been added.
+
+Five-seed collections passed for four blocks and both five-block layouts above.
+All 15 filmed trajectories formed a complete physical tower, with converged
+primitives. Data and videos are in `demos/restack/4-blocks-5-trajectories/`,
+`demos/restack/5-blocks-3-tower-5-trajectories/` and
+`demos/restack/5-blocks-4-tower-5-trajectories/`; the aggregate diagnostic is
+`demos/restack/validation.json`. The six Restack tests and 36 shared regression
+tests passed, including exact snapshot/action replay of both phases.
+
+## Collect Grid and Pyramid demonstrations
+
+Pyramid source center X is initial-gripper X minus 0.14 m; Grid uses minus
+0.10 m. This preserves source separation while making the ten-block Pyramid
+source corner reachable at the top goal clearance.
+
+The collector now uses the provided goal-traversal groundtruth by default for
+these tasks. Configure dimensions, rather than specifying a conflicting total
+block count:
+
+```bash
+uv run python -m synthesis.entry.collect_demos --task grid --grid-rows 3 --grid-cols 2 --save-video
+uv run python -m synthesis.entry.collect_demos --task pyramid --bottom-row-blocks 3 --save-video
+uv run python -m synthesis.entry.collect_demos --task pyramid --bottom-row-blocks 4 --save-video
+```
+
+These create five trajectories each unless `--num-trajectories` or `--seeds` is
+specified. Pyramid widths 3 and 4 create 3+2+1 and 4+3+2+1 layers respectively.
+For the requested nine-block Grid, use `--task grid --grid-rows 3 --grid-cols 3`.
+Explicit `--program synthesis.examples.grid:build_program` and
+`--program synthesis.examples.pyramid:build_program` select the same defaults;
+custom factories use the existing `module:factory` / `path.py:factory` interface.
+
+Both programs execute ordinary nested While loops, with r links within goal
+rows and d links between row heads. Only goals have traversal pointers. The
+collector holds the initial gripper for 50 settling steps, then records the
+actual primitive execution. Accepted demonstrations start with scattered blocks
+and empty goals, finish with every goal occupied, and have converged primitives.
+Release checks use the payload's actual goal occupancy and preserve earlier
+occupied goals; the Release reference itself supplies only retreat height.
+An incomplete or invalid seed prevents publication of the combined archive,
+while diagnostic archives retain completed and failed attempts.
+
+Default output directories include dimensions:
+
+```text
+demos/grid/3x2-6-blocks-5-trajectories/
+demos/pyramid/3-bottom-row-6-blocks-5-trajectories/
+demos/pyramid/4-bottom-row-10-blocks-5-trajectories/
+```
+
+Each contains `demonstrations.npz`, `collection.json` and optional `videos/`.
+Goal archives retain full simulator snapshots/actions, immutable goal coordinates
+and topology, and separate block/goal bindings. Events preserve outer/inner loop
+paths, invocation IDs, entry indices and logical cursor changes between actions.
+Exact snapshot restoration and action replay restore goal bindings, including
+event bindings supplied via `DemoSegment.goal_bindings`. Mismatched row layouts
+are rejected. These optional version-2 fields preserve existing tower archives.
+
+**2026-10-23 collection validation:** all 15 demonstrations passed on seeds 0–4
+for the three layouts above, with all videos saved. Maximum final goal errors
+were 9.57 mm (Grid), 8.51 mm (six-block Pyramid), and 10.16 mm (ten-block Pyramid),
+within the shared 20 mm occupancy tolerance. The requested 3×3 Grid also passed
+on seed 0, with nine transfers and at most 9.05 mm final goal error; its archive
+is `demos/grid/3x3-9-blocks-1-trajectories/demonstrations.npz`.
+The aggregate is `demos/goal-collection-validation.json`. All 77 focused
+collection, replay, runtime/controller, task and existing inference tests passed.
+
+The collector explicitly opts into goal programs in the shared loader. The
+synthesis/verification entry points retain their existing restrictions, and
+`DemoStore.from_archive` / `loop_store` reject goal traces rather than dropping
+their goal state. Collection support does not establish goal-aware synthesis,
+invariant learning or formal verification.
 
 ## Higher height tolerance
 
@@ -205,9 +463,9 @@ Controller settings and the action-scaling version are preserved during
 ID-to-name conversion and included in program descriptions/fingerprints. Archives
 from the earlier component-clipping controller must be recollected for matching
 supplied-program verification. The later head-contact/Release update adds no new
-version mechanism. Existing local demonstration archives have been deleted;
-no replacement collection was requested. These are fixed settings, separate from the
-waypoint offsets optimized by CEM. Scaling improves direction fidelity; it does
+version mechanism. The current [15-seed collections](#cross-environment-audit)
+use these settings. These are fixed settings, separate from the waypoint offsets
+optimized by CEM. Scaling improves direction fidelity; it does
 not establish physical refinement of the motion proof (review entry 36).
 
 Each instruction retains `last_control_result` (convergence, steps, final phase,
@@ -235,65 +493,18 @@ See [review entry 24](../../../PAPER-DISCREPANCIES.md#24-the-first-stack-placeme
 for the saved-state policy. Recollect after changing controller settings;
 program fingerprints identify the executable used by each archive.
 
-### Measuring physical path straightness
+### Controller findings and current validation
 
-The backend uniformly scales XYZ, preserving the requested direction. The
-previous component-clipping backend could change direction above 50 mm axis
-error at gain 20. Endpoint convergence still does not guarantee a straight
-physical path. The historical Stack discrepancy and scope are recorded in
-[entry 36](../../../PAPER-DISCREPANCIES.md#36-component-wise-saturation-bends-the-physical-gripper-path).
+Uniform XYZ scaling preserves the requested command direction; endpoint
+convergence does not guarantee a straight physical path or exact carried-block
+centering. The adopted settings and limitations are recorded in the
+[controller findings](../experiment/CONTROLLER-PATHS.md). Historical controller
+comparison, tuning and video-rendering runners have been retired.
 
-Compare the previous uniform-scaling controller (10 mm Pick, head contacts,
-Z-only Release) with the combined production changes (2 mm Pick, no head contacts,
-fixed-XY Release) using complete programs from identical full settled starts:
-
-```bash
-uv run python -m synthesis.experiment.compare_stack_control --num-seeds 200
-uv run python -m synthesis.experiment.report --run runs/stack-control/latest
-```
-
-This writes path/payload metrics and a standalone HTML report, without saving
-demonstration archives. See [measurement definitions](../experiment/CONTROLLER-PATHS.md).
-
-To isolate component clipping versus uniform XYZ scaling under the **current**
-Pick/Release/collision defaults, configure the simulator environment
-as above, then run from `roboverify/`:
-
-```bash
-uv run python -m synthesis.experiment.compare_stack_paths \
-  --num-blocks 4 --num-seeds 100 --compare-uniform
-uv run python -m synthesis.experiment.report --run runs/controller-paths/latest
-```
-
-This serial diagnostic observes each fixed-target motion phase and temporarily
-patches raw action generation and clipping/scaling inside the diagnostic. It does not change the
-production controller. Both variants are checked against the current task's
-pre/postconditions; failed seeds remain in the results. Artifacts include a
-phase table, raw commands and gripper paths, execution outcomes and `paths.png`.
-Bend measures distance from the original phase line at control-step boundaries;
-it excludes intentional waypoint turns and does not bound substep or held-block
-motion. Opening/closing and the initial settling period are not motion phases.
-These commands now use 2 mm Pick and fixed-XY Release with head contacts disabled;
-their results should not be labeled as the older entry-36 controller cohort.
-
-For a newly generated four-block paired measurement, generate annotated
-side-by-side videos using its `artifacts/phases.json` (replace the example run path
-with your own). Earlier measurements must be rendered with their original code
-revision; the renderer checks replay equality and refuses mismatched paths:
-
-```bash
-uv run python -m synthesis.experiment.render_stack_paths \
-  --measurements runs/controller-paths/latest/artifacts/phases.json
-uv run python -m synthesis.experiment.report --run runs/controller-videos/latest
-```
-
-This reproduces the first seed and the measured largest-bend seed, validates both
-controller executions, and checks that their paths match the measurements before
-rendering saved snapshots. Complete videos share simulation time at half speed;
-the detail clip aligns phase starts at one-tenth speed. Both include measured XY
-paths and 3D line-deviation readouts. MP4 frame counts and full decoding are checked.
-The saved rollout archive is marked diagnostic, including the uniform-scaling
-trials, rather than published as pipeline demonstrations.
+Reproduce current executions with `collect_demos` and validate their snapshots,
+actions and settled task success with `audit_demos`, following the
+[cross-environment audit](#cross-environment-audit). Use `--save-video` during
+collection for current demonstration videos.
 
 ## Run either pipeline mode
 

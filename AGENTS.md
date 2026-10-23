@@ -73,6 +73,54 @@ Read [README.md](README.md#project-status) for current project status and
 reasoning and remaining actions. Collection and supplied-program verification
 are implemented; full synthesis acceptance is resolved. Stack reset bounds initial
 blocks to 0.70 m XY from the robot base.
+The current tasks are Stack, Unstack, Reverse, Restack, Grid and Pyramid.
+`collect_demos --task TASK` defaults to a provided groundtruth for all six.
+The 2026-10-23 audit saved 15 seeds (0–14) for each of seven configurations,
+105 valid demonstrations including both five-block Restack layouts. Archives
+and audit reports are under `demos/pipeline-audit-20261023/`; see the
+[collection audit](roboverify/synthesis/inference_lib/README.md#cross-environment-audit).
+All final states replayed exactly and remained successful after 50 extra steps.
+This did not establish new synthesis or verification results. The integrated
+CLI exposes Stack/Unstack; current Unstack observation-relative operands and
+the other four tasks remain outside integrated proof support.
+The Pyramid source center moved 4 cm closer after seed 12 failed at its final
+high approach; the original failed batch and replay video are retained.
+
+Unstack and Reverse share one lateral source workspace: base-relative X in
+[0.54, 0.70] m and Y in [0.15, 0.25] m, independent of block count. The Unstack
+provided program uses shared observation-relative coordinates and collection;
+the old lateral experiment and compatibility wrapper have been removed. Reverse's
+supplied primitive program starts with `b <- tbl` and uses one loop for all N
+transfers. Table-relative Move offsets position the new tower on the lower-Y side
+and remain trainable.
+`collect_demos --task reverse --program synthesis.examples.reverse:build_program`
+validates frozen-entry order reversal for 2–4 blocks. Archived full states still
+restore exactly.
+Payload-aware placement remains a documented idea; its diagnostic runner was
+retired. The user deferred adoption because it strengthens primitive capabilities
+and needs a review of motion contracts and verification assumptions. See the
+[workspace investigation](roboverify/synthesis/experiment/TOWER-WORKSPACE.md).
+Grid and Pyramid support goal-only pointer traversal and execution of the shared
+reference program. Pyramid takes `bottom_row_blocks=k` and creates k,...,1 layers;
+Grid takes rows/columns. `collect_demos --task grid|pyramid` defaults to the
+provided groundtruth, settles for 50 steps, and saves full-state archives with
+goal topology, cursor bindings and nested-loop events. `execute_goal_program`
+remains the execution-only entry point. Goal occupancy is independent of block
+identity. Goal-aware synthesis and verification remain unsupported; see
+[discrepancy 40](PAPER-DISCREPANCIES.md#40-grid-and-pyramid-execution-and-verification-have-separate-support).
+Restack now supports a lateral source tower plus loose blocks and collection
+with an adapted version of the paper's two-phase program. `--num-blocks` sets
+the total and `--initial-tower-blocks` sets the source height; b0 starts inside
+the tower. Source blocks stay on the higher-Y side, leaving the lower-Y side for
+temporary placements and the rebuilt tower. `collect_demos --task restack`
+defaults to the supplied program. The printed guard's nontermination and the
+lateral waypoint adaptations are documented in
+[discrepancy 41](PAPER-DISCREPANCIES.md#41-restack-needs-a-terminating-first-loop-and-an-executable-lateral-layout).
+See the [collection guide](roboverify/synthesis/inference_lib/README.md#collect-restack-demonstrations).
+Execution/collection is supported; Restack synthesis and formal verification
+have not been added. Legacy PartialStack environment/factory/verifier and its
+inference option have been removed; use Restack.
+
 Stack collection holds the initial gripper position for 50 steps before
 recording; the settled full snapshot becomes state zero. Synthesis, candidate
 verification, and standalone MCMC restore archived states without repeating
@@ -164,6 +212,12 @@ and accepted demonstrations must actually satisfy their pre/postconditions.
   and Markdown files. Chinese is reserved for conversation with the user.
 - All real work lives under `roboverify/`; the repository root holds project
   guidance, the paper and review decisions.
+- Keep maintained experiment code only when needed to reproduce current results or
+  provide an actively used diagnostic. Put one-off investigation scripts outside
+  the repository (for example, in `/tmp`). Retire superseded runners and their
+  diagnostic-only tests; preserve useful regressions in the owning subsystem and
+  settled findings in the relevant documentation. Historical reproducibility
+  alone does not justify retaining a script or compatibility wrapper.
 - Commit in meaningful increments, one coherent change per commit, rather than one large
   commit at the end.
 - Work on a topic branch; do not commit directly to `main`.
@@ -240,16 +294,24 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
     Control settings and action-scaling semantics enter executable fingerprints;
     the existing fingerprint mechanism is unchanged by the combined update. Legacy
     PickPlace macros retain separate controllers and are not collection inputs.
+    Move/Release resolve `tbl` (including aliases) through the physical table
+    frame: XY is `table_position[:2]`, reference Z is surface minus half a block.
+    A +0.05 m placement offset then works for table and block supports. Pick
+    requires a physical block. Relational table predicates remain unchanged.
   - `instructions.py`: `Instruction` subclasses. Physical instructions (`Pick`, `Move`,
     `Release`, `PickPlace`, and their `...ByName` variants that resolve symbolic box names via
     `env.symbolic_name_to_box_id`) implement `eval()` to drive a MuJoCo env, and
     `register_trainable_parameter`/`update_trainable_parameter` to expose float offsets
     (`Parameter`) as a flat vector for MCMC/CEM optimization. Verification-only instructions
-    (`Put`, `GoalAssign`, `MarkGoal`, `MoveRight`, `MoveDown`) raise on `eval()` and
-    must be lowered to physical instructions before execution. `Assign` updates
+    (`Put`, `MarkGoal`) raise on `eval()` and
+    must be lowered to physical instructions before execution. `GoalAssign`,
+    `MoveRight` and `MoveDown` execute using separate goal bindings. Move/Release
+    accept goal-center references; Pick accepts only physical blocks. `Assign` updates
     runtime aliases, and `Get` finds an object satisfying its binding condition.
     `While` evaluates a restricted subset of Z3 formulas against concrete block
     positions to find/bind existential guard variables each loop iteration.
+    Runtime goal guards also support Goal equality/null and geometric AtGoal/HasBlock;
+    the synthesis predicate language is unchanged.
   - `program.py`: `Program` (holds a list of instructions plus trainable parameters), the
     weakest-precondition machinery (`wp`, `VC_aux`) and the `rewrite_for_put_for_*`/
     `rewrite_for_put_on_tbl_for_*` family that specializes VC generation for each predicate
@@ -281,7 +343,8 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
     swept-cube checks for lowered loop bodies. Results retain proof mode, failed
     obligations, counterexamples, and timings. `NoiseSpec` is opt-in, off by default;
     all tower verification CLIs accept `--motion-noise GRASP MOVE RELEASE`.
-    Missing physical programs (Reverse/Partial) and uncovered instructions fail closed.
+    Missing physical programs in a verifier and uncovered instructions fail closed.
+    The obsolete Reverse verifier was removed because it encoded Unstack (39).
     See [motion verification semantics](roboverify/synthesis/verification_lib/README.md).
   - `lowlevel_verification_lib.py`: geometric low-level context, box-corner/cube drawing
     helpers used to visualize/verify concrete 3D placements.
@@ -312,7 +375,7 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
     MuJoCo env, mutates programs (`mutate_program`), scores candidates by trajectory
     divergence from demos (via `cost_func`) combined with BMC feasibility checks
     (`check_bmc_candidate`/`score_candidate_program`), and drives the outer `MCMC(...)` search
-    loop. Also has the `make_roboverify_*_env` factories (stack/unstack/reverse/partial/grid/
+    loop. Also has the `make_roboverify_*_env` factories (stack/unstack/reverse/restack/grid/
     pyramid) and video/frame saving utilities.
   - `decision_tree.py`: a compatibility alias only. `ON_feature` now resolves to
     `predicates.atoms.GroundON`; the shallow-tree feature learner it used to hold was
@@ -349,8 +412,21 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
 - **`synthesis/entry/`** — runnable pipelines.
   `collect_demos.py` loads `--program module:factory` or `path.py:factory`, runs
   distinct seeds, validates pre/post transitions, and writes current archives to
-  `demos/stack/<blocks>-blocks-<count>-trajectories/`. Optional MP4s run at 20 FPS.
-  It requires primitive DSL programs; PickPlace and nested loops are rejected.
+  `demos/<task>/<blocks>-blocks-<count>-trajectories/` for Stack and Reverse;
+  Grid/Pyramid directory names also include layout dimensions. Goal tasks default
+  to `synthesis.examples.grid:build_program` / `synthesis.examples.pyramid:build_program`;
+  `--grid-rows`, `--grid-cols` and `--bottom-row-blocks` determine their block counts.
+  Restack defaults to `synthesis.examples.restack:build_program`;
+  `--initial-tower-blocks` configures its source tower and the remaining blocks
+  start loose. Restack uses the same 50-step settling policy and records both
+  flat loops. Optional MP4s run at 20 FPS. Reverse uses `synthesis.examples.reverse:build_program`;
+  its validation compares current ON* with transposed frozen entry ON*.
+  All six tasks default to their provided example when --program is omitted.
+  `audit_demos` independently checks current fingerprints, task validation,
+  snapshot/action replay and physical success after extra final settling.
+  It requires primitive DSL programs; PickPlace is rejected. The collection loader
+  opts into nested goal programs; synthesis/verification loading keeps that mode
+  disabled. `cfg.goal_collection` validates real goal occupancy without proof VCs.
   `synthesize_cfg.py` requires `--demos`. `--mode full` searches first;
   `--mode verify --program ...` starts with the matching supplied program.
   Both execute the actual candidate for inference, then perform symbolic and
@@ -358,9 +434,40 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   Experiment results stay in `runs/`; `--output-dir` changes that root and
   `--run-name` adds a label. `main.py` forwards to this driver.
   `verified_synthesis.py` and the Stack verifier CLI forward to verify mode.
-  Unstack/Reverse/Partial standalone verifiers consume `--demos` via the in-memory
-  inference adapter; Reverse/Partial still report unsupported motion because they
-  lack lowered physical programs. The 2D entry point remains outside tower scope.
+  The historical Unstack verifier consumes `--demos` via the inference adapter
+  for its own abstraction. The obsolete Reverse verifier and legacy PartialStack
+  verifier have been removed. Neither certified the current physical programs. `execute_goal_program.py`
+  executes the shared Grid/Pyramid example through Program.eval with nested While
+  loops, checks primitive convergence and occupancy, and optionally saves video.
+  It does not create synthesis archives or invoke verification. The historical
+  2D verifier remains a separate symbolic mark-all example.
+
+- **`synthesis/environment/goal_layout.py`** — immutable goal graphs with XYZ,
+  r links within rows and d links between row heads. Only goals have these links.
+  Runtime goal bindings are separate from physical block IDs. Shared 20 mm
+  occupancy semantics drive guards and task completion. Pyramid traverses bottom
+  to top; Grid uses 10 cm tabletop spacing for finger clearance. Goal-marker
+  mocaps stay fixed when robot actions are applied. The source-layout fallback
+  preserves Scattered and rejects layouts outside the nominal workspace. Source
+  center X is initial-gripper X minus 0.10 m for Grid and 0.14 m for Pyramid,
+  keeping the latter reachable at its higher goal clearance.
+
+- **`synthesis/environment/motion_reference.py`** — typed runtime-only operands
+  Y_min, Z_m and gripper, resolved at instruction entry. The shared controller
+  freezes each target for its servo loop. Fingerprints include these semantics;
+  collection opts in and synthesis/verification loading rejects them.
+
+- **`synthesis/environment/tower_reset.py`** — shared lateral Unstack/Reverse
+  reset geometry. Both sample X in [0.54, 0.70] m ahead of the robot base and
+  Y in [0.15, 0.25] m to its side, independent of block count. The Reverse example
+  uses `b <- tbl` and one loop for every block.
+  Table-relative XY offsets (default +0.45, -0.15 m) position the destination;
+  `b` supplies support height and becomes the newly placed block after each transfer.
+
+- **`synthesis/environment/restack_reset.py`** — bounded lateral source sampling
+  for Restack. The tower shares Unstack/Reverse bounds; loose blocks may extend
+  to base-relative X = 0.40 m. All initial blocks have Y in [0.15, 0.25] m.
+  Source columns remain Scattered; b0 starts inside the configured source tower.
 
 - **`synthesis/environment/stack_reset.py`** — Stack-only bounded reset sampling.
   Initial block centers have base-relative X in [0.54, 0.70] m, Y in [-0.20,
@@ -373,10 +480,11 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   `fetch_block_construction`. Observations pack agent state first, then per-block state in
   fixed-width slots; the `10 + 12*i : 10 + 12*i + 3` box-position slice convention recurs
   across `instructions.py`, `on.py`, and the `While` guard evaluator — keep it in sync if the
-  observation layout ever changes. The four tower tasks expose
-  `table_surface_height` separately (the world z of the simulator's table plane);
-  `height_offset` is the resting block-center height, and relational `tbl` has no
-  coordinates.
+  observation layout ever changes. The tower tasks expose
+  `table_surface_height` separately (the world z of the simulator's table plane)
+  and `table_position` (the physical frame origin). `height_offset` is the resting
+  block-center height; relational `tbl` still has no predicate coordinates.
+  Controller Move/Release references use a separate support-height convention.
 
 - **`synthesis/experiment/invariant_learning/`** — a fixed-program experiment runner
   and environment adapter protocol. `witness.py` builds finite initial-state
@@ -441,6 +549,10 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
 
   `recordings.py` owns the current full-state NPZ format, `collection.py` executes
   bounded recorded programs, and `program_source.py` loads/fingerprints factories.
+  Goal recordings extend version 2 with a per-trace immutable layout and per-state
+  cursor bindings; tower archives remain compatible. Snapshot and action replay
+  restore goal cursors; event cursor bindings describe logical changes between
+  actions. Goal traces are explicitly rejected by the block-only inference adapter.
   Fresh Stack collection holds the initial gripper position for 50 steps before
   recording. Supplied snapshots bypass reset and settling; all recorded indices,
   frozen entry geometry, and video start at the saved settled state. Standalone

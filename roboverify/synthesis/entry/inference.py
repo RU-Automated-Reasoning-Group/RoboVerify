@@ -63,7 +63,7 @@ if __name__ == "__main__":
     parser.add_argument("--loop-id", default="1")
     add_inference_options(parser)
     parser.add_argument(
-        "--task", choices=["stack", "unstack", "reverse", "partial"], default="stack"
+        "--task", choices=["stack", "unstack", "reverse"], default="stack"
     )
     args = parser.parse_args()
     context = highlevel_verification_lib.HighLevelContext(

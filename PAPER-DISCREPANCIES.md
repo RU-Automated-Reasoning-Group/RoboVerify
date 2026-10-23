@@ -5,7 +5,7 @@ Algorithms 1–6, Appendix A/Table 7, associated proofs, and the Section 6.2
 experiment. Neither paper nor code automatically wins a disagreement, and paper
 experiment numbers are not correctness targets.
 
-Entry IDs **1–38 and their headings are stable**. Retain decisions, proof
+Entry IDs **1–39 and their headings are stable**. Retain decisions, proof
 arguments and unresolved limits here; implementation history belongs in Git.
 See [project status](README.md#project-status) and the
 [verification guide](roboverify/synthesis/cfg/VERIFICATION.md) for current workflows.
@@ -155,6 +155,57 @@ blocking assume in Table 1.
 unlike the Put-to-table verification fixture. Reach-any-state PostScore cannot
 replace final-state correctness. The pipeline rejects invalid demonstrations and
 does not use the legacy oracle as fallback.
+
+A separate user-supplied candidate was tested on 2026-10-15 with dynamically
+recomputed maximum-X placement and maximum-Z retreat, ignoring its supplied
+invariant. On five seeds each, only 1/5 two-block, 0/5 three-block and 0/5
+four-block executions passed demonstration validation. Logical final-state
+success was 5/5, 4/5 and 4/5 respectively, but every rejected trial had an
+unconverged primitive. The transport instruction adds another 0.15 m above the
+already lifted block; exact-state replays of four failed moves still failed
+with 500-step budgets. Ideal top-removal tests terminate for sizes 2–10, while
+the one-block guard loops forever. This is a distinct candidate and empirical
+controller diagnosis, not a correction to the historical oracle or a new formal
+verification result. See the [program, semantics, counts and saved traces](roboverify/synthesis/cfg/VERIFICATION.md#user-supplied-unstack-groundtruth-diagnostic).
+
+**Right-to-left revision, 2026-10-15.** Initializing the tower on the higher-Y
+side of the base in a bounded forward workspace and placing blocks at successive
+`min(Y)-0.15 m` targets passes all 15 trials (five seeds each at 2–4 blocks).
+All task pre/postconditions hold, every primitive converges, and each execution
+takes N−1 iterations. The current revision holds the gripper Z reached by the lift
+throughout the sideways transfer. Repeating all 15 trials from exactly the same
+initial scenes still passes, with at most 1.221 mm gripper height deviation across
+30 transfers (2.481 mm for the carried block). The preceding lateral version also
+passed but retained an unwanted extra 0.15 m rise. Its initial workspace and
+direction changed together, so those effects were not separated. The diagnostic
+runner and videos are recorded
+[in the verification guide](roboverify/synthesis/cfg/VERIFICATION.md#right-to-left-unstack-revision).
+This establishes empirical validity for the tested scenes, not a formal proof;
+production extrema support and Unstack collector integration remain separate work.
+
+**Environment consolidation, 2026-10-23.** The right-side tower reset is now the
+only production Unstack reset. The lateral runner uses that shared factory,
+with no instance-specific reset override. Reverse was unchanged by that
+consolidation; its subsequent lateral reset/program is recorded in entry 39.
+Archived simulator states still restore exactly. This promotes the environment
+layout, without changing the experimental program or its verification scope.
+
+**Historical formal diagnostic, 2026-10-19.** The then-current right-to-left
+revision was checked by an experimental adapter, retired during the script
+cleanup. `InvInference` with ON*/equality and PyEDA learned from all 45 recorded
+heads/exits in the 15 validated executions. All 12 symbolic VCs passed, including
+the unbounded proof, with two independently proved exit lemmas and required
+premise-consistency checks. This proved the proposed Put-to-table abstraction
+under the recorded axioms, including `on4` and top
+existence. Its connection to the executable remains conditional on motion.
+Actual-reset motion checks refuted exact Release support: base centers were
+0.207–0.367 mm below the model's 0.425 m resting center. The program lowers to
+that base height; unsupported Release then permits arbitrary falling positions.
+Normalizing only the initial center height in an explicitly labeled diagnostic
+passed 31/60/91 motion checks for 2/3/4 blocks over the recorded continuous reset workspace.
+This is a bounded noiseless waypoint result, not physical refinement or a proof
+for the actual reset heights. Neither the executable nor the production motion
+semantics was changed. See the [configuration and artifacts](roboverify/synthesis/cfg/VERIFICATION.md#verification-of-the-current-unstack-revision).
 
 Keep end-to-end Unstack invocations within **60 seconds**; exhausted budgets and
 inconclusive proofs are unsuccessful results.
@@ -684,6 +735,21 @@ demonstration archives were deleted; reports/videos remain. No replacement
 collection or fresh demonstration-consuming proof run accompanied this update.
 Physical refinement still requires justified tracking and attachment bounds.
 
+The 2026-10-23 [Reverse follow-up](roboverify/synthesis/experiment/TOWER-WORKSPACE.md)
+reproduced an 11.18–12.30 mm bottom-two-block offset: the first transferred block
+and later blocks acquire different gripper-relative offsets. Five paired
+executions with diagnostic block XY feedback reduced this to 1.35–1.49 mm at
+the same fixed destination; tighter Pick tolerance and block XYZ feedback each
+failed their unchanged step budgets. These remain experiments, not production
+controller changes or a physical-refinement proof. The same investigation
+validated 200 complete Unstack/Reverse executions in a larger source rectangle,
+while confirming initial gripper overlap for some centerline starts. The user
+adopted base-relative X in [0.54, 0.70] m and Y in [0.15, 0.25] m for both tasks;
+all 30 fresh production-factory executions at 2–4 blocks passed. The user
+explicitly deferred payload-aware placement because it is a stronger primitive
+and requires reviewing motion contracts and verification assumptions. Historical
+Unstack motion results retain their original, narrower input region.
+
 ## 38. Unsat-core minimization can consume the budget after proving a VC
 
 **Performance defect addressed; proof obligations preserved.** Symbolic solvers
@@ -705,3 +771,334 @@ unknowns. The invariant was byte-identical across runs. Unbounded exit VCs took
 This is evidence of improved runtime and repeatability, not a guarantee of
 deciding every quantified VC or an isolation of every earlier unknown's cause.
 See [configuration and evidence](roboverify/synthesis/cfg/VERIFICATION.md#unsat-core-minimization).
+
+## 39. The historical Reverse verifier encodes Unstack rather than reversal
+
+**Historical implementation discrepancy; obsolete verifier removed in the collection audit (42).**
+The former `entry/verify_reverse_with_learned_invariant.py` used `Put(b_prime,tbl)` and an
+unstacked/equal-height/scattered postcondition. It does not establish a tower
+whose order is the reverse of frozen entry ON*. That historical entry point
+also explicitly reported unsupported motion. It was removed rather than left
+as a misleading verifier for the new Reverse program.
+
+At the user's request, Reverse now resets its source tower 0.54–0.70 m ahead of
+the robot base and 0.15–0.25 m toward higher Y, sharing Unstack's expanded source
+workspace. `examples/reverse.py` starts
+with `b <- tbl` and handles all N transfers in one loop, including the first
+block and the original base last. After each placement it assigns `b <- b_prime`.
+Ordinary Move parameters choose the destination relative to the physical table
+frame; the groundtruth supplies (+0.45, -0.15) m XY offsets, exposed for later
+optimization. The physical table reference uses Z = surface minus half a block,
+so one +0.05 m placement offset works for both table and block supports.
+This controller reference does not change the isolated relational tbl marker.
+Missing table geometry fails explicitly, and the motion verifier reports these
+new table-coordinate operands as unsupported. The existing 50-step budgets and
+2 mm tolerances remain.
+
+`cfg.tasks.task_spec("reverse")` requires the final ON* relation to equal the
+transpose of frozen entry ON* on physical blocks. The shared collector now
+supports this task. All 15 fresh single-loop executions passed on seeds 0–4 at
+2–4 blocks, including primitive convergence, N loop iterations, normal exit and
+final-state validation. All 54 focused controller, task execution, collection,
+replay and motion tests passed. Table-relative semantics enter fingerprints for
+programs using table references; earlier first-block-outside-loop archives remain
+historical artifacts.
+This is empirical evidence, not a symbolic/motion proof or controller refinement.
+Connecting the correct Reverse abstraction, invariant learning and motion
+contracts to a verifier remains open. See the
+[program, collection and evidence](roboverify/synthesis/inference_lib/README.md#collect-reverse-demonstrations).
+
+## 40. Grid and Pyramid execution and verification have separate support
+
+**Environment, runtime and collection gaps addressed; synthesis and verification deferred.**
+The 2026-10-23 review compared Fig. 10, Appendix B/Table 8 and Figs. 17–18 in
+[POPL2027.pdf](POPL2027.pdf) with the implementation. The user clarified that
+only goals have traversal pointers, then scoped implementation to environments
+and execution of the supplied program. Physical blocks have no traversal links.
+
+Grid takes `grid_rows` and `grid_cols` (default 3 by 2). Pyramid now takes
+`bottom_row_blocks=k`, creates layers k,k−1,...,1 and allocates k(k+1)/2 physical
+blocks and goals: 3 gives six blocks; 4 gives ten. Positive integer dimensions
+are required. Layouts that exceed the nominal workspace or cannot fit separated
+source blocks fail explicitly. Configuration is not a reachability guarantee
+for arbitrary sizes; the execution checks below cover bottom rows 1–4.
+
+The shared [reference program](roboverify/synthesis/examples/goal_layout.py)
+implements the identical Grid/Pyramid programs in Figs. 17–18 (which the paper
+labels synthesized programs):
+
+```text
+d <- h0
+while d != null:
+    r <- d
+    while r != null and exists physical block b: not AtGoal(b):
+        Move(b, b, r, (0, 0, 0.15))
+        Pick(b)
+        Move(b, b, r, (0, 0, 0.15))
+        Move(r, r, r, (0, 0, 0.15))
+        Move(r, r, r, (0, 0, 0))
+        Release(r, 0.15)
+        r <- r.next_r
+    d <- d.next_c
+```
+
+`d` and `r` here are goal cursors. The immutable goal graph exposes `r` within
+rows and `d` between row heads, corresponding to `next_r` and `next_c` in the
+paper. Other goals have no `d` successor. Pyramid starts with its bottom row,
+then advances physically upward in Z. Grid rows lie in XY. Move's operands
+supply X, Y and Z respectively; goal coordinates denote desired block centers,
+so placement uses zero additional Z offset.
+
+`GoalAssign`, `MoveRight` and `MoveDown` now execute through `Program.eval` and
+its ordinary nested `While` interpreter. Goal references/bindings are separate
+from physical block IDs. Named Move/Release resolve either kind of coordinate
+reference; Pick continues to require a physical block. Runtime Z3 guards
+support Goal equality/null and geometric AtGoal/HasBlock. Block selection
+retains the existing lowest-ID policy. The controllers, 2 mm tolerances,
+50-step primitive budgets and six-motion sequence remain unchanged; the
+payload-feedback skill deferred in entry 37 was not adopted.
+
+Shared 20 mm occupancy semantics replace the former block-i-to-goal-i success
+check: `AtGoal(b)` means b occupies some goal, and `HasBlock(g)` means some
+block occupies g. Goal regions must be disjoint. Reward, success and runtime
+guards use these semantics. Goal markers remain noncolliding visual references.
+Reset clears runtime aliases, and simulator state restoration reinstalls goal
+coordinates and markers from the saved goal vector.
+
+**Execution defects found and addressed:**
+
+- Robot action encoding formerly assumed one mocap body and failed on the
+  additional goal-marker mocaps. Actions now contain entries for every mocap,
+  with robot commands applied only to the robot's mocap. Markers stay fixed.
+- Grid's former 65 mm spacing let the fingers displace already placed blocks
+  when approaching later rows. Grid now uses 100 mm spacing. Pyramid retains
+  65 mm horizontal spacing and 50 mm layer height.
+- Far source positions prevented a ten-block Pyramid approach from converging
+  at the higher goal-relative clearance. The source region is now centered
+  100 mm closer to the base in X than the initial gripper, on the lower-Y side.
+  The scattered fallback uses 105 mm separation without per-block jitter,
+  checks its bounds and clearance, and refuses invalid layouts. The previous
+  independently jittered fallback could violate Scattered.
+
+**Run the supplied programs**, from `roboverify/` with the simulator environment
+in AGENTS.md configured:
+
+```bash
+uv run python -m synthesis.entry.execute_goal_program --task grid --save-video
+uv run python -m synthesis.entry.execute_goal_program --task pyramid --bottom-row-blocks 3 --save-video
+uv run python -m synthesis.entry.execute_goal_program --task pyramid --bottom-row-blocks 4 --save-video
+```
+
+Use `--grid-rows 2 --grid-cols 3` to change the Grid. The Python factories are
+`make_roboverify_grid_env(grid_rows=..., grid_cols=...)` and
+`make_roboverify_pyramid_env(bottom_row_blocks=...)`; both examples expose
+`build_program`. The execution entry point settles the initial scene for
+50 steps, then runs the DSL program, rejects unconverged primitives, checks
+each placement and preservation of earlier occupied goals, and validates final
+coverage. `--seed`, `--max-loop-iterations` and `--timeout-seconds` control runs.
+Reports and optional MP4s live under `runs/goal-execution/<run>/`; the detailed
+`artifacts/execution.json` records actual placements, goal coordinates and loop
+exits. These are execution reports, not synthesis demonstration archives.
+
+**Validation:** 63 focused tests passed across goal runtime/layout execution,
+existing controllers, guard replay, quantifier hygiene, collection, snapshot
+replay and tower task conditions. Simulator regression executions passed for
+default Grid and bottom-row-3/bottom-row-4 Pyramids on seeds 0 and 1. Additional
+seed-2 executions passed for a 2×3 Grid and bottom-row-1/bottom-row-2 Pyramids.
+Recorded seed-2 executions passed for default Grid and the ten-block Pyramid:
+
+- [Grid video](roboverify/runs/goal-execution/20261023-121327-54185cf-grid-seed2/artifacts/execution.mp4)
+- [4+3+2+1 Pyramid video](roboverify/runs/goal-execution/20261023-121208-54185cf-pyramid-seed2/artifacts/execution.mp4)
+
+**Groundtruth collection added at the user's request.** The shared
+`collect_demos` entry point now supports Grid/Pyramid and selects their provided
+factories by default. Layout options determine block counts. The loader opts into
+nested goal programs only for collection, retaining the synthesis/verification
+restriction. Goal fingerprints include cursor operations, Z3 guards, goal-center
+reference semantics and occupancy tolerance. Existing tower fingerprints remain
+unchanged.
+
+Archives extend the current version-2 format with a per-trace immutable goal
+layout and per-snapshot goal bindings. Nested events retain cursor bindings,
+invocation IDs and frozen entry indices. Snapshot restoration and action replay
+restore both sorts of bindings, including logical event changes between actions;
+wrong row layouts fail explicitly. The numeric validator checks scattered/empty
+entry conditions, converged primitives, actual released-payload occupancy,
+preservation of previously occupied goals, and final coverage. Release's operand
+is a height reference and is not treated as a placement-XY specification.
+Existing tower archives remain readable. The block-only inference adapter rejects
+goal archives explicitly.
+
+All 15 requested batch demonstrations passed on seeds 0–4, with videos:
+
+- `demos/grid/3x2-6-blocks-5-trajectories/`
+- `demos/pyramid/3-bottom-row-6-blocks-5-trajectories/`
+- `demos/pyramid/4-bottom-row-10-blocks-5-trajectories/`
+
+Maximum final goal errors were 9.57, 8.51 and 10.16 mm respectively; no primitive
+used more than 21 of its 50 steps. The requested 3×3 Grid also passed on seed 0:
+nine transfers, 54 converged primitives, at most 9.05 mm final goal error and
+18 primitive steps. Its [video](roboverify/demos/grid/3x3-9-blocks-1-trajectories/videos/seed_0000.mp4)
+and `demonstrations.npz` are in `demos/grid/3x3-9-blocks-1-trajectories/`.
+All 77 focused collection/replay, runtime/controller, task and existing inference
+tests passed. See the [collection commands and archive contract](roboverify/synthesis/inference_lib/README.md#collect-grid-and-pyramid-demonstrations).
+
+**Deferred scope:** `entry/verify_2d_with_learned_invariant.py` remains a separate
+symbolic mark-all example using synthetic states. It neither selects blocks nor
+certifies the executable above. The synthesis predicate language, partition
+learner inputs, nested quotient recovery and motion contracts have not gained
+goal-task integration. In particular, Pyramid support
+across two lower blocks is not modeled by the single-column tower contracts.
+The canonical goal diagram still draws vertical links in every column, unlike
+the row-head-only nested axioms; this illustration mismatch is unresolved.
+
+**Paper/model clarifications retained for future verification:** Table 8's Grid
+row quantifies `g` but writes `reach(h0,x)`; its Grid/Pyramid Scattered clauses
+omit the distinct-block restriction. The displayed `reach` definition omits
+closure stars: immediate-successor composition cannot describe all visited
+goals. Specify closure-inclusive row traversal, including h0. Verification also
+needs a sufficient-block premise; otherwise the inner guard can stop with goals
+unfilled. The existing partial-correctness VCs alone do not establish termination
+(15). No synthesis or formal verification result is claimed for these executions.
+
+## 41. Restack needs a terminating first loop and an executable lateral layout
+
+**Paper corrections and execution support; synthesis/verification not claimed.**
+The 2026-10-23 review compared Fig. 10d, Appendix B/Table 8 and Fig. 16 with the
+existing `RoboVerifyPartialStack` environment. That historical environment
+randomly partitioned blocks over the whole workspace; it did not provide the
+requested lateral layout or a collector-ready Restack program.
+
+**Paper issues:**
+
+- Fig. 16's first guard selects a clear block ON* b0. Because ON* is reflexive,
+  b0 continues to satisfy the guard after it has been placed on the table.
+  Literal execution therefore keeps moving b0 and never reaches the second loop.
+- Table 8 requires distinct ON*-related blocks to be Scattered, contradicting
+  the intended initial towers. The executable collection contract instead
+  requires each pair of physical blocks to be comparable by ON* or Scattered;
+  its postcondition is that every physical block is ON* b0. The isolated tbl
+  marker is excluded from these physical quantifiers.
+- The printed invariant I2 contains a free `x`. No printed invariant is supplied
+  to the executor and no verification result is inferred from the paper.
+
+**Executable adaptation:** [`examples/restack.py`](roboverify/synthesis/examples/restack.py)
+retains the two flat loops and the six primitive transfers of Fig. 16. A cursor
+`p <- tbl` records each newly parked block. The first guard additionally excludes
+`p`, and each iteration ends with `p <- b_prime`. This transfers the blocks above
+b0 and then b0 exactly once; when p becomes b0, the guard becomes false.
+The second phase starts `b <- b0` and repeatedly transfers a clear physical
+block other than b onto the destination, then assigns `b <- b_prime`.
+It can dismantle a remaining tower below b0 while rebuilding on the new base.
+
+For the requested geometry, first-phase placement uses
+`Move(tbl, p, tbl, (+0.45, -0.12, +0.05))`: table-relative X fixes a column,
+previous placement Y advances a separated temporary row, and table Z supplies
+the resting height. The first p is tbl. The last temporary placement is b0 and
+becomes the new tower base. Stack placement uses b0 for XY and b for support Z.
+The paper's dynamic Xm/Zm references are replaced with these ordinary reference
+operands and fixed table-relative clearance `N*0.05 + 0.10` m above its support
+reference. The table-placement +0.05 m follows the existing support convention;
+the paper's zero offset would put the target below the surface under that
+convention. These are explicit waypoint adaptations, not a literal transcription.
+All parameters remain trainable. Controllers, tolerances and instruction budgets
+are unchanged; payload-aware feedback remains deferred.
+
+`RoboVerifyRestack` and `make_roboverify_restack_env` supply one randomized source
+tower with b0 at a random interior level (at the top for a two-block tower), plus
+loose blocks. Total count defaults to four and initial height to max(2, N-1).
+The source tower uses base-relative X [0.54, 0.70] m and Y [0.15, 0.25] m;
+loose blocks may extend closer in X to 0.40 m. Every source remains on the
+higher-Y side. Distinct columns have at least 105 mm separation along an axis,
+with 100 mm clearance from the initial gripper. Bounded sampling rejects layouts
+that cannot fit; this region accommodates at most three source columns.
+There is no 2–4-block restriction in the program, but arbitrary counts/heights
+are not a reachability guarantee. The historical PartialStack environment, factory, standalone verifier and
+inference option were subsequently removed at the user's request; Restack is
+the only current task for this behavior.
+
+`collect_demos --task restack` defaults to the new reference program, accepts
+`--initial-tower-blocks`, settles for 50 steps, and records both loop traces,
+aliases, actions and full simulator snapshots. Each accepted trajectory must
+finish with converged primitives and satisfy its pre/postcondition. Saved starts
+and action replay restore exactly without settling again. This uses the shared
+collector and ordinary Program/While execution, without a runtime monkey patch.
+
+**Validation:** six Restack regression tests and 36 shared tests passed. Tests
+cover bounded/randomized resets, both phases and termination, the designated
+base postcondition, snapshot/action replay, and rejected controller or budget
+failures. Four-block, three-block-source runs passed on seeds 0–4. Five-block
+runs passed on seeds 0–4 for both a three-block source plus two loose blocks and
+a four-block source plus one loose block, including both interior b0 levels.
+All 15 recorded executions completed a physical tower on b0, with every primitive
+converged (maximum 18/50 steps). The largest final XY distance from b0 was
+15.48 mm. This measures ordinary grasp/placement offset, not feedback correction.
+
+Archives, per-seed reports and videos are under:
+
+- `roboverify/demos/restack/4-blocks-5-trajectories/`
+- `roboverify/demos/restack/5-blocks-3-tower-5-trajectories/`
+- `roboverify/demos/restack/5-blocks-4-tower-5-trajectories/`
+
+The aggregate diagnostic is `roboverify/demos/restack/validation.json`.
+These are empirical execution results, not a symbolic or motion proof.
+
+## 42. Cross-environment collection coverage is broader than synthesis and verification
+
+**Shared collection gaps addressed; proof boundaries retained.** The 2026-10-23
+audit found that Unstack still required an experiment-local execution wrapper,
+while the shared collector supported the other five paper tasks. The existing
+lateral program is now `examples/unstack.py`. The controller resolves minimum-Y,
+maximum-Z and instruction-entry gripper coordinates through typed observation
+references. A Move freezes its target before its servo loop; this preserves the
+original horizontal transfer. Two- and four-block seed-0 executions were compared
+against saved pre-migration executions: every action and observation was identical.
+No payload-feedback skill, tolerance change or relaxed step limit was introduced.
+The reference semantics enter fingerprints. Collection explicitly opts in, while
+the normal synthesis/verification loader rejects these unencoded references.
+
+`collect_demos --task TASK` now selects a provided groundtruth for all six tasks.
+The old `unstack_lateral` runner, monkey-patched controllers and compatibility
+wrapper have been removed; callers use the shared collector and factory.
+The user explicitly retired PartialStack, so its environment, factory, reset
+helpers, standalone verifier, inference option and unused golden fixture were
+removed. The figure helper was migrated to Restack. The obsolete Reverse
+verifier was also removed: it encoded Unstack rather than the current reversal
+specification (entry 39). The subsequent cleanup retired historical controller
+comparisons, tolerance/drift studies, workspace interventions, manual ID-first
+continuation and the local finite Unstack proof adapter. Their diagnostic-only
+tests were removed; environment and collection regressions now live in those
+packages. Current search, invariant-learning and proof-ablation runners remain;
+see the [experiment inventory](roboverify/synthesis/experiment/README.md).
+Retained findings explain current decisions without requiring obsolete runners
+to remain executable in the final repository.
+
+**Pyramid defect found by seed expansion:** the original bottom-row-4 run failed
+on seed 12 at the highest-goal approach to the last source block. At the far,
+lower-Y corner, the approach used all 50 steps and remained 5.714 mm from its
+target, above the unchanged 2 mm tolerance; the following Pick also exhausted
+its budget. The source layout's center is now 140 mm closer in X than the initial
+gripper, instead of 100 mm. Grid remains at 100 mm. The goal geometry and supplied
+program are unchanged. All original seeds 0–14 passed after this 40 mm workspace
+correction. The original failed archive and a replay video remain under
+`demos/pipeline-audit-20261023/pyramid/`; the replay differs from recorded
+observations by at most 2.33e-10. A seed-12 regression covers this approach.
+
+**105 accepted demonstrations:** 15 seeds each for four-block Stack, Unstack
+and Reverse, five-block Restack with initial tower heights three and four,
+3×3 Grid, and bottom-row-4 Pyramid. The reusable `synthesis.entry.audit_demos`
+checks the exact requested seed set, current task/program identities, validation,
+snapshot restoration, full action replay, physical final success and success
+after 50 additional settling steps. Every final replay error was zero; every
+primitive converged, with a maximum 24 of 50 steps across all tasks. Unstack
+collection and audit invocations each ran under a 55-second external timeout.
+The aggregate manifest is `demos/pipeline-audit-20261023/summary.json`.
+
+The 82 focused tests passed across reference semantics, archive auditing,
+collection/replay, controllers, task removal, inference entry points, goal
+layouts, Pyramid seed 12, Restack and Reverse. These are execution results and
+regressions. No new symbolic or motion verification result, and no full synthesis
+run, is claimed by this audit. The integrated CLI still exposes Stack/Unstack;
+current Unstack runtime references, Reverse/Restack integration and goal-aware
+synthesis/verification remain open. Historical proof evidence retains its
+recorded executable, premises and workspace scope.

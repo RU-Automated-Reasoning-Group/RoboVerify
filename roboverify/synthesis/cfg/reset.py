@@ -5,12 +5,20 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from synthesis.environment.goal_layout import (
+    GoalLayout,
+    decode_goal_bindings,
+    encode_goal_bindings,
+)
+
 
 @dataclass
 class Snapshot:
     gt_state: np.ndarray
     arrays: dict
     bindings: dict
+    goal_layout: GoalLayout | None = None
+    goal_bindings: dict | None = None
 
 
 def inner_env(env):
@@ -37,19 +45,49 @@ def capture(env):
         inner.get_GT_state().copy(),
         arrays,
         deepcopy(getattr(inner, "symbolic_name_to_box_id", {})),
+        getattr(inner, "goal_layout", None),
+        (
+            encode_goal_bindings(inner.symbolic_name_to_goal)
+            if hasattr(inner, "goal_layout")
+            else None
+        ),
     )
+
+
+def restore_bindings(env, snapshot):
+    inner = inner_env(env)
+    inner.symbolic_name_to_box_id = deepcopy(snapshot.bindings)
+    if snapshot.goal_layout is not None:
+        inner.symbolic_name_to_goal = decode_goal_bindings(
+            snapshot.goal_bindings, snapshot.goal_layout
+        )
 
 
 def restore(env, snapshot):
     inner = inner_env(env)
+    case = getattr(inner, "case", None)
+    goal_env = case in ("RoboVerifyGrid", "RoboVerifyPyramid")
+    if goal_env != (snapshot.goal_layout is not None):
+        raise ValueError("Snapshot goal layout is incompatible with this environment")
+    if goal_env:
+        rows = (
+            (inner.grid_cols,) * inner.grid_rows
+            if case == "RoboVerifyGrid"
+            else inner.pyramid_layer_sizes
+        )
+        if rows != snapshot.goal_layout.row_lengths:
+            raise ValueError("Snapshot goal row layout does not match this environment")
+        decode_goal_bindings(snapshot.goal_bindings, snapshot.goal_layout)
     inner.set_GT_state(snapshot.gt_state.copy())
+    if goal_env and inner.goal_layout != snapshot.goal_layout:
+        raise ValueError("Snapshot goal geometry disagrees with its simulator state")
     for name, value in snapshot.arrays.items():
         getattr(inner.sim.data, name)[:] = value
     inner.sim.forward()
     # Forward recomputes derived state; preserve the solver's recorded warm start.
     if "qacc_warmstart" in snapshot.arrays:
         inner.sim.data.qacc_warmstart[:] = snapshot.arrays["qacc_warmstart"]
-    inner.symbolic_name_to_box_id = deepcopy(snapshot.bindings)
+    restore_bindings(env, snapshot)
     return inner.flatten_observation(inner._get_obs())
 
 
@@ -132,14 +170,17 @@ def reset_segment(env, segment, *, mode="replay"):
         for action in actions[: indices[segment.t_start]]:
             observation = env.step(np.array(action, copy=True))[0]
         # Symbolic assignments are not actions; reinstate recorded aliases.
-        inner_env(env).symbolic_name_to_box_id = dict(
-            trace.snapshots[segment.t_start].bindings
-        )
+        restore_bindings(env, trace.snapshots[segment.t_start])
     else:
         raise ValueError(
             "Full simulator snapshots and action recordings are required; recollect demonstrations"
         )
     inner_env(env).symbolic_name_to_box_id.update(segment.bindings)
+    if segment.goal_bindings is not None:
+        inner = inner_env(env)
+        bindings = encode_goal_bindings(inner.symbolic_name_to_goal)
+        bindings.update(segment.goal_bindings)
+        inner.symbolic_name_to_goal = decode_goal_bindings(bindings, inner.goal_layout)
     if not np.allclose(observation, trace.states[segment.t_start], atol=1e-8, rtol=0):
         raise ValueError(
             "Segment replay/reset did not reproduce its recorded observation"

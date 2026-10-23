@@ -5,6 +5,14 @@ verification stages on the same candidate and task conditions.
 
 ## Collection and pipeline modes
 
+Collection supports all six current tasks: Stack, Unstack, Reverse, Restack,
+Grid and Pyramid. The integrated synthesis/verification CLI exposes Stack and
+Unstack only. Its ordinary loader rejects the current Unstack program's
+observation-relative extrema/gripper operands, which are execution/collection
+features. Goal programs remain collection-only as well. Do not interpret the
+cross-environment demo audit as six end-to-end synthesis/verification results;
+see the [support matrix](../../../README.md#project-status).
+
 First collect a supplied primitive DSL program using
 `synthesis.entry.collect_demos`. The [collection guide](../inference_lib/README.md)
 describes seeds, full-state archives, and optional 20 FPS videos. Demonstrations
@@ -153,6 +161,57 @@ Finite symbolic checks are followed by an unbounded proof; motion checks also
 quantify over unnamed objects. The demonstration count supplies inference data,
 not a bound on the proof's block count. Full MCMC/CFG synthesis acceptance is
 resolved; it is separate from this supplied-program proof.
+
+### Removing the common-support comparability axiom (`on4`)
+
+**Both proof levels still pass with `on4` disabled (2026-10-12).** The omitted
+current-state ON* axiom is:
+
+```text
+forall x,y,c. O(x,c) and O(y,c) => O(x,y) or O(y,x)
+```
+
+The supplied Stack configuration above returned `verified_model` in about
+32 seconds: all 12 symbolic checks (establishment, preservation and exit at
+sizes 2–4 and unbounded) and all 36 noiseless motion checks were valid. Five
+candidate executions supplied 20 learning states; no invariant refinement or
+program repair was needed. The partition learner retained seven clauses,
+including `forall x. O(x,b0) => O(b,x)` in addition to the six documented above.
+
+A separate control reused the **unchanged six-clause invariant** saved by the
+2026-10-01 proof, with no relearning. It also passed all 12 symbolic and all 36
+motion checks without `on4`. Thus success does not depend on the extra clause
+retained during the new inference run.
+
+Only the tracked `on4` assertion was omitted, using a scoped in-memory wrapper
+around `HighLevelContext.add_axiom`. This covers finite/unbounded symbolic
+contexts and the abstract root-selection queries used by motion verification.
+The wrapper audited every omission and checked that `on1`, `on2`, `on3` and `on5`
+remained. Higher, Scattered, the separate frozen-geometry `on_zero_4` axiom,
+1 mm Higher tolerance, and all supported-height/alignment/arm premises remained.
+No obligation or premise-consistency check was skipped. This establishes that
+explicit `on4` is unnecessary for this supplied Stack proof under the remaining
+assumptions; it does not remove those geometric assumptions or change defaults.
+
+Recorded runs:
+
+- Full candidate-execution/inference pipeline:
+  `runs/cfg/20261012-183046-1f55b1b-stack-without-on4/`.
+- Fixed six-clause invariant control:
+  `runs/on4-ablation/20261012-183222-1f55b1b-fixed-baseline-invariant/`.
+
+Read either using `uv run python -m synthesis.experiment.report --run <path>`.
+The full run saves per-check verdicts under `artifacts/verification/`, the learned
+invariant under `artifacts/candidates/0/`, and the wrapper and omission audit as
+`artifacts/stack_without_on4.py` and `artifacts/on4-ablation-audit.json`.
+To reproduce, add that artifact directory to `PYTHONPATH`, use
+`uv run python -m stack_without_on4` in place of
+`uv run python -m synthesis.entry.synthesize_cfg` in the supplied command above,
+and set `--run-name stack-without-on4`. The fixed-invariant run also saves its
+control module as `artifacts/stack_on4_fixed_invariant.py`; add its artifact
+directory to `PYTHONPATH` and run `uv run python -m stack_on4_fixed_invariant`.
+Both commands require the usual simulator environment and execution from
+`roboverify/`. Production source files were not modified for either run.
 
 ### Three-block demonstrations
 
@@ -494,6 +553,320 @@ Each process ran the usual ablation command with `--case baseline
 --without-extra-motion-premises --symbolic-timeout-ms 300000
 --no-minimize-unsat-core`, using its own output directory.
 
+## User-supplied Unstack groundtruth diagnostic
+
+**The original +X program is not an acceptable demonstration source in the
+current simulator (2026-10-15).** This original experiment ignored its supplied
+invariant; it checked complete executions, the shared Unstack pre/postconditions,
+and primitive convergence. It did not run symbolic or motion verification.
+The later [right-to-left revision](#right-to-left-unstack-revision) passes the
+bounded execution tests documented separately below.
+
+The tested guard is the following, with `n != tbl` inside the antecedent:
+
+```text
+exists b_prime. forall n.
+  (n != tbl and (O(b0,b_prime) or O(n,b0))) => O(b_prime,n)
+```
+
+The six-instruction body was executed unchanged:
+
+```text
+Move(b_prime, b_prime, b_prime, (0, 0, 0.15))
+Pick(b_prime)
+Move(b_prime, b_prime, b_prime, (0, 0, 0.15))
+Move(X_m, b_prime, b_prime, (0.15, 0, 0.15))
+Move(X_m, b_prime, b0, (0, 0, 0))
+Release(Z_m, 0.15)
+```
+
+`X_m` and `Z_m` are recomputed before each instruction over all physical blocks,
+including the carried block. Release opens the gripper at its current XY and
+retreats to the current maximum block-center Z plus 0.15 m. A diagnostic wrapper
+resolves these extrema to object aliases and invokes the existing primitive
+controllers; it does not add extrema operands to the production DSL or verifier.
+Caching `X_m` at loop entry would describe a different program: the descent
+would target the old maximum X instead of the carried block's new maximum X.
+
+Each row below uses seeds 0–4 with the pre-lateral Unstack reset, the unchanged
+50-step primitive budgets and 2 mm convergence tolerance. All 15 initial states
+satisfy the task precondition. Unlike Stack collection, the existing Unstack
+recording path performs no extra settling before state zero.
+
+| Blocks | Final logical postcondition holds | Accepted by demonstration validation |
+| --- | --- | --- |
+| 2 | 5/5 | 1/5 (seed 1) |
+| 3 | 4/5 | 0/5 |
+| 4 | 4/5 | 0/5 |
+
+Every rejected trial contains at least one unconverged primitive. A final
+unstacked configuration alone does not make those trials valid demonstrations.
+For four blocks, seed 4 exits with two blocks still stacked. Seed 3 exits after
+one iteration with all four blocks displaced onto the table, rather than the
+intended three successful top-removal iterations.
+
+The frequent failure is instruction 4, horizontal transport. Its Z reference
+is the **current** carried block after instruction 3, so it requests another
+0.15 m rise, approximately 0.30 m above the original top. Together with increasing
+maximum X, these targets are difficult for the current controller to reach.
+For four-block seed 0, the first transport target is
+`(1.475709, 0.866801, 0.878251)` m and the 50-step residual is **58.65 mm**.
+Restoring that exact saved state and increasing only the budget to 500 steps
+still leaves **39.01 mm** error. Equivalent probes of the first failed move for
+seeds 1, 3 and 4 also fail at 500 steps. These are measured controller failures;
+no inverse-kinematics impossibility proof was performed.
+
+A separate ideal-placement diagnostic evaluated the same guard on towers of
+sizes 2–10, moving each selected top to `(max(X)+0.15, Y(source), Z(b0))`.
+Every case selected the remaining tower top and terminated after N−1 iterations
+with the postcondition true. The one-block edge case does not terminate: it
+continues selecting b0 even though the postcondition already holds. Collection
+currently requires at least two blocks. These finite ideal checks do not certify
+physical safety or provide an unbounded proof.
+
+All invocations had an external 55-second timeout and finished within it.
+The completed runs under `runs/unstack-groundtruth/` are:
+
+- `20261015-170915-520d5f8-2-blocks`
+- `20261015-170918-520d5f8-3-blocks`
+- `20261015-170821-520d5f8-4-blocks`
+- `20261015-171118-520d5f8-failed-move-budget-probe`
+
+Read them with `uv run python -m synthesis.experiment.report --run <path>`.
+Each execution run saves the exact diagnostic module as
+`artifacts/check_unstack.py`, per-instruction targets and controller results,
+`artifacts/summary.json`, and full-state diagnostic NPZ traces. To reproduce,
+add an execution run's artifact directory to `PYTHONPATH` and run, from
+`roboverify/` with the usual MuJoCo environment:
+
+```bash
+timeout --signal=TERM --kill-after=2s 55s uv run python -m check_unstack \
+  --num-blocks 4 --seeds 0 1 2 3 4
+```
+
+The probe run saves `artifacts/probe_unstack.py` and `artifacts/summary.json`,
+including exact-state replay checks and the ideal guard results. An earlier
+probe attempt (`20261015-171019-520d5f8-failed-move-budget-probe`) failed because
+its harness omitted a guard binding at state zero; it is not verification
+evidence. The completed probe restores the recorded instruction bindings and
+checks that the restored observation and target exactly match the original.
+Production programs, controllers, resets and collection support are unchanged.
+The candidate needs reachable placement/transport targets and validated physical
+executions before adoption as groundtruth; this experiment does not establish
+which waypoint changes suffice.
+
+### Videos of the saved Unstack executions
+
+All 15 trials above have annotated MP4s under
+`runs/unstack-groundtruth/videos-20261015/`, named
+`unstack_<blocks>_blocks_seed_<seed>.mp4`. Each has oblique and side camera views,
+the active instruction, measured gripper-target error, controller-failure count,
+and final task verdict. Playback follows the 25 Hz simulator clock, with a
+one-second opening hold, a brief pause at failed primitives, and a two-second
+final hold. Rendering restores the original full-state snapshots without
+advancing physics; every restored observation is checked against its recording.
+
+Useful examples are two-block seed 1 (accepted demonstration), four-block seed 0
+(transport failures), four-block seed 3 (tower displacement in one iteration),
+and four-block seed 4 (final postcondition fails). The full set is also packaged
+as `unstack_all_15_videos.zip` in that directory. `videos.json` records source
+archives, verdicts, frame counts and durations; `render_unstack.py` is the exact
+renderer used. All clips are 1280×680 H.264 MP4 at 25 fps and were checked for
+complete decoding. Each rendering invocation retained the 55-second process cap.
+
+### Right-to-left Unstack revision
+
+**The revised layout/program passes all 15 execution validations (2026-10-15):**
+seeds 0–4 for each of 2, 3 and 4 blocks. All initial/final task predicates hold,
+every primitive converges within its unchanged 50-step budget and 2 mm tolerance,
+and each execution exits after N−1 iterations. Every final block is within 2 mm
+of the resting table height. This is empirical groundtruth validation in the
+specified workspace, not symbolic or motion verification.
+
+The environment's existing Grid/Pyramid convention calls higher Y the right side
+and lower Y the left side; X controls forward distance from the robot base.
+The October 15 executions and the recorded consolidation/verification rechecks
+used the following historical source workspace:
+
+```text
+X = base_X + Uniform(0.54, 0.58) m
+Y = base_Y + 0.075*(N-1) + Uniform(-0.01, 0.01) m
+```
+
+That earlier rectangle centers the intended final 15 cm-spaced row across the
+base's Y coordinate. On 2026-10-23 the user adopted the expanded shared workspace
+for both Unstack and Reverse: **base-relative X in [0.54, 0.70] m and Y in
+[0.15, 0.25] m**, independent of block count. Tower order and initial heights
+are unchanged. All Unstack factories use this single reset, including
+`make_roboverify_unstack_env()` and `make_roboverify_env("unstack")`.
+The old experiment wrapper has been removed; there is no separate reset
+override or legacy Unstack layout option. Reverse uses the same
+source bounds and keeps its table-relative destination.
+Archived full simulator states still restore exactly.
+The [workspace investigation](../experiment/TOWER-WORKSPACE.md) records 200
+candidate-region executions and 30 fresh production rechecks. The historical
+motion results below still cover the earlier rectangle; they have not been
+rerun over the expanded region. Primitive skills and motion contracts are
+unchanged; payload-aware placement remains explicitly deferred.
+
+The 2026-10-23 consolidation recheck passed all 15 executions (five seeds each
+at 2–4 blocks) through the production factory, plus 25 reset, replay and collection
+regression tests. Each execution batch completed within its 55-second cap. Runs
+under `runs/unstack-lateral/` are `20261023-095818-702d11e-2-blocks`,
+`20261023-095914-702d11e-3-blocks`, and `20261023-095934-702d11e-4-blocks`.
+
+The guard and first three instructions are unchanged. The revised last three
+instructions are:
+
+```text
+Move(b0, Y_min, gripper, (0, -0.15, 0))
+Move(b0, Y_min, b0,      (0,  0,    0))
+Release(Z_m, 0.15)
+```
+
+`Y_min` is the current minimum Y among all blocks, including the carried block;
+`Z_m` remains the current maximum Z. Commanded X stays anchored to b0. The
+transport captures the gripper Z at instruction entry, after the preceding lift,
+and holds that absolute target throughout the move. The shared runtime `gripper`
+Z operand avoids another 15 cm rise and also avoids the small block-center/gripper
+height difference that a zero block-relative Z offset would introduce. The shared
+controller continues correcting all three coordinates toward the fixed target.
+Actual placed block X can differ slightly from the commanded gripper X.
+
+The current runnable implementation is
+[`synthesis.examples.unstack`](../examples/unstack.py), through the shared
+collector and controller. `Y_min`, `Z_m` and `gripper` are resolved from the
+observation once per instruction, and their semantics enter program fingerprints.
+The older experiment entry point and compatibility imports have been removed.
+Use the shared collector and production environment factory directly.
+These operands remain outside integrated synthesis and motion verification.
+Run with the usual MuJoCo environment from `roboverify/`:
+
+```bash
+timeout --signal=TERM --kill-after=2s 55s \
+  uv run python -m synthesis.entry.collect_demos --task unstack \
+  --num-blocks 4 --num-trajectories 15
+```
+
+The historical tested scope below is 2–4 blocks. The current shared collector
+also passed all seeds 0–14 at four blocks; the supplied invariant is ignored. No primitive tolerances or budgets were relaxed, and no extra
+initial settling was added. Each batch completed inside its 55-second cap.
+
+The five-seed horizontal-transfer runs under `runs/unstack-lateral/` are:
+
+- `20261015-173904-86c448d-2-blocks`
+- `20261015-173905-86c448d-3-blocks`
+- `20261015-173905-86c448d-4-blocks`
+
+All 30 transfer targets exactly retain their entry gripper Z. Across every saved
+transfer step, maximum absolute gripper height deviation is **1.221 mm**, and
+maximum carried-block height excursion from its transfer-entry position is
+**2.481 mm**. The latter includes grasp dynamics. All 15 initial observations
+exactly match the earlier lateral trials, isolating the transport-target change.
+All task, termination and controller checks above still pass. All 36 existing
+controller and collection regression tests also pass.
+
+Read runs with the bounded report tool. Updated annotated videos for all 15 trials
+are under `runs/unstack-lateral/videos-horizontal-20261015/`; front and overhead
+views show decreasing Y as screen-right to screen-left, and the transfer annotation
+reports the fixed gripper height and its current tracking error. They restore the
+exact recorded snapshots, use 25 fps, and include an initial/final hold. The
+directory also contains `videos.json`, the renderer,
+`horizontal-transfer-validation.json`, and `unstack_horizontal_all_15_videos.zip`.
+
+The preceding lateral version retained `Move(b0, Y_min, b_prime, (0, -0.15, 0.15))`
+and therefore rose diagonally during transport. Its passing runs remain under
+`20261015-172456-efd81a5-2-blocks`, `20261015-172456-efd81a5-3-blocks`, and
+`20261015-172409-efd81a5-4-blocks`; the packaged-module seed-0 replay is
+`20261015-172610-efd81a5-4-blocks`. Its earlier videos remain under
+`runs/unstack-lateral/videos-right-to-left-20261015/`. That version changed both
+the original workspace and placement direction, so those effects were not isolated.
+
+<a id="verification-of-the-current-unstack-revision"></a>
+
+### Historical Unstack verification diagnostic
+
+This section records the historical 2026-10-19 diagnostic. Its one-off
+adapter and compatibility wrapper have been retired. The results apply to
+the recorded executable and narrower workspace, not the current integrated
+pipeline. Saved artifacts remain available for inspection.
+
+**Symbolic verification passed all 12 VCs:** entry, preservation, and exit at
+2, 3, and 4 physical blocks (plus the relational table), followed by an unbounded
+proof. `InvInference` uses the intended partition learner, PyEDA minimization,
+ON*/equality, and the recorded program's constants `b0,tbl`; this program has no
+loop-carried `b`. All 15 saved validated trajectories contribute 45 heads/exits.
+Archive executable fingerprints and horizontal-transfer semantics are checked.
+The learned invariant is:
+
+```text
+forall x,y. ON_star(x,y) or not ON_star(y,x) or ON_star(x,b0)
+not ON_star(tbl,b0)
+```
+
+The pre/postconditions are the shared `task_spec("unstack")`, with physical `b0`.
+The postcondition says all ON* pairs are reflexive; it is not the older standalone
+entry point's stronger Higher/Scattered postcondition. The actual loop guard is
+retained, and its body is proposed as `Put(b_prime,tbl)`. Domain axioms include
+`on4` and top existence; no axiom-removal claim is made. Two auxiliary theorems
+are independently proved from ON axioms before use: a non-base top of the
+remaining tower enables the guard, and the invariant plus a nonfinal state
+implies such a top exists. They guide the unbounded exit query without adding
+assumptions. Full-domain premise consistency remains required for all VCs.
+This is partial correctness of the proposed abstraction, conditional on motion
+realizing it, rather than unbounded termination or physical correctness.
+
+**Motion verification failed for the actual reset heights.** The experimental
+adapter resolves minimum Y, maximum Z, and held gripper Z from the current
+geometry before each instruction. Release uses `Z_m` as a height reference;
+the held object is released while gripper XY stays fixed. It reuses the shared
+primitive sweeps, support, contract, and frame checks, and checks the full
+ON*/Higher/Scattered Put effects by exact finite quantifier expansion. Every
+physical obstacle and every guard binding is covered. Complete executions are
+unrolled for the runner's supported sizes 2–4 with symbolic XY over its full
+continuous reset workspace, the live environment's initial arm pose, nominal
+50 mm levels, and default 1 mm Higher tolerance. This scope is finite and
+noiseless; it does not model controller tracking, settling, or floating-point
+rounding of coordinates.
+
+| Blocks | Actual base center (m) | Exact resting center (m) | First failed obligation |
+| --- | --- | --- | --- |
+| 2 | 0.42479285324334115 | 0.425 | Release support |
+| 3 | 0.424706270765723 | 0.425 | Release support |
+| 4 | 0.42463307711707404 | 0.425 | Release support |
+
+The lowering Move uses the base's Z. The motion model requires exact table
+support at `0.4 + 0.05/2`, so the 0.207–0.367 mm mismatch refutes Release support
+and its placement contract. The model then permits arbitrary falling positions;
+the reported relation-effect failures follow from that allowance. These are
+model counterexamples, not failed MuJoCo trials or demonstrated real collisions.
+
+The retired runner's `--ideal-height-diagnostic` option changed only the proof's
+initial center height to exactly 0.425 m. It passed **31, 60, and 91 checks** for 2, 3, and 4 blocks,
+including final guard-false and task-postcondition checks. These 182 checks are
+conditional on that changed model and cannot be reported as a pass for the
+unchanged actual reset. Current execution supports observation-relative
+operands, but integrated motion verification still rejects them.
+
+The retired runner used a 45-second internal experiment budget and
+5-second solver queries. Unknown, timeout, inconsistency and refutation
+could not pass. The actual-reset motion runs returned nonzero. Runs under
+`runs/unstack-verification/` retain the source, learned invariant, checks, and
+geometric counterexamples. Final evidence:
+
+- Symbolic: `20261019-202828-702d11e-symbolic-4` (approximately 24 seconds).
+- Actual-reset motion: `20261019-202605-702d11e-motion-2`,
+  `20261019-202605-702d11e-motion-3`, `20261019-202828-702d11e-motion-4`.
+- Ideal-height diagnostics: `20261019-202829-702d11e-motion-2-ideal-height`,
+  `20261019-202834-702d11e-motion-3-ideal-height`,
+  `20261019-202841-702d11e-motion-4-ideal-height`.
+
+Use `python -m synthesis.experiment.report --run <run-directory>` to inspect
+these runs. All 20 focused Unstack, symbolic-verdict, and primitive-motion
+regression tests passed at that revision. They covered unsupported Release,
+unsafe initial arm geometry, and nested quantifier expansion using synthetic inputs.
+Tests specific to the retired adapter were removed with it.
+
 ## Counterexample learning without initial demonstrations
 
 The separate [Section 6.2 experiment](../experiment/invariant_learning/README.md)
@@ -570,41 +943,10 @@ search or later named body search does not prove the generalized loop; the share
 inference and verification pipeline still has to accept that returned candidate.
 The selected ID-first policy is retained for any later whole-task resynthesis.
 
-### Manual continuation experiment
-
-To replace MCMC with supplied placement candidates while retaining real simulator
-execution, refinement, and quotienting, use recordings from the current Stack
-example. Recollect after changing controller settings or waypoints; the diagnostic
-checks the source fingerprint. For example:
-
-```bash
-uv run python -m synthesis.experiment.id_first_continuation \
-  --demos demos/stack/3-blocks-5-trajectories/demonstrations.npz
-uv run python -m synthesis.experiment.report --run runs/id-first-continuation/latest
-```
-
-Use `--num-blocks 4` with four-block recordings to repeat the experiment with
-an additional intermediate placement:
-
-```bash
-uv run python -m synthesis.entry.collect_demos \
-  --program synthesis.examples.stack:build_program --task stack \
-  --num-blocks 4 --num-trajectories 5 --seed-start 0 --save-video \
-  --max-loop-iterations 3 \
-  --output-dir demos/stack/4-blocks-5-trajectories
-uv run python -m synthesis.experiment.id_first_continuation \
-  --num-blocks 4 \
-  --demos demos/stack/4-blocks-5-trajectories/demonstrations.npz
-```
-
-This diagnostic requires three- or four-block recordings from the current Stack
-example, with `b0` bound to physical ID 0. It saves `artifacts/summary.json`, named
-programs, and complete replay archives.
-The script distinguishes automatic continuation from isolated calls to quotient
-and from replaying rejected candidate loops; none is a formal verification result.
-If folding succeeds, it also supplies a candidate for the new named body-search
-call and records its actual per-iteration rollouts in `post_quotient_oracle_calls`.
-That diagnostic replaces MCMC in both phases; the integrated CLI runs real MCMC.
+The former manual continuation diagnostic substituted supplied placements for
+MCMC and has been retired. Its findings remain in
+[review entry 22](../../../PAPER-DISCREPANCIES.md#22-id-first-continuation-exposes-placement-and-loop-exit-boundary-limits).
+Use the integrated command above to exercise current ID-first synthesis.
 
 ## Finite checks and unbounded proof
 
@@ -684,11 +1026,13 @@ adds an explicit initial-arm condition; without it, all arm positions are checke
 `--motion-noise` and the associated bounds are available through the shared
 motion options. Table placements require `--table-surface-height`.
 
-The tower-task scope covers Stack, Unstack, Reverse and ReStack/Partial; the
-integrated CLI currently exposes Stack and Unstack. Branch synthesis,
-nested/starred quotient, Grid/Pyramid, total-termination proofs and controller
-refinement are outside scope. Existing code for other tasks is not evidence of
-verified physical execution.
+The current execution tasks are Stack, Unstack, Reverse, Restack, Grid and
+Pyramid; PartialStack has been removed. The integrated CLI exposes Stack and
+Unstack, with the current observation-relative Unstack groundtruth rejected
+until its operands have a proof encoding. Reverse/Restack and goal-task
+integration, branch synthesis, nested/starred quotient, total-termination proofs
+and controller refinement remain outside the supported pipeline scope. Existing
+execution code and passing demonstrations do not establish formal verification.
 
 Supported towers have uniform upright blocks of height L, a common flat table,
 exact support and complete layers. The tight XY input invariant and placement

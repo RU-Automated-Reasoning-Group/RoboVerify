@@ -25,6 +25,7 @@ class DemoSegment:
     parent: object = None
     entry_index: int = None
     final_bindings: object = None
+    goal_bindings: dict | None = None
 
     def __post_init__(self):
         if not 0 <= self.t_start <= self.t_end < len(self.trace.states):
@@ -34,6 +35,8 @@ class DemoSegment:
         if not 0 <= self.entry_index <= self.t_start:
             raise ValueError("Entry geometry must precede the segment")
         self.bindings = dict(self.bindings)
+        if self.goal_bindings is not None:
+            self.goal_bindings = dict(self.goal_bindings)
 
     @property
     def states(self):
@@ -51,6 +54,7 @@ class DemoSegment:
                 self.bindings,
                 self,
                 self.entry_index,
+                goal_bindings=self.goal_bindings,
             ),
             DemoSegment(
                 self.demo_idx,
@@ -61,6 +65,7 @@ class DemoSegment:
                 self,
                 self.entry_index,
                 self.final_bindings,
+                self.goal_bindings,
             ),
         )
 

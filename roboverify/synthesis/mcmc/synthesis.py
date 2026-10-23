@@ -768,11 +768,11 @@ ROBOVERIFY_REVERSE_ENV_KWARGS = {
     "base_block_id": 0,
 }
 
-ROBOVERIFY_PARTIAL_STACK_ENV_KWARGS = {
+ROBOVERIFY_RESTACK_ENV_KWARGS = {
     "sparse": False,
     "shaped_reward": False,
     "reward_type": "sparse",
-    "case": "RoboVerifyPartialStack",
+    "case": "RoboVerifyRestack",
     "visualize_mocap": False,
     "simple": True,
     "base_block_id": 0,
@@ -818,7 +818,7 @@ def make_roboverify_unstack_env(
     num_blocks: int = 4,
     render_mode: str = "rgb_array",
 ) -> GymToGymnasium:
-    """Create the RoboVerifyUnstack env for unstack demo rollouts and MCMC eval."""
+    """Create the standard right-to-left Unstack env for rollouts and MCMC eval."""
     return GymToGymnasium(
         FetchPickAndPlaceConstruction(
             name=f"roboverify_unstack_{num_blocks}",
@@ -833,7 +833,7 @@ def make_roboverify_reverse_env(
     num_blocks: int = 4,
     render_mode: str = "rgb_array",
 ) -> GymToGymnasium:
-    """Create the RoboVerifyReverse env for reverse demo rollouts and MCMC eval."""
+    """Create Reverse with its source tower on the robot's higher-Y side."""
     return GymToGymnasium(
         FetchPickAndPlaceConstruction(
             name=f"roboverify_reverse_{num_blocks}",
@@ -844,16 +844,19 @@ def make_roboverify_reverse_env(
     )
 
 
-def make_roboverify_partial_stack_env(
+def make_roboverify_restack_env(
     num_blocks: int = 4,
     render_mode: str = "rgb_array",
+    *,
+    initial_tower_blocks: int | None = None,
 ) -> GymToGymnasium:
-    """Create the RoboVerifyPartialStack env for partial-stack rollouts and MCMC eval."""
+    """Create a lateral source tower containing b0, plus loose blocks."""
     return GymToGymnasium(
         FetchPickAndPlaceConstruction(
-            name=f"roboverify_partial_stack_{num_blocks}",
+            name=f"roboverify_restack_{num_blocks}",
             num_blocks=num_blocks,
-            **ROBOVERIFY_PARTIAL_STACK_ENV_KWARGS,
+            initial_tower_blocks=initial_tower_blocks,
+            **ROBOVERIFY_RESTACK_ENV_KWARGS,
         ),
         render_mode=render_mode,
     )
@@ -879,12 +882,18 @@ def make_roboverify_grid_env(
 
 def make_roboverify_pyramid_env(
     render_mode: str = "rgb_array",
+    *,
+    bottom_row_blocks: int = 3,
 ) -> GymToGymnasium:
-    """Create the RoboVerifyPyramid env with six blocks in a 3+2+1 goal pyramid."""
+    """Create layers k, k-1, ..., 1 from bottom_row_blocks=k."""
+    from synthesis.environment.goal_layout import pyramid_layers
+
+    num_blocks = sum(pyramid_layers(bottom_row_blocks))
     return GymToGymnasium(
         FetchPickAndPlaceConstruction(
-            name="roboverify_pyramid_6",
-            num_blocks=6,
+            name=f"roboverify_pyramid_{bottom_row_blocks}",
+            num_blocks=num_blocks,
+            bottom_row_blocks=bottom_row_blocks,
             **ROBOVERIFY_PYRAMID_ENV_KWARGS,
         ),
         render_mode=render_mode,
@@ -895,8 +904,18 @@ def make_roboverify_env(
     task: str,
     num_blocks: int = 4,
     render_mode: str = "rgb_array",
+    *,
+    initial_tower_blocks: int | None = None,
 ) -> GymToGymnasium:
-    """Create a RoboVerify env for stack / unstack / reverse / partial_stack tasks."""
+    """Create a RoboVerify tower-task environment."""
+    if task == "restack":
+        return make_roboverify_restack_env(
+            num_blocks=num_blocks,
+            render_mode=render_mode,
+            initial_tower_blocks=initial_tower_blocks,
+        )
+    if initial_tower_blocks is not None:
+        raise ValueError("initial_tower_blocks requires the Restack task")
     if task == "stack":
         return make_roboverify_stack_env(num_blocks=num_blocks, render_mode=render_mode)
     if task == "unstack":
@@ -905,10 +924,6 @@ def make_roboverify_env(
         )
     if task == "reverse":
         return make_roboverify_reverse_env(
-            num_blocks=num_blocks, render_mode=render_mode
-        )
-    if task in ("partial_stack", "partial"):
-        return make_roboverify_partial_stack_env(
             num_blocks=num_blocks, render_mode=render_mode
         )
     if task in ("grid", "2dgrid"):

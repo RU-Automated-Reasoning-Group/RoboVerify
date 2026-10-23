@@ -8,6 +8,12 @@ from synthesis.api.control import ControlResult
 
 def emit(callback, kind, path, env, trajectory, **fields):
     if callback is not None:
+        goals = getattr(env, "symbolic_name_to_goal", None)
+        if goals is not None:
+            fields["goal_bindings"] = {
+                name: None if value is None else value.index
+                for name, value in goals.items()
+            }
         callback(
             dict(
                 kind=kind,

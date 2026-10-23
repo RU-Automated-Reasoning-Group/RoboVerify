@@ -175,6 +175,17 @@ class PrimitiveMotionProblem(MotionProblem):
             self.used_bindings.update(
                 o["val"] for o in instruction.get_operand() if o["type"] == "BoxName"
             )
+            if isinstance(instruction, (MoveByName, ReleaseByName)) and any(
+                self.bindings[o["val"]] == "tbl" for o in instruction.get_operand()
+            ):
+                self.checks.append(
+                    MotionCheck(
+                        f"table_reference_{self.step}",
+                        "unsupported",
+                        reason="Table-relative controller coordinates are not encoded by this motion verifier",
+                    )
+                )
+                return
             if isinstance(instruction, PickByName):
                 if self.held_name is not None:
                     self.checks.append(

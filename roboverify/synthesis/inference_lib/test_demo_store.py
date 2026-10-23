@@ -218,7 +218,7 @@ class TraceEntryPoints(unittest.TestCase):
         class ReachedInference(Exception):
             pass
 
-        for task in ("stack", "unstack", "reverse", "partial"):
+        for task in ("stack", "unstack"):
             with self.subTest(task=task):
                 module = importlib.import_module(
                     f"synthesis.entry.verify_{task}_with_learned_invariant"

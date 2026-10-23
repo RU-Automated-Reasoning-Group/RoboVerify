@@ -90,8 +90,17 @@ not the robot arm or the physical table plane. A table-placement contract requir
 the actual `table_surface_height` and checks the resting center height at release;
 it does not assign coordinates to relational `tbl`. The CFG verifier supplies
 entry conditions for straight-line blocks; uncovered motion fails closed. The
-handwritten Reverse and Partial verification entry points have no lowered physical
-program and explicitly report unsupported motion verification.
+obsolete Reverse and PartialStack verification entry points were removed during
+the collection audit. Current Reverse/Restack execution does not establish motion
+verification support.
+
+The physical controller additionally permits tbl (or an alias such as b initialized
+from tbl) as a Move/Release coordinate reference. Its XY comes from the environment's
+`table_position`; its reference Z is the physical surface minus half a block.
+Adding one block length then places a block center on either tbl or a block.
+This convention is separate from relational tbl and is not yet encoded by
+`PrimitiveMotionProblem`. A resolved table operand there returns `unsupported`
+explicitly, rather than inventing coordinates or claiming a proof.
 
 Named Pick/Release primitives explicitly permit contact with their selected
 object. Empty-gripper sweeps use a point; carried payloads use a cube. Primitive
@@ -221,3 +230,9 @@ transitive on arbitrary continuous heights; the intended interpretation uses
 well-separated block levels. Increasing the threshold is not a proof that all
 physical executions satisfy the abstract model. Motion/controller tolerances
 and `--motion-noise` are separate parameters.
+
+The current Unstack runtime also accepts observation-relative `Y_min`, `Z_m`
+and `gripper` coordinates. Their targets are fixed at instruction entry. They
+are fingerprinted execution/collection features; the ordinary program loader
+rejects them for integrated synthesis/verification. See the
+[project support matrix](../../../README.md#project-status).
