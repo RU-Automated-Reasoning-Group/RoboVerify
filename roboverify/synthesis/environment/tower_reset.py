@@ -2,18 +2,15 @@
 
 import numpy as np
 
-REVERSE_TOWER_Y_OFFSET = 0.15
+TOWER_X_RANGE = (0.54, 0.70)
+TOWER_Y_RANGE = (0.15, 0.25)
 
 
 def sample_tower_xy(num_blocks, robot_base_xy, *, task):
-    if task == "unstack":
-        # Center the eventual 15 cm-spaced row on the robot base.
-        y_offset = 0.075 * (num_blocks - 1)
-    elif task == "reverse":
-        # Two towers, one on each side, irrespective of the block count.
-        y_offset = REVERSE_TOWER_Y_OFFSET
-    else:
+    """Sample the same side workspace for both tasks and every tower height."""
+    if task not in ("unstack", "reverse"):
         raise ValueError(f"Unsupported tower reset: {task}")
+    # Keep the source away from the initial arm while allowing farther starts.
     return np.asarray(robot_base_xy) + np.array(
-        [np.random.uniform(0.54, 0.58), y_offset + np.random.uniform(-0.01, 0.01)]
+        [np.random.uniform(*TOWER_X_RANGE), np.random.uniform(*TOWER_Y_RANGE)]
     )

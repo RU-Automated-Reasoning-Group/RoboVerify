@@ -19,7 +19,8 @@ class TowerWorkspaceTests(unittest.TestCase):
 
     def test_paired_feedback_uses_identical_physics_and_distinct_identity(self):
         args = SimpleNamespace(task="reverse", num_blocks=4)
-        baseline, trace = run_trial(args, seed=0)
+        # Keep the known off-center grasp independent of reset sampling policy.
+        baseline, trace = run_trial(args, seed=0, point=(0.56, 0.15))
         replay, replay_trace = run_trial(args, seed=0, snapshot=trace.snapshots[0])
         self.assertTrue(baseline["valid"], baseline["reason"])
         self.assertTrue(replay["valid"], replay["reason"])

@@ -12,7 +12,6 @@ from synthesis.cfg.demos import DemoSegment
 from synthesis.cfg.program_source import load_program
 from synthesis.cfg.recordings import load_traces, save_traces
 from synthesis.cfg.reset import inner_env, reset_segment
-from synthesis.environment.tower_reset import REVERSE_TOWER_Y_OFFSET
 from synthesis.examples.reverse import DESTINATION_OFFSET
 from synthesis.mcmc.synthesis import make_roboverify_env, make_roboverify_reverse_env
 from synthesis.util.on import BLOCK_LENGTH, get_block_pos
@@ -43,12 +42,12 @@ class ReverseTests(unittest.TestCase):
                             offsets = xyz[:, :2] - inner.robot_base_xy
                             self.assertTrue(
                                 np.all(
-                                    (0.54 <= offsets[:, 0]) & (offsets[:, 0] <= 0.58)
+                                    (0.54 <= offsets[:, 0]) & (offsets[:, 0] <= 0.70)
                                 )
                             )
                             self.assertTrue(
                                 np.all(
-                                    abs(offsets[:, 1] - REVERSE_TOWER_Y_OFFSET) <= 0.01
+                                    (0.15 <= offsets[:, 1]) & (offsets[:, 1] <= 0.25)
                                 )
                             )
                             np.testing.assert_array_equal(
@@ -72,6 +71,12 @@ class ReverseTests(unittest.TestCase):
                                 np.testing.assert_array_equal(obs, expected[seed])
                             else:
                                 expected[seed] = obs.copy()
+                    sampled = np.array(
+                        [get_block_pos(o, 0)[:2] for o in expected.values()]
+                    )
+                    sampled -= inner.robot_base_xy
+                    self.assertGreater(sampled[:, 0].max(), 0.65)
+                    self.assertGreater(sampled[:, 1].max(), 0.20)
                 finally:
                     env.close()
 
@@ -127,8 +132,17 @@ class ReverseTests(unittest.TestCase):
                 ]
                 self.assertEqual(selected, expected_order)
                 destination_xy = geometry["table"][:2] + DESTINATION_OFFSET
+                # The fixed column is a gripper target. Payload centering has no
+                # 1 cm guarantee; grasp drift is measured separately by the
+                # tower-workspace diagnostic, including the wider reset range.
+                placements = [
+                    trace.states[e["index"]][:2]
+                    for e in trace.events
+                    if e["kind"] == "instruction_end" and e["path"] == "1.4"
+                ]
+                self.assertEqual(len(placements), count)
                 np.testing.assert_allclose(
-                    final[:, :2], np.tile(destination_xy, (count, 1)), atol=0.01, rtol=0
+                    placements, np.tile(destination_xy, (count, 1)), atol=0.002, rtol=0
                 )
                 self.assertTrue(np.all(final[:, 1] < geometry["base"][1]))
                 heads = [e for e in trace.events if e["kind"] == "loop_head"]

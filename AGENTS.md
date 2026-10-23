@@ -56,15 +56,18 @@ Read [README.md](README.md#project-status) for current project status and
 reasoning and remaining actions. Collection and supplied-program verification
 are implemented; full synthesis acceptance is resolved. Stack reset bounds initial
 blocks to 0.70 m XY from the robot base.
-Unstack has one production reset: the lateral layout starts its tower at
-base-relative X in [0.54, 0.58] m and Y = 0.075*(N-1) +/- 0.01 m for right-to-left
-placement. The lateral experiment uses the shared factory. Reverse starts at
-base-relative X in [0.54, 0.58] m and Y in [0.14, 0.16] m; its supplied primitive
+Unstack and Reverse share one lateral source workspace: base-relative X in
+[0.54, 0.70] m and Y in [0.15, 0.25] m, independent of block count. The Unstack
+lateral experiment uses the shared factory. Reverse's supplied primitive
 program starts with `b <- tbl` and uses one loop for all N transfers. Table-relative
 Move offsets position the new tower on the lower-Y side and remain trainable.
 `collect_demos --task reverse --program synthesis.examples.reverse:build_program`
 validates frozen-entry order reversal for 2–4 blocks. Archived full states still
 restore exactly.
+Payload-aware placement remains diagnostic only: the user deferred adoption
+because it strengthens primitive capabilities and needs a review of motion
+contracts and verification assumptions. See the
+[workspace investigation](roboverify/synthesis/experiment/TOWER-WORKSPACE.md).
 Stack collection holds the initial gripper position for 50 steps before
 recording; the settled full snapshot becomes state zero. Synthesis, candidate
 verification, and standalone MCMC restore archived states without repeating
@@ -362,9 +365,9 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   outside tower scope.
 
 - **`synthesis/environment/tower_reset.py`** — shared lateral Unstack/Reverse
-  reset geometry. Both start 0.54–0.58 m ahead of the robot base. Unstack's Y
-  offset centers the eventual row; Reverse uses a fixed +0.15 m offset with
-  ±0.01 m jitter. The Reverse example uses `b <- tbl` and one loop for every block.
+  reset geometry. Both sample X in [0.54, 0.70] m ahead of the robot base and
+  Y in [0.15, 0.25] m to its side, independent of block count. The Reverse example
+  uses `b <- tbl` and one loop for every block.
   Table-relative XY offsets (default +0.45, -0.15 m) position the destination;
   `b` supplies support height and becomes the newly placed block after each transfer.
 

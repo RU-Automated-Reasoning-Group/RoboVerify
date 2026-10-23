@@ -725,8 +725,13 @@ executions with diagnostic block XY feedback reduced this to 1.35–1.49 mm at
 the same fixed destination; tighter Pick tolerance and block XYZ feedback each
 failed their unchanged step budgets. These remain experiments, not production
 controller changes or a physical-refinement proof. The same investigation
-validated 200 complete Unstack/Reverse executions in a larger candidate source
-rectangle, while confirming initial gripper overlap for some centerline starts.
+validated 200 complete Unstack/Reverse executions in a larger source rectangle,
+while confirming initial gripper overlap for some centerline starts. The user
+adopted base-relative X in [0.54, 0.70] m and Y in [0.15, 0.25] m for both tasks;
+all 30 fresh production-factory executions at 2–4 blocks passed. The user
+explicitly deferred payload-aware placement because it is a stronger primitive
+and requires reviewing motion contracts and verification assumptions. Historical
+Unstack motion results retain their original, narrower input region.
 
 ## 38. Unsat-core minimization can consume the budget after proving a VC
 
@@ -759,8 +764,9 @@ whose order is the reverse of frozen entry ON*. That historical entry point
 also explicitly reports unsupported motion; it must not be used to certify the
 new Reverse program.
 
-At the user's request, Reverse now resets its source tower 0.54–0.58 m ahead of
-the robot base and 0.14–0.16 m toward higher Y. `examples/reverse.py` now starts
+At the user's request, Reverse now resets its source tower 0.54–0.70 m ahead of
+the robot base and 0.15–0.25 m toward higher Y, sharing Unstack's expanded source
+workspace. `examples/reverse.py` starts
 with `b <- tbl` and handles all N transfers in one loop, including the first
 block and the original base last. After each placement it assigns `b <- b_prime`.
 Ordinary Move parameters choose the destination relative to the physical table

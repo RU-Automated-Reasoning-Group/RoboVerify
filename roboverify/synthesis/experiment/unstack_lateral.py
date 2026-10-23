@@ -267,7 +267,7 @@ def main():
         "unstack-lateral",
         dict(
             vars(args),
-            layout="right-to-left; X in base+[.54,.58]; initial Y=base+.075*(N-1)+/- .01; spacing .15",
+            layout="right-to-left; X in base+[.54,.70]; Y in base+[.15,.25]; spacing .15",
             transport_height="hold gripper Z at transfer entry",
             transport_z_offset=0.0,
         ),

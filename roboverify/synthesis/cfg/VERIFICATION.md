@@ -677,21 +677,29 @@ specified workspace, not symbolic or motion verification.
 
 The environment's existing Grid/Pyramid convention calls higher Y the right side
 and lower Y the left side; X controls forward distance from the robot base.
-All Unstack entry points now start the tower at:
+The October 15 executions and the recorded consolidation/verification rechecks
+used the following historical source workspace:
 
 ```text
 X = base_X + Uniform(0.54, 0.58) m
 Y = base_Y + 0.075*(N-1) + Uniform(-0.01, 0.01) m
 ```
 
-This places the tower to the right and centers the intended final 15 cm-spaced
-row across the base's Y coordinate. It retains the current tower ordering and
-initial heights. Since 2026-10-23 this is the only production Unstack reset,
-including `make_roboverify_unstack_env()` and `make_roboverify_env("unstack")`.
+That earlier rectangle centers the intended final 15 cm-spaced row across the
+base's Y coordinate. On 2026-10-23 the user adopted the expanded shared workspace
+for both Unstack and Reverse: **base-relative X in [0.54, 0.70] m and Y in
+[0.15, 0.25] m**, independent of block count. Tower order and initial heights
+are unchanged. All Unstack factories use this single reset, including
+`make_roboverify_unstack_env()` and `make_roboverify_env("unstack")`.
 The experiment's `lateral_env` name aliases the production factory; there is no
-separate reset override or legacy Unstack layout option. Reverse has its own
-fixed side offset for the [reversal program](../inference_lib/README.md#collect-reverse-demonstrations).
+separate reset override or legacy Unstack layout option. Reverse uses the same
+source bounds and keeps its table-relative destination.
 Archived full simulator states still restore exactly.
+The [workspace investigation](../experiment/TOWER-WORKSPACE.md) records 200
+candidate-region executions and 30 fresh production rechecks. The historical
+motion results below still cover the earlier rectangle; they have not been
+rerun over the expanded region. Primitive skills and motion contracts are
+unchanged; payload-aware placement remains explicitly deferred.
 
 The 2026-10-23 consolidation recheck passed all 15 executions (five seeds each
 at 2–4 blocks) through the production factory, plus 25 reset, replay and collection

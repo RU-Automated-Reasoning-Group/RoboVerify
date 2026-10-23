@@ -95,13 +95,13 @@ verification. Stack is
 implemented with an adapter interface for future environments. See the
 [counterexample-learning experiment](roboverify/synthesis/experiment/invariant_learning/README.md).
 
-Unstack uses a single right-to-left environment: its initial tower is placed
-54–58 cm ahead of the robot base and on the higher-Y side, leaving room for
-successive 15 cm leftward placements. All Unstack factories use this layout;
-the [lateral experiment](roboverify/synthesis/cfg/VERIFICATION.md#right-to-left-unstack-revision)
-uses the same factory. Reverse now starts 14–16 cm on the higher-Y side and
-rebuilds the reversed tower on the lower-Y side using trainable table-relative
-Move offsets. The supplied
+Unstack and Reverse both sample their initial tower 54–70 cm ahead of the robot
+base and 15–25 cm on its higher-Y side, independent of block count. All Unstack
+factories use this single right-to-left layout; the
+[lateral experiment](roboverify/synthesis/cfg/VERIFICATION.md#right-to-left-unstack-revision)
+uses the same factory and retains 15 cm leftward placements. Reverse rebuilds
+the reversed tower on the lower-Y side using trainable table-relative Move
+offsets. The supplied
 [`synthesis.examples.reverse`](roboverify/synthesis/examples/reverse.py) program
 starts with `b <- tbl`; one While loop handles every block using ordinary
 Pick/Move/Release primitives and `b <- b_prime` after each placement. All 15 tested
@@ -111,9 +111,12 @@ checks the reversal against frozen entry geometry. See the
 This is empirical execution validation; the historical standalone Reverse
 verifier does not verify this program (discrepancy 39).
 A [workspace and Reverse placement investigation](roboverify/synthesis/experiment/TOWER-WORKSPACE.md)
-validated 200 executions in a larger candidate source region and diagnosed the
-bottom-two-block offset using paired payload-feedback experiments. Production
-reset bounds and controllers remain as described above.
+validated 200 executions in the now-adopted larger source region; fresh
+production-factory rechecks passed all 30 executions across both tasks and
+2–4 blocks. The user deferred the investigated payload-feedback placement skill
+because it would strengthen the primitive and require reviewing its verification
+assumptions. Production controllers and motion contracts remain unchanged.
+Historical Unstack motion checks cover their original narrower source region.
 
 A [Lean mechanization of WP soundness](roboverify/proofs/wp_soundness/README.md)
 checks the complete, separated-chain model, including guarded top-to-top

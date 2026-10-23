@@ -1,10 +1,11 @@
 # Tower workspace and Reverse placement investigation
 
-2026-10-23. The measured candidate for both Unstack and Reverse is robot-base-relative
-**X in [0.54, 0.70] m and Y in [0.15, 0.25] m**. This expands the current
-4 cm by 2 cm source rectangle to 16 cm by 10 cm, while keeping the source to
-one side of the initial arm. Production reset bounds and primitive controllers
-are unchanged by this investigation. Reverse's commanded destination remains
+2026-10-23. The user adopted the measured workspace for both Unstack and Reverse:
+robot-base-relative **X in [0.54, 0.70] m and Y in [0.15, 0.25] m**, independent
+of block count. This expands the former 4 cm by 2 cm source rectangle to
+16 cm by 10 cm, while keeping the source to one side of the initial arm.
+The shared production reset now uses these bounds. Primitive controllers and
+their motion contracts are unchanged. Reverse's commanded destination remains
 world XY **(1.25, 0.60) m**, using the existing table-relative offsets.
 
 The large bottom-two-block offset in Reverse is reproducible. The first block
@@ -61,11 +62,29 @@ overlaps both fingers and the gripper body. The two-block probes had no such
 contacts. These are reset contact queries, not complete executions or a proof
 of swept-arm clearance. The active model still excludes head collisions.
 
-The proposed common Y interval also shifts the two- and three-block Unstack
-row toward higher Y compared with the current count-dependent centering. It
+The adopted common Y interval also shifts the two- and three-block Unstack
+row toward higher Y compared with the former count-dependent centering. It
 preserves the 15 cm spacing and right-to-left execution. The evidence supports
 a larger candidate reset region; it is not a continuous-workspace safety proof
 or a certified success rate.
+
+After adopting the reset, fresh production-factory executions passed **30/30**:
+seeds 0–4 for both tasks at each of 2–4 blocks. These runs use no reset override
+or payload-feedback intervention. Thirteen focused reset, execution, diagnostic
+and snapshot-replay tests passed. The Reverse destination test checks actual
+gripper placement endpoints against the 2 mm controller tolerance and validates
+the reversal postcondition separately; the earlier 1 cm payload-centering
+assertion was an empirical property of the old test start, not a skill contract.
+The new four-block seed 0 reaches 10.64 mm block offset on one axis despite a
+converged gripper and valid reversal, consistent with the limitation below.
+
+Production rechecks: `runs/unstack-lateral/20261023-112001-b7d469a-2-blocks`,
+`20261023-112007-b7d469a-3-blocks`, `20261023-112014-b7d469a-4-blocks`; and
+`runs/tower-workspace/20261023-112002-b7d469a-reverse-2-production-expanded`,
+`20261023-112009-b7d469a-reverse-3-production-expanded`,
+`20261023-112017-b7d469a-reverse-4-production-expanded`.
+Historical Unstack motion-verification results retain their original narrower
+input region; expanding the reset does not extend those recorded proofs.
 
 ## Why the bottom two Reverse blocks look misaligned
 
@@ -130,6 +149,13 @@ These paired interventions support block-position-aware XY control as a useful
 fix direction. They do not establish a production controller or its compatibility
 with the geometric verifier. The scoped interventions have distinct diagnostic
 fingerprints, and their archives must not be treated as production-program demos.
+
+**Decision: defer payload-aware placement.** The user chose to retain this idea
+as a note, without adopting it. Measuring the block–gripper offset and adjusting
+placement introduces a stronger primitive than the current gripper-target skill.
+Future adoption requires an explicit contract for sensing, grasp-offset changes,
+tracking and release, and a review of the verification assumptions. Existing
+production primitives, their contracts and default execution remain unchanged.
 
 ![Measured final placements, seed 0](../../runs/tower-workspace/20261023-110734-d3fbc5e-investigation-summary/artifacts/placement-comparison.png)
 

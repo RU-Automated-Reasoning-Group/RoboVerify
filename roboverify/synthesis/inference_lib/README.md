@@ -90,7 +90,8 @@ recording starts after the 50-step preparation.
 ## Collect Reverse demonstrations
 
 Reverse starts one tower to the robot's right (higher Y), with base-relative
-X in [0.54, 0.58] m and Y in [0.14, 0.16] m. The source order is the existing
+X in [0.54, 0.70] m and Y in [0.15, 0.25] m, the same source workspace as Unstack.
+The source order is the existing
 canonical order with b0 at the bottom. The physical program in
 [`synthesis.examples.reverse`](../examples/reverse.py) starts with `b <- tbl`.
 One While loop handles all N blocks, moving the original top first and the

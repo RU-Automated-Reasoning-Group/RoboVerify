@@ -27,8 +27,9 @@ class UnstackResetTests(unittest.TestCase):
         order = inner._roboverify_canonical_tower_order()
         offsets = xyz[:, :2] - inner.robot_base_xy
         self.assertTrue(np.all(offsets[:, 0] >= 0.54))
-        self.assertTrue(np.all(offsets[:, 0] <= 0.58))
-        self.assertTrue(np.all(abs(offsets[:, 1] - 0.075 * (count - 1)) <= 0.01))
+        self.assertTrue(np.all(offsets[:, 0] <= 0.70))
+        self.assertTrue(np.all(offsets[:, 1] >= 0.15))
+        self.assertTrue(np.all(offsets[:, 1] <= 0.25))
         np.testing.assert_array_equal(xyz[:, :2], np.tile(xyz[0, :2], (count, 1)))
         np.testing.assert_array_equal(
             xyz[order, 2],
@@ -61,6 +62,12 @@ class UnstackResetTests(unittest.TestCase):
                                 expected[seed] = obs.copy()
                             self.assert_lateral_tower(env, obs, count)
                     self.assertFalse(np.array_equal(expected[0], expected[4]))
+                    sampled = np.array(
+                        [get_block_pos(o, 0)[:2] for o in expected.values()]
+                    )
+                    sampled -= inner_env(env).robot_base_xy
+                    self.assertGreater(sampled[:, 0].max(), 0.65)
+                    self.assertGreater(sampled[:, 1].max(), 0.20)
                 finally:
                     env.close()
 
