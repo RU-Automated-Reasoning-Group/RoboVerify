@@ -71,15 +71,18 @@ VC. Entry clearance and exact alignment exceed the initial premises; preservatio
 counterexamples exploit unnamed objects omitted by the finite extrema candidates.
 See the [counterexamples and longer-timeout run](roboverify/synthesis/cfg/VERIFICATION.md#unstack-motion-counterexamples-and-longer-timeouts).
 
-Unstack now removes the auxiliary exact-column invariant, including both its
-checks and its assumptions at loop body/exit boundaries. Stack retains it.
-Concrete SAT scenes still refute entry arm clearance, arm-clearance preservation
-and tower-height preservation. Earlier passing body checks depended on the
-stronger premises; they do not establish a proof for this weaker configuration.
-The current rerun passes all 12 symbolic checks but exhausts its 600-second motion
-budget. A shorter diagnostic leaves two collision queries and the Higher-effect
-query UNKNOWN. Stack still passes all 12 symbolic and 40 motion checks.
-See the [current alignment policy and results](roboverify/synthesis/cfg/VERIFICATION.md#unstack-without-exact-column-alignment).
+Unstack removes the auxiliary exact-column invariant, including both its checks
+and its assumptions at loop body/exit boundaries. Its extrema references now use
+physical witnesses bounded universally against **all** blocks at instruction entry.
+This resolves both the arm-clearance and tower-height preservation counterexamples;
+their unbounded violation queries return UNSAT. The current shared run passes all
+12 symbolic checks and 28 motion checks, with four UNKNOWN at 30-second query
+limits (212.1 s overall). A separate unbounded diagnostic refutes initial arm
+clearance. Longer replays resolve the first collision and Higher-effect queries;
+the descent collision remains UNKNOWN at 300 seconds, so there is no complete
+motion proof.
+Stack still passes all 12 symbolic and 40 motion checks.
+See the [global-extrema VC formulas and results](roboverify/synthesis/cfg/VERIFICATION.md#global-extrema-motion-vcs).
 
 After the extrema encoding changes, revision `4f734bf` passed the full Python
 regression suite: **475 tests across 68 modules**, with no failures, errors or

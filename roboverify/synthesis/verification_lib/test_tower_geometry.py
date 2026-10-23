@@ -77,8 +77,11 @@ class ConsistencyWitnessTests(unittest.TestCase):
             )
         assume_tower_geometry(p, 0.4)
         self.assertEqual(p.check("consistency").status, "valid")
-        self.assertEqual(
-            p.check("column", z3.Not(column_alignment(p))).status, "refuted"
+        # A closed two-block SAT witness conclusively refutes an exact-column
+        # assumption, without relying on open-domain quantified SAT heuristics.
+        p.solver.add(z3.Not(column_alignment(p)))
+        self.assertTrue(
+            p.finite_consistency_witness((p.constants["a"], p.constants["b"]))
         )
 
     def test_finite_unsat_does_not_establish_unbounded_inconsistency(self):

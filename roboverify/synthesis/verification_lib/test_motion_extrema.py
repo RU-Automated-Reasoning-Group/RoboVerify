@@ -1,4 +1,4 @@
-"""Independent extrema/obstacle witnesses and instruction-entry reference semantics."""
+"""Global extrema, independent obstacles and instruction-entry reference semantics."""
 
 import contextlib
 import io
@@ -8,6 +8,7 @@ import z3
 
 from synthesis.api.instructions import MoveByName, ReleaseByName
 from synthesis.examples.unstack import build_program
+from synthesis.util.symbols import fresh_const
 from synthesis.verification_lib.highlevel_verification_lib import HighLevelContext
 from synthesis.verification_lib.lowlevel_verification_lib import LowLevelContext
 from synthesis.verification_lib.motion_verification import (
@@ -36,6 +37,7 @@ class MotionExtremaTests(unittest.TestCase):
         )
 
     def assert_implied(self, problem, condition):
+        self.assertEqual(problem.solver.check(), z3.sat, "Inconsistent fixture")
         problem.solver.push()
         problem.solver.add(z3.Not(condition))
         self.assertEqual(problem.solver.check(), z3.unsat)
@@ -83,8 +85,8 @@ class MotionExtremaTests(unittest.TestCase):
                 "a": [1, 0.2, 0.5],
                 "b": [2, 0.3, 0.4],
                 "sym": [3, 1, 0.4],
-                "sym2": [4, 1, 0.4],
-                "sym3": [5, 1, 0.4],
+                "sym2": [1, 0.2, 0.5],
+                "sym3": [1, 0.2, 0.5],
             },
         )
         p.held_name = "a"
@@ -103,7 +105,7 @@ class MotionExtremaTests(unittest.TestCase):
             positions={
                 "a": [1, 0.2, 0.5],
                 "sym": [2, 0.3, 0.5],
-                "sym2": [3, 0.4, 0.5],
+                "sym2": [1, 0.2, 0.5],
             },
         )
         p.solver.add(
@@ -118,9 +120,9 @@ class MotionExtremaTests(unittest.TestCase):
                 "a": [1, 0.2, 0.5],
                 "b": [2, 0.2, 0.6],
                 "sym": [3, 0.3, 0.4],
-                "sym2": [4, 0.4, 0.4],
             }
         )
+        p.solver.add(z3.Or(p.same("sym2", "a"), p.same("sym2", "b")))
         position = p.reference_position("Y_min")
         for x, z in ((1, "0.5"), (2, "0.6")):
             p.solver.push()
@@ -141,7 +143,7 @@ class MotionExtremaTests(unittest.TestCase):
                 "a": [1, 0.2, 0.7],
                 "b": [2, 0.3, 0.4],
                 "sym": [3, 1, 0.4],
-                "sym2": [4, 1, 0.4],
+                "sym2": [1, 0.2, 0.7],
             }
         )
         p.held_name = "a"
@@ -163,6 +165,36 @@ class MotionExtremaTests(unittest.TestCase):
             "refuted",
         )
 
+    def test_unnamed_objects_cannot_be_missed_by_global_extrema(self):
+        for reference, axis, hidden_value in (("Y_min", 1, -0.15), ("Z_m", 2, 0.575)):
+            with self.subTest(reference=reference):
+                p = self.problem(use_tbl=True)
+                hidden = fresh_const(
+                    p.context.BoxSort,
+                    "unnamed_extremum",
+                    avoid=(*p.constants.values(), *p.solver.assertions()),
+                )
+                p.solver.add(
+                    z3.Distinct(hidden, *p.constants.values()),
+                    hidden != p.context.table_const(),
+                )
+                p.solver.add(
+                    (p.context.Y if axis == 1 else p.context.Z)(hidden) == hidden_value
+                )
+                result = p.reference_position(reference)
+                self.assert_implied(
+                    p,
+                    (
+                        result[axis] <= hidden_value
+                        if axis == 1
+                        else result[axis] >= hidden_value
+                    ),
+                )
+                # These values were admitted when all finite witnesses missed
+                # the unnamed lower/higher block. They must now be impossible.
+                p.solver.add(result[axis] == (0 if axis == 1 else 0.425))
+                self.assertEqual(p.solver.check(), z3.unsat)
+
     def test_no_extrema_preserves_the_original_symbol_universe(self):
         p = self.problem(0)
         self.assertEqual(set(p.constants), {"a", "b", "sym"})
@@ -177,8 +209,10 @@ class MotionExtremaTests(unittest.TestCase):
         source, base, table = [high.get_consts(n) for n in ("b_prime", "b0", "tbl")]
         conditions = [z3.ForAll([q], z3.Or(q == source, q == base, q == table))]
         positions = {"b_prime": [0.3, 0.2, 0.475], "b0": [0.3, 0.2, 0.425]}
-        for name in ("sym", "sym2", "sym3", "sym4"):
+        for name in ("sym", "sym2", "sym4"):
             positions[name] = positions["b0"]
+        # After lateral transport, the held source is the new minimum-Y block.
+        positions["sym3"] = positions["b_prime"]
         with contextlib.redirect_stdout(io.StringIO()):
             result = verify_motion_block(
                 conditions,

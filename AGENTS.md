@@ -67,17 +67,17 @@ This did not establish new synthesis or verification results. The integrated
 CLI exposes Stack/Unstack/Reverse. Current Unstack and Reverse supplied programs
 now pass inference and unbounded symbolic verification through the shared pipeline,
 using all 60/75 states from 15 archived starts. Unstack observation-relative motion
-now uses independent extrema witnesses and instruction-entry gripper coordinates;
-the strengthened `b_prime != b0` guard removes the singleton release failure.
-Unstack now omits the auxiliary exact-column invariant, removing both its checks
-and its assumptions at loop body/exit boundaries; Stack retains it. Concrete
-SAT scenes remain for arm clearance at entry, arm-clearance preservation and
-tower-height preservation. These distinguish insufficient entry premises from
-extra motions admitted by finite extrema witnesses; there is no full motion proof.
-Earlier passing transfer-body results used exact-column loop premises and must
-not be transferred to the weaker current configuration without rechecking.
-The recheck passes all 12 symbolic VCs but exhausts its 600-second motion budget;
-a shorter diagnostic leaves two collision checks and the Higher effect UNKNOWN.
+now uses global extrema witnesses with universal bounds over all physical blocks
+at instruction entry. The strengthened `b_prime != b0` guard removes the singleton
+release failure. Unstack omits the auxiliary exact-column invariant and its loop
+assumptions; Stack retains them. Global extrema resolve the previous arm-clearance
+and tower-height preservation counterexamples: both unbounded violations are UNSAT.
+The shared recheck passes all 12 symbolic VCs and 28 motion checks, with four
+UNKNOWN queries at 30 seconds (212.1 seconds overall). A separate unbounded
+diagnostic refutes initial arm clearance; it has not been repaired by changing
+later references. Longer replays resolve the first collision and Higher-effect
+queries, while the descent-collision query remains UNKNOWN at 300 seconds. There is no full
+motion proof. See the recorded global-extrema results for query budgets and scope.
 Reverse table-relative operands remain unsupported; the other four tasks are
 outside integrated proof support. See the
 [tower verification commands](roboverify/synthesis/cfg/VERIFICATION.md#provided-unstack-and-reverse-verification).
@@ -412,10 +412,12 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
     `Z_m` and `gripper` references frozen at instruction entry. Independent extrema
     witnesses (`sym2`, etc.) coexist with collision witness `sym`, receive the same
     entry instances and frame updates, and may alias other objects. The shared APIs
-    allocate one per instruction/extremum evaluation, none for Stack. This is a
-    conservative trace overapproximation, not an exact global-minimum definition.
-    Quantifier treatment of complete motion VCs is deferred and recorded by
-    `TODO(motion-quantifiers)`; existing quantified premises/effects are retained.
+    allocate one per instruction/extremum evaluation, none for Stack. Each selected
+    physical witness is constrained universally against every physical object's
+    current functional coordinates. Scalar extrema are exact; tied-object selection
+    remains nondeterministic. Global extrema, height premises and exact effects
+    retain quantifiers; `TODO(motion-quantifiers)` records the remaining elimination
+    investigation.
   - `lowlevel_verification_lib.py`: geometric low-level context, box-corner/cube drawing
     helpers used to visualize/verify concrete 3D placements.
 

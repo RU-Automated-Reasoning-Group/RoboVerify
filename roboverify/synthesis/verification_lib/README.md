@@ -71,28 +71,33 @@ the reference. Ties admit either extremizing block and preserve its complete XYZ
 vector. Release captures gripper XY and reference Z before opening; its operand
 specifies the retreat reference, not the identity of the held block.
 
-`PrimitiveMotionProblem` implements the independent `sym2` approach. It takes
-each extremum over named physical objects, the arbitrary obstacle `sym`, and
-extra arbitrary physical witnesses. The shared APIs preallocate one extra witness
-per instruction/extremum evaluation: Unstack needs three, normally named
+`PrimitiveMotionProblem` selects a **global extremizer**, using one physical
+witness per instruction/extremum evaluation. Unstack needs three, normally named
 `sym2`, `sym3`, `sym4`, for its two minimum-Y references and maximum-Z retreat.
-All receive the same entry-condition instances and alias/frame updates as `sym`.
-They can alias one another or named objects; this does not require extra blocks
-or impose a block-count limit. Programs without extrema, including Stack, add
-no witnesses.
+They are allocated before entry-condition translation, receive the same relational
+instances and alias/frame updates as `sym`, and may alias any physical object.
+The collision witness remains independent. Programs without extrema, including
+Stack, allocate no extra witnesses and add no extrema constraints.
 
-For any real finite-scene trace, choose each witness to denote the corresponding
-true extremizer and choose `sym` independently as the obstacle under examination.
-This includes the real motion. Other witness assignments can give different
-targets, so the encoding conservatively admits additional motions. Consequently,
-valid universal safety/effect checks cover the real traces, but a SAT failure or
-premise-consistency witness alone does not establish a realizable execution or
-an exact global extremum. This distinction applies beyond collision checks.
+At instruction entry, the selected minimum witness m satisfies
+`forall c. physical(c) => Y(m) <= Y(c)`; the maximum witness satisfies
+`forall c. physical(c) => Z(c) <= Z(m)`. Coordinates come from the current
+functional state, so the bounds cover **unnamed objects and moved aliases**, not
+just the represented object dictionary. The witness itself is physical, and the
+returned XYZ vector belongs to that single block. Cached references retain their
+instruction-entry values after motion or release. Every nonempty finite physical
+scene has an admissible extremizer; no fixed block-count bound is imposed.
 
-The extrema expressions and swept-collision expressions add no quantifiers.
-Complete motion VCs still contain quantified supported-height/alignment premises
-and exact predicate-effect checks. Their quantifier treatment is deliberately
-deferred; `TODO(motion-quantifiers)` in `primitive_motion.py` records that boundary.
+These constraints replace the earlier finite-candidate extrema overapproximation.
+They encode exact scalar minimum/maximum values. Tied blocks may still be chosen
+nondeterministically because the model has no runtime object-ID order. Unstack
+uses only the extremizing coordinate, so this tie freedom does not change its
+waypoints. The remaining idealized motion assumptions still apply.
+
+Global extrema deliberately introduce universal quantifiers. Complete motion VCs
+also retain quantified supported-height/alignment premises and exact predicate
+effects. `TODO(motion-quantifiers)` in `primitive_motion.py` records the remaining
+quantifier-elimination investigation; the complete checks are not quantifier-free.
 See the [Unstack pipeline results](../cfg/VERIFICATION.md#provided-unstack-and-reverse-verification).
 
 ### Obligations and model scope

@@ -639,6 +639,9 @@ distinct from `verified_model`.
 
 ### Independent extrema witness recheck
 
+This section records the former finite-candidate encoding. The current
+[global-extrema encoding](#global-extrema-motion-vcs) replaces it.
+
 The `sym2` approach is implemented in the shared primitive checker and CFG path,
 with one extra arbitrary physical witness per extrema evaluation. The current
 Unstack body has three evaluations (two `Y_min`, one `Z_m`); they normally allocate
@@ -883,6 +886,10 @@ remaining proof-model changes remain deferred.
 
 ### Unstack without exact-column alignment
 
+The alignment policy below remains current. Its recorded results used the former
+finite-candidate extrema; see [global-extrema results](#global-extrema-motion-vcs)
+for the current reference semantics.
+
 The integrated Unstack task now passes `exact_column_alignment=False` to
 `verify_cfg_motion`. This removes `column_alignment_entry` and
 `column_alignment_preserved`, **and** removes exact-column assumptions from fresh
@@ -938,6 +945,105 @@ although their unrestricted solver calls did not resolve in that diagnostic
 (the entry query was captured without an unrestricted retry). Do not present
 these combined diagnostic observations as a completed shared-pipeline proof or
 promote UNKNOWN to SAT/UNSAT. No additional body SAT failure was established.
+
+### Global-extrema motion VCs
+
+The primitive checker now selects one physical extremizing block m_i for each
+instruction-entry reference. Write S_i for that entry state and Phys(c) for
+`c != tbl`. The added constraints are:
+
+\[
+E_i^{\min}=\mathrm{Phys}(m_i)\land
+  \forall c.\;(\mathrm{Phys}(c)\Rightarrow
+  Y_{S_i}(m_i)\leq Y_{S_i}(c)),
+\]
+\[
+E_i^{\max}=\mathrm{Phys}(m_i)\land
+  \forall c.\;(\mathrm{Phys}(c)\Rightarrow
+  Z_{S_i}(c)\leq Z_{S_i}(m_i)).
+\]
+
+Unstack uses the first rule at instructions 4 and 5, and the second at Release
+(instruction 6). Each reference is frozen before that instruction changes state.
+The held source is included. Table objects are excluded. The arbitrary collision
+witness sym is independent of all three selected extrema witnesses. Every finite,
+nonempty scene has extrema, without imposing a fixed cardinality bound. Scalar
+extrema are exact; the model admits either tied extremizing block rather than
+encoding runtime ID tie-breaking. Unstack uses only Y from Y_min and Z from Z_m.
+
+Let I be the learned symbolic invariant translated to geometry, G the witnessed
+guard, H the supported-height condition, C the empty-arm clearance condition, and
+T the composed primitive transitions including these global reference constraints.
+The preservation violation queries are:
+
+\[
+I\land G\land H_{\mathrm{in}}\land C_{\mathrm{in}}\land T
+\land\neg C_{\mathrm{out}},
+\qquad
+I\land G\land H_{\mathrm{in}}\land C_{\mathrm{in}}\land T
+\land\neg H_{\mathrm{out}}.
+\]
+
+The existing tight input-alignment premise also remains; exact-column alignment
+is disabled for Unstack. These are unbounded, quantified queries. The new
+constraints specify how references are computed; neither postcondition is added
+as an assumption. Entry clearance still checks the initial premises against
+`not C_in` before any extrema instruction executes.
+
+Use the strengthened-guard supported command above with
+`--motion-timeout-ms 30000 --wall-timeout-seconds 600
+--run-name unstack-global-extrema` and the guarded four-block archive. The run
+`runs/cfg/20261023-195605-8589a8c-unstack-global-extrema` replayed all 15 starts,
+relearned from all 60 states, and finished in **212.1 s**. All **12 symbolic checks
+passed**, including unbounded checks. Motion returned **28 valid, 4 UNKNOWN**:
+entry arm clearance, `collision_1_sym`, `collision_5_sym`, and `effect_Higher`
+each reached the 30-second query limit. The overall result is `motion_unverified`.
+Both preservation checks are now valid: the arm-clearance violation is UNSAT in
+0.136 s and the tower-height violation is UNSAT in 23.196 s.
+
+An independent invocation of the same motion API with 10-second query limits
+returned 28 valid, one SAT (`arm_clearance_entry`), and three UNKNOWN body queries.
+Its saved learned invariant is byte-identical to the fresh shared-run invariant.
+This diagnostic exports the original unbounded violation queries; there are no
+finite-domain restrictions in those queries. Separate small-scene checks confirm
+that the previous two preservation counterexamples are excluded nonvacuously:
+
+| Scene | Scene premises | Violation | Corrected final value |
+| --- | --- | --- | --- |
+| Five-block tower, move its top block | SAT | UNSAT | Gripper Z=0.725, above required 0.600 |
+| Loose block already at Y=-0.15 | SAT | UNSAT | Placement Y=-0.30, avoiding that block |
+
+The entry scene remains feasible; its restricted violation solver returned
+UNKNOWN, while the unrestricted diagnostic query returned SAT. Keep those
+individual outcomes distinct. Extrema changes do not alter the initial gripper
+height or establish its clearance above every allowed tower.
+
+The three UNKNOWN body queries were replayed independently with 120-second
+budgets, preserving their full unbounded formulas:
+
+| Query | Result | Time |
+| --- | --- | ---: |
+| `collision_1_sym` | UNSAT | 116.857 s |
+| `effect_Higher` | UNSAT | 11.829 s |
+| `collision_5_sym` | UNKNOWN (timeout) | 120.141 s |
+| `collision_5_sym`, retried at 300 seconds | UNKNOWN (timeout) | 300.215 s |
+
+The longer retries therefore establish **30 valid motion checks, one confirmed
+SAT entry-clearance obligation, and one unresolved descent-collision query**
+when combined with the completed diagnostic. This is not a single fully verified
+pipeline run. The original shared report remains 28 valid / 4 UNKNOWN. Replays
+start fresh solvers; a result below the previous timeout does not imply the
+original run should have found it in the same time. No finite validity result
+was promoted to an unbounded proof.
+
+Exported VCs, original results and scene models are under
+`runs/diagnostics/20261023-unstack-global-extrema/`. No one-off runner was added
+to the repository. Stack's shared regression still passes **12 symbolic and 40
+motion checks in 25.4 s** (`runs/cfg/20261023-195605-8589a8c-stack-global-extrema-regression`).
+The affected primitive/CFG regression suite passed **72 tests in 57.5 s**.
+An existing offset-scene test now uses a closed finite SAT witness to avoid an
+unrelated open-domain SAT timeout; finite UNSAT still proves nothing about the
+unbounded premises. The full Python suite was not rerun for this change.
 
 ### Paper invariant controls
 

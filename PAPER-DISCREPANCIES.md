@@ -280,6 +280,16 @@ geometric counterexamples remain possible; removing an unnecessary invariant
 does not resolve the extrema abstraction or establish a full motion proof. See
 [the current configuration and results](roboverify/synthesis/cfg/VERIFICATION.md#unstack-without-exact-column-alignment).
 
+**Global-extrema encoding, 2026-10-23.** The former finite-candidate extrema
+admitted lower retreats and occupied destinations that the runtime global
+minimum/maximum would not select. Each reference now has a physical extremizer
+bounded universally against every physical object's instruction-entry coordinate.
+The unbounded arm-clearance and tower-height preservation violations now return
+UNSAT. Scalar extrema are exact; tied-object choice and the idealized waypoint
+model retain their documented scope. Initial arm clearance remains refutable,
+and solver UNKNOWNs still prevent full motion verification. See
+[the VC formulas and results](roboverify/synthesis/cfg/VERIFICATION.md#global-extrema-motion-vcs).
+
 Figure 14's supplied invariant refers to an undefined b. The separately named
 `unstack_paper_base` interpretation substitutes b0, but the final checker finds
 an unbounded preservation countermodel consisting only of tbl with b0=tbl.

@@ -121,21 +121,19 @@ class PrimitiveMotionProblem(MotionProblem):
         )
 
     def reference_position(self, name):
-        """Freeze runtime coordinates at instruction entry, including sym2 extrema.
+        """Freeze references, selecting a globally extremizing physical block.
 
-        The finite extremum ranges over named blocks, the independent collision
-        witness sym, and preallocated extrema witnesses sym2, sym3, ... . Every
-        real finite-scene trace is represented by assigning each extra witness
-        to its instruction's true extremizer. Other assignments overapproximate
-        motion, so SAT failures/consistency are not exact-realizability evidence.
-        Witnesses may alias; no closed finite domain is asserted. All extrema
-        witnesses are allocated up front so snapshots and frame updates cover them.
+        Each evaluation uses a separate preallocated witness. Its selected axis
+        is bounded against EVERY physical object's current coordinate, including
+        unnamed blocks. All three returned coordinates belong to that witness.
+        Tied extremizers remain nondeterministic because runtime IDs are absent.
+        Every nonempty finite physical scene has an admissible extremizer;
+        the collision witness sym stays independent of its selection.
 
-        TODO(motion-quantifiers): this reference encoding and the swept collision
-        expression add no quantifiers. Whole VCs still contain quantified height/
-        alignment premises (tower_geometry.py) and exact predicate-effect checks
-        (check_abstract_effects). Their elimination is a separate investigation;
-        do not drop them or label the complete motion proof quantifier-free.
+        TODO(motion-quantifiers): global extrema deliberately add universal
+        constraints. Whole VCs also retain quantified height/alignment premises
+        and exact predicate-effect checks. Quantifier elimination is a separate
+        investigation; do not label the complete motion proof quantifier-free.
         """
         if name not in OBSERVATION_REFERENCE_NAMES:
             return self.current[self.bindings[name]]
@@ -149,30 +147,22 @@ class PrimitiveMotionProblem(MotionProblem):
                 raise NotImplementedError(
                     "Extrema reference requires an independent preallocated witness"
                 )
+            witness = self.extrema_witnesses[len(self._extrema_evaluations)]
             self._extrema_evaluations.add(key)
             axis = 1 if name == "Y_min" else 2
-            # This initial candidate is physical even if program names alias tbl.
-            result = self.current[self.extrema_witnesses[0]]
-            for other, point in self.current.items():
-                better = (
-                    point[axis] < result[axis]
-                    if axis == 1
-                    else point[axis] > result[axis]
-                )
-                # Runtime breaks ties by object ID. IDs are absent from this
-                # model, so admit either tied block, preserving its full vector.
-                tie = fresh_const(
-                    z3.BoolSort(),
-                    "extremum_tie",
-                    avoid=(*point, *result, *self.solver.assertions()),
-                )
-                take = z3.And(
-                    self.physical(other),
-                    z3.Or(better, z3.And(point[axis] == result[axis], tie)),
-                )
-                result = tuple(
-                    z3.If(take, value, old) for value, old in zip(point, result)
-                )
+            result = self.current[witness]
+            obj = fresh_const(
+                self.context.BoxSort,
+                "extremum_object",
+                avoid=(*self.fields, *result, *self.solver.assertions()),
+            )
+            # Substitute the instruction-entry functional state, not the initial
+            # coordinate functions or the finite list of represented objects.
+            value = z3.substitute_vars(self.fields[axis], obj)
+            bound = result[axis] <= value if axis == 1 else value <= result[axis]
+            self.solver.add(
+                z3.ForAll([obj], z3.Implies(z3.Not(self.context._is_table(obj)), bound))
+            )
         self._reference_cache[key] = result
         return result
 
