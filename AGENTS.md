@@ -66,9 +66,12 @@ All final states replayed exactly and remained successful after 50 extra steps.
 This did not establish new synthesis or verification results. The integrated
 CLI exposes Stack/Unstack/Reverse. Current Unstack and Reverse supplied programs
 now pass inference and unbounded symbolic verification through the shared pipeline,
-using all 60/75 states from 15 archived starts. Their observation/table-relative
-motion operands remain unsupported; the other four tasks are outside integrated
-proof support. See the
+using all 60/75 states from 15 archived starts. Unstack observation-relative motion
+now uses independent extrema witnesses and instruction-entry gripper coordinates;
+all collision checks pass under the existing supported-tower premises, but release/
+placement and geometric loop obligations still prevent a full motion proof.
+Reverse table-relative operands remain unsupported; the other four tasks are
+outside integrated proof support. See the
 [tower verification commands](roboverify/synthesis/cfg/VERIFICATION.md#provided-unstack-and-reverse-verification).
 The Pyramid source center moved 4 cm closer after seed 12 failed at its final
 high approach; the original failed batch and replay video are retained.
@@ -391,6 +394,14 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
     Missing physical programs in a verifier and uncovered instructions fail closed.
     The obsolete Reverse verifier was removed because it encoded Unstack (39).
     See [motion verification semantics](roboverify/synthesis/verification_lib/README.md).
+  - `primitive_motion.py`: named primitive waypoint encoding, including `Y_min`,
+    `Z_m` and `gripper` references frozen at instruction entry. Independent extrema
+    witnesses (`sym2`, etc.) coexist with collision witness `sym`, receive the same
+    entry instances and frame updates, and may alias other objects. The shared APIs
+    allocate one per instruction/extremum evaluation, none for Stack. This is a
+    conservative trace overapproximation, not an exact global-minimum definition.
+    Quantifier treatment of complete motion VCs is deferred and recorded by
+    `TODO(motion-quantifiers)`; existing quantified premises/effects are retained.
   - `lowlevel_verification_lib.py`: geometric low-level context, box-corner/cube drawing
     helpers used to visualize/verify concrete 3D placements.
 

@@ -14,7 +14,7 @@ optionally replaces that default. Collection support is broader than proof suppo
 | Task | Shared execution and demo collection | Integrated synthesis / verification |
 | --- | --- | --- |
 | Stack | Supported | Supported in the documented model below |
-| Unstack | Supported, including current lateral groundtruth | Supplied-program invariant learning and unbounded symbolic proof pass; current extrema/gripper motion encoding is incomplete |
+| Unstack | Supported, including current lateral groundtruth | Inference and unbounded symbolic proof pass; extrema/gripper motion operands are encoded, but the full motion proof remains unsuccessful |
 | Reverse | Supported | Supplied-program invariant learning and unbounded symbolic proof pass; table-coordinate motion encoding and synthesis remain unsupported |
 | Restack | Supported | Not integrated |
 | Grid | Supported, nested goal loops | Not supported |
@@ -43,13 +43,23 @@ retained symbolic success and reported incomplete motion support. Paper formulas
 are separate verification-only controls, with explicitly documented repairs.
 See the [commands, timings and scope](roboverify/synthesis/cfg/VERIFICATION.md#provided-unstack-and-reverse-verification).
 
-After the tower verification changes, revision `e4c45be` passed the full Python
-regression suite: **466 tests across 67 modules**, with no failures, errors or
+The subsequent independent-extrema-witness implementation supports Unstack's
+`Y_min`, `Z_m` and instruction-entry gripper references. The shared run takes
+66.7 s and passes all 12 symbolic checks, but retains motion failures. With the
+existing supported-tower premises, all collision checks pass; release/placement
+and geometric loop checks still prevent a complete proof (103.6 s). Stack's
+regression passes all 12 symbolic and 40 motion checks in 24.8 s. Extrema
+expressions add no quantifiers; the full motion VCs retain their quantified
+premises and effect checks. See the
+[encoding and remaining obligations](roboverify/synthesis/cfg/VERIFICATION.md#independent-extrema-witness-recheck).
+
+After the extrema encoding changes, revision `4f734bf` passed the full Python
+regression suite: **475 tests across 68 modules**, with no failures, errors or
 skips, including the optional real-solver baseline tests. On the current machine
-the tests took 244.8 seconds, or 248.7 seconds including module loading. Results
-are under `roboverify/runs/tests/20261023-tower-verification/`.
+the tests took 242.9 seconds, or 247.7 seconds including module loading. Results
+are under `roboverify/runs/tests/20261023-motion-extrema/`.
 The complete command is in [AGENTS.md](AGENTS.md#validation). The separate Lean
-build and axiom audit previously passed all 709 declarations; the tower changes
+build and axiom audit previously passed all 709 declarations; the motion changes
 do not modify that formalization or mechanically certify the Python translation.
 
 The Stack workflow has a standalone multi-seed DSL demonstration collector,

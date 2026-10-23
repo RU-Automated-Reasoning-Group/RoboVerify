@@ -626,15 +626,91 @@ a finite SAT witness now resolves that case after the unbounded proof. Finite
 UNSAT/UNKNOWN never establishes unrestricted validity or vacuity. See the
 [inference timing investigation](../inference_lib/README.md#truth-table-minimization).
 
-`--verification-level both` requests motion after symbolic success and returns
-`motion_unverified` for these tower programs. Unstack stops on `Y_min`, with Z_m
-and gripper references also requiring encoding. Reverse reports unsupported
-table-coordinate instructions and root selection; its additional refuted checks
-come from that incomplete motion translation and do not certify an actual
-simulator collision. The missing work is an instruction-entry geometric encoding
-for those coordinates, both table/block support cases and their placement/frame/
-collision obligations. No payload-feedback primitive or stronger controller was
-introduced. `verified_symbolic` is kept distinct from `verified_model`.
+`--verification-level both` requests motion after symbolic success. The earlier
+Unstack run stopped on observation references; their encoding and current results
+are below. Reverse still reports unsupported table-coordinate instructions and
+root selection; its additional refuted checks come from that incomplete motion
+translation and do not certify an actual simulator collision. No payload-feedback
+primitive or stronger controller was introduced. `verified_symbolic` is kept
+distinct from `verified_model`.
+
+### Independent extrema witness recheck
+
+The `sym2` approach is implemented in the shared primitive checker and CFG path,
+with one extra arbitrary physical witness per extrema evaluation. The current
+Unstack body has three evaluations (two `Y_min`, one `Z_m`); they normally allocate
+`sym2`, `sym3`, `sym4`. These may alias any physical object, including one another
+and `sym`. No block-count restriction is added. Each reference takes its finite
+extremum over all represented physical objects at instruction entry; the next
+instruction recomputes it, including the moved payload. `gripper` is captured at
+entry too. Release uses its operand for retreat Z, with gripper XY and reference
+Z captured before opening. Stack has no extrema operands and allocates no extra
+witnesses. See the [encoding and scope](../verification_lib/README.md#observation-relative-motion-references).
+
+Reproduce from `roboverify/` with the usual simulator environment:
+
+```bash
+timeout 610s uv run python -u -m synthesis.entry.synthesize_cfg \
+  --task unstack --mode verify --program synthesis.examples.unstack:build_program \
+  --num-blocks 4 --demos demos/pipeline-audit-20261023/unstack/demonstrations.npz \
+  --invariant-minimizer pyeda --verification-level both \
+  --table-surface-height 0.4 --verification-timeout-ms 30000 \
+  --motion-timeout-ms 10000 --wall-timeout-seconds 600 \
+  --symbolic-iterations 0 --motion-iterations 0 --run-name unstack-sym2
+```
+
+For the separately labeled supported-model check, add `--supported-towers
+--initial-arm 1.3446426 0.74911606 0.5314612` and use
+`--run-name unstack-sym2-supported`. This requests the existing geometric entry
+and preservation checks; it does not establish their premises from simulation.
+The Stack regression uses the [provided Stack command](#provided-stack-verification)
+with `--symbolic-iterations 0 --wall-timeout-seconds 600` and
+`--run-name stack-sym2-regression` replacing its run name.
+
+| Run under `runs/cfg/` | Total | Symbolic | Motion |
+| --- | ---: | --- | --- |
+| `20261023-181211-827d858-unstack-sym2` | 66.7 s | 12 valid | 19 valid, 9 refuted |
+| `20261023-181351-827d858-unstack-sym2-supported` | 103.6 s | 12 valid | 27 valid, 5 refuted, 2 unknown |
+| `20261023-181211-827d858-stack-sym2-regression` | 24.8 s | 12 valid | 40 valid; `verified_model` |
+
+The run IDs capture the pre-commit HEAD and dirty tree; implementation was
+committed as `4f734bf`. Both Unstack runs reexecuted all 15 archived starts and
+learned from all 60 states. Neither used a supplied invariant or refinement.
+The full regression suite passed 475 tests across 68 modules, with no skips,
+failures or errors, in 242.9 s (247.7 s including imports); logs and summary are
+under `runs/tests/20261023-motion-extrema/`. This includes nine focused extrema
+regressions and the installed real-solver baseline tests. Run timings are wall
+times from this machine, with some checks running concurrently.
+Their observation references have no unsupported obligations. Without the
+supported-tower premises, the extrema-dependent transfer, descent and retreat
+collision checks pass; approach/lift collisions, exact release support, placement,
+Put source clearance and predicate effects have countermodels in the broader
+geometric model. Solver-query time summed to 0.72 s; run events attribute about
+4 s to the complete motion stage.
+
+Under the supported-tower premises, **all seven swept collision checks pass**,
+as do Put enabling conditions, frame preservation and ON*/Higher/Scattered
+effects. This remains conditional: the full motion result is unsuccessful.
+Release support and the placement contract are refuted by a singleton physical
+loop head allowed by the learned invariant/guard: `b_prime = b0`, with all
+witnesses aliased to that same block at Z=0.425. The lift moves b0 as well, so the
+descent's b0 reference leaves the block at Z=0.575 instead of the resting height.
+The release counterexample is distinct from the historical simulator's
+submillimetre settling-height discrepancy.
+
+Arm-clearance and column-alignment entry checks each reach the 10 s query limit
+and return `unknown`. Their preservation and supported-height preservation are
+refuted. Globally quantified geometric invariants range beyond the finite extrema
+candidates; a nonextremizing witness assignment can therefore admit a target
+that the real global minimum would exclude. These SAT witnesses do not establish
+actual simulator failures. Addressing these loop-head/model obligations is
+separate from adding the operand encoding. The supported run spent about 41 s
+in motion, with 37.72 s summed solver-query time, including the two timeouts.
+
+The extrema and swept-collision expressions introduce no quantifiers, but full
+VCs retain quantified geometry and predicate effects. Their quantifier treatment
+is deferred by request and recorded as `TODO(motion-quantifiers)` in
+`primitive_motion.py`; no quantified premise or conclusion was discarded.
 
 ### Paper invariant controls
 

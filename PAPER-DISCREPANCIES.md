@@ -212,10 +212,26 @@ provided program now uses `Put(b_prime,tbl)` in the shared verifier. Learning
 from all 60 heads/exits of the 15 four-block starts passes all 12 symbolic checks,
 including unbounded establishment, preservation and exit. The 68-second run
 includes about 41 seconds of learning/coverage and 16 seconds of symbolic checks.
-Current motion encoding still rejects the observation-relative coordinates;
-this does not extend the historical bounded motion claim. The user suspended
+That run's motion encoding rejected the observation-relative coordinates;
+it did not extend the historical bounded motion claim. The user suspended
 the earlier 60-second cap for this feasibility investigation; commands now use
 an explicit 600-second budget. Timeouts and UNKNOWN remain unsuccessful results.
+
+**Independent extrema witnesses, 2026-10-23.** Shared motion encoding now handles
+`Y_min`, `Z_m` and instruction-entry gripper coordinates, keeping extrema witnesses
+independent of collision witness `sym`. It admits additional motions when those
+witnesses are not the true global extremizers. No primitive controller changed.
+Unstack still passes 12 symbolic checks. With the existing supported-tower
+premises, every collision check passes, but the overall result is
+`motion_unverified`: release/placement and three geometric preservation checks
+are refuted, and arm/column entry checks time out. The release countermodel allows
+only one physical object, so `b_prime` aliases `b0`; lifting then moves the height
+reference too. Symbolic correctness alone did not require excluding this loop
+head. The global geometric preservation obligations also exceed the arbitrary-
+obstacle collision test and may expose the extrema overapproximation. These are
+model counterexamples, not reproduced simulator failures. The complete motion
+VCs retain quantifiers; their treatment remains a separate investigation.
+See the [current results and reproduction commands](roboverify/synthesis/cfg/VERIFICATION.md#independent-extrema-witness-recheck).
 
 Figure 14's supplied invariant refers to an undefined b. The separately named
 `unstack_paper_base` interpretation substitutes b0, but the final checker finds
@@ -370,6 +386,12 @@ empty gripper, cube payloads, and checks against other objects. Release proves
 support or fails and permits an arbitrary falling position; simulation opens
 before arm retreat. Remove the grasp-noise argument and avoid claims about
 settling or controller refinement (4).
+
+The 2026-10-23 Unstack integration corrected the named primitive verifier's
+Release operand interpretation: the operand gives retreat Z and need not name
+the payload. The model now captures gripper XY and reference Z before opening,
+matching the existing controller, including `Release(Z_m)`. This does not add
+settling dynamics, payload feedback or a controller-refinement proof.
 
 ## 19. Recorded and candidate CFG trajectories used different imitation features
 
@@ -1144,7 +1166,9 @@ collection/replay, controllers, task removal, inference entry points, goal
 layouts, Pyramid seed 12, Restack and Reverse. These are execution results and
 regressions. No new symbolic or motion verification result, and no full synthesis
 run, is claimed by this audit. Subsequent Unstack/Reverse shared-pipeline symbolic
-proofs are recorded separately in entries 10 and 39; their current motion
-encoding, Restack integration and goal-aware synthesis/verification remain open.
+proofs are recorded separately in entries 10 and 39. Unstack's observation
+operands are now encoded, with remaining motion obligations in entry 10;
+Reverse's motion encoding, Restack integration and goal-aware synthesis/
+verification remain open.
 Historical proof evidence retains its recorded executable, premises and workspace
 scope.
