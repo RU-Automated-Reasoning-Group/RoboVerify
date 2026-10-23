@@ -4,9 +4,9 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import z3
-
 from synthesis.util.symbols import fresh_const
 from synthesis.verification_lib.highlevel_verification_lib import VC_CHECK_TIMEOUT_MS
+from synthesis.verification_lib.solver_options import finite_sat_witness
 
 
 @dataclass(frozen=True)
@@ -84,7 +84,13 @@ def discharge_vc(vc, context, timeout_ms=VC_CHECK_TIMEOUT_MS):
     solver.pop()
     answer = solver.check()
     if answer == z3.unknown:
-        return VCResult(vc, "unknown", reason=solver.reason_unknown(), queries=2)
+        reason = solver.reason_unknown()
+        queries = 2
+        if context.exists_top and context.mode == "declare":
+            queries += 1
+            if finite_sat_witness(solver, context, restore_timeout_ms=timeout_ms):
+                return VCResult(vc, "valid", queries=queries)
+        return VCResult(vc, "unknown", reason=reason, queries=queries)
     return VCResult(vc, "valid" if answer == z3.sat else "vacuous", queries=2)
 
 

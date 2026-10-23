@@ -1,4 +1,5 @@
 import itertools
+import logging
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -10,6 +11,9 @@ from synthesis.inference_lib import quant_enum_merge
 from synthesis.inference_lib.minimization import espresso_form, get_invariant_minimizer
 from synthesis.util import on
 from synthesis.util.symbols import fresh_const
+from synthesis.verification_lib.solver_options import finite_sat_witness
+
+_log = logging.getLogger(__name__)
 
 
 class InferenceDataError(Exception):
@@ -245,9 +249,9 @@ def forall_exists_compute_dataset(
                 }
                 var_mapping = {**universal_var_mapping, **existential_var_mapping}
                 d = compute_data(state_zero, state, omega_k, var_mapping, mapping)
-                print("var_mapping", var_mapping)
-                print("omega_k", omega_k)
-                print("data", d)
+                _log.debug("var_mapping %s", var_mapping)
+                _log.debug("omega_k %s", omega_k)
+                _log.debug("data %s", d)
                 dataset.add(d)
 
         all_datasets.append(dataset)
@@ -283,9 +287,9 @@ def compute_dataset(
                 var_mapping,
                 mapping,
             )
-            print("var_mapping", var_mapping)
-            print("omega_k", omega_k)
-            print("data", d)
+            _log.debug("var_mapping %s", var_mapping)
+            _log.debug("omega_k %s", omega_k)
+            _log.debug("data %s", d)
             dataset.add(d)
     return dataset
 
@@ -330,9 +334,9 @@ def compute_dataset_with_function(
                 functions_evaluation_cache,
                 mark_lookup,
             )
-            print("var_mapping", var_mapping)
-            print("omega_k", omega_k)
-            print("data", d)
+            _log.debug("var_mapping %s", var_mapping)
+            _log.debug("omega_k %s", omega_k)
+            _log.debug("data %s", d)
             dataset.add(d)
     return dataset
 
@@ -346,7 +350,7 @@ def compute_data(
 ) -> Tuple:
     data = []
     for predicate in omega_k:
-        print("predicate:", predicate)
+        _log.debug("predicate: %s", predicate)
         if str(predicate).startswith("ON_star") and not str(predicate).startswith(
             "ON_star_zero"
         ):
@@ -490,7 +494,7 @@ def compute_data_with_function(
 
     data = []
     for predicate in omega_k:
-        print("predicate:", predicate)
+        _log.debug("predicate: %s", predicate)
         if str(predicate).startswith("Mark"):
             arg0 = predicate.arg(0)
             block1_name = _resolve_term_to_object_name(arg0)
@@ -886,6 +890,10 @@ def check_tautology(
         active_context.add_axiom_scattered(solver)
 
     solver.add(z3.Not(clause))
+    if active_context.exists_top and finite_sat_witness(
+        solver, active_context, restore_timeout_ms=timeout_ms
+    ):
+        return False
     result = solver.check()
     if result == z3.unsat:
         # can be derived from axioms
@@ -1791,14 +1799,30 @@ def loop_inference(
 
 
 def check_redundancy(
-    candidates: List, context: highlevel_verification_lib.HighLevelContext
+    candidates: List,
+    context: highlevel_verification_lib.HighLevelContext,
+    *,
+    timeout_ms: int = TAUTOLOGY_CHECK_TIMEOUT_MS,
 ) -> List:
+    """Remove only proved redundancy; keep clauses on timeout/unknown.
+
+    Redundancy filtering must not prevent an otherwise learned formula from
+    reaching verification. Exact duplicate syntax needs no solver query.
+    """
+    if timeout_ms <= 0:
+        raise ValueError("Redundancy query budget must be positive")
     print("======= starting check redundancy =======")
     active_context = _ensure_context(context)
     filtered_invariants: List = []
+    seen = set()
     for candidate in candidates:
         cand_expr = candidate.expr if hasattr(candidate, "expr") else candidate
+        key = cand_expr.sexpr()
+        if key in seen:
+            continue
+        seen.add(key)
         solver = z3.Solver()
+        solver.set(timeout=timeout_ms)
         if active_context.verification_mode == "goals":
             active_context.add_axiom_goal_nested(solver)
         else:
@@ -1812,7 +1836,14 @@ def check_redundancy(
             solver.add(ex_expr)
         solver.add(z3.Not(cand_expr))
 
-        result = solver.check()
+        result = (
+            z3.sat
+            if active_context.exists_top
+            and finite_sat_witness(
+                solver, active_context, restore_timeout_ms=timeout_ms
+            )
+            else solver.check()
+        )
         if result == z3.sat:
             # not redundant
             filtered_invariants.append(candidate)
