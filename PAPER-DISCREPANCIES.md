@@ -190,6 +190,23 @@ consolidation; its subsequent lateral reset/program is recorded in entry 39.
 Archived simulator states still restore exactly. This promotes the environment
 layout, without changing the experimental program or its verification scope.
 
+**Historical formal diagnostic, 2026-10-19.** The then-current right-to-left
+revision was checked by an experimental adapter, retired during the script
+cleanup. `InvInference` with ON*/equality and PyEDA learned from all 45 recorded
+heads/exits in the 15 validated executions. All 12 symbolic VCs passed, including
+the unbounded proof, with two independently proved exit lemmas and required
+premise-consistency checks. This proved the proposed Put-to-table abstraction
+under the recorded axioms, including `on4` and top
+existence. Its connection to the executable remains conditional on motion.
+Actual-reset motion checks refuted exact Release support: base centers were
+0.207–0.367 mm below the model's 0.425 m resting center. The program lowers to
+that base height; unsupported Release then permits arbitrary falling positions.
+Normalizing only the initial center height in an explicitly labeled diagnostic
+passed 31/60/91 motion checks for 2/3/4 blocks over the recorded continuous reset workspace.
+This is a bounded noiseless waypoint result, not physical refinement or a proof
+for the actual reset heights. Neither the executable nor the production motion
+semantics was changed. See the [configuration and artifacts](roboverify/synthesis/cfg/VERIFICATION.md#verification-of-the-current-unstack-revision).
+
 Keep end-to-end Unstack invocations within **60 seconds**; exhausted budgets and
 inconclusive proofs are unsuccessful results.
 

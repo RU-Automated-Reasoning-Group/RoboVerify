@@ -782,6 +782,91 @@ and therefore rose diagonally during transport. Its passing runs remain under
 `runs/unstack-lateral/videos-right-to-left-20261015/`. That version changed both
 the original workspace and placement direction, so those effects were not isolated.
 
+<a id="verification-of-the-current-unstack-revision"></a>
+
+### Historical Unstack verification diagnostic
+
+This section records the historical 2026-10-19 diagnostic. Its one-off
+adapter and compatibility wrapper have been retired. The results apply to
+the recorded executable and narrower workspace, not the current integrated
+pipeline. Saved artifacts remain available for inspection.
+
+**Symbolic verification passed all 12 VCs:** entry, preservation, and exit at
+2, 3, and 4 physical blocks (plus the relational table), followed by an unbounded
+proof. `InvInference` uses the intended partition learner, PyEDA minimization,
+ON*/equality, and the recorded program's constants `b0,tbl`; this program has no
+loop-carried `b`. All 15 saved validated trajectories contribute 45 heads/exits.
+Archive executable fingerprints and horizontal-transfer semantics are checked.
+The learned invariant is:
+
+```text
+forall x,y. ON_star(x,y) or not ON_star(y,x) or ON_star(x,b0)
+not ON_star(tbl,b0)
+```
+
+The pre/postconditions are the shared `task_spec("unstack")`, with physical `b0`.
+The postcondition says all ON* pairs are reflexive; it is not the older standalone
+entry point's stronger Higher/Scattered postcondition. The actual loop guard is
+retained, and its body is proposed as `Put(b_prime,tbl)`. Domain axioms include
+`on4` and top existence; no axiom-removal claim is made. Two auxiliary theorems
+are independently proved from ON axioms before use: a non-base top of the
+remaining tower enables the guard, and the invariant plus a nonfinal state
+implies such a top exists. They guide the unbounded exit query without adding
+assumptions. Full-domain premise consistency remains required for all VCs.
+This is partial correctness of the proposed abstraction, conditional on motion
+realizing it, rather than unbounded termination or physical correctness.
+
+**Motion verification failed for the actual reset heights.** The experimental
+adapter resolves minimum Y, maximum Z, and held gripper Z from the current
+geometry before each instruction. Release uses `Z_m` as a height reference;
+the held object is released while gripper XY stays fixed. It reuses the shared
+primitive sweeps, support, contract, and frame checks, and checks the full
+ON*/Higher/Scattered Put effects by exact finite quantifier expansion. Every
+physical obstacle and every guard binding is covered. Complete executions are
+unrolled for the runner's supported sizes 2–4 with symbolic XY over its full
+continuous reset workspace, the live environment's initial arm pose, nominal
+50 mm levels, and default 1 mm Higher tolerance. This scope is finite and
+noiseless; it does not model controller tracking, settling, or floating-point
+rounding of coordinates.
+
+| Blocks | Actual base center (m) | Exact resting center (m) | First failed obligation |
+| --- | --- | --- | --- |
+| 2 | 0.42479285324334115 | 0.425 | Release support |
+| 3 | 0.424706270765723 | 0.425 | Release support |
+| 4 | 0.42463307711707404 | 0.425 | Release support |
+
+The lowering Move uses the base's Z. The motion model requires exact table
+support at `0.4 + 0.05/2`, so the 0.207–0.367 mm mismatch refutes Release support
+and its placement contract. The model then permits arbitrary falling positions;
+the reported relation-effect failures follow from that allowance. These are
+model counterexamples, not failed MuJoCo trials or demonstrated real collisions.
+
+The retired runner's `--ideal-height-diagnostic` option changed only the proof's
+initial center height to exactly 0.425 m. It passed **31, 60, and 91 checks** for 2, 3, and 4 blocks,
+including final guard-false and task-postcondition checks. These 182 checks are
+conditional on that changed model and cannot be reported as a pass for the
+unchanged actual reset. Current execution supports observation-relative
+operands, but integrated motion verification still rejects them.
+
+The retired runner used a 45-second internal experiment budget and
+5-second solver queries. Unknown, timeout, inconsistency and refutation
+could not pass. The actual-reset motion runs returned nonzero. Runs under
+`runs/unstack-verification/` retain the source, learned invariant, checks, and
+geometric counterexamples. Final evidence:
+
+- Symbolic: `20261019-202828-702d11e-symbolic-4` (approximately 24 seconds).
+- Actual-reset motion: `20261019-202605-702d11e-motion-2`,
+  `20261019-202605-702d11e-motion-3`, `20261019-202828-702d11e-motion-4`.
+- Ideal-height diagnostics: `20261019-202829-702d11e-motion-2-ideal-height`,
+  `20261019-202834-702d11e-motion-3-ideal-height`,
+  `20261019-202841-702d11e-motion-4-ideal-height`.
+
+Use `python -m synthesis.experiment.report --run <run-directory>` to inspect
+these runs. All 20 focused Unstack, symbolic-verdict, and primitive-motion
+regression tests passed at that revision. They covered unsupported Release,
+unsafe initial arm geometry, and nested quantifier expansion using synthetic inputs.
+Tests specific to the retired adapter were removed with it.
+
 ## Counterexample learning without initial demonstrations
 
 The separate [Section 6.2 experiment](../experiment/invariant_learning/README.md)

@@ -32,6 +32,11 @@ The original failure and its replay video are retained. See the
 and [experiment inventory](roboverify/synthesis/experiment/README.md).
 This audit did not run synthesis or establish new formal verification results.
 
+After the experiment-script cleanup, revision `3537361` passed the full Python
+regression suite: **406 tests across 59 modules**, with no failures, errors or
+skips. On the current machine the tests took 171.5 seconds, or 176.1 seconds
+including module loading. The complete command is in [AGENTS.md](AGENTS.md#validation).
+
 The Stack workflow has a standalone multi-seed DSL demonstration collector,
 full-state archives, optional 20 FPS videos, and shared `full` / `verify` pipeline
 modes. Collection holds the initial gripper position for **50 settling steps**,
@@ -150,6 +155,15 @@ checks the complete, separated-chain model, including guarded top-to-top
 relocation, quantified assertions and conditional program partial correctness.
 The Python attachment-only dispatcher and physical refinement remain separate
 correspondence obligations; this does not change the verification status above.
+
+A historical right-to-left Unstack result is recorded in the
+[retired verification diagnostic](roboverify/synthesis/cfg/VERIFICATION.md#verification-of-the-current-unstack-revision):
+its learned ON*/equality invariant passed all 12 symbolic checks (2–4 blocks and
+unbounded), under the recorded domain axioms. Actual-reset motion checking failed
+exact Release support because the base center starts slightly below 0.425 m.
+A separately labeled exact-resting-height model passed 182 noiseless motion
+checks across 2–4 blocks; this conditional result does not certify the unchanged
+simulator/controller or establish unbounded motion safety.
 
 Grid and Pyramid execute the shared reference program using nested loops over
 goal-only links. Pyramid accepts `bottom_row_blocks=k` for k+(k−1)+...+1 blocks;
