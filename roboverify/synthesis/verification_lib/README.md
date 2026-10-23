@@ -6,6 +6,12 @@ Its [Lean companion](../../proofs/wp_soundness/README.md) checks the relational
 rewrites and conditional program soundness under explicit model assumptions.
 Python correspondence and the motion checks below remain separate.
 
+[Higher/Scattered action summaries](RELATIONAL-SUMMARIES.md) additionally support
+inferred endpoint atoms through an explicit nondeterministic relation contract.
+CFG motion checks its endpoint, nonmover frame and successor-domain axioms;
+the guide records the exact WP, Lean theorem scope and quantified-array solver
+limits. Existing ON* Put behavior is unchanged.
+
 `Program.lowlevel_verification` requires an explicit `MotionContract` for each
 loop. The contract identifies the manipulated source and placement target.
 `frame_base` is a compatibility hint; root discovery must prove the reference.

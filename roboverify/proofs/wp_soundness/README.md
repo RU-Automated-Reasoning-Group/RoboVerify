@@ -11,6 +11,13 @@ The result concerns the complete, separated tower model defined here.
 Correspondence with the production Python verifier and physical controllers
 remains a separate proof obligation.
 
+[RelationalSummary.lean](RoboVerify/RelationalSummary.lean) additionally proves
+exact WPs for nondeterministic actions summarized by Higher or Scattered,
+under explicit nonmover frames and successor admissibility. This is a separate
+relational contract, not the deterministic complete-tower update above. The
+[summary guide](../../synthesis/verification_lib/RELATIONAL-SUMMARIES.md)
+gives the full rules, Python integration and solver limits.
+
 ## Build and audit
 
 From the repository root:
@@ -85,6 +92,26 @@ invariant to survive rebinding that witness. It checks the scoping condition
 that is easy to leave implicit in a prose argument.
 
 ## Model assumptions to review
+
+For the new Higher/Scattered contracts, `RelationalSummary.wp_exact` equates
+the candidate-relation rewrite with existence of a framed admissible successor
+and correctness for **every** such successor. `rewrite_correct` covers the
+full assertion language; equality and frozen ON* remain unchanged. The theorem
+is uniform over any physical-object type, includes the table as an explicit
+object, and allows any explicitly supplied successor-domain predicate. Table
+isolation, when required, belongs to that admissibility predicate.
+`implementation_refines` requires proofs of the frame, domain and endpoint
+for each actual transition. Domain preservation is not inferred from its
+endpoint atom. `sequential_sound` and `sequential_no_fault` cover demonic
+continuation composition. This module is not yet a constructor in the existing
+`Command` theorem below; Python/Lean translation, alias-store correspondence
+and geometric refinement remain separate obligations.
+
+Kernel-checked examples establish that Higher permits equal-height separated
+blocks and does not imply ON*. Scattered admits unequal heights in either
+direction and need not extend to a third block. Impossible successors and one
+bad permitted successor explicitly refute the WP. This exactness concerns the
+conservative relational contract, not an exact geometric placement WP.
 
 [Scene.WellFormed](RoboVerify/Model.lean) states four structural properties:
 roots are fixed points; roots have level zero; a root and level uniquely

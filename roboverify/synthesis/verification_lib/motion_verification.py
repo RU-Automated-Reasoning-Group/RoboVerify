@@ -631,11 +631,12 @@ def prepare_alignment(
         problem.alignment_root = None  # A separated table placement starts a singleton.
         return
     from synthesis.api.instructions import Put
+    from synthesis.api.relational_summary import RelationalSummary
 
     # Get/Assign may expose another input root without changing object positions.
-    # Once a Put has occurred, alignment must follow from checked motion, never
+    # Once any placement summary has occurred, alignment follows from motion, never
     # a newly inserted assumption on an already-built tower.
-    if not any(isinstance(i, Put) for i in root_context.history):
+    if not any(isinstance(i, (Put, RelationalSummary)) for i in root_context.history):
         assume_input_alignment(
             problem,
             [problem.bindings[name] for name in root_context.initial_roots(candidates)],

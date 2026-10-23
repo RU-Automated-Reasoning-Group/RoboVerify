@@ -18,6 +18,10 @@ from synthesis.api.instructions import (
     ReleaseByName,
     Skip,
 )
+from synthesis.api.relational_summary import (
+    RelationalSummary,
+    check_summary_realization,
+)
 from synthesis.cfg.bindings import require_closed
 from synthesis.cfg.lower import lower, lower_region
 from synthesis.cfg.region import BlockRegion, LoopRegion
@@ -40,11 +44,14 @@ from synthesis.verification_lib.root_selection import RootContext
 
 
 def propose_summaries(cfg, context):
-    """Attach a Put only to a structurally identified completed placement.
+    """Propose an action contract for a structurally completed placement.
 
     Pure binding/arm operations have no relational object effect. Transfers may
     span adjacent blocks, but no relational observation/control boundary may
-    intervene while their abstract Put is pending.
+    intervene while their abstract action is pending. Explicit Higher/Scattered
+    edges select framed nondeterministic contracts; ON* and transport-target
+    fallback retain the established Put interpretation. Motion must prove the
+    entire selected contract before it is accepted.
     """
     from synthesis.cfg.scope import scope
 
@@ -87,6 +94,21 @@ def propose_summaries(cfg, context):
             elif isinstance(i, ReleaseByName):
                 if held is None or held != i.release_box_name:
                     raise ValueError("Release must refer to the currently held object")
+                if post.op in ("Higher", "Scattered"):
+                    if any(arg.op != "ref" for arg in post.args) or held not in (
+                        post.args[0].value,
+                        post.args[1].value,
+                    ):
+                        raise ValueError(
+                            "Relational placement edge must name the moved object"
+                        )
+                    summary.append(
+                        RelationalSummary(
+                            post.op, post.args[0].value, post.args[1].value, moved=held
+                        )
+                    )
+                    held = None
+                    continue
                 if post.op in ("ON", "ON_star") and post.args[0].value == held:
                     target = post.args[1].value
                 elif last_move is not None:
@@ -333,28 +355,51 @@ def verify_cfg_motion(
             remaining.extend(tail)
             for instruction in region.physical:
                 if isinstance(instruction, PickByName):
-                    proposed = next((i for i in remaining if isinstance(i, Put)), None)
+                    proposed = next(
+                        (
+                            i
+                            for i in remaining
+                            if isinstance(i, (Put, RelationalSummary))
+                        ),
+                        None,
+                    )
                     if proposed is None:
                         raise ValueError("Pick has no completed symbolic placement")
                     p.contract = MotionContract(
-                        p.bindings[proposed.upper_block],
-                        p.bindings[proposed.base_block],
+                        p.bindings[
+                            (
+                                proposed.moved
+                                if isinstance(proposed, RelationalSummary)
+                                else proposed.upper_block
+                            )
+                        ],
+                        p.bindings[
+                            (
+                                proposed.reference
+                                if isinstance(proposed, RelationalSummary)
+                                else proposed.base_block
+                            )
+                        ],
                         table_surface_height=table_surface_height,
                     )
-                    prepare_alignment(
-                        p,
-                        p.root_context,
-                        available,
-                        target=proposed.base_block,
-                        continuation=remaining,
-                        postcondition=postcondition,
-                    )
+                    if isinstance(proposed, Put):
+                        prepare_alignment(
+                            p,
+                            p.root_context,
+                            available,
+                            target=proposed.base_block,
+                            continuation=remaining,
+                            postcondition=postcondition,
+                        )
+                    else:
+                        p.alignment_root = None
                     pending = (
                         dict(p.current),
                         p.fields,
                         p.contract,
                         p.alignment_root,
                         proposed,
+                        dict(p.bindings),
                     )
                 p.execute([instruction])
                 if isinstance(instruction, (Get, Assign)):
@@ -367,7 +412,11 @@ def verify_cfg_motion(
                         remaining.pop(0)
                 elif isinstance(instruction, ReleaseByName) and pending is not None:
                     p.root_context.history.append(pending[4])
-            puts = [i for i in region.symbolic or () if isinstance(i, Put)]
+            puts = [
+                i
+                for i in region.symbolic or ()
+                if isinstance(i, (Put, RelationalSummary))
+            ]
             if puts:
                 if len(puts) != 1 or pending is None:
                     checks.append(
@@ -379,13 +428,23 @@ def verify_cfg_motion(
                     )
                     return p
                 old_initial = p.initial
-                p.initial, p.effect_entry_fields, p.contract, p.alignment_root, _ = (
-                    pending
-                )
-                check_contract_realization(p)
+                (
+                    p.initial,
+                    p.effect_entry_fields,
+                    p.contract,
+                    p.alignment_root,
+                    summary,
+                    entry_bindings,
+                ) = pending
                 check_frame_preservation(p)
-                check_abstract_effects(p)
-                check_alignment(p)
+                if isinstance(summary, RelationalSummary):
+                    check_summary_realization(
+                        p, summary, context, entry_bindings=entry_bindings
+                    )
+                else:
+                    check_contract_realization(p)
+                    check_abstract_effects(p)
+                    check_alignment(p)
                 p.initial = old_initial
                 pending = None
             p.check("transition_consistency")

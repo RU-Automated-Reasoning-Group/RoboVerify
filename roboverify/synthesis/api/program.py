@@ -6,29 +6,6 @@ from pathlib import Path
 from typing import List, Optional, Sequence, Union
 
 import numpy as np
-import synthesis.inference_lib.inference
-import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
-import synthesis.verification_lib.lowlevel_verification_lib as lowlevel_verification_lib
-from synthesis.api.instructions import (
-    Assign,
-    Get,
-    GoalAssign,
-    Instruction,
-    MarkGoal,
-    Move,
-    MoveByName,
-    MoveDown,
-    MoveRight,
-    Pick,
-    PickByName,
-    Put,
-    Release,
-    ReleaseByName,
-    Seq,
-    Skip,
-    While,
-)
-from synthesis.util.symbols import fresh_const, rewrite_quantifier
 from z3 import (
     Z3_OP_UNINTERPRETED,
     And,
@@ -54,6 +31,30 @@ from z3 import (
     substitute_vars,
     unsat,
 )
+
+import synthesis.inference_lib.inference
+import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
+import synthesis.verification_lib.lowlevel_verification_lib as lowlevel_verification_lib
+from synthesis.api.instructions import (
+    Assign,
+    Get,
+    GoalAssign,
+    Instruction,
+    MarkGoal,
+    Move,
+    MoveByName,
+    MoveDown,
+    MoveRight,
+    Pick,
+    PickByName,
+    Put,
+    Release,
+    ReleaseByName,
+    Seq,
+    Skip,
+    While,
+)
+from synthesis.util.symbols import fresh_const, rewrite_quantifier
 
 
 def _outer_while_direct_body_move_down_var(
@@ -1223,6 +1224,7 @@ def to_seq(instructions):
 
 def wp(seq_instruction, Q, context):
     """calculate weakest precondition"""
+    from synthesis.api.relational_summary import RelationalSummary, summary_wp
 
     def inv_expr(inv):
         # Invariant may be a Z3 expr or a list of ProvenancedClause-like objects.
@@ -1232,6 +1234,8 @@ def wp(seq_instruction, Q, context):
 
     if isinstance(seq_instruction, Skip):
         return Q
+    elif isinstance(seq_instruction, RelationalSummary):
+        return summary_wp(seq_instruction, Q, context)
     elif isinstance(seq_instruction, Seq):
         return wp(seq_instruction.s1, wp(seq_instruction.s2, Q, context), context)
     elif isinstance(seq_instruction, While):

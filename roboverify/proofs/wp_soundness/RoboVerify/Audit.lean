@@ -1,4 +1,5 @@
 import RoboVerify.Examples
+import RoboVerify.RelationalSummary
 import Lean
 
 /- Audit every declaration in this development, including generated helpers.
@@ -28,3 +29,8 @@ run_elab do
 #print axioms RoboVerify.Command.verified_program
 #print axioms RoboVerify.Command.loopFree_wp_exact
 #print axioms RoboVerify.Command.chooseLoop_vc
+#print axioms RoboVerify.RelationalSummary.rewrite_correct
+#print axioms RoboVerify.RelationalSummary.wp_exact
+#print axioms RoboVerify.RelationalSummary.wp_weakest
+#print axioms RoboVerify.RelationalSummary.implementation_refines
+#print axioms RoboVerify.RelationalSummary.scattered_self_rejects
