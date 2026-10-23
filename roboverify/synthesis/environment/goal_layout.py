@@ -29,32 +29,52 @@ class Goal:
     position: tuple[float, float, float]
     r: GoalRef | None
     d: GoalRef | None
+    u: GoalRef | None = None
 
 
 @dataclass(frozen=True)
 class GoalLayout:
     goals: tuple[Goal, ...]
     row_lengths: tuple[int, ...]
+    layer_row_counts: tuple[int, ...] | None = None
 
     def as_dict(self):
-        return dict(
+        value = dict(
             row_lengths=list(self.row_lengths),
             positions=self.positions.tolist(),
             head=self.head.index,
             r=[None if g.r is None else g.r.index for g in self.goals],
             d=[None if g.d is None else g.d.index for g in self.goals],
         )
+        # Preserve the exact serialized topology of existing 2D archives.
+        if self.layer_row_counts is not None:
+            value.update(
+                layer_row_counts=list(self.layer_row_counts),
+                u=[None if g.u is None else g.u.index for g in self.goals],
+            )
+        return value
 
     @classmethod
     def from_dict(cls, value):
-        layout = cls.from_positions(value["positions"], value["row_lengths"])
+        layout = cls.from_positions(
+            value["positions"],
+            value["row_lengths"],
+            layer_row_counts=value.get("layer_row_counts"),
+        )
         if layout.as_dict() != value:
             raise ValueError("Goal topology does not match its row layout")
         return layout
 
     @classmethod
-    def from_positions(cls, positions, row_lengths):
+    def from_positions(cls, positions, row_lengths, *, layer_row_counts=None):
         rows = tuple(positive_size(n, "row length") for n in row_lengths)
+        layers = (
+            None
+            if layer_row_counts is None
+            else tuple(positive_size(n, "layer row count") for n in layer_row_counts)
+        )
+        if layers is not None and (not layers or sum(layers) != len(rows)):
+            raise ValueError("Layer row counts must partition the goal rows")
         xyz = np.asarray(positions, dtype=float)
         if not rows or xyz.shape != (sum(rows), 3) or not np.isfinite(xyz).all():
             raise ValueError(
@@ -65,18 +85,30 @@ class GoalLayout:
         if np.any(distances <= 2 * GOAL_TOLERANCE):
             raise ValueError("Goal occupancy regions must be disjoint")
         goals, start = [], 0
-        for length in rows:
+        row_starts = np.cumsum((0, *rows[:-1])).tolist()
+        layer_starts = np.cumsum((0, *(layers or ())[:-1])).tolist() if layers else []
+        last_rows = {
+            start + size - 1 for start, size in zip(layer_starts, layers or ())
+        }
+        next_layer = {
+            row_starts[start]: GoalRef(row_starts[next_start])
+            for start, next_start in zip(layer_starts, layer_starts[1:])
+        }
+        for row, length in enumerate(rows):
             for column in range(length):
                 index = start + column
                 right = GoalRef(index + 1) if column + 1 < length else None
                 down = (
                     GoalRef(start + length)
-                    if column == 0 and start + length < len(xyz)
+                    if column == 0
+                    and start + length < len(xyz)
+                    and row not in last_rows
                     else None
                 )
-                goals.append(Goal(tuple(map(float, xyz[index])), right, down))
+                up = next_layer.get(index)
+                goals.append(Goal(tuple(map(float, xyz[index])), right, down, up))
             start += length
-        return cls(tuple(goals), rows)
+        return cls(tuple(goals), rows, layers)
 
     @property
     def head(self):

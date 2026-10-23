@@ -1,17 +1,18 @@
-"""Execute the supplied Grid/Pyramid program; no synthesis or verification."""
+"""Execute the supplied Grid/Pyramid/Build3D program; no synthesis or verification."""
 
 import argparse
 import json
 import random
 
 import numpy as np
-
 from synthesis.api.control import get_move_action
 from synthesis.cfg.collection import VideoRecorder, execution_deadline
 from synthesis.environment.goal_layout import occupancy
+from synthesis.examples.build3d import build_program as build_3d_program
 from synthesis.examples.goal_layout import build_program
 from synthesis.experiment.run_logger import RunLogger
 from synthesis.mcmc.synthesis import (
+    make_roboverify_build3d_env,
     make_roboverify_grid_env,
     make_roboverify_pyramid_env,
 )
@@ -23,21 +24,25 @@ def execute(
     bottom_row_blocks=3,
     grid_rows=3,
     grid_cols=2,
+    build_rows=2,
+    build_cols=2,
+    build_layers=2,
     seed=0,
     video_path=None,
     on_event=None,
     max_loop_iterations=100,
 ):
     """Run the ordinary DSL executor and validate the actual final occupancy."""
-    if task not in ("grid", "pyramid"):
+    if task not in ("grid", "pyramid", "build3d"):
         raise ValueError(f"Unsupported goal task: {task}")
     random.seed(seed)
     np.random.seed(seed)
-    env = (
-        make_roboverify_grid_env(grid_rows=grid_rows, grid_cols=grid_cols)
-        if task == "grid"
-        else make_roboverify_pyramid_env(bottom_row_blocks=bottom_row_blocks)
-    )
+    if task == "build3d":
+        env = make_roboverify_build3d_env(build_rows, build_cols, build_layers)
+    elif task == "grid":
+        env = make_roboverify_grid_env(grid_rows=grid_rows, grid_cols=grid_cols)
+    else:
+        env = make_roboverify_pyramid_env(bottom_row_blocks=bottom_row_blocks)
     video, result = None, None
     try:
         inner = env.env
@@ -53,6 +58,7 @@ def execute(
             raise ValueError("Initial blocks must be outside the goal regions")
         video = VideoRecorder(video_path) if video_path is not None else None
         controls, placements, loop_exits = [], [], []
+        release_path = "1.1.1.5" if task == "build3d" else "1.1.5"
 
         def state(observation):
             if video is not None:
@@ -67,7 +73,7 @@ def execute(
                     raise RuntimeError(
                         f"Primitive {row['path']} failed to converge: {row['control']}"
                     )
-            if row["kind"] == "instruction_end" and row["path"] == "1.1.5":
+            if row["kind"] == "instruction_end" and row["path"] == release_path:
                 block, goal = row["bindings"]["b_prime"], row["goal_bindings"]["r"]
                 xyz = inner.sim.data.get_site_xpos(f"object{block}")
                 if not occupancy([xyz], [inner.goal_layout.goals[goal].position])[0, 0]:
@@ -86,7 +92,8 @@ def execute(
             if row["kind"] == "loop_exit":
                 loop_exits.append({"path": row["path"], "iterations": row["iteration"]})
 
-        trajectory = build_program(num_blocks=count).eval(
+        factory = build_3d_program if task == "build3d" else build_program
+        trajectory = factory(num_blocks=count).eval(
             env,
             initial_observation=obs,
             on_event=event,
@@ -103,6 +110,7 @@ def execute(
             seed=seed,
             num_blocks=count,
             row_lengths=list(inner.goal_layout.row_lengths),
+            layer_row_counts=inner.goal_layout.layer_row_counts,
             success=success,
             filled_goals=int(filled.sum()),
             steps=len(trajectory) - 1,
@@ -128,10 +136,13 @@ def execute(
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--task", choices=("grid", "pyramid"), required=True)
+    parser.add_argument("--task", choices=("grid", "pyramid", "build3d"), required=True)
     parser.add_argument("--bottom-row-blocks", type=int, default=3)
     parser.add_argument("--grid-rows", type=int, default=3)
     parser.add_argument("--grid-cols", type=int, default=2)
+    parser.add_argument("--build-rows", type=int, default=2)
+    parser.add_argument("--build-cols", type=int, default=2)
+    parser.add_argument("--build-layers", type=int, default=2)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--max-loop-iterations", type=int, default=100)
     parser.add_argument("--timeout-seconds", type=float, default=120)
@@ -139,7 +150,13 @@ def main(argv=None):
     parser.add_argument("--output-dir", default="runs")
     args = parser.parse_args(argv)
     if min(
-        args.bottom_row_blocks, args.grid_rows, args.grid_cols, args.max_loop_iterations
+        args.bottom_row_blocks,
+        args.grid_rows,
+        args.grid_cols,
+        args.max_loop_iterations,
+        args.build_rows,
+        args.build_cols,
+        args.build_layers,
     ) < 1 or not 0 < args.timeout_seconds < float("inf"):
         parser.error("Dimensions and execution budgets must be positive and finite")
     config = vars(args).copy()
@@ -158,6 +175,9 @@ def main(argv=None):
                     bottom_row_blocks=args.bottom_row_blocks,
                     grid_rows=args.grid_rows,
                     grid_cols=args.grid_cols,
+                    build_rows=args.build_rows,
+                    build_cols=args.build_cols,
+                    build_layers=args.build_layers,
                     seed=args.seed,
                     video_path=video,
                     max_loop_iterations=args.max_loop_iterations,

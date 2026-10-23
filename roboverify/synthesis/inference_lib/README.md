@@ -65,7 +65,7 @@ uv run python -m synthesis.entry.collect_demos \
   --num-blocks 3 --num-trajectories 5 --save-video
 ```
 
-All six tasks have a default supplied program; `--program` is optional and
+All seven tasks have a default supplied program; `--program` is optional and
 selects a replacement factory. The editable factory in `synthesis/examples/stack.py`
 uses explicit Pick, Move,
 and Release primitives. Its transfer and placement waypoints use the base block
@@ -74,7 +74,7 @@ and Release primitives. Its transfer and placement waypoints use the base block
 `--program path/to/program.py:factory` must return a `Program` from
 `factory(context, *, num_blocks)`. Named and numeric physical operands, Assign,
 Get, Skip, and flat While loops are supported for tower tasks. PickPlace is
-rejected. Grid/Pyramid collection additionally accepts nested goal loops as
+rejected. Grid/Pyramid/Build3D collection additionally accepts nested goal loops as
 described below. Numeric operands get fixed aliases; their identities are not learned.
 
 Collection runs exactly N distinct seeds, defaulting to five seeds starting at
@@ -344,6 +344,84 @@ synthesis/verification entry points retain their existing restrictions, and
 `DemoStore.from_archive` / `loop_store` reject goal traces rather than dropping
 their goal state. Collection support does not establish goal-aware synthesis,
 invariant learning or formal verification.
+
+## Collect Build3D demonstrations
+
+Build3D creates an `m × n × k` rectangular arrangement: `m` rows per layer,
+`n` columns per row, and `k` vertical layers. All dimensions default to 2 and
+must be positive integers; the block count is their product. The environment
+uses Grid's 10 cm horizontal spacing for finger clearance, with each higher
+block directly above its support at 5 cm vertical spacing. Goal centers are
+on the higher-Y side of the robot and scattered source blocks on the lower-Y
+side. Source center X is initial-gripper X minus 0.14 m; the target grid is
+centered 0.04 m closer in X than the initial gripper.
+
+```bash
+uv run python -m synthesis.entry.collect_demos --task build3d \
+  --build-rows 2 --build-cols 3 --build-layers 2 \
+  --num-trajectories 5 --save-video
+```
+
+The default groundtruth is [`synthesis.examples.build3d`](../examples/build3d.py).
+It reuses the unchanged six-primitive Grid/Pyramid transfer, with approach and
+transport Z equal to the current goal Z plus 0.15 m. Its three loops follow
+goal-only links: `r` within a row, `d` between row heads within a layer, and `u`
+between layer heads. The last row's `d` is null, so the entire current layer
+finishes before the next layer starts. Physical blocks have no traversal links.
+
+```text
+u <- h0
+while u != null:
+    d <- u
+    while d != null:
+        r <- d
+        while r != null and exists b_prime: not AtGoal(b_prime):
+            Move(b_prime, b_prime, r, (0, 0, 0.15))
+            Pick(b_prime)
+            Move(b_prime, b_prime, r, (0, 0, 0.15))
+            Move(r, r, r, (0, 0, 0.15))
+            Move(r, r, r, (0, 0, 0))
+            Release(r, 0.15)
+            r <- r.r
+        d <- d.d
+    u <- u.u
+```
+
+Default output names include all three dimensions, for example
+`demos/build3d/2x3x2-12-blocks-5-trajectories/`. The shared collector, archive
+auditor and optional `execute_goal_program --task build3d` all support this task.
+Collection uses the same 50-step initial settling, controller convergence checks,
+identity-independent occupancy, and preservation of earlier goals as the 2D
+tasks. Version-2 archives add `layer_row_counts` and `u` links only for Build3D;
+existing Grid/Pyramid serialization is unchanged. Snapshots and events preserve
+all three cursors, including logical cursor changes between physical actions.
+Loading a snapshot with a different layer partition is rejected even when its
+flattened row lengths match.
+
+**Physical validation:** 25/25 demonstrations passed, with exact final-state
+action replay and successful occupancy after 50 additional settling steps:
+
+| Dimensions | Blocks | Seeds | Archive directory under `demos/build3d/` |
+| --- | ---: | --- | --- |
+| 2×2×2 | 8 | 0–14 | `2x2x2-15-seeds/` |
+| 2×3×2 | 12 | 0–4 | `2x3x2-5-seeds/` |
+| 2×2×3 | 12 | 0–4 | `2x2x3-5-seeds/` |
+
+Each directory contains `demonstrations.npz`, `collection.json` and `audit.json`.
+All final replay errors were zero; the maximum primitive used 18 of 50 steps.
+An additional twelve-block video is in
+`demos/build3d/2x3x2-video/videos/seed_0000.mp4`.
+The 22 focused Build3D and existing 2D goal tests passed. They cover single-row,
+single-column and single-layer topology, all three loop exits, archive replay,
+dimension conflicts, and synthesis-loader rejection.
+
+Dimensions are configurable rather than hardcoded to these tested shapes.
+The finite robot workspace still limits physical layouts: source sampling fails
+explicitly when separated blocks cannot fit, out-of-workspace goals are rejected,
+and unreachable motions fail collection through the normal primitive budgets.
+These runs do not establish success for arbitrary sizes. As for Grid/Pyramid,
+Build3D currently supports execution and collection, not synthesis or formal
+verification.
 
 ## Higher height tolerance
 

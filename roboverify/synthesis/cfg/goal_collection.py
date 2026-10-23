@@ -1,21 +1,35 @@
 """Goal-task collection configuration and numeric validation, without proof VCs."""
 
 import numpy as np
-
 from synthesis.cfg.demo_validation import DemoValidation
 from synthesis.environment.goal_layout import occupancy, positive_size, pyramid_layers
 from synthesis.util.on import scattered_implementation
 
-GOAL_TASKS = ("grid", "pyramid")
+GOAL_TASKS = ("grid", "pyramid", "build3d")
 PROVIDED_PROGRAMS = {
     "grid": "synthesis.examples.grid:build_program",
     "pyramid": "synthesis.examples.pyramid:build_program",
+    "build3d": "synthesis.examples.build3d:build_program",
 }
 
 
 def resolve_goal_configuration(
-    task, *, grid_rows=None, grid_cols=None, bottom_row_blocks=None, num_blocks=None
+    task,
+    *,
+    grid_rows=None,
+    grid_cols=None,
+    bottom_row_blocks=None,
+    num_blocks=None,
+    build_rows=None,
+    build_cols=None,
+    build_layers=None,
 ):
+    if task != "build3d" and any(
+        v is not None for v in (build_rows, build_cols, build_layers)
+    ):
+        raise ValueError(
+            "--build-rows/--build-cols/--build-layers apply only to Build3D"
+        )
     if task == "grid":
         if bottom_row_blocks is not None:
             raise ValueError("--bottom-row-blocks applies only to Pyramid")
@@ -28,6 +42,20 @@ def resolve_goal_configuration(
         bottom = 3 if bottom_row_blocks is None else bottom_row_blocks
         layers = pyramid_layers(bottom)
         count, config = sum(layers), dict(bottom_row_blocks=layers[0])
+    elif task == "build3d":
+        if any(v is not None for v in (grid_rows, grid_cols, bottom_row_blocks)):
+            raise ValueError(
+                "Build3D dimensions use --build-rows/--build-cols/--build-layers"
+            )
+        config = {
+            name: positive_size(2 if value is None else value, name)
+            for name, value in (
+                ("build_rows", build_rows),
+                ("build_cols", build_cols),
+                ("build_layers", build_layers),
+            )
+        }
+        count = config["build_rows"] * config["build_cols"] * config["build_layers"]
     else:
         raise ValueError(f"Unsupported goal task: {task}")
     if num_blocks is not None and num_blocks != count:
@@ -39,21 +67,42 @@ def resolve_goal_configuration(
 
 def make_goal_env(task, config):
     from synthesis.mcmc.synthesis import (
+        make_roboverify_build3d_env,
         make_roboverify_grid_env,
         make_roboverify_pyramid_env,
     )
 
     _, config = resolve_goal_configuration(task, **config)
-    factory = (
-        make_roboverify_grid_env if task == "grid" else make_roboverify_pyramid_env
-    )
+    factory = {
+        "grid": make_roboverify_grid_env,
+        "pyramid": make_roboverify_pyramid_env,
+        "build3d": make_roboverify_build3d_env,
+    }[task]
     return factory(**config)
 
 
 def environment_configuration(env):
     if env.case == "RoboVerifyGrid":
         return dict(grid_rows=env.grid_rows, grid_cols=env.grid_cols)
+    if env.case == "RoboVerifyBuild3D":
+        return dict(
+            build_rows=env.build_rows,
+            build_cols=env.build_cols,
+            build_layers=env.build_layers,
+        )
     return dict(bottom_row_blocks=env.bottom_row_blocks)
+
+
+def goal_topology(task, config):
+    """Return the expected rows and optional grouping into 3D layers."""
+    if task == "build3d":
+        return (
+            (config["build_cols"],) * (config["build_rows"] * config["build_layers"]),
+            (config["build_rows"],) * config["build_layers"],
+        )
+    if task == "grid":
+        return (config["grid_cols"],) * config["grid_rows"], None
+    return pyramid_layers(config["bottom_row_blocks"]), None
 
 
 def validate_goal_trace(trace):
@@ -71,12 +120,12 @@ def validate_goal_trace(trace):
         count, config = resolve_goal_configuration(
             trace.task, **trace.metadata["environment"]
         )
-        rows = (
-            (config["grid_cols"],) * config["grid_rows"]
-            if trace.task == "grid"
-            else pyramid_layers(config["bottom_row_blocks"])
-        )
-        if count != trace.num_blocks or rows != layout.row_lengths:
+        rows, layers = goal_topology(trace.task, config)
+        if (
+            count != trace.num_blocks
+            or rows != layout.row_lengths
+            or layers != layout.layer_row_counts
+        ):
             raise ValueError(
                 "Environment dimensions disagree with the recorded goal layout"
             )

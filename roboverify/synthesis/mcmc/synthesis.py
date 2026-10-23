@@ -799,6 +799,11 @@ ROBOVERIFY_PYRAMID_ENV_KWARGS = {
 }
 
 
+ROBOVERIFY_BUILD3D_ENV_KWARGS = dict(
+    ROBOVERIFY_GRID_ENV_KWARGS, case="RoboVerifyBuild3D"
+)
+
+
 def make_roboverify_stack_env(
     num_blocks: int = 4,
     render_mode: str = "rgb_array",
@@ -900,6 +905,31 @@ def make_roboverify_pyramid_env(
     )
 
 
+def make_roboverify_build3d_env(
+    build_rows: int = 2,
+    build_cols: int = 2,
+    build_layers: int = 2,
+    render_mode: str = "rgb_array",
+) -> GymToGymnasium:
+    """Create m-by-n-by-k blocks arranged into complete horizontal goal layers."""
+    from synthesis.environment.goal_layout import positive_size
+
+    rows = positive_size(build_rows, "build_rows")
+    cols = positive_size(build_cols, "build_cols")
+    layers = positive_size(build_layers, "build_layers")
+    return GymToGymnasium(
+        FetchPickAndPlaceConstruction(
+            name=f"roboverify_build3d_{rows}x{cols}x{layers}",
+            num_blocks=rows * cols * layers,
+            build_rows=rows,
+            build_cols=cols,
+            build_layers=layers,
+            **ROBOVERIFY_BUILD3D_ENV_KWARGS,
+        ),
+        render_mode=render_mode,
+    )
+
+
 def make_roboverify_env(
     task: str,
     num_blocks: int = 4,
@@ -932,6 +962,10 @@ def make_roboverify_env(
         )
     if task == "pyramid":
         raise ValueError("use make_roboverify_pyramid_env() for pyramid tasks")
+    if task == "build3d":
+        raise ValueError(
+            "use make_roboverify_build3d_env(build_rows=..., build_cols=..., build_layers=...)"
+        )
     raise ValueError(f"unsupported RoboVerify task: {task!r}")
 
 

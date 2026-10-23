@@ -8,8 +8,6 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import numpy as np
-from z3.z3util import get_vars
-
 from synthesis.api.control import TABLE_REFERENCE_MODE
 from synthesis.api.instructions import (
     Assign,
@@ -19,6 +17,7 @@ from synthesis.api.instructions import (
     MoveByName,
     MoveDown,
     MoveRight,
+    MoveUp,
     Pick,
     PickByName,
     Release,
@@ -36,6 +35,7 @@ from synthesis.environment.motion_reference import (
 from synthesis.predicates.term import free_names, from_z3
 from synthesis.util.actions import CARTESIAN_ACTION_MODE
 from synthesis.util.symbols import fresh_name
+from z3.z3util import get_vars
 
 
 def guard_term(instruction):
@@ -46,7 +46,7 @@ def guard_term(instruction):
 def uses_goals(program):
     def walk(rows):
         return any(
-            isinstance(i, (GoalAssign, MoveRight, MoveDown))
+            isinstance(i, (GoalAssign, MoveRight, MoveDown, MoveUp))
             or (isinstance(i, While) and walk(i.body))
             for i in rows
         )
@@ -83,7 +83,7 @@ def describe_program(program):
             result.update(guard=guard(i), witnesses=list(map(str, i.guard_exists_vars)))
         elif isinstance(i, (Assign, GoalAssign)):
             result.update(left=i.left, right=i.right)
-        elif isinstance(i, (MoveRight, MoveDown)):
+        elif isinstance(i, (MoveRight, MoveDown, MoveUp)):
             result["var_name"] = i.var_name
         elif isinstance(i, Skip):
             result["steps"] = i.skip_steps
@@ -186,7 +186,7 @@ def prepare_program(
                 inspect(i.body, depth + 1)
             elif isinstance(i, (Assign, GoalAssign)):
                 occupied.update((i.left, i.right))
-            elif isinstance(i, (MoveRight, MoveDown)):
+            elif isinstance(i, (MoveRight, MoveDown, MoveUp)):
                 occupied.add(i.var_name)
             elif not isinstance(i, (Get, Skip)):
                 for op in i.get_operand():

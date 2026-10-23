@@ -4,7 +4,6 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 
 import numpy as np
-
 from synthesis.environment.goal_layout import (
     GoalLayout,
     decode_goal_bindings,
@@ -66,16 +65,25 @@ def restore_bindings(env, snapshot):
 def restore(env, snapshot):
     inner = inner_env(env)
     case = getattr(inner, "case", None)
-    goal_env = case in ("RoboVerifyGrid", "RoboVerifyPyramid")
+    goal_env = case in ("RoboVerifyGrid", "RoboVerifyPyramid", "RoboVerifyBuild3D")
     if goal_env != (snapshot.goal_layout is not None):
         raise ValueError("Snapshot goal layout is incompatible with this environment")
     if goal_env:
-        rows = (
-            (inner.grid_cols,) * inner.grid_rows
-            if case == "RoboVerifyGrid"
-            else inner.pyramid_layer_sizes
+        from synthesis.cfg.goal_collection import (
+            environment_configuration,
+            goal_topology,
         )
-        if rows != snapshot.goal_layout.row_lengths:
+
+        task = {
+            "RoboVerifyGrid": "grid",
+            "RoboVerifyPyramid": "pyramid",
+            "RoboVerifyBuild3D": "build3d",
+        }[case]
+        rows, layers = goal_topology(task, environment_configuration(inner))
+        if (
+            rows != snapshot.goal_layout.row_lengths
+            or layers != snapshot.goal_layout.layer_row_counts
+        ):
             raise ValueError("Snapshot goal row layout does not match this environment")
         decode_goal_bindings(snapshot.goal_bindings, snapshot.goal_layout)
     inner.set_GT_state(snapshot.gt_state.copy())

@@ -87,7 +87,7 @@ def task_spec(task):
 
 
 def task_identity(task):
-    if task in ("grid", "pyramid"):
+    if task in ("grid", "pyramid", "build3d"):
         from synthesis.environment.goal_layout import GOAL_TOLERANCE
 
         return dict(

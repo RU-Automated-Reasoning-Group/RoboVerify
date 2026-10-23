@@ -1,6 +1,6 @@
-"""Collect tower, Grid or Pyramid DSL demonstrations, with optional videos.
+"""Collect tower and goal-layout DSL demonstrations, with optional videos.
 
-Stack/Restack/Grid/Pyramid hold the gripper for 50 settling steps; Unstack/Reverse record
+Stack/Restack/goal tasks hold the gripper for 50 settling steps; Unstack/Reverse record
 the lateral tower reset directly.
 """
 
@@ -59,6 +59,8 @@ def output_directory(args, count):
         layout = f"{args.grid_rows}x{args.grid_cols}-"
     elif args.task == "pyramid":
         layout = f"{args.bottom_row_blocks}-bottom-row-"
+    elif args.task == "build3d":
+        layout = f"{args.build_rows}x{args.build_cols}x{args.build_layers}-"
     base = (
         Path("demos")
         / args.task
@@ -97,6 +99,15 @@ def build_parser():
     )
     parser.add_argument("--grid-rows", type=int, help="Grid rows (default 3)")
     parser.add_argument("--grid-cols", type=int, help="Grid columns (default 2)")
+    parser.add_argument(
+        "--build-rows", type=int, help="Build3D rows per layer (default 2)"
+    )
+    parser.add_argument(
+        "--build-cols", type=int, help="Build3D columns per row (default 2)"
+    )
+    parser.add_argument(
+        "--build-layers", type=int, help="Build3D vertical layers (default 2)"
+    )
     parser.add_argument(
         "--bottom-row-blocks",
         type=int,
@@ -147,6 +158,9 @@ def collect(args, parser):
                 grid_rows=args.grid_rows,
                 grid_cols=args.grid_cols,
                 bottom_row_blocks=args.bottom_row_blocks,
+                build_rows=args.build_rows,
+                build_cols=args.build_cols,
+                build_layers=args.build_layers,
                 num_blocks=args.num_blocks,
             )
             for name, value in environment_config.items():
@@ -155,9 +169,18 @@ def collect(args, parser):
         else:
             if any(
                 value is not None
-                for value in (args.grid_rows, args.grid_cols, args.bottom_row_blocks)
+                for value in (
+                    args.grid_rows,
+                    args.grid_cols,
+                    args.bottom_row_blocks,
+                    args.build_rows,
+                    args.build_cols,
+                    args.build_layers,
+                )
             ):
-                raise ValueError("Goal layout options require --task grid or pyramid")
+                raise ValueError(
+                    "Goal layout options require --task grid, pyramid or build3d"
+                )
             if args.num_blocks is None:
                 args.num_blocks = 4 if args.task == "restack" else 3
             if args.task == "restack":
