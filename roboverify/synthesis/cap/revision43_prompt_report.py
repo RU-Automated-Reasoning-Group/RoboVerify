@@ -11,6 +11,11 @@ from pathlib import Path
 
 from .revision43_prompt_experiment import SWITCHES
 
+METHOD_NAMES = {
+    "cap_google_baseline": ("baseline", "Baseline"),
+    "cap_method_1": ("method1", "Method 1"),
+    "cap_method_2": ("method2", "Method 2"),
+}
 SHORT = {
     "explain_target_offsets": "T",
     "explain_convergence_criteria": "C",
@@ -48,10 +53,12 @@ def wilson(successes, total, z=1.96):
     return max(0.0, centre - half), min(1.0, centre + half)
 
 
-def cells(rows):
-    """Per-cell counts of round-0 and final task success."""
+def cells(rows, method=None):
+    """Per-cell counts of round-0 and final task success, optionally one method."""
     table = {}
     for row in rows:
+        if method and row["method"] != method:
+            continue
         cell = table.setdefault(row["variant"], {"n": 0, "round0": 0, "final": 0})
         cell["n"] += 1
         cell["round0"] += bool(row["first_attempt_success"])
@@ -59,7 +66,13 @@ def cells(rows):
     return table
 
 
-def plot_cells(table, path):
+def cell_order(table):
+    """Cells grouped by the motion-planning block, then by round-0 success."""
+    # Cell names are "p" + one bit per switch in SWITCHES order; M is last.
+    return sorted(table, key=lambda c: (c[-1], table[c]["round0"] / table[c]["n"]))
+
+
+def plot_cells(table, path, *, order=None, scope="3 methods pooled"):
     """Horizontal bars per cell, grouped by the motion-planning block."""
     import matplotlib
 
@@ -68,8 +81,7 @@ def plot_cells(table, path):
     import numpy as np
     from matplotlib.patches import Patch
 
-    # Cell names are "p" + one bit per switch in SWITCHES order; M is last.
-    order = sorted(table, key=lambda c: (c[-1], table[c]["round0"] / table[c]["n"]))
+    order = order or cell_order(table)
     labels = [
         " ".join(SHORT[s] if bit == "1" else "·" for s, bit in zip(SWITCHES, cell[1:]))
         + f"   {cell}"
@@ -123,7 +135,7 @@ def plot_cells(table, path):
     n = {table[c]["n"] for c in order}
     ax.set_title(
         "Prompt factorial, Qwen3.8 27B: success by cell "
-        f"({'/'.join(map(str, sorted(n)))} trials per cell, 3 methods pooled)",
+        f"({'/'.join(map(str, sorted(n)))} trials per cell, {scope})",
         fontsize=10,
     )
     handles = [Patch(facecolor=c, label=l) for _, l, c in measures] + [
@@ -150,9 +162,20 @@ def main():
     parser.add_argument("--rerun", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    table = cells(trials(args.main, args.rerun))
-    plot_cells(table, args.output)
-    print(json.dumps(table, indent=1, sort_keys=True))
+    rows = trials(args.main, args.rerun)
+    table = cells(rows)
+    order = cell_order(table)
+    plot_cells(table, args.output, order=order)
+    report = {"pooled": table}
+    # One figure per method, in the pooled cell order so the three compare row by row.
+    for method, (suffix, name) in METHOD_NAMES.items():
+        per_method = cells(rows, method)
+        output = args.output.with_name(
+            f"{args.output.stem}_{suffix}{args.output.suffix}"
+        )
+        plot_cells(per_method, output, order=order, scope=f"{name}; pooled cell order")
+        report[method] = per_method
+    print(json.dumps(report, indent=1, sort_keys=True))
 
 
 if __name__ == "__main__":

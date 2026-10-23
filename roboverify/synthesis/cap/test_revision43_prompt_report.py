@@ -6,7 +6,7 @@ from pathlib import Path
 from .revision43_prompt_report import cells, trials, wilson
 
 
-def write(root, job, cell, round0, final):
+def write(root, job, cell, round0, final, method="cap_method_1"):
     path = Path(root) / "trials" / job
     path.mkdir(parents=True)
     (path / "summary.json").write_text(
@@ -14,6 +14,7 @@ def write(root, job, cell, round0, final):
             {
                 "job_id": job,
                 "variant": cell,
+                "method": method,
                 "first_attempt_success": round0,
                 "task_success": final,
             }
@@ -35,6 +36,17 @@ class PromptReportTest(unittest.TestCase):
             table = cells(trials(main, rerun))
         self.assertEqual(table["p0001"], {"n": 2, "round0": 2, "final": 2})
         self.assertEqual(table["p0000"], {"n": 1, "round0": 0, "final": 1})
+
+    def test_cells_by_method(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            main = Path(tmp) / "main"
+            write(main, "a", "p0001", True, True, "cap_google_baseline")
+            write(main, "b", "p0001", False, True, "cap_method_2")
+            rows = trials(main)
+        self.assertEqual(
+            cells(rows, "cap_method_2")["p0001"], {"n": 1, "round0": 0, "final": 1}
+        )
+        self.assertEqual(cells(rows)["p0001"], {"n": 2, "round0": 1, "final": 2})
 
     def test_wilson_interval(self):
         low, high = wilson(105, 150)
