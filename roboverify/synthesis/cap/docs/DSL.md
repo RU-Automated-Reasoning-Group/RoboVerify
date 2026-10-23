@@ -50,20 +50,20 @@ experiments are excluded.
 | Stack | Stack all scattered blocks on the input base block `b0` | `RoboVerifyStack` / `make_roboverify_stack_env` | Shared task specification, explicit primitive reference program, and standard collection entry point |
 | Unstack | Dismantle a single tower and return all blocks to the table | `RoboVerifyUnstack` / `make_roboverify_unstack_env` | Shared symbolic task specification; physical table height must be retained; standard collection CLI does not yet support it |
 | Reverse | Reverse the vertical order of all blocks in the original tower | `RoboVerifyReverse` / `make_roboverify_reverse_env` | Environment checks full reversal; the standalone verifier with this name currently uses a dismantling program/specification |
-| ReStack | Start with potentially multiple towers, with `b0` possibly inside a tower; finish with all blocks stacked on base `b0` | `RoboVerifyPartialStack` / `make_roboverify_partial_stack_env` | Reset and final environment goal provide a basis for ReStack; the Partial standalone verifier does not implement this task |
+| ReStack | Start with potentially multiple towers, with `b0` possibly inside a tower; finish with all blocks stacked on base `b0` | `RoboVerifyRestack` / `make_roboverify_restack_env` (replaced `RoboVerifyPartialStack` upstream; merged 2026-10-23) | One lateral source tower containing `b0` plus loose table blocks; same success check as Stack; shared `task_spec` entry |
 | Grid | Place blocks at given grid goal positions | `RoboVerifyGrid` / `make_roboverify_grid_env` | Physical goal layout exists; no Goal DSL execution adapter connects it to the three primitives yet |
 | Pyramid | Place blocks at given pyramid goal positions | `RoboVerifyPyramid` / `make_roboverify_pyramid_env` | Currently fixed at six blocks in a `3+2+1` layout; also lacks Goal execution adaptation |
 
 Factories are in [mcmc/synthesis.py](../../mcmc/synthesis.py).
-`make_roboverify_env` accepts `stack/unstack/reverse/partial_stack/partial`;
-Grid/Pyramid require their respective factories. There is currently no `restack`
-string entry point. The grid factory defaults to `3×2`, with the block count equal
+`make_roboverify_env` accepts `stack/unstack/reverse/restack` (after the
+2026-10-23 upstream merge; before it, `partial_stack/partial` instead of
+`restack`); Grid/Pyramid require their respective factories. The grid factory defaults to `3×2`, with the block count equal
 to rows times columns.
 
-`PartialStack` is more general than adding scattered blocks to a single existing
-tower. Its [reset implementation](../../environment/cee_us_env/fpp_construction_env.py)
-randomly partitions blocks into at least two towers and allows `b0` inside a
-tower, providing a scene basis for the paper's ReStack task. An existing
+Before the 2026-10-23 upstream merge, `PartialStack` randomly partitioned blocks
+into at least two towers and allowed `b0` inside a tower. Upstream replaced it
+with `Restack`, whose [reset](../../environment/restack_reset.py) builds one
+lateral source tower containing `b0` plus loose table blocks. An existing
 environment does not establish complete integration of the corresponding
 program, DSL execution, demonstration collection, and proof.
 
@@ -436,8 +436,9 @@ The following table lists current gaps, rather than completed implementation:
 | Demonstrations and initialization | Full-state NPZ, Stack's 50-step preparation and restoration | Valid collection/preparation rules for the other five tasks; unverified historical fixtures must not serve as experts |
 | Evaluation | Environment success functions, run logger, recording | Fixed snapshots, independent outcome checks, failure classification, and budget records |
 
-Both `verify_reverse_with_learned_invariant.py` and
-`verify_partial_with_learned_invariant.py` currently construct a dismantling loop
+Before upstream removed them (commit `3537361`, merged 2026-10-23), both
+`verify_reverse_with_learned_invariant.py` and
+`verify_partial_with_learned_invariant.py` constructed a dismantling loop
 with `Put(selected,tbl)` and require no nontrivial ON*, equal physical block
 heights, and Scattered at the end. This does not verify the paper's
 Reverse/ReStack tasks. These existing implementation gaps are recorded in
@@ -476,5 +477,5 @@ experiments.
 | [mcmc/synthesis.py](../../mcmc/synthesis.py) | Six environment factories |
 | [fpp_construction_env.py](../../environment/cee_us_env/fpp_construction_env.py) | Reset, goal positions, initial aliases, and six-task success checks |
 | [examples/stack.py](../../examples/stack.py), [collect_demos.py](../../entry/collect_demos.py) | Explicit primitive example and current Stack collection scope |
-| [Unstack entry point](../../entry/verify_unstack_with_learned_invariant.py), [Reverse entry point](../../entry/verify_reverse_with_learned_invariant.py), [Partial entry point](../../entry/verify_partial_with_learned_invariant.py), [2D entry point](../../entry/verify_2d_with_learned_invariant.py) | Actual standalone verification programs and capability gaps |
+| [Unstack entry point](../../entry/verify_unstack_with_learned_invariant.py), [2D entry point](../../entry/verify_2d_with_learned_invariant.py) (the Reverse/Partial entry points were removed upstream) | Actual standalone verification programs and capability gaps |
 | [PAPER-DISCREPANCIES.md](../../../../PAPER-DISCREPANCIES.md) | Settled semantics, paper corrections, implementation gaps, and model limits |

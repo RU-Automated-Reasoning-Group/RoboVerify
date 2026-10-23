@@ -38,8 +38,20 @@
 | Task | Shared pre/post ([`cfg/tasks.py`](../../cfg/tasks.py)) | Physical success ([environment](../../environment/cee_us_env/fpp_construction_env.py)) | Standalone verifier pre/post |
 | --- | --- | --- | --- |
 | Unstack | pre `∀x. x = tbl ∨ ON_star(x, b0)`; post `∀x,y. ON_star(x, y) → x = y` | `_roboverify_unstack_all_on_ground`: every block at table height and no block on another | [verify_unstack](../../entry/verify_unstack_with_learned_invariant.py) |
-| Reverse | None | `_roboverify_reverse_tower_complete`: one tower whose bottom-to-top order is the reverse of the canonical start `[b0, …]` | [verify_reverse](../../entry/verify_reverse_with_learned_invariant.py) checks only the first loop, which puts every block on the table. Its postcondition matches Unstack's (singleton `ON_star`, equal height, Scattered) and says nothing about reversed order. Its precondition pins `ON_star_zero = ON_star` at entry. |
-| ReStack (`partial_stack`) | None; the name `restack` exists only in CaP | `_roboverify_stack_tower_complete`, the same evaluator as Stack: one tower rooted at b0, with b0 on the table. Start: `_reset_sim_roboverify_partial_stack`, a random partition into at least two towers. | [verify_partial](../../entry/verify_partial_with_learned_invariant.py) uses the Unstack postcondition. Its precondition, every block `ON_star(·, b0)`, describes a single tower and does not match the multi-tower start. |
+| Reverse | None | `_roboverify_reverse_tower_complete`: one tower whose bottom-to-top order is the reverse of the canonical start `[b0, …]` | `verify_reverse` (removed upstream) checks only the first loop, which puts every block on the table. Its postcondition matches Unstack's (singleton `ON_star`, equal height, Scattered) and says nothing about reversed order. Its precondition pins `ON_star_zero = ON_star` at entry. |
+| ReStack (`partial_stack`) | None; the name `restack` exists only in CaP | `_roboverify_stack_tower_complete`, the same evaluator as Stack: one tower rooted at b0, with b0 on the table. Start: `_reset_sim_roboverify_partial_stack`, a random partition into at least two towers. | `verify_partial` (removed upstream) uses the Unstack postcondition. Its precondition, every block `ON_star(·, b0)`, describes a single tower and does not match the multi-tower start. |
+
+**Update after merging upstream `main` (`67d48dc`, 2026-10-23).** This settles the source of the specifications. Upstream now defines both tasks in the shared [`task_spec`](../../cfg/tasks.py), and the entries above describe the earlier state.
+
+- **ReStack (`restack`):**
+  - pre: `b0 ≠ tbl` and every two physical blocks are tower-related or Scattered;
+  - post: every physical block is `ON_star(·, b0)`.
+  - Environment: `RoboVerifyRestack`, one lateral source tower containing `b0` plus loose blocks. It uses the same success check as Stack.
+- **Reverse:**
+  - pre: every physical block is `ON_star(·, b0)` and `ON_star_zero = ON_star`;
+  - post: for physical blocks, `ON_star_zero(x, y) ↔ ON_star(y, x)`, i.e. the order is reversed.
+- The standalone `verify_reverse`/`verify_partial` entry points above were removed upstream (`3537361`).
+- CaP `restack` now creates the upstream Restack environment (see [pre-merge review](pre_merge_upstream_main_20261023.md)). Adopting the shared pre/postconditions in CaP's `validate_start`/`evaluate_terminal` remains a Revision 5 item.
 
 Current CaP handling in [tasks.py](../tasks.py):
 
