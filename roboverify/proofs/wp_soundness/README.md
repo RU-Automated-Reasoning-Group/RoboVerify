@@ -91,6 +91,127 @@ one existential guard witness through an explicit Get and requires the
 invariant to survive rebinding that witness. It checks the scoping condition
 that is easy to leave implicit in a prose argument.
 
+`Command.branch` extends these soundness, no-fault, and loop-free exactness
+theorems to conditionals. `chooseIf_wp` derives the witness-selecting rule:
+
+```text
+wp(if get v satisfying G then C else D, Q)
+  = [forall v. G(v) => wp(C,Q)[v/name]]
+    and [(forall v. not G(v)) => wp(D,Q)].
+```
+
+The else branch retains the original name valuation. It is enabled when
+**no** eligible witness exists. A separate implication for every ineligible
+witness would incorrectly require an unreachable else branch to establish Q.
+Standalone Get additionally requires `exists v. G(v)`; an empty Get is a fault.
+Kernel-checked negative examples for both points are in
+[QuantifierLifting.lean](RoboVerify/QuantifierLifting.lean).
+
+## Shared height witnesses
+
+[WitnessWP.lean](RoboVerify/WitnessWP.lean) implements an alternative exact WP
+over the existing formula vocabulary. Its `wpPut_exact` and
+`wpSeparate_exact` cover **arbitrary postconditions**, including both
+quantifiers and negation, and use the same `PutStep`/`SeparateStep` execution
+relations as the original proofs. `wpPut_equiv` establishes equivalence with
+the existing guarded Put WP. These are alternatives in Lean; the production
+Python transformer has not been replaced.
+
+For physical objects, write the following as formula abbreviations:
+
+```text
+Maximum(b) = forall t. Higher(b,t)
+NextRep(b,u) = Higher(u,b) and not Higher(b,u)
+              and forall t.
+                (Higher(t,b) and not Higher(b,t)) => Higher(t,u)
+```
+
+`HeightWitness.nextRep_iff` proves that `NextRep(b,u)` means
+`level(u) = level(b)+1` in a well-formed scene. `coverage` proves that either
+b has maximum height or such a representative exists. This uses tower
+completeness, not an extra assumed adjacency axiom or finite enumeration.
+
+The new rule is:
+
+```text
+LegalPut(a,b)
+and (Maximum(b) => Q[maximum-height atom replacements])
+and forall u. NextRep(b,u) => Q[representative atom replacements].
+```
+
+For `Higher(a,c)` with c distinct from a, the representative replacement is
+`Higher(u,c)`; the maximum-height replacement is `True`. The implementation
+also handles operand equalities, table isolation, ON*, Scattered, and frozen
+ON*. `putAtom_qf` and `separateAtom_qf` prove the individual replacements are
+quantifier-free when the supplied row is. Table placement uses a shared
+bottom-height representative. No new relation symbols are introduced.
+
+The complete WP still has quantifiers. The change places universal selectors
+in implication antecedents around the **whole** rewritten postcondition,
+which is the polarity needed for the AER closure argument.
+
+## Restricted AER/EPR VC theorem
+
+[Fragments.lean](RoboVerify/Fragments.lean) uses a separate deep syntax to
+enforce function-free first-order matrices. Terms are variables or free
+parameters/constants; there are no object-valued function symbols, arrays,
+or quantifiers hidden in matrix atoms. A `Block` is a finite list-shaped tree
+of variable slots; it does not enumerate objects. The domain may be infinite.
+
+- `AF` permits Boolean combinations of universal-only or existential-only
+  blocks over quantifier-free matrices. This includes single-block AFR
+  specifications and explicitly fixes the paper's ambiguous terminology.
+- `AE` is a finite `forall* exists*` prefix with a QF matrix (AER).
+- `EA` is a finite `exists* forall*` prefix with a QF matrix (EPR).
+
+Checked normalization lemmas preserve meaning for conjunction, disjunction,
+AFR-antecedent implication, universal generalization, variable substitution,
+and QF atom replacement. `AE.eval_refute` proves that negating AER gives EPR.
+`EA.eval_close` existentially closes a finite set of free parameters while
+remaining EPR. No object-domain enumeration is needed.
+
+[FragmentVC.lean](RoboVerify/FragmentVC.lean) defines a restricted **normalizing
+VC generator**, including tuple-valued Get, witness-selecting if and while,
+sequencing, and abstract actions. Specifications and invariants are AF; all
+selection matrices G are QF. Every action must supply an AER transformer.
+`lift_AF_action` proves how the proposed uniform AFR-preservation assumption
+suffices: on a fixed nonempty object domain, the nonblocking demonic WP
+commutes with universal quantification of fresh logical parameters. Apply AFR
+preservation to the existential suffix, then restore the universal prefix.
+This is an explicit hypothesis, not a claim that current Put preserves AFR.
+`Rules.sharedPut_exact` instead gives the shared-witness construction directly
+in AER, using AF selectors and AER rewritten continuations.
+
+The two main fragment theorems are:
+
+```text
+Fragments.Program.vcgen_epr:
+  each generated VC has an equivalent EPR negation.
+
+Fragments.Program.vcgen_background_epr:
+  for an EPR background Gamma, each Gamma and not VC has an EPR representation.
+```
+
+[FragmentSoundness.lean](RoboVerify/FragmentSoundness.lean) interprets that
+generator in the existing RoboVerify scene and name-store model, with
+independently defined execution and faults. `Fragments.Program.verified_program`
+proves that valid generated VCs imply partial correctness and no reachable
+modeled fault, **provided the used abstract action transformers are sound
+and preserve well-formed scenes**. Selection and loop binding are modeled
+directly, including arbitrary finite tuples of witnesses.
+
+This establishes the restricted symbolic theorem and the alternative WP's
+soundness, not EPR membership of the current Python pipeline. Remaining
+connections are explicit: production guard matrices may themselves contain
+universals; current/frozen top-existence background axioms are not EPR as
+written; relational summaries quantify successor arrays; and no checked
+Python-to-Lean translator exists. The concrete `WitnessWP` formulas and the
+deep-syntax AER schema are proved separately; a complete compiler from the
+concrete action WP into that schema has not been checked. Well-formed scenes
+are semantic hypotheses, not a proved EPR encoding of all environment axioms.
+EPR decidability follows from the usual fragment theorem; this development
+does not mechanize an EPR decision procedure or certify Z3.
+
 ## Model assumptions to review
 
 For the new Higher/Scattered contracts, `RelationalSummary.wp_exact` equates
@@ -169,12 +290,12 @@ To review the proof, inspect the definitions of `WellFormed`, `Direct`,
 Lean validates the deductions from these definitions; choosing the right
 definitions remains a human review task.
 
-The production dispatcher still uses attachment-only ON* and does not encode
-all the clear guards. This formalization does not silently fix that mismatch;
-see [finding 30](../../../PAPER-DISCREPANCIES.md#30-stack-invariant-vocabulary-and-attachment-semantics).
+The production dispatcher now detaches before attachment and includes the
+clear-source/clear-target checks; see
+[finding 30](../../../PAPER-DISCREPANCIES.md#30-stack-invariant-vocabulary-and-attachment-semantics).
 There is no checked translation from Python ASTs or emitted Z3 formulas to
 these Lean formulas, no proof of the solver-axiom inclusion and geometric
-interpretation section, and no controller refinement or AFR-closure theorem.
-Tuple-valued Get and a direct formalization of the runtime's scoped While
-bindings are also outside this first version; the checked witness-loop result
-is the explicit single-name lowering described above.
+interpretation section, and no controller refinement or unconditional
+AFR-closure theorem for current actions. Tuple-valued selection is covered by
+the restricted generator above; correspondence with the Python runtime's
+scoped bindings remains separate from these abstract execution definitions.

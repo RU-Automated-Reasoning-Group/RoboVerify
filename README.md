@@ -214,6 +214,13 @@ including table-valued supports. Mechanical Python/Lean correspondence and
 physical refinement remain separate obligations; see
 [discrepancy 30](PAPER-DISCREPANCIES.md#30-stack-invariant-vocabulary-and-attachment-semantics).
 
+The Lean development also checks an exact shared-height-witness Put WP and a
+[restricted AER/EPR VC theorem](roboverify/proofs/wp_soundness/README.md#restricted-aerepr-vc-theorem),
+with execution/no-fault soundness for the restricted symbolic generator.
+This requires AF specifications, QF selection matrices, and sound AER action
+transformers. It does not establish EPR membership of the production pipeline
+or its background axioms; see [discrepancy 1](PAPER-DISCREPANCIES.md#1-theorem-52-contradicts-the-papers-own-table-7-r_higher).
+
 [Higher and Scattered action summaries](roboverify/synthesis/verification_lib/RELATIONAL-SUMMARIES.md)
 now have an explicit framed, nondeterministic WP contract. CFG summary inference
 recognizes these endpoint atoms, and motion checking must establish the endpoint,

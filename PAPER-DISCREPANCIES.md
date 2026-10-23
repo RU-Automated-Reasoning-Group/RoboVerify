@@ -62,6 +62,16 @@ auxiliaries (16); their effect depends on surrounding formula and polarity.
 Revise the closure/decidability claim and proof or qualify Higher. Do not change
 valid code merely to force the original theorem.
 
+The [Lean development](roboverify/proofs/wp_soundness/README.md#restricted-aerepr-vc-theorem)
+now checks a restricted replacement theorem: AF specifications/invariants,
+QF selection matrices, and certified AER action transformers produce VCs with
+EPR negations. Uniform AFR action preservation implies the required AER
+closure on a fixed nonempty domain. The restricted generator also has an
+execution/no-fault soundness proof. A shared-height-witness Put WP is separately
+proved exact under the complete-tower model; its individual atom replacements
+are QF. This does not establish the original AFR claim or certify current
+Python VCs, quantified guards, or non-EPR background axioms.
+
 ## 2. Rollouts from segment-initial states are required but never addressed
 
 **Implemented; paper omission.** Algorithm 5/§3.4 needs rollouts from each
