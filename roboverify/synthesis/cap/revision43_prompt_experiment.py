@@ -64,19 +64,50 @@ class HealthGate:
 
     A dead local server turns every new trial into an immediate transport
     failure, so dispatch stops instead of consuming the pending trials.
+
+    ``limit_path`` optionally names a JSON file ``{"max_active": N}`` that is
+    re-read before every dispatch. It lowers concurrency while a batch runs
+    (for example before serving GPUs are released) without interrupting
+    running trials; 0 pauses dispatch. Each change is appended to
+    ``dispatch_limit_events.jsonl`` next to the file.
     """
 
-    def __init__(self, gate, url, *, interval=10):
+    def __init__(self, gate, url, *, interval=10, limit_path=None):
         self.gate, self.url, self.interval = gate, url, interval
+        self.limit_path = Path(limit_path) if limit_path else None
         self.checked_at, self.healthy = 0.0, False
+        self.limit, self.limited = None, False
 
     @property
     def reason(self):
         if not self.healthy:
             return "model_endpoint_unavailable"
+        if self.limited:
+            return "dispatch_limit"
         return self.gate.reason if self.gate else "ready"
 
+    def _read_limit(self):
+        if self.limit_path is None or not self.limit_path.exists():
+            limit = None
+        else:
+            try:
+                limit = int(json.loads(self.limit_path.read_text())["max_active"])
+            except (ValueError, KeyError, TypeError):
+                return self.limit  # Keep the last valid value on a bad edit.
+        if limit != self.limit:
+            with (self.limit_path.parent / "dispatch_limit_events.jsonl").open(
+                "a"
+            ) as events:
+                events.write(json.dumps({"epoch": time.time(), "max_active": limit}))
+                events.write("\n")
+            self.limit = limit
+        return limit
+
     def __call__(self, job, active):
+        limit = self._read_limit()
+        self.limited = limit is not None and len(active) >= limit
+        if self.limited:
+            return False
         if time.time() - self.checked_at >= self.interval:
             request = urllib.request.Request(
                 self.url,

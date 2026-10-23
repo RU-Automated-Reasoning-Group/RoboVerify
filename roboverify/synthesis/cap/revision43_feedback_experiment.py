@@ -761,7 +761,9 @@ def main():
         result = execute(
             directory,
             resume=args.resume,
-            wrap_gate=lambda gate: HealthGate(gate, url),
+            wrap_gate=lambda gate: HealthGate(
+                gate, url, limit_path=directory / "dispatch_limit.json"
+            ),
         )
         print(json.dumps({"directory": str(directory)} | result), flush=True)
 

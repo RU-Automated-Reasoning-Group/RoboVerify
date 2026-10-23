@@ -68,6 +68,28 @@ class HealthGateTest(unittest.TestCase):
         self.assertEqual(gate.reason, "model_endpoint_unavailable")
         self.assertEqual(calls, [])
 
+    def test_dispatch_limit_file_caps_active_trials_and_logs_changes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            limit = Path(tmp) / "dispatch_limit.json"
+            gate = HealthGate(None, "http://127.0.0.1:9/v1/models", limit_path=limit)
+            gate.healthy, gate.checked_at = True, float("inf")
+            self.assertTrue(gate({"id": "a"}, [{}] * 5))
+            limit.write_text(json.dumps({"max_active": 2}))
+            self.assertFalse(gate({"id": "a"}, [{}, {}]))
+            self.assertEqual(gate.reason, "dispatch_limit")
+            self.assertTrue(gate({"id": "a"}, [{}]))
+            limit.write_text("not json")
+            self.assertFalse(gate({"id": "a"}, [{}, {}]))
+            limit.write_text(json.dumps({"max_active": 0}))
+            self.assertFalse(gate({"id": "a"}, []))
+            events = [
+                json.loads(line)["max_active"]
+                for line in (Path(tmp) / "dispatch_limit_events.jsonl")
+                .read_text()
+                .splitlines()
+            ]
+            self.assertEqual(events, [2, 0])
+
 
 if __name__ == "__main__":
     unittest.main()
