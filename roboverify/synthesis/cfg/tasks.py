@@ -32,6 +32,26 @@ def task_spec(task):
             ),
             forall(["x"], atom("ON_star", x, b0)),
         )
+    if task == "restack":
+        physical_x = negate(atom("eq", x, ref("tbl")))
+        physical_y = negate(atom("eq", y, ref("tbl")))
+        return (
+            conjunction(
+                negate(atom("eq", b0, ref("tbl"))),
+                forall(
+                    ["x", "y"],
+                    implies(
+                        conjunction(physical_x, physical_y),
+                        disjunction(
+                            atom("ON_star", x, y),
+                            atom("ON_star", y, x),
+                            atom("Scattered", x, y),
+                        ),
+                    ),
+                ),
+            ),
+            forall(["x"], implies(physical_x, atom("ON_star", x, b0))),
+        )
     if task == "unstack":
         return (
             forall(

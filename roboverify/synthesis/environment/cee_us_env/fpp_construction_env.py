@@ -13,6 +13,7 @@ from synthesis.environment.cee_us_env.abstract_environments import MaskedGoalSpa
 from synthesis.environment.cee_us_env.fpp_construction.construction import FetchBlockConstructionEnv
 from synthesis.environment.cee_us_env.robotics import GymRoboticsGroundTruthSupportEnv
 from synthesis.environment.goal_layout import GoalLayout, occupancy
+from synthesis.environment.restack_reset import resolve_tower_blocks, sample_restack_layout
 from synthesis.environment.stack_reset import sample_stack_xy
 from synthesis.environment.tower_reset import sample_tower_xy
 from synthesis.util.actions import bound_delta_action
@@ -31,6 +32,7 @@ ROBOVERIFY_CASES = (
     "RoboVerifyUnstack",
     "RoboVerifyReverse",
     "RoboVerifyPartialStack",
+    "RoboVerifyRestack",
 )
 
 import pdb
@@ -48,8 +50,14 @@ class FetchPickAndPlaceConstruction(
         shaped_reward,
         simple=False,
         base_block_id=None,
+        initial_tower_blocks=None,
         **kwargs,
     ):
+        self.restack_initial_tower_blocks = (
+            resolve_tower_blocks(kwargs["num_blocks"], initial_tower_blocks)
+            if kwargs.get("case") == "RoboVerifyRestack"
+            else None
+        )
         self.shaped_reward = shaped_reward
         self.sparse = sparse
         self.simple = simple
@@ -93,6 +101,7 @@ class FetchPickAndPlaceConstruction(
             sparse=sparse,
             shaped_reward=shaped_reward,
             base_block_id=base_block_id,
+            initial_tower_blocks=initial_tower_blocks,
             **kwargs,
         )
 
@@ -290,6 +299,7 @@ class FetchPickAndPlaceConstruction(
             "RoboVerifyUnstack",
             "RoboVerifyReverse",
             "RoboVerifyPartialStack",
+            "RoboVerifyRestack",
             "RoboVerifyGrid",
             "RoboVerifyPyramid",
         ]
@@ -433,6 +443,8 @@ class FetchPickAndPlaceConstruction(
             return self._reset_sim_roboverify_stack()
         if self.case == "RoboVerifyPartialStack":
             return self._reset_sim_roboverify_partial_stack()
+        if self.case == "RoboVerifyRestack":
+            return self._reset_sim_roboverify_restack()
         if self.case == "RoboVerifyGrid":
             return self._reset_sim_roboverify_grid()
         if self.case == "RoboVerifyPyramid":
@@ -571,6 +583,23 @@ class FetchPickAndPlaceConstruction(
                 object_qpos[2] = self.height_offset + level * block_height
                 self.sim.data.set_joint_qpos(f"{obj_name}:joint", object_qpos)
 
+        self.sim.forward()
+        return True
+
+    def _reset_sim_roboverify_restack(self):
+        self.sim.set_state(self.initial_state)
+        xy, levels = sample_restack_layout(
+            self.num_blocks,
+            self.restack_initial_tower_blocks,
+            self.roboverify_base_block_id,
+            self.robot_base_xy,
+            self.initial_gripper_xpos[:2],
+        )
+        for block_id, name in enumerate(self.object_names):
+            qpos = self.sim.data.get_joint_qpos(f"{name}:joint")
+            qpos[:2] = xy[block_id]
+            qpos[2] = self.height_offset + levels[block_id] * BLOCK_LENGTH
+            self.sim.data.set_joint_qpos(f"{name}:joint", qpos)
         self.sim.forward()
         return True
 
@@ -1310,7 +1339,7 @@ class FetchPickAndPlaceConstruction(
         return True
 
     def _roboverify_task_complete(self, positions: np.ndarray) -> bool:
-        if self.case in ("RoboVerifyStack", "RoboVerifyPartialStack"):
+        if self.case in ("RoboVerifyStack", "RoboVerifyPartialStack", "RoboVerifyRestack"):
             return self._roboverify_stack_tower_complete(positions)
         if self.case == "RoboVerifyUnstack":
             return self._roboverify_unstack_all_on_ground(positions)

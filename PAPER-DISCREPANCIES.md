@@ -943,3 +943,84 @@ goals. Specify closure-inclusive row traversal, including h0. Verification also
 needs a sufficient-block premise; otherwise the inner guard can stop with goals
 unfilled. The existing partial-correctness VCs alone do not establish termination
 (15). No synthesis or formal verification result is claimed for these executions.
+
+## 41. Restack needs a terminating first loop and an executable lateral layout
+
+**Paper corrections and execution support; synthesis/verification not claimed.**
+The 2026-10-23 review compared Fig. 10d, Appendix B/Table 8 and Fig. 16 with the
+existing `RoboVerifyPartialStack` environment. That historical environment
+randomly partitioned blocks over the whole workspace; it did not provide the
+requested lateral layout or a collector-ready Restack program.
+
+**Paper issues:**
+
+- Fig. 16's first guard selects a clear block ON* b0. Because ON* is reflexive,
+  b0 continues to satisfy the guard after it has been placed on the table.
+  Literal execution therefore keeps moving b0 and never reaches the second loop.
+- Table 8 requires distinct ON*-related blocks to be Scattered, contradicting
+  the intended initial towers. The executable collection contract instead
+  requires each pair of physical blocks to be comparable by ON* or Scattered;
+  its postcondition is that every physical block is ON* b0. The isolated tbl
+  marker is excluded from these physical quantifiers.
+- The printed invariant I2 contains a free `x`. No printed invariant is supplied
+  to the executor and no verification result is inferred from the paper.
+
+**Executable adaptation:** [`examples/restack.py`](roboverify/synthesis/examples/restack.py)
+retains the two flat loops and the six primitive transfers of Fig. 16. A cursor
+`p <- tbl` records each newly parked block. The first guard additionally excludes
+`p`, and each iteration ends with `p <- b_prime`. This transfers the blocks above
+b0 and then b0 exactly once; when p becomes b0, the guard becomes false.
+The second phase starts `b <- b0` and repeatedly transfers a clear physical
+block other than b onto the destination, then assigns `b <- b_prime`.
+It can dismantle a remaining tower below b0 while rebuilding on the new base.
+
+For the requested geometry, first-phase placement uses
+`Move(tbl, p, tbl, (+0.45, -0.12, +0.05))`: table-relative X fixes a column,
+previous placement Y advances a separated temporary row, and table Z supplies
+the resting height. The first p is tbl. The last temporary placement is b0 and
+becomes the new tower base. Stack placement uses b0 for XY and b for support Z.
+The paper's dynamic Xm/Zm references are replaced with these ordinary reference
+operands and fixed table-relative clearance `N*0.05 + 0.10` m above its support
+reference. The table-placement +0.05 m follows the existing support convention;
+the paper's zero offset would put the target below the surface under that
+convention. These are explicit waypoint adaptations, not a literal transcription.
+All parameters remain trainable. Controllers, tolerances and instruction budgets
+are unchanged; payload-aware feedback remains deferred.
+
+`RoboVerifyRestack` and `make_roboverify_restack_env` supply one randomized source
+tower with b0 at a random interior level (at the top for a two-block tower), plus
+loose blocks. Total count defaults to four and initial height to max(2, N-1).
+The source tower uses base-relative X [0.54, 0.70] m and Y [0.15, 0.25] m;
+loose blocks may extend closer in X to 0.40 m. Every source remains on the
+higher-Y side. Distinct columns have at least 105 mm separation along an axis,
+with 100 mm clearance from the initial gripper. Bounded sampling rejects layouts
+that cannot fit; this region accommodates at most three source columns.
+There is no 2–4-block restriction in the program, but arbitrary counts/heights
+are not a reachability guarantee. The historical PartialStack factory remains
+separate and unchanged.
+
+`collect_demos --task restack` defaults to the new reference program, accepts
+`--initial-tower-blocks`, settles for 50 steps, and records both loop traces,
+aliases, actions and full simulator snapshots. Each accepted trajectory must
+finish with converged primitives and satisfy its pre/postcondition. Saved starts
+and action replay restore exactly without settling again. This uses the shared
+collector and ordinary Program/While execution, without a runtime monkey patch.
+
+**Validation:** six Restack regression tests and 36 shared tests passed. Tests
+cover bounded/randomized resets, both phases and termination, the designated
+base postcondition, snapshot/action replay, and rejected controller or budget
+failures. Four-block, three-block-source runs passed on seeds 0–4. Five-block
+runs passed on seeds 0–4 for both a three-block source plus two loose blocks and
+a four-block source plus one loose block, including both interior b0 levels.
+All 15 recorded executions completed a physical tower on b0, with every primitive
+converged (maximum 18/50 steps). The largest final XY distance from b0 was
+15.48 mm. This measures ordinary grasp/placement offset, not feedback correction.
+
+Archives, per-seed reports and videos are under:
+
+- `roboverify/demos/restack/4-blocks-5-trajectories/`
+- `roboverify/demos/restack/5-blocks-3-tower-5-trajectories/`
+- `roboverify/demos/restack/5-blocks-4-tower-5-trajectories/`
+
+The aggregate diagnostic is `roboverify/demos/restack/validation.json`.
+These are empirical execution results, not a symbolic or motion proof.

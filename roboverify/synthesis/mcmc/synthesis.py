@@ -844,6 +844,24 @@ def make_roboverify_reverse_env(
     )
 
 
+def make_roboverify_restack_env(
+    num_blocks: int = 4,
+    render_mode: str = "rgb_array",
+    *,
+    initial_tower_blocks: int | None = None,
+) -> GymToGymnasium:
+    """Create a lateral source tower containing b0, plus loose blocks."""
+    return GymToGymnasium(
+        FetchPickAndPlaceConstruction(
+            name=f"roboverify_restack_{num_blocks}",
+            num_blocks=num_blocks,
+            initial_tower_blocks=initial_tower_blocks,
+            **{**ROBOVERIFY_PARTIAL_STACK_ENV_KWARGS, "case": "RoboVerifyRestack"},
+        ),
+        render_mode=render_mode,
+    )
+
+
 def make_roboverify_partial_stack_env(
     num_blocks: int = 4,
     render_mode: str = "rgb_array",
@@ -901,8 +919,18 @@ def make_roboverify_env(
     task: str,
     num_blocks: int = 4,
     render_mode: str = "rgb_array",
+    *,
+    initial_tower_blocks: int | None = None,
 ) -> GymToGymnasium:
-    """Create a RoboVerify env for stack / unstack / reverse / partial_stack tasks."""
+    """Create a RoboVerify tower-task environment."""
+    if task == "restack":
+        return make_roboverify_restack_env(
+            num_blocks=num_blocks,
+            render_mode=render_mode,
+            initial_tower_blocks=initial_tower_blocks,
+        )
+    if initial_tower_blocks is not None:
+        raise ValueError("initial_tower_blocks requires the Restack task")
     if task == "stack":
         return make_roboverify_stack_env(num_blocks=num_blocks, render_mode=render_mode)
     if task == "unstack":

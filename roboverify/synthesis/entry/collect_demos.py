@@ -1,6 +1,6 @@
-"""Collect Stack, Reverse, Grid or Pyramid DSL demonstrations, with optional videos.
+"""Collect tower, Grid or Pyramid DSL demonstrations, with optional videos.
 
-Stack/Grid/Pyramid hold the initial gripper position for 50 settling steps; Reverse records
+Stack/Restack/Grid/Pyramid hold the gripper for 50 settling steps; Reverse records
 the lateral tower reset directly.
 """
 
@@ -78,15 +78,20 @@ def build_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--program",
-        help="module:factory or path/to/program.py:factory; defaults to the provided Grid/Pyramid groundtruth",
+        help="module:factory or path/to/program.py:factory; defaults to the provided Restack/Grid/Pyramid groundtruth",
     )
     parser.add_argument(
-        "--task", choices=["stack", "reverse", *GOAL_TASKS], default="stack"
+        "--task", choices=["stack", "reverse", "restack", *GOAL_TASKS], default="stack"
     )
     parser.add_argument(
         "--num-blocks",
         type=int,
-        help="Defaults to 3 for tower tasks; derived from the goal layout otherwise",
+        help="Defaults to 4 for Restack, 3 for Stack/Reverse; derived from goal layouts",
+    )
+    parser.add_argument(
+        "--initial-tower-blocks",
+        type=int,
+        help="Restack source tower height; remaining blocks start loose (default max(2, N-1))",
     )
     parser.add_argument("--grid-rows", type=int, help="Grid rows (default 3)")
     parser.add_argument("--grid-cols", type=int, help="Grid columns (default 2)")
@@ -132,6 +137,8 @@ def collect(args, parser):
         seeds = resolve_seeds(args)
         goal_task = args.task in GOAL_TASKS
         environment_config = None
+        if args.initial_tower_blocks is not None and args.task != "restack":
+            raise ValueError("--initial-tower-blocks requires --task restack")
         if goal_task:
             args.num_blocks, environment_config = resolve_goal_configuration(
                 args.task,
@@ -149,7 +156,20 @@ def collect(args, parser):
                 for value in (args.grid_rows, args.grid_cols, args.bottom_row_blocks)
             ):
                 raise ValueError("Goal layout options require --task grid or pyramid")
-            args.num_blocks = 3 if args.num_blocks is None else args.num_blocks
+            if args.num_blocks is None:
+                args.num_blocks = 4 if args.task == "restack" else 3
+            if args.task == "restack":
+                from synthesis.environment.restack_reset import resolve_tower_blocks
+
+                args.initial_tower_blocks = resolve_tower_blocks(
+                    args.num_blocks, args.initial_tower_blocks
+                )
+                environment_config = dict(
+                    initial_tower_blocks=args.initial_tower_blocks
+                )
+                args.program = (
+                    args.program or "synthesis.examples.restack:build_program"
+                )
             if not args.program:
                 raise ValueError("--program is required for Stack and Reverse")
         if (
@@ -162,7 +182,9 @@ def collect(args, parser):
             )
         if args.save_video:
             VideoRecorder.check_available()
-        context = HighLevelContext(mode="declare", use_tbl=args.task == "reverse")
+        context = HighLevelContext(
+            mode="declare", use_tbl=args.task in ("reverse", "restack")
+        )
         reference = load_program(
             args.program, context, args.num_blocks, allow_goal_program=goal_task
         )

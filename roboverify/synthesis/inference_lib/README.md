@@ -162,6 +162,57 @@ synthesis CLI still exposes Stack and Unstack. The historical standalone Reverse
 verifier encodes a different task and is not a verifier for this program; see
 [discrepancy 39](../../../PAPER-DISCREPANCIES.md#39-the-historical-reverse-verifier-encodes-unstack-rather-than-reversal).
 
+## Collect Restack demonstrations
+
+Restack uses the two-phase program adapted from Fig. 16: free the designated b0,
+then build a complete tower on it. The source tower and loose blocks start on
+the higher-Y side of the robot. Temporary placements form a row toward lower Y;
+b0 is the last parked block and becomes the base of the new tower there.
+
+```bash
+uv run python -m synthesis.entry.collect_demos --task restack --num-blocks 4 --save-video
+uv run python -m synthesis.entry.collect_demos --task restack --num-blocks 5 --initial-tower-blocks 3 --save-video
+uv run python -m synthesis.entry.collect_demos --task restack --num-blocks 5 --initial-tower-blocks 4 --save-video
+```
+
+`--num-blocks` is the total (default four). `--initial-tower-blocks` specifies
+how many start in the tower (default max(2, N-1)); the others start loose.
+With five blocks, heights three and four produce respectively two and one loose
+blocks. Tower membership/order, its XY, loose-block XY and b0's interior level
+are randomized. A two-block source places b0 on top. The source tower shares
+Unstack/Reverse's base-relative X [0.54, 0.70] m, Y [0.15, 0.25] m workspace;
+loose blocks may extend to X = 0.40 m. The bounded sampler preserves at least
+105 mm separation between columns and refuses layouts that do not fit.
+At most three separate source columns fit this region; configuring a count
+is not a guarantee of physical success for arbitrary heights.
+
+The default factory is [`synthesis.examples.restack:build_program`](../examples/restack.py).
+Explicit `--program` accepts a replacement primitive program. Both phases run
+through ordinary While/Program execution; the collector saves both loops and
+full-state snapshots after 50 settling steps. Restore/replay uses those states
+without settling again. Accepted runs require primitive convergence, normal
+termination, separated/comparable source blocks, and all physical blocks ON* b0
+at the end. Budgets and failure/archive handling match the other collection tasks.
+
+The supplied program corrects the paper's first-loop guard, which would continue
+selecting b0 after placing it on the table. `p <- tbl` tracks the last parked
+block, the first guard excludes p, and `p <- b_prime` ends each iteration.
+Once p is b0 that loop exits. The second loop starts `b <- b0` and handles every
+remaining clear block. Table-relative XY offsets and clearance adapt the paper's
+waypoints to the lateral setup, using unchanged primitive controllers. These
+changes and the Table 8 precondition correction are documented in
+[discrepancy 41](../../../PAPER-DISCREPANCIES.md#41-restack-needs-a-terminating-first-loop-and-an-executable-lateral-layout).
+This is supplied-program execution/collection; Restack synthesis and formal
+verification have not been added.
+
+Five-seed collections passed for four blocks and both five-block layouts above.
+All 15 filmed trajectories formed a complete physical tower, with converged
+primitives. Data and videos are in `demos/restack/4-blocks-5-trajectories/`,
+`demos/restack/5-blocks-3-tower-5-trajectories/` and
+`demos/restack/5-blocks-4-tower-5-trajectories/`; the aggregate diagnostic is
+`demos/restack/validation.json`. The six Restack tests and 36 shared regression
+tests passed, including exact snapshot/action replay of both phases.
+
 ## Collect Grid and Pyramid demonstrations
 
 The collector now uses the provided goal-traversal groundtruth by default for

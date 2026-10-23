@@ -172,7 +172,7 @@ def record_execution(
 ):
     """Record a program from its task reset or an exact saved snapshot.
 
-    Fresh Stack/Grid/Pyramid collection holds the gripper for 50 steps before
+    Fresh Stack/Restack/Grid/Pyramid collection holds the gripper for 50 steps before
     recording. A supplied snapshot is already the requested start: never reset
     or settle it again. Settling is outside demo actions, events, and video.
     Optional guard_choices replay an enabled binding prefix for counterexamples;
@@ -229,13 +229,15 @@ def record_execution(
                     lambda: (
                         make_goal_env(task, environment_config or {})
                         if task in GOAL_TASKS
-                        else make_roboverify_env(task, num_blocks=num_blocks)
+                        else make_roboverify_env(
+                            task, num_blocks=num_blocks, **(environment_config or {})
+                        )
                     )
                 )
             )()
             if initial_snapshot is None:
                 first = env.reset()[0]
-                if task in ("stack", *GOAL_TASKS):
+                if task in ("stack", "restack", *GOAL_TASKS):
                     target = first[:3].copy()
                     inner = inner_env(env)
                     for _ in range(STACK_SETTLING_STEPS):
@@ -251,6 +253,10 @@ def record_execution(
                         "Goal environment block count does not match the collection"
                     )
                 metadata["environment"] = environment_configuration(inner)
+            if task == "restack":
+                metadata["environment"] = dict(
+                    initial_tower_blocks=inner_env(env).restack_initial_tower_blocks
+                )
             inner_env(env).symbolic_name_to_box_id.update(definition.initial_bindings)
             collect_recording(
                 definition.program,

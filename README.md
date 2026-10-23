@@ -134,6 +134,18 @@ Goal-aware synthesis and verification remain separate work. Execution and
 collection evidence is recorded in
 [discrepancy 40](PAPER-DISCREPANCIES.md#40-grid-and-pyramid-execution-and-verification-have-separate-support).
 
+Restack now supports a lateral source tower plus loose blocks and collection
+with an adapted version of the paper's two-phase program. `--num-blocks` sets
+the total and `--initial-tower-blocks` sets the source height; b0 starts inside
+the tower. Source blocks stay on the higher-Y side, leaving the lower-Y side for
+temporary placements and the rebuilt tower. `collect_demos --task restack`
+defaults to the supplied program. The printed guard's nontermination and the
+lateral waypoint adaptations are documented in
+[discrepancy 41](PAPER-DISCREPANCIES.md#41-restack-needs-a-terminating-first-loop-and-an-executable-lateral-layout).
+See the [collection guide](roboverify/synthesis/inference_lib/README.md#collect-restack-demonstrations).
+Execution/collection is supported; Restack synthesis and formal verification
+have not been added.
+
 The supported scope is structured chains and flat loops for the tower tasks;
 the integrated synthesis CLI exposes Stack and Unstack. A successful
 `verified_model` result establishes partial correctness in the documented

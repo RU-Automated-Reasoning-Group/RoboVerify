@@ -76,6 +76,18 @@ goal topology, cursor bindings and nested-loop events. `execute_goal_program`
 remains the execution-only entry point. Goal occupancy is independent of block
 identity. Goal-aware synthesis and verification remain unsupported; see
 [discrepancy 40](PAPER-DISCREPANCIES.md#40-grid-and-pyramid-execution-and-verification-have-separate-support).
+Restack now supports a lateral source tower plus loose blocks and collection
+with an adapted version of the paper's two-phase program. `--num-blocks` sets
+the total and `--initial-tower-blocks` sets the source height; b0 starts inside
+the tower. Source blocks stay on the higher-Y side, leaving the lower-Y side for
+temporary placements and the rebuilt tower. `collect_demos --task restack`
+defaults to the supplied program. The printed guard's nontermination and the
+lateral waypoint adaptations are documented in
+[discrepancy 41](PAPER-DISCREPANCIES.md#41-restack-needs-a-terminating-first-loop-and-an-executable-lateral-layout).
+See the [collection guide](roboverify/synthesis/inference_lib/README.md#collect-restack-demonstrations).
+Execution/collection is supported; Restack synthesis and formal verification
+have not been added.
+
 Stack collection holds the initial gripper position for 50 steps before
 recording; the settled full snapshot becomes state zero. Synthesis, candidate
 verification, and standalone MCMC restore archived states without repeating
@@ -322,7 +334,7 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
     MuJoCo env, mutates programs (`mutate_program`), scores candidates by trajectory
     divergence from demos (via `cost_func`) combined with BMC feasibility checks
     (`check_bmc_candidate`/`score_candidate_program`), and drives the outer `MCMC(...)` search
-    loop. Also has the `make_roboverify_*_env` factories (stack/unstack/reverse/partial/grid/
+    loop. Also has the `make_roboverify_*_env` factories (stack/unstack/reverse/restack/partial/grid/
     pyramid) and video/frame saving utilities.
   - `decision_tree.py`: a compatibility alias only. `ON_feature` now resolves to
     `predicates.atoms.GroundON`; the shallow-tree feature learner it used to hold was
@@ -363,7 +375,10 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   Grid/Pyramid directory names also include layout dimensions. Goal tasks default
   to `synthesis.examples.grid:build_program` / `synthesis.examples.pyramid:build_program`;
   `--grid-rows`, `--grid-cols` and `--bottom-row-blocks` determine their block counts.
-  Optional MP4s run at 20 FPS. Reverse uses `synthesis.examples.reverse:build_program`;
+  Restack defaults to `synthesis.examples.restack:build_program`;
+  `--initial-tower-blocks` configures its source tower and the remaining blocks
+  start loose. Restack uses the same 50-step settling policy and records both
+  flat loops. Optional MP4s run at 20 FPS. Reverse uses `synthesis.examples.reverse:build_program`;
   its validation compares current ON* with transposed frozen entry ON*.
   It requires primitive DSL programs; PickPlace is rejected. The collection loader
   opts into nested goal programs; synthesis/verification loading keeps that mode
@@ -399,6 +414,11 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   Table-relative XY offsets (default +0.45, -0.15 m) position the destination;
   `b` supplies support height and becomes the newly placed block after each transfer.
 
+- **`synthesis/environment/restack_reset.py`** — bounded lateral source sampling
+  for Restack. The tower shares Unstack/Reverse bounds; loose blocks may extend
+  to base-relative X = 0.40 m. All initial blocks have Y in [0.15, 0.25] m.
+  Source columns remain Scattered; b0 starts inside the configured source tower.
+
 - **`synthesis/environment/stack_reset.py`** — Stack-only bounded reset sampling.
   Initial block centers have base-relative X in [0.54, 0.70] m, Y in [-0.20,
   0.20] m, and XY radius at most 0.70 m. Retain Scattered separation and 0.10 m
@@ -410,7 +430,7 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   `fetch_block_construction`. Observations pack agent state first, then per-block state in
   fixed-width slots; the `10 + 12*i : 10 + 12*i + 3` box-position slice convention recurs
   across `instructions.py`, `on.py`, and the `While` guard evaluator — keep it in sync if the
-  observation layout ever changes. The four tower tasks expose
+  observation layout ever changes. The tower tasks expose
   `table_surface_height` separately (the world z of the simulator's table plane)
   and `table_position` (the physical frame origin). `height_offset` is the resting
   block-center height; relational `tbl` still has no predicate coordinates.
