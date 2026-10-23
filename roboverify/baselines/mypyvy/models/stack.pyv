@@ -1,0 +1,90 @@
+# Inference experiment: domain axioms supplied; no supporting invariants.
+# Same initialization, transitions, and two safety goals as stack-implementation.pyv.
+sort block
+immutable constant b0: block
+mutable constant b: block
+mutable relation done()
+mutable relation on_star(block, block)
+mutable relation higher(block, block)
+mutable relation scattered(block, block)
+
+# Domain axioms are assumed at every state, including transition endpoints.
+# mypyvy's `axiom` keyword is restricted to immutable symbols. A derived
+# relation's constraint is asserted at every state by its solver. This nullary
+# carrier is forced true and introduces no additional information beyond the
+# following 14 block-domain axioms. No paper invariant clauses are supplied.
+derived relation domain_axioms():
+  domain_axioms &
+  # on_transitive
+  (forall X, Y, Z. on_star(X, Y) & on_star(Y, Z) -> on_star(X, Z)) &
+  # on_reflexive
+  (forall X. on_star(X, X)) &
+  # on_predecessor_linear
+  (forall X, Y, Z. on_star(X, Y) & on_star(X, Z) -> on_star(Y, Z) | on_star(Z, Y)) &
+  # on_successor_linear
+  (forall X, Y, Z. on_star(X, Z) & on_star(Y, Z) -> on_star(X, Y) | on_star(Y, X)) &
+  # on_antisymmetric
+  (forall X, Y. on_star(X, Y) & on_star(Y, X) -> X = Y) &
+  # top_exists
+  (forall X. exists Y. on_star(Y, X) & (forall Z. on_star(Z, Y) -> Z = Y)) &
+  # height_transitive
+  (forall X, Y, Z. higher(X, Y) & higher(Y, Z) -> higher(X, Z)) &
+  # height_reflexive
+  (forall X. higher(X, X)) &
+  # height_comparable
+  (forall X, Y, Z. higher(X, Y) & higher(X, Z) -> higher(Y, Z) | higher(Z, Y)) &
+  # on_implies_height
+  (forall X, Y. on_star(X, Y) -> higher(X, Y)) &
+  # strict_on_height
+  (forall X, Y. on_star(X, Y) & X != Y -> !higher(Y, X)) &
+  # scattered_symmetric
+  (forall X, Y. scattered(X, Y) <-> scattered(Y, X)) &
+  # scattered_irreflexive
+  (forall X. !scattered(X, X)) &
+  # scattered_chain
+  (forall X, Y, Z. on_star(X, Y) -> (scattered(X, Z) <-> scattered(Y, Z)))
+
+definition eligible(p: block) =
+  p != b & (forall N. N = p | !on_star(N, p))
+
+# Initial configuration from the paper, including reflexivity of on_star.
+init b = b0
+init !done
+init forall M, N. on_star(M, N) <-> M = N
+init forall M, N. higher(M, N)
+init forall M, N. scattered(M, N) <-> M != N
+
+transition stack_step(p: block)
+  modifies b, on_star, higher, scattered
+  !done & eligible(p) & !on_star(b, p) &
+  new(b) = p &
+  (forall X, Y. new(on_star(X, Y)) <->
+    on_star(X, Y) | (on_star(X, p) & on_star(b, Y))) &
+  (forall M, N. new(higher(M, N)) <->
+    (M != p & M != b & N != p & N != b & higher(M, N)) |
+    (M != p & M != b & N = p &
+      (higher(M, b) & !higher(b, M))) |
+    (M != p & M != b & N = b & higher(M, N)) |
+    (M = b & N != p & N != b & higher(M, N)) |
+    (M = b & N = b) |
+    (M = p & N != p & N != b &
+      (higher(b, N) | (forall T. higher(N, b) &
+        ((higher(N, T) & !higher(T, N)) -> higher(b, T))))) |
+    (M = p & N = b) |
+    (M = p & N = p)) &
+  (forall M, N. new(scattered(M, N)) <->
+    (M != p & M != b & N != p & N != b & scattered(M, N)) |
+    (M != p & M != b & N = b & scattered(M, N)) |
+    (M != p & M != b & N = p & scattered(M, b)) |
+    (M = p & N != p & N != b & scattered(b, N)) |
+    (M = b & N != p & N != b & scattered(M, N)))
+
+transition finish()
+  modifies done
+  !done & !(exists P. eligible(P)) & new(done)
+
+# Check the abstract action's precondition as a safety obligation so that
+# guarding stack_step by it cannot hide a failing program execution.
+safety [put_enabled] !done -> (forall P. eligible(P) -> !on_star(b, P))
+# Equivalent prenex form lets UPDR recognize the universal safety clause.
+safety [postcondition] forall M. done -> on_star(M, b0)

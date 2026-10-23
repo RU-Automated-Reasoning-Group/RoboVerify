@@ -1,0 +1,66 @@
+# Physical blocks plus an isolated relational table marker.
+sort block
+immutable constant b0: block
+immutable constant tbl: block
+axiom b0 != tbl
+mutable relation done()
+mutable relation on_star(block, block)
+mutable relation higher(block, block)
+mutable relation scattered(block, block)
+
+# The same 14 domain axioms as the supplied Stack baseline, plus table isolation.
+# These are assumptions at every state, not inferred loop invariants.
+derived relation domain_axioms():
+  domain_axioms &
+  (forall X, Y, Z. on_star(X,Y) & on_star(Y,Z) -> on_star(X,Z)) &
+  (forall X. on_star(X,X)) &
+  (forall X, Y, Z. on_star(X,Y) & on_star(X,Z) -> on_star(Y,Z) | on_star(Z,Y)) &
+  (forall X, Y, Z. on_star(X,Z) & on_star(Y,Z) -> on_star(X,Y) | on_star(Y,X)) &
+  (forall X, Y. on_star(X,Y) & on_star(Y,X) -> X = Y) &
+  (forall X. exists Y. on_star(Y,X) & (forall Z. on_star(Z,Y) -> Z = Y)) &
+  (forall X, Y, Z. higher(X,Y) & higher(Y,Z) -> higher(X,Z)) &
+  (forall X. higher(X,X)) &
+  (forall X, Y, Z. higher(X,Y) & higher(X,Z) -> higher(Y,Z) | higher(Z,Y)) &
+  (forall X, Y. on_star(X,Y) -> higher(X,Y)) &
+  (forall X, Y. on_star(X,Y) & X != Y -> !higher(Y,X)) &
+  (forall X, Y. scattered(X,Y) <-> scattered(Y,X)) &
+  (forall X. !scattered(X,X)) &
+  (forall X, Y, Z. on_star(X,Y) -> (scattered(X,Z) <-> scattered(Y,Z))) &
+  (forall X. on_star(X,tbl) | on_star(tbl,X) -> X = tbl) &
+  (forall X. higher(X,tbl) | higher(tbl,X) -> X = tbl) &
+  (forall X. !scattered(X,tbl))
+
+definition clear(p: block) = forall N. on_star(N,p) -> N = p
+definition ground(p: block) = forall N. N != tbl -> higher(N,p)
+
+init !done
+init forall X. X != tbl -> on_star(X,b0)
+
+# Copy the executable guard exactly; only physical blocks can be witnesses.
+# In particular, do not replace it by p != b0 without a cardinality premise.
+definition eligible(p: block) =
+  p != tbl &
+  (forall N. N != tbl & (on_star(b0,p) | on_star(N,b0)) -> on_star(p,N))
+
+transition unstack_step(p: block)
+  modifies on_star, higher, scattered
+  !done & eligible(p) & clear(p) &
+  # A clear source is detached and placed on a fresh tabletop column.
+  (forall X, Y. new(on_star(X,Y)) <->
+    X = Y | (X != p & Y != p & on_star(X,Y))) &
+  (forall X, Y. new(higher(X,Y)) <->
+    (X != p & Y != p & higher(X,Y)) |
+    (X = p & Y = p) |
+    (X = p & Y != p & ground(Y)) |
+    (X != p & X != tbl & Y = p)) &
+  (forall X, Y. new(scattered(X,Y)) <->
+    X != tbl & Y != tbl & X != Y &
+    (X = p | Y = p | scattered(X,Y)))
+
+transition finish()
+  modifies done
+  !done & !(exists P. eligible(P)) & new(done)
+
+# Do not hide an executable guard match behind the abstract action precondition.
+safety [put_enabled] forall P. !done & eligible(P) -> clear(P)
+safety [postcondition] forall X, Y. done & on_star(X,Y) -> X = Y

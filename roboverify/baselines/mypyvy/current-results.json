@@ -1,0 +1,351 @@
+{
+  "date": "2026-10-23",
+  "description": "Single-run observations; no physical or termination proof. Full artifacts are generated under ignored runs/.",
+  "runs": [
+    {
+      "result": {
+        "schema_version": 1,
+        "family": "mypyvy",
+        "task": "stack",
+        "solver": "cvc5",
+        "status": "verified",
+        "proof_scope": "unbounded_abstract_partial_safety",
+        "supplied_supporting_invariants": false,
+        "phases": [
+          {
+            "phase": "typecheck",
+            "status": "typechecked",
+            "returncode": 0,
+            "timed_out": false,
+            "elapsed_seconds": 0.31681985780596733
+          },
+          {
+            "phase": "trace",
+            "status": "consistent",
+            "returncode": 0,
+            "timed_out": false,
+            "elapsed_seconds": 0.3673442807048559
+          },
+          {
+            "phase": "updr",
+            "status": "inferred",
+            "returncode": 0,
+            "timed_out": false,
+            "elapsed_seconds": 4.370340781286359
+          },
+          {
+            "phase": "verify",
+            "status": "verified",
+            "returncode": 0,
+            "timed_out": false,
+            "elapsed_seconds": 0.5683362782001495
+          }
+        ],
+        "output_directory": "runs/baselines/mypyvy/stack-cvc5-checked",
+        "elapsed_seconds": 5.789248488843441
+      },
+      "config": {
+        "task": "stack",
+        "solver": "cvc5",
+        "timeout_seconds": 90.0,
+        "query_timeout_ms": 5000,
+        "seed": 0,
+        "mode": "infer",
+        "model_sha256": "296b6ee52fece99831410b20418cc6380ea67da5e0c8271a79f2f0fff7bd1087",
+        "adapter_sha256": "8fa72564a66e749206684fdd08ea05db2d1dcd29d5840db923eb4a58628fc5c9",
+        "mypyvy_commit": "cd80557ae11f5958c7c81dbecf3b24f7a3b16c1f",
+        "versions": {
+          "python": "3.12.3",
+          "z3": "4.16.0",
+          "networkx": "3.4.2",
+          "flask": "3.1.2"
+        },
+        "cvc5_version": "This is cvc5 version 1.3.1 [git ea1b484 on branch HEAD]",
+        "cvc5_binary_sha256": "3ac157cf769c8fbaafe72e16179f062950c55a0537efb2bd15d5bc4d6793b16b"
+      }
+    },
+    {
+      "result": {
+        "schema_version": 1,
+        "family": "mypyvy",
+        "task": "unstack",
+        "solver": "cvc5",
+        "status": "verified",
+        "proof_scope": "unbounded_abstract_partial_safety",
+        "supplied_supporting_invariants": false,
+        "phases": [
+          {
+            "phase": "typecheck",
+            "status": "typechecked",
+            "returncode": 0,
+            "timed_out": false,
+            "elapsed_seconds": 0.31660984084010124
+          },
+          {
+            "phase": "trace",
+            "status": "consistent",
+            "returncode": 0,
+            "timed_out": false,
+            "elapsed_seconds": 0.3667306564748287
+          },
+          {
+            "phase": "updr",
+            "status": "inferred",
+            "returncode": 0,
+            "timed_out": false,
+            "elapsed_seconds": 19.23297304660082
+          },
+          {
+            "phase": "verify",
+            "status": "verified",
+            "returncode": 0,
+            "timed_out": false,
+            "elapsed_seconds": 1.067761393263936
+          }
+        ],
+        "output_directory": "runs/baselines/mypyvy/unstack-cvc5-checked",
+        "elapsed_seconds": 21.184040056541562
+      },
+      "config": {
+        "task": "unstack",
+        "solver": "cvc5",
+        "timeout_seconds": 45,
+        "query_timeout_ms": 5000,
+        "seed": 0,
+        "mode": "infer",
+        "model_sha256": "dd935712f06eeb40f635b1b8c8b809bbe927e5ab94df21ce87d7191fded790fe",
+        "adapter_sha256": "7dc5cc86a66e8318f3cd54533a0d7d908c0f6210f70c6fdd9966cb67f8b1a83a",
+        "mypyvy_commit": "cd80557ae11f5958c7c81dbecf3b24f7a3b16c1f",
+        "versions": {
+          "python": "3.12.3",
+          "z3": "4.16.0",
+          "networkx": "3.4.2",
+          "flask": "3.1.2"
+        },
+        "cvc5_version": "This is cvc5 version 1.3.1 [git ea1b484 on branch HEAD]",
+        "cvc5_binary_sha256": "3ac157cf769c8fbaafe72e16179f062950c55a0537efb2bd15d5bc4d6793b16b"
+      }
+    },
+    {
+      "result": {
+        "schema_version": 1,
+        "family": "mypyvy",
+        "task": "reverse",
+        "solver": "cvc5",
+        "status": "verified",
+        "proof_scope": "unbounded_abstract_partial_safety",
+        "supplied_supporting_invariants": false,
+        "phases": [
+          {
+            "phase": "typecheck",
+            "status": "typechecked",
+            "returncode": 0,
+            "timed_out": false,
+            "elapsed_seconds": 0.31656589917838573
+          },
+          {
+            "phase": "trace",
+            "status": "consistent",
+            "returncode": 0,
+            "timed_out": false,
+            "elapsed_seconds": 0.3668764475733042
+          },
+          {
+            "phase": "updr",
+            "status": "inferred",
+            "returncode": 0,
+            "timed_out": false,
+            "elapsed_seconds": 160.7076345961541
+          },
+          {
+            "phase": "verify",
+            "status": "verified",
+            "returncode": 0,
+            "timed_out": false,
+            "elapsed_seconds": 1.6190346106886864
+          }
+        ],
+        "output_directory": "runs/baselines/mypyvy/reverse-cvc5-checked",
+        "elapsed_seconds": 163.1762649193406
+      },
+      "config": {
+        "task": "reverse",
+        "solver": "cvc5",
+        "timeout_seconds": 240.0,
+        "query_timeout_ms": 5000,
+        "seed": 0,
+        "mode": "infer",
+        "model_sha256": "94109e13e9f0e48db6530a7cc12bf4ed7a94f2a21b9b3a0edb1e41e8e469ba42",
+        "adapter_sha256": "8fa72564a66e749206684fdd08ea05db2d1dcd29d5840db923eb4a58628fc5c9",
+        "mypyvy_commit": "cd80557ae11f5958c7c81dbecf3b24f7a3b16c1f",
+        "versions": {
+          "python": "3.12.3",
+          "z3": "4.16.0",
+          "networkx": "3.4.2",
+          "flask": "3.1.2"
+        },
+        "cvc5_version": "This is cvc5 version 1.3.1 [git ea1b484 on branch HEAD]",
+        "cvc5_binary_sha256": "3ac157cf769c8fbaafe72e16179f062950c55a0537efb2bd15d5bc4d6793b16b"
+      }
+    },
+    {
+      "result": {
+        "schema_version": 1,
+        "family": "mypyvy",
+        "task": "stack",
+        "solver": "z3",
+        "status": "unknown",
+        "proof_scope": "unbounded_abstract_partial_safety",
+        "supplied_supporting_invariants": false,
+        "phases": [
+          {
+            "phase": "typecheck",
+            "status": "typechecked",
+            "returncode": 0,
+            "timed_out": false,
+            "elapsed_seconds": 0.31690085493028164
+          },
+          {
+            "phase": "trace",
+            "status": "consistent",
+            "returncode": 0,
+            "timed_out": false,
+            "elapsed_seconds": 0.36730101332068443
+          },
+          {
+            "phase": "updr",
+            "status": "unknown",
+            "returncode": 1,
+            "timed_out": false,
+            "elapsed_seconds": 15.588653098791838
+          }
+        ],
+        "output_directory": "runs/baselines/mypyvy/stack-z3-checked",
+        "elapsed_seconds": 16.41083601489663
+      },
+      "config": {
+        "task": "stack",
+        "solver": "z3",
+        "timeout_seconds": 45,
+        "query_timeout_ms": 5000,
+        "seed": 0,
+        "mode": "infer",
+        "model_sha256": "296b6ee52fece99831410b20418cc6380ea67da5e0c8271a79f2f0fff7bd1087",
+        "adapter_sha256": "8fa72564a66e749206684fdd08ea05db2d1dcd29d5840db923eb4a58628fc5c9",
+        "mypyvy_commit": "cd80557ae11f5958c7c81dbecf3b24f7a3b16c1f",
+        "versions": {
+          "python": "3.12.3",
+          "z3": "4.16.0",
+          "networkx": "3.4.2",
+          "flask": "3.1.2"
+        }
+      }
+    },
+    {
+      "result": {
+        "schema_version": 1,
+        "family": "mypyvy",
+        "task": "unstack",
+        "solver": "z3",
+        "status": "unknown",
+        "proof_scope": "unbounded_abstract_partial_safety",
+        "supplied_supporting_invariants": false,
+        "phases": [
+          {
+            "phase": "typecheck",
+            "status": "typechecked",
+            "returncode": 0,
+            "timed_out": false,
+            "elapsed_seconds": 0.3167529460042715
+          },
+          {
+            "phase": "trace",
+            "status": "consistent",
+            "returncode": 0,
+            "timed_out": false,
+            "elapsed_seconds": 0.3669641315937042
+          },
+          {
+            "phase": "updr",
+            "status": "unknown",
+            "returncode": 1,
+            "timed_out": false,
+            "elapsed_seconds": 22.02945875376463
+          }
+        ],
+        "output_directory": "runs/baselines/mypyvy/unstack-z3-checked",
+        "elapsed_seconds": 22.82914988324046
+      },
+      "config": {
+        "task": "unstack",
+        "solver": "z3",
+        "timeout_seconds": 45,
+        "query_timeout_ms": 5000,
+        "seed": 0,
+        "mode": "infer",
+        "model_sha256": "dd935712f06eeb40f635b1b8c8b809bbe927e5ab94df21ce87d7191fded790fe",
+        "adapter_sha256": "8fa72564a66e749206684fdd08ea05db2d1dcd29d5840db923eb4a58628fc5c9",
+        "mypyvy_commit": "cd80557ae11f5958c7c81dbecf3b24f7a3b16c1f",
+        "versions": {
+          "python": "3.12.3",
+          "z3": "4.16.0",
+          "networkx": "3.4.2",
+          "flask": "3.1.2"
+        }
+      }
+    },
+    {
+      "result": {
+        "schema_version": 1,
+        "family": "mypyvy",
+        "task": "reverse",
+        "solver": "z3",
+        "status": "unknown",
+        "proof_scope": "unbounded_abstract_partial_safety",
+        "supplied_supporting_invariants": false,
+        "phases": [
+          {
+            "phase": "typecheck",
+            "status": "typechecked",
+            "returncode": 0,
+            "timed_out": false,
+            "elapsed_seconds": 0.3168918117880821
+          },
+          {
+            "phase": "trace",
+            "status": "consistent",
+            "returncode": 0,
+            "timed_out": false,
+            "elapsed_seconds": 0.3667516987770796
+          },
+          {
+            "phase": "updr",
+            "status": "unknown",
+            "returncode": 1,
+            "timed_out": false,
+            "elapsed_seconds": 17.934255687519908
+          }
+        ],
+        "output_directory": "runs/baselines/mypyvy/reverse-z3-checked",
+        "elapsed_seconds": 18.738925287500024
+      },
+      "config": {
+        "task": "reverse",
+        "solver": "z3",
+        "timeout_seconds": 45.0,
+        "query_timeout_ms": 5000,
+        "seed": 0,
+        "mode": "infer",
+        "model_sha256": "94109e13e9f0e48db6530a7cc12bf4ed7a94f2a21b9b3a0edb1e41e8e469ba42",
+        "adapter_sha256": "8fa72564a66e749206684fdd08ea05db2d1dcd29d5840db923eb4a58628fc5c9",
+        "mypyvy_commit": "cd80557ae11f5958c7c81dbecf3b24f7a3b16c1f",
+        "versions": {
+          "python": "3.12.3",
+          "z3": "4.16.0",
+          "networkx": "3.4.2",
+          "flask": "3.1.2"
+        }
+      }
+    }
+  ]
+}

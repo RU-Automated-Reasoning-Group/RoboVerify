@@ -1,0 +1,82 @@
+# Physical blocks plus an isolated relational table marker.
+sort block
+immutable constant b0: block
+immutable constant tbl: block
+axiom b0 != tbl
+mutable relation done()
+mutable relation on_star(block, block)
+mutable relation higher(block, block)
+mutable relation scattered(block, block)
+
+# The same 14 domain axioms as the supplied Stack baseline, plus table isolation.
+# These are assumptions at every state, not inferred loop invariants.
+derived relation domain_axioms():
+  domain_axioms &
+  (forall X, Y, Z. on_star(X,Y) & on_star(Y,Z) -> on_star(X,Z)) &
+  (forall X. on_star(X,X)) &
+  (forall X, Y, Z. on_star(X,Y) & on_star(X,Z) -> on_star(Y,Z) | on_star(Z,Y)) &
+  (forall X, Y, Z. on_star(X,Z) & on_star(Y,Z) -> on_star(X,Y) | on_star(Y,X)) &
+  (forall X, Y. on_star(X,Y) & on_star(Y,X) -> X = Y) &
+  (forall X. exists Y. on_star(Y,X) & (forall Z. on_star(Z,Y) -> Z = Y)) &
+  (forall X, Y, Z. higher(X,Y) & higher(Y,Z) -> higher(X,Z)) &
+  (forall X. higher(X,X)) &
+  (forall X, Y, Z. higher(X,Y) & higher(X,Z) -> higher(Y,Z) | higher(Z,Y)) &
+  (forall X, Y. on_star(X,Y) -> higher(X,Y)) &
+  (forall X, Y. on_star(X,Y) & X != Y -> !higher(Y,X)) &
+  (forall X, Y. scattered(X,Y) <-> scattered(Y,X)) &
+  (forall X. !scattered(X,X)) &
+  (forall X, Y, Z. on_star(X,Y) -> (scattered(X,Z) <-> scattered(Y,Z))) &
+  (forall X. on_star(X,tbl) | on_star(tbl,X) -> X = tbl) &
+  (forall X. higher(X,tbl) | higher(tbl,X) -> X = tbl) &
+  (forall X. !scattered(X,tbl))
+
+definition clear(p: block) = forall N. on_star(N,p) -> N = p
+definition ground(p: block) = forall N. N != tbl -> higher(N,p)
+
+init !done
+init forall X. X != tbl -> on_star(X,b0)
+
+immutable relation on_star_zero(block, block)
+mutable constant b: block
+init b = tbl
+init forall X, Y. on_star_zero(X,Y) <-> on_star(X,Y)
+
+definition eligible(p: block) =
+  p != tbl & p != b & on_star(p,b0) & clear(p)
+
+# On supported unit-height towers this expresses Y's next occupied level above B.
+definition adjacent_above(y: block, support: block) =
+  higher(y,support) &
+  (forall T. higher(y,T) & !higher(T,y) -> higher(support,T))
+
+transition reverse_step(p: block)
+  modifies b, on_star, higher, scattered
+  !done & eligible(p) & (b = tbl | clear(b)) & !on_star(b,p) &
+  new(b) = p &
+  # Detach the old source edges before attaching p above the destination.
+  # Table placement leaves p an isolated singleton in on_star.
+  (forall X, Y. new(on_star(X,Y)) <->
+    X = Y | (X != p & Y != p & on_star(X,Y)) |
+    (X = p & b != tbl & Y != tbl & on_star(b,Y))) &
+  (forall X, Y. new(higher(X,Y)) <->
+    (X != p & Y != p & higher(X,Y)) |
+    (X = p & Y = p) |
+    (X = p & Y != p &
+      ((b = tbl & ground(Y)) |
+       (b != tbl & (higher(b,Y) | adjacent_above(Y,b))))) |
+    (X != p & X != tbl & Y = p &
+      (b = tbl | (higher(X,b) & !higher(b,X))))) &
+  (forall X, Y. new(scattered(X,Y)) <->
+    X != tbl & Y != tbl & X != Y &
+    ((X != p & Y != p & scattered(X,Y)) |
+     (X = p & (b = tbl | scattered(b,Y))) |
+     (Y = p & (b = tbl | scattered(X,b)))))
+
+transition finish()
+  modifies done
+  !done & !(exists P. eligible(P)) & new(done)
+
+safety [put_enabled] forall P. !done & eligible(P) ->
+  (b = tbl | clear(b)) & !on_star(b,P)
+safety [postcondition] forall X, Y. done & X != tbl & Y != tbl ->
+  (on_star_zero(X,Y) <-> on_star(Y,X))
