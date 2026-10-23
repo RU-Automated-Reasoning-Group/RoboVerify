@@ -101,17 +101,22 @@ We ran the free MiniMax M3.1 Flash model to see which weaknesses a less capable 
 
 Design: [revision_4_2_fix_primitive_noncovergence.md](revision_4_2_fix_primitive_noncovergence.md). Each change can be switched on or off independently, and all three methods share one rendering path.
 
-| Kind | Switch | Adds |
-| --- | --- | --- |
-| Prompt | `explain_target_offsets` | `offset = desired_gripper − reference`, how to account for the carried block's displacement, and a numeric right/wrong example |
-| Prompt | `explain_convergence_criteria` | When each phase of Pick, Move and Release counts as complete; the 3D 2 mm tolerance; one 50-step budget shared by all phases |
-| Prompt | `explain_partial_execution` | A failed primitive may already have moved objects or opened the gripper; nothing is rolled back |
-| Prompt | `explain_motion_planning_limits` | Move has no obstacle avoidance or automatic waypoints; lift, transfer and descent must be written explicitly |
-| Feedback | `target_derivation` | For each axis: reference block and its coordinate, the offset, and the resulting fixed target |
-| Feedback | `controller_phases` | Which controller phases completed, which phase failed, the measured value against its threshold, and steps per phase |
-| Feedback | `action_context` | The preceding converged action and the local Pick → transport sequence, with geometry before and after |
+| Kind | Switch | Adds | Example |
+| --- | --- | --- | --- |
+| Prompt | `explain_target_offsets` | `offset = desired_gripper − reference`, how to account for the carried block's displacement, and a numeric right/wrong example | [round-0 prompt, line 108](../../../runs/cap-revision42/20261021-174848-minimax-220/trials/cap_google_baseline-dsl_only-001-recovery-on-full/cap/20261021-174853-29d9ebf-cap_google_baseline-recovery-e2f7152e/attempts/round_000/cap/20261021-174855-29d9ebf-cap_google_baseline-stack-9f035ef7/artifacts/trial_001/lmp/call_0001/prompt.txt#L108) |
+| Prompt | `explain_convergence_criteria` | When each phase of Pick, Move and Release counts as complete; the 3D 2 mm tolerance; one 50-step budget shared by all phases | [round-0 prompt, line 118](../../../runs/cap-revision42/20261021-174848-minimax-220/trials/cap_google_baseline-dsl_only-001-recovery-on-full/cap/20261021-174853-29d9ebf-cap_google_baseline-recovery-e2f7152e/attempts/round_000/cap/20261021-174855-29d9ebf-cap_google_baseline-stack-9f035ef7/artifacts/trial_001/lmp/call_0001/prompt.txt#L118) |
+| Prompt | `explain_partial_execution` | A failed primitive may already have moved objects or opened the gripper; nothing is rolled back | [round-0 prompt, line 133](../../../runs/cap-revision42/20261021-174848-minimax-220/trials/cap_google_baseline-dsl_only-001-recovery-on-full/cap/20261021-174853-29d9ebf-cap_google_baseline-recovery-e2f7152e/attempts/round_000/cap/20261021-174855-29d9ebf-cap_google_baseline-stack-9f035ef7/artifacts/trial_001/lmp/call_0001/prompt.txt#L133) |
+| Prompt | `explain_motion_planning_limits` | Move has no obstacle avoidance or automatic waypoints; lift, transfer and descent must be written explicitly | [round-0 prompt, line 141](../../../runs/cap-revision42/20261021-174848-minimax-220/trials/cap_google_baseline-dsl_only-001-recovery-on-full/cap/20261021-174853-29d9ebf-cap_google_baseline-recovery-e2f7152e/attempts/round_000/cap/20261021-174855-29d9ebf-cap_google_baseline-stack-9f035ef7/artifacts/trial_001/lmp/call_0001/prompt.txt#L141) |
+| Feedback | `target_derivation` | For each axis: reference block and its coordinate, the offset, and the resulting fixed target | [round-1 feedback, line 239](../../../runs/cap-revision42/20261021-174848-minimax-220/trials/cap_google_baseline-dsl_only-001-recovery-on-full/cap/20261021-174853-29d9ebf-cap_google_baseline-recovery-e2f7152e/artifacts/trial_001/rounds/000/feedback.json#L239) |
+| Feedback | `controller_phases` | Which controller phases completed, which phase failed, the measured value against its threshold, and steps per phase | [round-1 feedback, line 292](../../../runs/cap-revision42/20261021-174848-minimax-220/trials/cap_google_baseline-dsl_only-001-recovery-on-full/cap/20261021-174853-29d9ebf-cap_google_baseline-recovery-e2f7152e/artifacts/trial_001/rounds/000/feedback.json#L292) |
+| Feedback | `action_context` | The preceding converged action and the local Pick → transport sequence, with geometry before and after | [round-1 feedback, line 316](../../../runs/cap-revision42/20261021-174848-minimax-220/trials/cap_google_baseline-dsl_only-001-recovery-on-full/cap/20261021-174853-29d9ebf-cap_google_baseline-recovery-e2f7152e/artifacts/trial_001/rounds/000/feedback.json#L316) |
 
 The prompt additions are present from the first attempt. The feedback enrichments only take effect after an executed failure.
+
+All examples come from one trial: [MiniMax Baseline trial 1, profile `full`](../../../runs/cap-revision42/20261021-174848-minimax-220/trials/cap_google_baseline-dsl_only-001-recovery-on-full/cap/20261021-174853-29d9ebf-cap_google_baseline-recovery-e2f7152e/).
+- The prompt links point into its round-0 prompt, which contains all four blocks.
+- The feedback links point into the structured feedback built from its failed round 0 (Move nonconvergence) and sent with the round-1 request, which recovered.
+- These files live under `runs/`, which git ignores, so the links resolve only in a checkout that has the run folders.
 
 ### 2.2 Experiment
 
