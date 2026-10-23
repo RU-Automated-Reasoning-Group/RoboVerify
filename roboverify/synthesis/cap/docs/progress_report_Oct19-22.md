@@ -77,23 +77,23 @@ We ran the free MiniMax M3.1 Flash model to see which weaknesses a less capable 
 
 - **Primitive nonconvergence dominates.**
 
-  | Failure | Initial failures | Unrecovered trials |
-  | --- | ---: | ---: |
-  | Move | 75 | 9 |
-  | Pick | 12 | 5 |
-  | Release | 5 | 2 |
-  | **Total** | **92 of 159** | **16 of 29** |
+  | Failure | Initial failures | Unrecovered trials | Example trial |
+  | --- | ---: | ---: | --- |
+  | Move | 75 | 9 | [MiniMax Method 1 trial 18](../../../runs/cap-revision4-minimax31flash/20261020-152924-free-300/trials/cap_method_1-dsl_only-018-recovery-on/): Move fails in four of five rounds (Release in round 3) |
+  | Pick | 12 | 5 | [MiniMax Method 1 trial 20](../../../runs/cap-revision4-minimax31flash/20261020-152924-free-300/trials/cap_method_1-dsl_only-020-recovery-on/): Pick fails initially and finally |
+  | Release | 5 | 2 | Initial: [MiniMax Method 2 trial 6](../../../runs/cap-revision4-minimax31flash/20261020-152924-free-300/trials/cap_method_2-dsl_only-006-recovery-on/). Unrecovered: [MiniMax Method 2 trial 3](../../../runs/cap-revision4-minimax31flash/20261020-152924-free-300/trials/cap_method_2-dsl_only-003-recovery-on/) |
+  | **Total** | **92 of 159** | **16 of 29** | |
 
 - **What goes wrong:**
-  - Confusing absolute coordinates with relative offsets. For example, a target 1.4 m away is commanded where 0.1 m was intended.
-  - Moving straight to the placement without first lifting and transferring.
-  - Choosing a Release retreat height that is too low.
-- **The feedback already contained the target and the residual.** The model still had to work out by itself how the target followed from the reference block and the offset. 128 of the 130 successful repairs changed a Move call.
+  - Confusing absolute coordinates with relative offsets. For example, a target 1.4 m away is commanded where 0.1 m was intended. Example: [MiniMax Method 1 trial 37](../../../runs/cap-revision4-minimax31flash/20261020-152924-free-300/trials/cap_method_1-dsl_only-037-recovery-on/), round 1.
+  - Moving straight to the placement without first lifting and transferring. Example: [Haiku Method 1 trial 4](../../../runs/cap-revision4-haiku55/20261019-225124/trials/cap_method_1-dsl_only-004-recovery-on/), round 0.
+  - Choosing a Release retreat height that is too low. Example: [MiniMax Baseline trial 48](../../../runs/cap-revision4-minimax31flash/20261020-152924-free-300/trials/cap_google_baseline-dsl_only-048-recovery-on/), round 1.
+- **The feedback already contained the target and the residual.** The model still had to work out by itself how the target followed from the reference block and the offset. 128 of the 130 successful repairs changed a Move call. Example: [MiniMax Baseline trial 3](../../../runs/cap-revision4-minimax31flash/20261020-152924-free-300/trials/cap_google_baseline-dsl_only-003-recovery-on/), where the round-4 repair restores higher Move waypoints and succeeds.
 - **Other gaps found** (kept in the [backlog](revision_4_unimplemented.md)):
-  - Loop-progress summaries.
-  - Namespace diagnosis: 8 of 10 NameErrors come from Baseline's `exec` scoping, not from a missing assignment.
-  - Explanations for queries that find no witness.
-  - **Earlier programs are absent from history.** 169 feedbacks summarize earlier failures without their source code.
+  - Loop-progress summaries. Example: [MiniMax Method 1 trial 29](../../../runs/cap-revision4-minimax31flash/20261020-152924-free-300/trials/cap_method_1-dsl_only-029-recovery-on/), which completes 253–267 primitive calls per round before exhausting the execution budget.
+  - Namespace diagnosis: 8 of 10 NameErrors come from Baseline's `exec` scoping, not from a missing assignment. Example: [MiniMax Baseline trial 17](../../../runs/cap-revision4-minimax31flash/20261020-152924-free-300/trials/cap_google_baseline-dsl_only-017-recovery-on/) (`NameError: base` in rounds 0 and 1).
+  - Explanations for queries that find no witness. Example: [MiniMax Method 2 trial 26](../../../runs/cap-revision4-minimax31flash/20261020-152924-free-300/trials/cap_method_2-dsl_only-026-recovery-on/), rounds 3 and 4.
+  - **Earlier programs are absent from history.** 169 feedbacks summarize earlier failures without their source code. Example: [MiniMax Method 1 trial 18](../../../runs/cap-revision4-minimax31flash/20261020-152924-free-300/trials/cap_method_1-dsl_only-018-recovery-on/), whose last recovery request sees three earlier failed programs only as one-line summaries.
 
 ## 2. Revision 4.2: prompt and feedback changes for primitive nonconvergence
 
