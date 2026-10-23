@@ -207,8 +207,24 @@ This is a bounded noiseless waypoint result, not physical refinement or a proof
 for the actual reset heights. Neither the executable nor the production motion
 semantics was changed. See the [configuration and artifacts](roboverify/synthesis/cfg/VERIFICATION.md#verification-of-the-current-unstack-revision).
 
-Keep end-to-end Unstack invocations within **60 seconds**; exhausted budgets and
-inconclusive proofs are unsuccessful results.
+**Shared-pipeline inference and symbolic verification, 2026-10-23.** The current
+provided program now uses `Put(b_prime,tbl)` in the shared verifier. Learning
+from all 60 heads/exits of the 15 four-block starts passes all 12 symbolic checks,
+including unbounded establishment, preservation and exit. The 68-second run
+includes about 41 seconds of learning/coverage and 16 seconds of symbolic checks.
+Current motion encoding still rejects the observation-relative coordinates;
+this does not extend the historical bounded motion claim. The user suspended
+the earlier 60-second cap for this feasibility investigation; commands now use
+an explicit 600-second budget. Timeouts and UNKNOWN remain unsuccessful results.
+
+Figure 14's supplied invariant refers to an undefined b. The separately named
+`unstack_paper_base` interpretation substitutes b0, but the final checker finds
+an unbounded preservation countermodel consisting only of tbl with b0=tbl.
+The precondition excludes that state; the printed invariant does not retain the
+type fact needed at a general loop head. Explicitly adding `b0 != tbl` in
+`unstack_paper_physical_base` passes all 12 checks. This is a supplied control,
+not the learned formula, and supersedes the earlier successful control observation.
+See the [current commands, controls and artifacts](roboverify/synthesis/cfg/VERIFICATION.md#provided-unstack-and-reverse-verification).
 
 ## 11. Corrected plan/code restriction: loop guards may have multiple witnesses
 
@@ -813,10 +829,28 @@ final-state validation. All 54 focused controller, task execution, collection,
 replay and motion tests passed. Table-relative semantics enter fingerprints for
 programs using table references; earlier first-block-outside-loop archives remain
 historical artifacts.
-This is empirical evidence, not a symbolic/motion proof or controller refinement.
-Connecting the correct Reverse abstraction, invariant learning and motion
-contracts to a verifier remains open. See the
+That collection evidence alone was not a symbolic/motion proof or controller refinement.
+The subsequent shared-pipeline run now learns from all 75 heads/exits of 15
+four-block executions and passes all 12 symbolic checks, including the unbounded
+proof, for `Put(b_prime,b); b <- b_prime`. Both b=tbl and b!=tbl WP branches are
+checked. The learned run requesting both proof levels takes 164.9 s and reports
+`motion_unverified`: table coordinates and tower-root selection remain unsupported.
+Its extra refuted motion checks arise under an incomplete translation and do not
+establish a simulator collision. No stronger primitive was introduced. See the
 [program, collection and evidence](roboverify/synthesis/inference_lib/README.md#collect-reverse-demonstrations).
+
+**Figure 15 invariant/guard discrepancy.** The literal formula contains `tbk`;
+`reverse_paper_table` explicitly interprets it as tbl. Even after that correction,
+clause 6, `ON*(b,u) => not ON*(u,b0)`, excludes b=b0 by reflexivity. The current
+program transfers the original base last and exits with b=b0, so preservation
+fails and the exit premises are inconsistent. Changing only that clause to
+`ON*(b,u) => (b=b0 or not ON*(u,b0))` yields the separately named
+`reverse_paper_final` control, which passes all 12 checks. The printed guard
+also matches Unstack's stopping condition rather than this all-block Reverse
+loop. These are candidate paper corrections, not evidence that the literal
+printed program/invariant was proved. Literal formulas remain available and
+supplied controls never trigger inference repair. See the
+[verification controls](roboverify/synthesis/cfg/VERIFICATION.md#paper-invariant-controls).
 
 ## 40. Grid and Pyramid execution and verification have separate support
 
@@ -1064,8 +1098,9 @@ references. A Move freezes its target before its servo loop; this preserves the
 original horizontal transfer. Two- and four-block seed-0 executions were compared
 against saved pre-migration executions: every action and observation was identical.
 No payload-feedback skill, tolerance change or relaxed step limit was introduced.
-The reference semantics enter fingerprints. Collection explicitly opts in, while
-the normal synthesis/verification loader rejects these unencoded references.
+The reference semantics enter fingerprints. Collection explicitly opts in.
+The later supplied-program verification path also opts in for execution and
+inference; ordinary search/loading still rejects the unencoded references.
 
 `collect_demos --task TASK` now selects a provided groundtruth for all six tasks.
 The old `unstack_lateral` runner, monkey-patched controllers and compatibility
@@ -1108,7 +1143,8 @@ The 82 focused tests passed across reference semantics, archive auditing,
 collection/replay, controllers, task removal, inference entry points, goal
 layouts, Pyramid seed 12, Restack and Reverse. These are execution results and
 regressions. No new symbolic or motion verification result, and no full synthesis
-run, is claimed by this audit. The integrated CLI still exposes Stack/Unstack;
-current Unstack runtime references, Reverse/Restack integration and goal-aware
-synthesis/verification remain open. Historical proof evidence retains its
-recorded executable, premises and workspace scope.
+run, is claimed by this audit. Subsequent Unstack/Reverse shared-pipeline symbolic
+proofs are recorded separately in entries 10 and 39; their current motion
+encoding, Restack integration and goal-aware synthesis/verification remain open.
+Historical proof evidence retains its recorded executable, premises and workspace
+scope.

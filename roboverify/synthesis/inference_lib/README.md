@@ -150,8 +150,11 @@ base and moves each clear upper block 15 cm toward decreasing Y. `Y_min` and
 `Z_m` select physical block coordinates at instruction entry; `gripper` captures
 the current gripper position. Each Move freezes its target throughout execution.
 These are coordinate references for Move/Release, not physical Pick operands.
-The reference semantics enter fingerprints, and ordinary synthesis/verification
-loading rejects them until they have proof support. Collection opts in explicitly.
+The reference semantics enter fingerprints. Collection and supplied-program
+verification opt in for execution/inference; ordinary synthesis loading rejects
+them and motion encoding remains incomplete. The shared pipeline now learns an
+invariant and proves the current Unstack abstraction; see the
+[tower verification guide](../cfg/VERIFICATION.md#provided-unstack-and-reverse-verification).
 Direct reset, controller tolerances and step budgets are unchanged. The old
 experiment wrapper has been removed. Use smaller seed batches when rendering
 so each Unstack invocation remains within the 60-second wall-clock limit.
@@ -648,6 +651,23 @@ heuristic search for a smaller equivalent Boolean expression; a globally minimum
 formula is not guaranteed. It can reduce minimization time, but truth-table
 enumeration, predicate selection and Z3 verification still contribute to runtime.
 End-to-end speedups require measuring the workload.
+
+For tower contexts with the top-existence axiom, quantified Z3 satisfiability
+queries can dominate inference. Tautology and redundancy pruning first try a
+small finite model of the same assertions. **Only SAT is used**: it witnesses
+non-tautology/non-redundancy, so the clause is retained. Finite UNSAT or UNKNOWN
+cannot remove a clause; that still requires an unrestricted proof. Redundancy
+queries have a 10-second default budget and retain clauses on UNKNOWN. The
+symbolic verifier can also use a finite SAT witness to resolve an inconclusive
+premise-consistency query after proving the VC in the unbounded domain. This
+never replaces the unbounded validity proof with finite checking.
+
+On the same 60 Unstack states, the 2026-10-23 timing investigation measured
+Boolean minimization at 0.021 s (SymPy) and 0.072 s (PyEDA), compared with about
+241 s of tautology checks for each backend before the finite-witness shortcut.
+The subsequent shared PyEDA run took 68 s overall: approximately 11 s setup and
+candidate replay, 41 s learning/coverage and 16 s symbolic verification. Motion
+verification was excluded. See the [tower verification results](../cfg/VERIFICATION.md#provided-unstack-and-reverse-verification).
 
 SymPy retains its existing POS policy: above five selected predicates, it builds
 unminimized CNF to avoid expensive minimization. PyEDA minimizes at those sizes

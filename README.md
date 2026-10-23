@@ -14,8 +14,8 @@ optionally replaces that default. Collection support is broader than proof suppo
 | Task | Shared execution and demo collection | Integrated synthesis / verification |
 | --- | --- | --- |
 | Stack | Supported | Supported in the documented model below |
-| Unstack | Supported, including current lateral groundtruth | CLI task exists; current extrema/gripper operands are not integrated into synthesis or motion verification |
-| Reverse | Supported | Not integrated; the obsolete verifier encoded Unstack and has been removed |
+| Unstack | Supported, including current lateral groundtruth | Supplied-program invariant learning and unbounded symbolic proof pass; current extrema/gripper motion encoding is incomplete |
+| Reverse | Supported | Supplied-program invariant learning and unbounded symbolic proof pass; table-coordinate motion encoding and synthesis remain unsupported |
 | Restack | Supported | Not integrated |
 | Grid | Supported, nested goal loops | Not supported |
 | Pyramid | Supported, nested goal loops | Not supported |
@@ -33,13 +33,24 @@ The original failure and its replay video are retained. See the
 and [experiment inventory](roboverify/synthesis/experiment/README.md).
 This audit did not run synthesis or establish new formal verification results.
 
-After adding Build3D, relational summaries and baselines, revision `94a6f27`
-passed the full Python regression suite: **452 tests across 65 modules**, with
-no failures, errors or skips, including the optional real-solver baseline tests.
-On the current machine the tests took 224.5 seconds, or 229.1 seconds including
-module loading. Results are under `roboverify/runs/tests/20261023-94a6f27/`.
+The subsequent **2026-10-23 shared-pipeline tower investigation learned invariants
+for both Unstack and Reverse and passed all 12 symbolic checks for each**, including
+the unbounded proof. It reexecuted all 15 archived starts per task and used all
+60/75 continuing and exit states. The 68-second Unstack symbolic run comprised
+approximately 11 s setup/replay, 41 s learning/coverage and 16 s verification.
+Later runs requesting both levels took 55.3 s (Unstack) and 164.9 s (Reverse),
+retained symbolic success and reported incomplete motion support. Paper formulas
+are separate verification-only controls, with explicitly documented repairs.
+See the [commands, timings and scope](roboverify/synthesis/cfg/VERIFICATION.md#provided-unstack-and-reverse-verification).
+
+After the tower verification changes, revision `e4c45be` passed the full Python
+regression suite: **466 tests across 67 modules**, with no failures, errors or
+skips, including the optional real-solver baseline tests. On the current machine
+the tests took 244.8 seconds, or 248.7 seconds including module loading. Results
+are under `roboverify/runs/tests/20261023-tower-verification/`.
 The complete command is in [AGENTS.md](AGENTS.md#validation). The separate Lean
-build and axiom audit passed all 709 declarations.
+build and axiom audit previously passed all 709 declarations; the tower changes
+do not modify that formalization or mechanically certify the Python translation.
 
 The Stack workflow has a standalone multi-seed DSL demonstration collector,
 full-state archives, optional 20 FPS videos, and shared `full` / `verify` pipeline
@@ -157,8 +168,10 @@ Historical Unstack motion checks cover their original narrower source region.
 A [Lean mechanization of WP soundness](roboverify/proofs/wp_soundness/README.md)
 checks the complete, separated-chain model, including guarded top-to-top
 relocation, quantified assertions and conditional program partial correctness.
-The Python attachment-only dispatcher and physical refinement remain separate
-correspondence obligations; this does not change the verification status above.
+The Python dispatcher now implements guarded source detachment and attachment,
+including table-valued supports. Mechanical Python/Lean correspondence and
+physical refinement remain separate obligations; see
+[discrepancy 30](PAPER-DISCREPANCIES.md#30-stack-invariant-vocabulary-and-attachment-semantics).
 
 [Higher and Scattered action summaries](roboverify/synthesis/verification_lib/RELATIONAL-SUMMARIES.md)
 now have an explicit framed, nondeterministic WP contract. CFG summary inference

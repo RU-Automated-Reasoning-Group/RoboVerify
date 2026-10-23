@@ -5,12 +5,12 @@ verification stages on the same candidate and task conditions.
 
 ## Collection and pipeline modes
 
-Collection supports all six current tasks: Stack, Unstack, Reverse, Restack,
-Grid and Pyramid. The integrated synthesis/verification CLI exposes Stack and
-Unstack only. Its ordinary loader rejects the current Unstack program's
-observation-relative extrema/gripper operands, which are execution/collection
-features. Goal programs remain collection-only as well. Do not interpret the
-cross-environment demo audit as six end-to-end synthesis/verification results;
+Collection supports all seven current tasks: Stack, Unstack, Reverse, Restack,
+Grid, Pyramid and Build3D. The integrated CLI accepts supplied Stack, Unstack
+and Reverse programs. Unstack/Reverse now have learned unbounded symbolic proofs;
+their current observation/table-relative coordinates remain outside the motion
+encoding. Reverse search and goal-program proofs are unsupported. Do not interpret
+the cross-environment demo audit as end-to-end synthesis/verification results;
 see the [support matrix](../../../README.md#project-status).
 
 First collect a supplied primitive DSL program using
@@ -161,6 +161,13 @@ Finite symbolic checks are followed by an unbounded proof; motion checks also
 quantify over unnamed objects. The demonstration count supplies inference data,
 not a bound on the proof's block count. Full MCMC/CFG synthesis acceptance is
 resolved; it is separate from this supplied-program proof.
+
+**Relocation regression, 2026-10-23:** after correcting public Put's source
+detachment, table-valued destinations and enabling conditions (discrepancy 30),
+the documented Stack configuration again returned `verified_model`: 12 symbolic
+and 40 motion checks, including four new Put-enabling obligations, in 25.0 s.
+Run: `runs/cfg/20261023-160508-770d1d6-stack-relocation-regression/`.
+The historical Higher-removal ablations below have not been rerun with this rule.
 
 ### Removing the common-support comparability axiom (`on4`)
 
@@ -552,6 +559,117 @@ uv run python -m synthesis.experiment.report \
 Each process ran the usual ablation command with `--case baseline
 --without-extra-motion-premises --symbolic-timeout-ms 300000
 --no-minimize-unsat-core`, using its own output directory.
+
+## Provided Unstack and Reverse verification
+
+Both current programs use the shared supplied-program pipeline: restore all
+archived starts, execute the actual primitives, learn from continuing heads and
+normal exits with `InvInference`, and check the resulting abstraction. Unstack
+uses `Put(b_prime,tbl)`. Reverse starts with `b <- tbl`, then repeats
+`Put(b_prime,b); b <- b_prime`; the WP dispatches on b's value, covering both the
+first table placement and later block placements. The source is detached from
+its old supports before attachment. The precondition, guard and frozen entry
+relation come from the current program/task, not an obsolete verifier.
+
+Run from `roboverify/` with the simulator environment in AGENTS.md configured:
+
+```bash
+uv run python -m synthesis.entry.synthesize_cfg \
+  --task unstack --mode verify --program synthesis.examples.unstack:build_program \
+  --num-blocks 4 --demos demos/pipeline-audit-20261023/unstack/demonstrations.npz \
+  --invariant-minimizer pyeda --verification-level symbolic \
+  --verification-timeout-ms 30000 --wall-timeout-seconds 600 \
+  --symbolic-iterations 0 --motion-iterations 0 --run-name unstack-learned
+uv run python -m synthesis.entry.synthesize_cfg \
+  --task reverse --mode verify --program synthesis.examples.reverse:build_program \
+  --num-blocks 4 --demos demos/pipeline-audit-20261023/reverse/demonstrations.npz \
+  --invariant-minimizer pyeda --verification-level symbolic \
+  --verification-timeout-ms 30000 --wall-timeout-seconds 600 \
+  --symbolic-iterations 0 --motion-iterations 0 --run-name reverse-learned
+```
+
+If an archive is absent, collect it with `collect_demos --task TASK --num-blocks 4
+--num-trajectories 15 --seed-start 0 --output-dir demos/pipeline-audit-20261023/TASK`.
+Use the collector's printed archive path. Unstack defaults to ON*/Higher/Scattered/
+equality; Reverse to ON*/frozen ON*_zero/equality. All 15 seeds are used, yielding
+60 Unstack and 75 Reverse states. Both contexts retain the top-existence axioms.
+Finite checks use 2–4 physical blocks plus the table marker, followed by an
+unbounded DeclareSort proof. This is partial correctness under the relational
+axioms, not a termination proof or a block-count bound.
+
+The user suspended the earlier 60-second Unstack limit for this feasibility
+investigation; `--wall-timeout-seconds 600` makes that override explicit. The CLI's
+Unstack default remains 60 seconds. `--symbolic-iterations 0` tests the initial
+learned invariant without counterexample refinement; it does not disable learning.
+No supplied invariant was used in the learned runs below.
+
+| Run under `runs/cfg/` | Total | Symbolic result | Motion result |
+| --- | ---: | --- | --- |
+| `20261023-155239-f72e967-unstack-learned-finite-sat-pruning` | 68.0 s | 12 valid, unbounded | Not requested |
+| `20261023-160301-f72e967-unstack-learned-shared-both` | 55.3 s | 12 valid, unbounded | Unsupported observation references |
+| `20261023-160302-f72e967-reverse-learned-shared-both` | 164.9 s | 12 valid, unbounded | Unsupported table coordinates/root selection |
+
+These run IDs record the HEAD at launch; the artifacts also record that the
+working tree contained this investigation's changes. Invariant SMT-LIB files and
+fresh candidate archives are under `artifacts/candidates/0/`; per-check results
+are under `artifacts/verification/`. Event timestamps split the 68-second run into
+approximately 11 s setup/replay, 41 s learning plus coverage checks and 16 s
+symbolic verification. The later Reverse run used approximately 13 s setup/replay,
+139 s learning/coverage, 6 s symbolic verification and 7 s motion/reporting.
+These are one-second-resolution phase estimates, not isolated CPU benchmarks.
+
+The original delay came from quantified tautology/redundancy queries with the
+top-existence axiom, not Boolean minimization. Pruning now tries finite SAT
+witnesses first, keeps clauses on UNKNOWN and bounds redundancy queries. Reverse
+initially proved the exit implication but returned UNKNOWN on premise consistency;
+a finite SAT witness now resolves that case after the unbounded proof. Finite
+UNSAT/UNKNOWN never establishes unrestricted validity or vacuity. See the
+[inference timing investigation](../inference_lib/README.md#truth-table-minimization).
+
+`--verification-level both` requests motion after symbolic success and returns
+`motion_unverified` for these tower programs. Unstack stops on `Y_min`, with Z_m
+and gripper references also requiring encoding. Reverse reports unsupported
+table-coordinate instructions and root selection; its additional refuted checks
+come from that incomplete motion translation and do not certify an actual
+simulator collision. The missing work is an instruction-entry geometric encoding
+for those coordinates, both table/block support cases and their placement/frame/
+collision obligations. No payload-feedback primitive or stronger controller was
+introduced. `verified_symbolic` is kept distinct from `verified_model`.
+
+### Paper invariant controls
+
+`--loop-invariant synthesis.examples.tower_invariants:FACTORY` replaces inference
+with a fixed formula while retaining candidate execution, coverage reporting and
+the same symbolic checker. A failed supplied invariant is not repaired by the
+learner. The literal Fig. 14/15 formulas remain in the module; their undefined
+Unstack `b` and Reverse `tbk` are rejected as out-of-scope names. Explicitly named
+interpretations and repairs are separate controls:
+
+| Factory | Interpretation/change | Current result |
+| --- | --- | --- |
+| `unstack_paper_base` | Interpret b as b0 | Finite checks pass; unbounded preservation admits an all-table countermodel |
+| `unstack_paper_physical_base` | Also retain b0 != tbl in the invariant | All 12 checks valid |
+| `reverse_paper_table` | Interpret tbk as tbl | Preservation invalid; exit vacuous |
+| `reverse_paper_final` | Also admit the final b=b0 phase in clause 6 | All 12 checks valid |
+
+For the last repair, writing O for ON*, clause 6 changes from
+`O(b,u) => not O(u,b0)` to `O(b,u) => (b=b0 or not O(u,b0))`.
+The printed version excludes the actual last transfer/exit by reflexivity. The
+paper's Reverse guard also differs from the current all-block loop. These are
+explicit interpretations and a candidate paper correction, not learned results.
+See discrepancies 10 and 39.
+
+Final controls: `20261023-160643-770d1d6-unstack_paper_base-final-control`
+(invalid, 15 s), `20261023-160910-770d1d6-unstack-paper-physical-base-control`
+(valid, 16 s), `20261023-160639-770d1d6-reverse_paper_table-final-control`
+(invalid/vacuous, 15 s), and
+`20261023-160640-770d1d6-reverse_paper_final-final-control` (valid, 23 s).
+The earlier successful paper-Unstack observation should not be used in place of
+the final countermodel and explicit physical-base control.
+
+The final Python regression suite passed 466 tests across 67 modules in 248.7 s
+including loading, with optional real-solver baselines enabled and no skips.
+The log and run manifest are in `runs/tests/20261023-tower-verification/`.
 
 ## User-supplied Unstack groundtruth diagnostic
 
@@ -1026,11 +1144,12 @@ adds an explicit initial-arm condition; without it, all arm positions are checke
 `--motion-noise` and the associated bounds are available through the shared
 motion options. Table placements require `--table-surface-height`.
 
-The current execution tasks are Stack, Unstack, Reverse, Restack, Grid and
-Pyramid; PartialStack has been removed. The integrated CLI exposes Stack and
-Unstack, with the current observation-relative Unstack groundtruth rejected
-until its operands have a proof encoding. Reverse/Restack and goal-task
-integration, branch synthesis, nested/starred quotient, total-termination proofs
+The current execution tasks are Stack, Unstack, Reverse, Restack, Grid, Pyramid
+and Build3D; PartialStack has been removed. The integrated CLI accepts supplied
+Stack/Unstack/Reverse programs. Unstack/Reverse invariant learning and symbolic
+verification pass; their observation/table-relative motion encoding remains
+incomplete. Reverse search, Restack and goal-task proof integration, branch
+synthesis, nested/starred quotient, total-termination proofs
 and controller refinement remain outside the supported pipeline scope. Existing
 execution code and passing demonstrations do not establish formal verification.
 
@@ -1077,7 +1196,10 @@ modes are existential even with noise, and do not prove robustness.
 ## Placement effects and alignment
 
 Placement summaries are proposed from the outgoing ON relation or the final
-transport reference, then checked against all ON*/Higher/Scattered WP effects.
+transport reference, then checked against all ON*/Higher/Scattered effects.
+Public Put's source/support enabling conditions are proved at transfer entry
+separately from those effects. Source deletion precedes attachment, and destination
+aliases select table versus block semantics by value.
 Root discovery follows §5.5: enumerate in-scope physical names `r` and prove
 `forall u. ON*(target,u) => ON*(u,r)`, including unnamed objects. The integrated
 path uses `P = wp(remaining symbolic body, postcondition)` under the established

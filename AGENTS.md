@@ -64,8 +64,12 @@ and audit reports are under `demos/pipeline-audit-20261023/`; see the
 [collection audit](roboverify/synthesis/inference_lib/README.md#cross-environment-audit).
 All final states replayed exactly and remained successful after 50 extra steps.
 This did not establish new synthesis or verification results. The integrated
-CLI exposes Stack/Unstack; current Unstack observation-relative operands and
-the other five tasks remain outside integrated proof support.
+CLI exposes Stack/Unstack/Reverse. Current Unstack and Reverse supplied programs
+now pass inference and unbounded symbolic verification through the shared pipeline,
+using all 60/75 states from 15 archived starts. Their observation/table-relative
+motion operands remain unsupported; the other four tasks are outside integrated
+proof support. See the
+[tower verification commands](roboverify/synthesis/cfg/VERIFICATION.md#provided-unstack-and-reverse-verification).
 The Pyramid source center moved 4 cm closer after seed 12 failed at its final
 high approach; the original failed batch and replay video are retained.
 
@@ -150,7 +154,8 @@ The [Higher-removal ablation](roboverify/synthesis/cfg/VERIFICATION.md#higher-re
 shows that ON*/Scattered/equality learning alone loses necessary structure, but a
 diagnostic four-clause Higher-free invariant passes both proof levels with the
 supported-height premises retained. It is not a production learner or fallback;
-defaults and the attachment/replay model limit remain unchanged.
+defaults remain unchanged. Public Put now detaches its source before attachment;
+the historical Higher-removal ablations have not been rerun under that correction.
 The diagnostic `--without-extra-motion-premises` also removes arm/column/input
 alignment assumptions, the initial arm pose, and exact premise reassertions.
 Even the learned Higher baseline then fails motion (gripper approach and input
@@ -198,6 +203,9 @@ separate implementation-plan history.
   absence alone is not a paper discrepancy.
 - Keep Unstack end-to-end invocations under the user's **60-second wall-clock
   limit**. A timeout or exhausted budget is not successful verification.
+  For the current Unstack/Reverse inference feasibility investigation, the user
+  explicitly suspended that limit: use a larger recorded budget (initially
+  600 seconds) and prioritize feasibility before speed.
 
 ### Settled implementation decisions
 
@@ -338,6 +346,12 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
     (`ON_star`, `Higher`, `Scattered`) across a `Put`. `Program.highlevel_verification(...)`
     and `Program.lowlevel_verification(...)` are the two verification entry points a program
     exposes.
+
+  Public `wp(Put, ...)` requires a clear physical source and, for a block target,
+  a distinct clear support. It detaches the source's old ON* edges before
+  attachment and dispatches on the target's value, including aliases of tbl.
+  `put_effect` is the pure transformer; motion checking proves enabling conditions
+  separately from equivalence of predicate effects. Frozen ON*_zero is unchanged.
   - `relational_summary.py`: verification-only Higher/Scattered endpoint actions.
     The moved object is independent of operand order. Mutable relations incident
     to it may change; the other pairs, equality and frozen entry ON* are framed.
@@ -362,6 +376,10 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   - `symbolic_verify.py`: labeled VC results, exact vacuity detection, increasing-size
     finite counterexample search and optional unbounded proof. `counterexamples.py`
     realizes relation tables as geometry or explicitly refuses the model.
+    Tower inference pruning uses finite SAT witnesses only; finite UNSAT/UNKNOWN
+    cannot discard clauses. After unbounded VC validity, an inconclusive premise
+    consistency check may use the same SAT-only witness. No finite validity result
+    is promoted to an unbounded proof.
   - `cegis.py`: bounded symbolic/motion refinement using the intended
     `InvInference` algorithm, explicit coverage/progress checks,
     `NeedsResynthesis` for entry failures, and counterexample penalties.
@@ -460,6 +478,11 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   `--mode verify --program ...` starts with the matching supplied program.
   Both execute the actual candidate for inference, then perform symbolic and
   motion verification with shared feedback. Changed executables get fresh traces.
+  Supplied-program mode accepts Stack/Unstack/Reverse. `--verification-level
+  symbolic|both` keeps `verified_symbolic` separate from `verified_model`.
+  `--loop-invariant module:factory` is an explicit fixed-formula control, not an
+  alternate learner or fallback. `--wall-timeout-seconds` overrides the total run
+  budget (Unstack defaults to 60); the current feasibility investigation uses 600.
   Experiment results stay in `runs/`; `--output-dir` changes that root and
   `--run-name` adds a label. `main.py` forwards to this driver.
   `verified_synthesis.py` and the Stack verifier CLI forward to verify mode.
@@ -487,7 +510,8 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
 - **`synthesis/environment/motion_reference.py`** — typed runtime-only operands
   Y_min, Z_m and gripper, resolved at instruction entry. The shared controller
   freezes each target for its servo loop. Fingerprints include these semantics;
-  collection opts in and synthesis/verification loading rejects them.
+  collection and supplied-program verification opt in for execution/inference;
+  ordinary synthesis loading rejects them and motion encoding is still missing.
 
 - **`synthesis/environment/tower_reset.py`** — shared lateral Unstack/Reverse
   reset geometry. Both sample X in [0.54, 0.70] m ahead of the robot base and
@@ -597,8 +621,10 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   --mode full --demos demos/stack/3-blocks-5-trajectories/demonstrations.npz
   --smoke --quotient` (on one line) for a bounded integration smoke.
   The driver requires validated current archives and has no historical-oracle
-  fallback. `--reset-mode replay` is the default; Unstack retains its 60-second
-  process alarm. Success is `verified_model` in the documented scope.
+  fallback. `--reset-mode replay` is the default; Unstack defaults to a 60-second
+  process alarm, explicitly overridden to 600 for the current investigation.
+  Both-level success is `verified_model`; symbolic-only success is
+  `verified_symbolic` and does not certify motion.
   Supplied Stack verification passes with the intended learner, the equal-height
   task precondition and `ON_star Higher Scattered equality`; full synthesis
   acceptance is resolved. `--supported-towers` adds explicit height

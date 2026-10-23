@@ -63,6 +63,10 @@ an unrestricted proof of the repaired program.
 
 The checks cover consistency, collision sweeps, release/support, direct placement,
 frame preservation, complete ON*/Higher/Scattered effects and root alignment.
+They also prove Put's enabling conditions at transfer entry: a clear physical
+source and a distinct clear block support when applicable. These conditions are
+separate from predicate effects. Public Put detaches old source support edges,
+then attaches to the new support, selecting table/block WP by destination value.
 Aliases follow the current bindings,
 and relative waypoint targets use updated geometry. `ON_star_zero` uses separate
 frozen entry coordinates. An explicitly manipulated source is excluded from the
@@ -239,6 +243,8 @@ and `--motion-noise` are separate parameters.
 
 The current Unstack runtime also accepts observation-relative `Y_min`, `Z_m`
 and `gripper` coordinates. Their targets are fixed at instruction entry. They
-are fingerprinted execution/collection features; the ordinary program loader
-rejects them for integrated synthesis/verification. See the
+are fingerprinted execution features. Supplied-program verification now opts in
+for candidate execution, inference and symbolic checking. Ordinary synthesis
+loading rejects them; the motion encoding remains incomplete. Reverse's physical
+table-coordinate references are likewise not encoded. See the
 [project support matrix](../../../README.md#project-status).
