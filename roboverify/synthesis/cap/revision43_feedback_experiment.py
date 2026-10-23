@@ -26,7 +26,13 @@ from pathlib import Path
 from .batch import METHODS, _run_directory, atomic_json, create_batch
 from .config import FEEDBACK_ITEMS, GPUConfig, PrimitivePromptConfig
 from .revision42_experiment import GPU_UUIDS, execute
-from .revision43_prompt_experiment import CREDENTIAL, MODELS, SWITCHES, configuration
+from .revision43_prompt_experiment import (
+    CREDENTIAL,
+    MODELS,
+    SWITCHES,
+    HealthGate,
+    configuration,
+)
 
 CLASSES = (
     "move_nonconvergence",
@@ -722,7 +728,14 @@ def main():
                 guard=args.evidence_guard,
             )
     if not args.create_only:
-        result = execute(directory, resume=args.resume)
+        # Pause dispatch while the batch's model endpoint is down.
+        manifest = json.loads((directory / "manifest.json").read_text())
+        url = manifest["jobs"][0]["model_config"]["base_url"].rstrip("/") + "/models"
+        result = execute(
+            directory,
+            resume=args.resume,
+            wrap_gate=lambda gate: HealthGate(gate, url),
+        )
         print(json.dumps({"directory": str(directory)} | result), flush=True)
 
 
