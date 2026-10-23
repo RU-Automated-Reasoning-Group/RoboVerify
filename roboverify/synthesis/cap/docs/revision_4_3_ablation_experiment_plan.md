@@ -191,16 +191,16 @@
 - **Precision guide.**
   - Power in a paired design depends on discordant pairs.
   - With roughly 20% discordance, about 160 seeds detect a 10-point pooled difference.
-  - Pooled over 3 methods with 50 seeds each, every profile has 150 seeds, slightly fewer than the roughly 160 needed for a 10-point pooled difference. Per method, 50 seeds detect only differences of roughly 25 points or more.
-  - Dropping the 9B halved the pooled seeds from 300. Whether to raise the seed count is open (Section 10).
+  - With 70 seeds per method, every profile has 210 seeds pooled over 3 methods, enough for a 10-point pooled difference at roughly 20% discordance. Per method, 70 seeds detect differences of roughly 20 points or more.
+  - The count was raised from 50 after the 9B was dropped (decided 2026-10-23).
 
 ## 8. Decided details
 
 | Item | Decision |
 | --- | --- |
-| Seeds | 50 failed round-0 attempts per method (Qwen3.8 27B). Seeds are method-specific. |
-| Class quotas | Move 15, Pick 8, Release 8, execution/query budget 6, no-witness `get` up to 5, goal failure 4, other runtime 4. Shortfalls are refilled proportionally from the other classes; actual counts are reported. |
-| Stage A limit | At most 300 round-0 attempts per method, stopping early once quotas are met. Round-0 attempts from the selected prompt-factorial cell are imported first. |
+| Seeds | 70 failed round-0 attempts per method (Qwen3.8 27B), 210 in total; 15 profiles give 3,150 Stage B chains. Seeds are method-specific. (Raised from 50 on 2026-10-23.) |
+| Class quotas | The 50-seed quotas (Move 15, Pick 8, Release 8, execution/query budget 6, no-witness `get` up to 5, goal failure 4, other runtime 4), scaled to 70 by largest remainder: Move 21, Pick 11, Release 11, budget 8, no-witness up to 7, goal failure 6, other runtime 6 (`select-seeds --seeds-per-method 70`). Shortfalls are refilled proportionally from the other classes; actual counts are reported. |
+| Stage A limit | At most 300 round-0 attempts per method, stopping early once quotas are met. The 50 round-0 attempts per method from the selected prompt-factorial cell `p0001` are imported first; with `p0001` failure rates (Move 8.8%, Pick 5.8%, Release 4.6% of attempts), about 250 new attempts per method are needed. Pilot attempts are not used. |
 | Replicates | One recovery chain per seed × profile |
 | Equivalence margin | 10 percentage points, for TOST claims pooled over methods only |
 | Token budgets | 200k per recovery round, 900k per trial; call and time limits unchanged |
@@ -227,4 +227,4 @@
 ## 10. Open points
 
 1. **Supporting events:** N = 40 with a 32 KiB guard (proposed), or N = 80 with a 48 KiB guard.
-2. **Seed count with one model:** keep 50 per method (150 pooled, 2,250 Stage B chains), or raise it, e.g. to 70 per method (210 pooled, 3,150 chains), to restore 10-point pooled sensitivity.
+2. ~~Seed count with one model~~ — decided 2026-10-23: 70 per method (Section 8).
