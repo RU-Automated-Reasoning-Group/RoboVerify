@@ -56,8 +56,8 @@ Read [README.md](README.md#project-status) for current project status and
 reasoning and remaining actions. Collection and supplied-program verification
 are implemented; full synthesis acceptance is resolved. Stack reset bounds initial
 blocks to 0.70 m XY from the robot base.
-The current tasks are Stack, Unstack, Reverse, Restack, Grid and Pyramid.
-`collect_demos --task TASK` defaults to a provided groundtruth for all six.
+The current tasks are Stack, Unstack, Reverse, Restack, Grid, Pyramid and Build3D.
+`collect_demos --task TASK` defaults to a provided groundtruth for all seven.
 The 2026-10-23 audit saved 15 seeds (0–14) for each of seven configurations,
 105 valid demonstrations including both five-block Restack layouts. Archives
 and audit reports are under `demos/pipeline-audit-20261023/`; see the
@@ -65,7 +65,7 @@ and audit reports are under `demos/pipeline-audit-20261023/`; see the
 All final states replayed exactly and remained successful after 50 extra steps.
 This did not establish new synthesis or verification results. The integrated
 CLI exposes Stack/Unstack; current Unstack observation-relative operands and
-the other four tasks remain outside integrated proof support.
+the other five tasks remain outside integrated proof support.
 The Pyramid source center moved 4 cm closer after seed 12 failed at its final
 high approach; the original failed batch and replay video are retained.
 
@@ -91,6 +91,15 @@ goal topology, cursor bindings and nested-loop events. `execute_goal_program`
 remains the execution-only entry point. Goal occupancy is independent of block
 identity. Goal-aware synthesis and verification remain unsupported; see
 [discrepancy 40](PAPER-DISCREPANCIES.md#40-grid-and-pyramid-execution-and-verification-have-separate-support).
+Build3D adds configurable rows, columns and vertical layers, with goal-only `u`
+links between layer heads in addition to `r` and `d`. Its three nested loops use
+the existing six-primitive transfer body and 15 cm goal-relative clearance.
+`collect_demos --task build3d --build-rows M --build-cols N --build-layers K`
+collects M×N×K transfers. All 25 trials across 2×2×2, 2×3×2 and 2×2×3 passed
+exact action replay and 50-step final settling. Existing 2D archive topology
+is preserved; new layer links are serialized only for 3D layouts. See the
+[collection guide](roboverify/synthesis/inference_lib/README.md#collect-build3d-demonstrations).
+Build3D execution/collection is supported; synthesis and verification are not.
 Restack now supports a lateral source tower plus loose blocks and collection
 with an adapted version of the paper's two-phase program. `--num-blocks` sets
 the total and `--initial-tower-blocks` sets the source height; b0 starts inside
@@ -157,6 +166,26 @@ replayed and checked; ordinary execution retains lowest-ID selection.
 `learn_invariant --verification-level symbolic|both` keeps the supplied program
 fixed; Stack is the initial adapter. Its proof is unbounded and separate from
 the bounded search for executable counterexamples.
+
+Higher/Scattered endpoint actions now use `RelationalSummary`, with a framed,
+nondeterministic WP that requires an admissible successor and correctness for
+every allowed successor. CFG summary inference and motion refinement share this
+contract; successor domain axioms are motion conclusions, not assumptions.
+Finite enumeration is exact; unbounded quantified-array queries may return
+unknown. Lean checks the abstract rewrite, weakestness and conditional refinement
+theorems, separately from Python/controller correspondence. See the
+[summary contract guide](roboverify/synthesis/verification_lib/RELATIONAL-SUMMARIES.md).
+
+Independent baselines live under `roboverify/baselines/`, with a separate package
+per family. The current pinned mypyvy/cvc5 baseline inferred and independently
+checked Stack, Unstack and Reverse invariants without supplied supporting
+invariants. Its domain assumptions establish abstract partial safety, not motion
+safety or termination; Reverse uses detach-before-attach semantics. Z3 returned
+unknown under the tested query limits. See the
+[baseline guide](roboverify/baselines/mypyvy/README.md) for reproduction, optional
+dependencies and result scope. `python -m baselines.report --run PATH` reads only
+bounded JSON summaries; these runs use a different schema from experiment runs.
+
 Update the relevant status or entry when it changes, rather than maintaining a
 separate implementation-plan history.
 
@@ -165,6 +194,8 @@ separate implementation-plan history.
   paper says so, and do not use its experimental numbers as regression targets.
 - **Discrepancies get logged, not silently fixed.** Preserve entry IDs and the
   distinction between implementation defects, paper corrections and model limits.
+  New extensions absent from the paper belong in feature documentation; their
+  absence alone is not a paper discrepancy.
 - Keep Unstack end-to-end invocations under the user's **60-second wall-clock
   limit**. A timeout or exhausted budget is not successful verification.
 
@@ -247,7 +278,8 @@ uv run python - <<'PYTEST'
 from pathlib import Path
 import unittest
 modules = sorted('.'.join(p.with_suffix('').parts)
-                 for p in Path('synthesis').rglob('test_*.py'))
+                 for root in ('synthesis', 'baselines')
+                 for p in Path(root).rglob('test_*.py'))
 result = unittest.TextTestRunner(verbosity=2).run(
     unittest.defaultTestLoader.loadTestsFromNames(modules))
 raise SystemExit(not result.wasSuccessful())
@@ -258,6 +290,13 @@ Run focused tests for changed behavior and the appropriate broader checks. Scope
 formatting to changed files (`uvx isort --profile black`, then `uvx black`) and run
 `git diff --check`. Documentation-only edits need reference checks, not simulator
 runs. Tests use synthetic scenes or generated traces, not saved demonstration files.
+
+The command includes baseline adapter tests. Real-solver baseline tests skip when
+the optional dependencies are absent; configure `ROBOVERIFY_MYPYVY_ROOT`,
+`ROBOVERIFY_CVC5` and `ROBOVERIFY_BASELINE_PYTHON` as described in the
+[baseline guide](roboverify/baselines/mypyvy/README.md) to include them. The
+[Lean proof](roboverify/proofs/wp_soundness/README.md) has a separate build and
+kernel/axiom audit.
 
 ## Architecture
 
@@ -286,7 +325,7 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
     (`Parameter`) as a flat vector for MCMC/CEM optimization. Verification-only instructions
     (`Put`, `MarkGoal`) raise on `eval()` and
     must be lowered to physical instructions before execution. `GoalAssign`,
-    `MoveRight` and `MoveDown` execute using separate goal bindings. Move/Release
+    `MoveRight`, `MoveDown` and `MoveUp` execute using separate goal bindings. Move/Release
     accept goal-center references; Pick accepts only physical blocks. `Assign` updates
     runtime aliases, and `Get` finds an object satisfying its binding condition.
     `While` evaluates a restricted subset of Z3 formulas against concrete block
@@ -299,6 +338,13 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
     (`ON_star`, `Higher`, `Scattered`) across a `Put`. `Program.highlevel_verification(...)`
     and `Program.lowlevel_verification(...)` are the two verification entry points a program
     exposes.
+  - `relational_summary.py`: verification-only Higher/Scattered endpoint actions.
+    The moved object is independent of operand order. Mutable relations incident
+    to it may change; the other pairs, equality and frozen entry ON* are framed.
+    `summary_wp` requires existence and universal successor correctness under an
+    explicit domain. CFG motion checking proves release, endpoint, the full
+    nonmover coordinate frame and all successor-domain axioms. A new summary in
+    the history prevents later Put checks from assuming fresh input alignment.
 
 - **`synthesis/verification_lib/`** — the two verification backends.
   - `highlevel_verification_lib.py`: `HighLevelContext` sets up the Z3 sort for boxes in one
@@ -357,7 +403,7 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
     divergence from demos (via `cost_func`) combined with BMC feasibility checks
     (`check_bmc_candidate`/`score_candidate_program`), and drives the outer `MCMC(...)` search
     loop. Also has the `make_roboverify_*_env` factories (stack/unstack/reverse/restack/grid/
-    pyramid) and video/frame saving utilities.
+    pyramid/build3d) and video/frame saving utilities.
   - `decision_tree.py`: a compatibility alias only. `ON_feature` now resolves to
     `predicates.atoms.GroundON`; the shallow-tree feature learner it used to hold was
     superseded by the bounded predicate enumerator in `synthesis/predicates/`, which can
@@ -402,7 +448,9 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   start loose. Restack uses the same 50-step settling policy and records both
   flat loops. Optional MP4s run at 20 FPS. Reverse uses `synthesis.examples.reverse:build_program`;
   its validation compares current ON* with transposed frozen entry ON*.
-  All six tasks default to their provided example when --program is omitted.
+  Build3D defaults to `synthesis.examples.build3d:build_program`; `--build-rows`,
+  `--build-cols` and `--build-layers` determine its block count and three-loop
+  traversal. All seven tasks default to their provided example when --program is omitted.
   `audit_demos` independently checks current fingerprints, task validation,
   snapshot/action replay and physical success after extra final settling.
   It requires primitive DSL programs; PickPlace is rejected. The collection loader
@@ -418,13 +466,14 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   The historical Unstack verifier consumes `--demos` via the inference adapter
   for its own abstraction. The obsolete Reverse verifier and legacy PartialStack
   verifier have been removed. Neither certified the current physical programs. `execute_goal_program.py`
-  executes the shared Grid/Pyramid example through Program.eval with nested While
+  executes Grid/Pyramid/Build3D examples through Program.eval with nested While
   loops, checks primitive convergence and occupancy, and optionally saves video.
   It does not create synthesis archives or invoke verification. The historical
   2D verifier remains a separate symbolic mark-all example.
 
 - **`synthesis/environment/goal_layout.py`** — immutable goal graphs with XYZ,
-  r links within rows and d links between row heads. Only goals have these links.
+  r links within rows and d links between row heads. Build3D restricts d to a
+  layer and adds u links between layer heads. Only goals have these links.
   Runtime goal bindings are separate from physical block IDs. Shared 20 mm
   occupancy semantics drive guards and task completion. Pyramid traverses bottom
   to top; Grid uses 10 cm tabletop spacing for finger clearance. Goal-marker
@@ -432,6 +481,8 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   preserves Scattered and rejects layouts outside the nominal workspace. Source
   center X is initial-gripper X minus 0.10 m for Grid and 0.14 m for Pyramid,
   keeping the latter reachable at its higher goal clearance.
+  `build3d_layout.py` supplies rectangular layered geometry with 10 cm XY
+  spacing and 5 cm layer height; Build3D uses the closer source center as well.
 
 - **`synthesis/environment/motion_reference.py`** — typed runtime-only operands
   Y_min, Z_m and gripper, resolved at instruction entry. The shared controller

@@ -7,7 +7,7 @@ learned invariants and counterexample-guided refinement.
 
 ## Project status
 
-The six current tasks are **Stack, Unstack, Reverse, Restack, Grid and Pyramid**.
+The seven current tasks are **Stack, Unstack, Reverse, Restack, Grid, Pyramid and Build3D**.
 All have a provided groundtruth and use `collect_demos --task TASK`; `--program`
 optionally replaces that default. Collection support is broader than proof support:
 
@@ -19,6 +19,7 @@ optionally replaces that default. Collection support is broader than proof suppo
 | Restack | Supported | Not integrated |
 | Grid | Supported, nested goal loops | Not supported |
 | Pyramid | Supported, nested goal loops | Not supported |
+| Build3D | Supported, layer/row/column goal loops | Not supported |
 
 The **2026-10-23 collection audit passed all 105 demonstrations**: seeds 0–14
 for four-block Stack/Unstack/Reverse, both five-block Restack source layouts,
@@ -32,10 +33,13 @@ The original failure and its replay video are retained. See the
 and [experiment inventory](roboverify/synthesis/experiment/README.md).
 This audit did not run synthesis or establish new formal verification results.
 
-After the experiment-script cleanup, revision `3537361` passed the full Python
-regression suite: **406 tests across 59 modules**, with no failures, errors or
-skips. On the current machine the tests took 171.5 seconds, or 176.1 seconds
-including module loading. The complete command is in [AGENTS.md](AGENTS.md#validation).
+After adding Build3D, relational summaries and baselines, revision `94a6f27`
+passed the full Python regression suite: **452 tests across 65 modules**, with
+no failures, errors or skips, including the optional real-solver baseline tests.
+On the current machine the tests took 224.5 seconds, or 229.1 seconds including
+module loading. Results are under `roboverify/runs/tests/20261023-94a6f27/`.
+The complete command is in [AGENTS.md](AGENTS.md#validation). The separate Lean
+build and axiom audit passed all 709 declarations.
 
 The Stack workflow has a standalone multi-seed DSL demonstration collector,
 full-state archives, optional 20 FPS videos, and shared `full` / `verify` pipeline
@@ -156,6 +160,25 @@ relocation, quantified assertions and conditional program partial correctness.
 The Python attachment-only dispatcher and physical refinement remain separate
 correspondence obligations; this does not change the verification status above.
 
+[Higher and Scattered action summaries](roboverify/synthesis/verification_lib/RELATIONAL-SUMMARIES.md)
+now have an explicit framed, nondeterministic WP contract. CFG summary inference
+recognizes these endpoint atoms, and motion checking must establish the endpoint,
+preservation of other objects and the successor domain. Lean checks the abstract
+rewrite and weakestness theorems for arbitrary object types; it does not certify
+the Python translator or physical controllers. The finite solver encoding is
+exact; unbounded quantified-array queries can remain inconclusive. This extends
+the verification API without establishing a new environment proof.
+
+The separate [baseline framework](roboverify/baselines/README.md) currently contains
+pinned mypyvy UPDR models for Stack, Unstack and Reverse. With cvc5, all three
+inferred invariants without supplied supporting invariants and passed a fresh
+certificate check. Unstack took 21.18 seconds and Reverse 163.18 seconds in the
+recorded runs; Z3 returned `unknown` under the tested query limits. These are
+unbounded abstract partial-safety results under the documented model assumptions,
+separate from physical motion verification and termination. The
+[baseline guide](roboverify/baselines/mypyvy/README.md) provides dependencies,
+reproduction commands, model boundaries and a bounded progress reporter.
+
 A historical right-to-left Unstack result is recorded in the
 [retired verification diagnostic](roboverify/synthesis/cfg/VERIFICATION.md#verification-of-the-current-unstack-revision):
 its learned ON*/equality invariant passed all 12 symbolic checks (2–4 blocks and
@@ -174,6 +197,18 @@ cursor bindings and nested-loop events; see the
 Goal-aware synthesis and verification remain separate work. Execution and
 collection evidence is recorded in
 [discrepancy 40](PAPER-DISCREPANCIES.md#40-grid-and-pyramid-execution-and-verification-have-separate-support).
+
+Build3D extends this execution model to **m rows × n columns × k layers**.
+Only goals carry traversal links: `r` advances across a row, `d` between rows
+within a layer, and `u` between layer heads. Three nested loops fill one layer
+before starting the next, using the existing Pick/Move/Release controllers and
+15 cm goal-relative clearance. The shared collector accepts `--task build3d`
+with `--build-rows`, `--build-cols` and `--build-layers`. All 25 collected trials
+passed task validation, exact action replay and 50 extra settling steps:
+15 seeds for 2×2×2 and five each for 2×3×2 and 2×2×3. See the
+[Build3D collection guide](roboverify/synthesis/inference_lib/README.md#collect-build3d-demonstrations).
+This adds execution and collection; goal-aware synthesis and verification remain
+unsupported, and larger dimensions remain subject to physical workspace limits.
 
 Restack now supports a lateral source tower plus loose blocks and collection
 with an adapted version of the paper's two-phase program. `--num-blocks` sets
@@ -204,6 +239,8 @@ geometric model, not total termination or physical-controller refinement.
 | [Motion API](roboverify/synthesis/verification_lib/README.md) | Motion contracts, collision/support checks, bounded noise and BMC distinctions. |
 | [Draft WP soundness proof](roboverify/synthesis/verification_lib/WP-SOUNDNESS-DRAFT.md) | Relational model, atomic rewrite proofs, and explicit assumptions for review. |
 | [Mechanized WP proof](roboverify/proofs/wp_soundness/README.md) | Lean build, checked theorem statements, paper correspondence and review boundaries. |
+| [Higher/Scattered summaries](roboverify/synthesis/verification_lib/RELATIONAL-SUMMARIES.md) | Endpoint-summary WP contract, CFG/motion integration, Lean theorems and solver limits. |
+| [Baselines](roboverify/baselines/README.md) | Independent baseline families, current mypyvy models and reproduction instructions. |
 | [Standalone CEGIS](roboverify/synthesis/verification_lib/CEGIS.md) | APIs and commands for refining existing programs. |
 | [Counterexample learning](roboverify/synthesis/experiment/invariant_learning/README.md) | Section 6.2 experiment from a fixed program and no demonstrations; symbolic or both proof stages. |
 | [Trace inference](roboverify/synthesis/inference_lib/README.md) | Collecting loop-head states and learning invariants with DemoStore. |
