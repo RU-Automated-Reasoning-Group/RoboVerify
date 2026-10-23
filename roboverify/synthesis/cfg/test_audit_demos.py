@@ -13,6 +13,33 @@ from synthesis.verification_lib.highlevel_verification_lib import HighLevelConte
 
 
 class AuditDemosTests(unittest.TestCase):
+    def test_single_block_unstack_collects_a_zero_action_archive(self):
+        from synthesis.entry.collect_demos import main
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "singleton"
+            self.assertEqual(
+                main(
+                    [
+                        "--task",
+                        "unstack",
+                        "--num-blocks",
+                        "1",
+                        "--seeds",
+                        "0",
+                        "--output-dir",
+                        str(output),
+                    ]
+                ),
+                0,
+            )
+            result = audit_archive(output / "demonstrations.npz", seeds=[0])
+            self.assertTrue(result["valid"], result)
+            row = result["trajectories"][0]
+            self.assertEqual(row["primitive_count"], 0)
+            self.assertEqual(row["loop_exits"], [{"path": "0", "iterations": 0}])
+            self.assertEqual(row["replay_max_error"], 0)
+
     @classmethod
     def setUpClass(cls):
         definition = load_program(

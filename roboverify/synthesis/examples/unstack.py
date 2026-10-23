@@ -8,14 +8,20 @@ from synthesis.api.program import Program
 
 def build_program(context, *, num_blocks):
     selected, other, base, table = z3.Consts("b_prime n b0 tbl", context.BoxSort)
-    guard = z3.ForAll(
-        [other],
-        z3.Implies(
-            z3.And(
-                other != table,
-                z3.Or(context.ON_star(base, selected), context.ON_star(other, base)),
+    # Keep the base fixed, including when it is the only physical block.
+    guard = z3.And(
+        selected != base,
+        z3.ForAll(
+            [other],
+            z3.Implies(
+                z3.And(
+                    other != table,
+                    z3.Or(
+                        context.ON_star(base, selected), context.ON_star(other, base)
+                    ),
+                ),
+                context.ON_star(selected, other),
             ),
-            context.ON_star(selected, other),
         ),
     )
     body = [

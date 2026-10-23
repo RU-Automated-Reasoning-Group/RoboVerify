@@ -3,6 +3,7 @@
 import unittest
 
 import z3
+
 from synthesis.api.instructions import Put, While
 from synthesis.cfg.lower import lower
 from synthesis.cfg.program_adapter import program_to_cfg
@@ -22,6 +23,51 @@ from synthesis.verification_lib.highlevel_verification_lib import HighLevelConte
 
 
 class TowerVerificationTests(unittest.TestCase):
+    def test_unstack_guard_exits_for_singleton_and_only_selects_the_upper_block(self):
+        from synthesis.examples.unstack import build_program
+
+        context = HighLevelContext(use_tbl=True, exists_top=True)
+        base, selected, table, other = [
+            context.get_consts(n) for n in ("b0", "b_prime", "tbl", "other")
+        ]
+        obj = z3.FreshConst(context.BoxSort)
+        guard = build_program(context, num_blocks=2).instructions[0].instantiated_cond
+        cases = (
+            (
+                "singleton",
+                [base != table, z3.ForAll([obj], z3.Or(obj == base, obj == table))],
+                z3.unsat,
+            ),
+            (
+                "finished",
+                [
+                    z3.Distinct(base, other, table),
+                    z3.ForAll([obj], z3.Or(obj == base, obj == other, obj == table)),
+                    z3.Not(context.ON_star(base, other)),
+                    z3.Not(context.ON_star(other, base)),
+                ],
+                z3.unsat,
+            ),
+            (
+                "tower",
+                [
+                    z3.Distinct(base, other, table),
+                    z3.ForAll([obj], z3.Or(obj == base, obj == other, obj == table)),
+                    context.ON_star(other, base),
+                    z3.Not(context.ON_star(base, other)),
+                ],
+                z3.sat,
+            ),
+        )
+        for label, premises, expected in cases:
+            with self.subTest(scene=label):
+                solver = context.new_solver(3000)
+                solver.add(*premises, guard)
+                self.assertEqual(solver.check(), expected)
+                if expected == z3.sat:
+                    solver.add(selected != other)
+                    self.assertEqual(solver.check(), z3.unsat)
+
     def test_unstack_paper_needs_its_base_to_remain_a_physical_block(self):
         context = HighLevelContext(use_tbl=True, exists_top=True)
         b0, tbl = [context.get_consts(n) for n in ("b0", "tbl")]

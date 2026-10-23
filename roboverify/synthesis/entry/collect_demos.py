@@ -199,7 +199,7 @@ def collect(args, parser):
                 args.program or f"synthesis.examples.{args.task}:build_program"
             )
         if (
-            args.num_blocks < (1 if goal_task else 2)
+            args.num_blocks < (1 if goal_task or args.task == "unstack" else 2)
             or args.max_loop_iterations < 1
             or not 0 < args.trajectory_timeout_seconds < float("inf")
         ):
