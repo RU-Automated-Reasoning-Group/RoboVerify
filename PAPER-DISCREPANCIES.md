@@ -718,6 +718,16 @@ demonstration archives were deleted; reports/videos remain. No replacement
 collection or fresh demonstration-consuming proof run accompanied this update.
 Physical refinement still requires justified tracking and attachment bounds.
 
+The 2026-10-23 [Reverse follow-up](roboverify/synthesis/experiment/TOWER-WORKSPACE.md)
+reproduced an 11.18–12.30 mm bottom-two-block offset: the first transferred block
+and later blocks acquire different gripper-relative offsets. Five paired
+executions with diagnostic block XY feedback reduced this to 1.35–1.49 mm at
+the same fixed destination; tighter Pick tolerance and block XYZ feedback each
+failed their unchanged step budgets. These remain experiments, not production
+controller changes or a physical-refinement proof. The same investigation
+validated 200 complete Unstack/Reverse executions in a larger candidate source
+rectangle, while confirming initial gripper overlap for some centerline starts.
+
 ## 38. Unsat-core minimization can consume the budget after proving a VC
 
 **Performance defect addressed; proof obligations preserved.** Symbolic solvers

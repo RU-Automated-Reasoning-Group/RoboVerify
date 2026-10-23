@@ -110,6 +110,10 @@ checks the reversal against frozen entry geometry. See the
 [Reverse collection guide](roboverify/synthesis/inference_lib/README.md#collect-reverse-demonstrations).
 This is empirical execution validation; the historical standalone Reverse
 verifier does not verify this program (discrepancy 39).
+A [workspace and Reverse placement investigation](roboverify/synthesis/experiment/TOWER-WORKSPACE.md)
+validated 200 executions in a larger candidate source region and diagnosed the
+bottom-two-block offset using paired payload-feedback experiments. Production
+reset bounds and controllers remain as described above.
 
 A [Lean mechanization of WP soundness](roboverify/proofs/wp_soundness/README.md)
 checks the complete, separated-chain model, including guarded top-to-top
