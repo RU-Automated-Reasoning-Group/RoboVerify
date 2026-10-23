@@ -338,7 +338,7 @@ def create(
     return manifest
 
 
-def execute(directory, *, resume=False, max_workers=None):
+def execute(directory, *, resume=False, max_workers=None, wrap_gate=None):
     plan = json.loads((directory / "comparison_plan.json").read_text())
     gate = (
         None
@@ -350,6 +350,8 @@ def execute(directory, *, resume=False, max_workers=None):
             paid=plan.get("admission") == "paid_request_cap",
         )
     )
+    if wrap_gate is not None:
+        gate = wrap_gate(gate)
     while True:
         result = execute_batch(
             directory, resume=resume, dispatch_gate=gate, max_workers=max_workers

@@ -6,10 +6,15 @@ model is served by a local OpenAI-compatible vLLM endpoint.
 """
 
 import argparse
+import copy
 import hashlib
 import itertools
 import json
+import os
+import shutil
 import subprocess
+import time
+import urllib.request
 from dataclasses import asdict
 from pathlib import Path
 
@@ -52,6 +57,43 @@ TRIAL_TIMEOUT = 18000
 INITIAL_TOKENS = 100000
 ROUND_TOKENS = 200000
 TRIAL_TOKENS = 900000
+
+
+class HealthGate:
+    """Dispatch only while the model endpoint answers; otherwise pause the batch.
+
+    A dead local server turns every new trial into an immediate transport
+    failure, so dispatch stops instead of consuming the pending trials.
+    """
+
+    def __init__(self, gate, url, *, interval=10):
+        self.gate, self.url, self.interval = gate, url, interval
+        self.checked_at, self.healthy = 0.0, False
+
+    @property
+    def reason(self):
+        if not self.healthy:
+            return "model_endpoint_unavailable"
+        return self.gate.reason if self.gate else "ready"
+
+    def __call__(self, job, active):
+        if time.time() - self.checked_at >= self.interval:
+            request = urllib.request.Request(
+                self.url,
+                headers={"Authorization": f"Bearer {os.environ.get(CREDENTIAL, '')}"},
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=10) as response:
+                    self.healthy = response.status == 200
+            except OSError:
+                self.healthy = False
+            self.checked_at = time.time()
+        return self.healthy and (self.gate is None or self.gate(job, active))
+
+
+def health_gate(model_name):
+    url = f"http://127.0.0.1:{MODELS[model_name]['port']}/v1/models"
+    return lambda gate: HealthGate(gate, url)
 
 
 def cell_name(flags):
@@ -219,6 +261,70 @@ def create(
     return manifest
 
 
+def create_rerun(directory, *, source, job_ids, reason, max_workers=64):
+    """Copy selected job definitions of ``source`` into a new batch.
+
+    Used for trials invalidated by infrastructure failures. The copied jobs keep
+    their identifiers and configuration; only paths change. The source batch is
+    read only, and analyses replace its listed trials with this batch's.
+    """
+    source = Path(source).resolve()
+    manifest = json.loads((source / "manifest.json").read_text())
+    if (
+        hashlib.sha256((source / "manifest.json").read_bytes()).hexdigest()
+        != (source / "manifest.sha256").read_text().strip()
+    ):
+        raise ValueError("Source manifest changed")
+    selected = set(job_ids)
+    jobs = [copy.deepcopy(j) for j in manifest["jobs"] if j["id"] in selected]
+    if len(jobs) != len(selected):
+        raise ValueError("Unknown job identifiers in rerun list")
+    directory.mkdir(parents=True)
+    snapshot = directory / "inputs/initial_state.npz"
+    snapshot.parent.mkdir()
+    shutil.copyfile(source / "inputs/initial_state.npz", snapshot)
+    if hashlib.sha256(snapshot.read_bytes()).hexdigest() != manifest["snapshot_sha256"]:
+        raise ValueError("Source snapshot changed")
+    plan = json.loads((source / "comparison_plan.json").read_text())
+    request_limit = len(jobs) * 76
+    for job in jobs:
+        job["run_config"]["output_root"] = str(directory / "trials" / job["id"])
+        job["initial_state"] = str(snapshot)
+        job["transport_control"] = dict(
+            job["transport_control"],
+            state_path=str(directory / "request_gate.json"),
+            request_limit=request_limit,
+            credential_limits={CREDENTIAL: request_limit},
+        )
+        Path(job["run_config"]["output_root"]).mkdir(parents=True)
+    rerun = dict(manifest, created_epoch=time.time(), max_workers=max_workers)
+    rerun["render_workers"] = min(manifest["render_workers"], max_workers)
+    rerun["jobs"] = jobs
+    atomic_json(directory / "manifest.json", rerun)
+    (directory / "manifest.sha256").write_text(
+        hashlib.sha256((directory / "manifest.json").read_bytes()).hexdigest() + "\n"
+    )
+    atomic_json(
+        directory / "schedule.json", {j["id"]: {"status": "pending"} for j in jobs}
+    )
+    atomic_json(
+        directory / "comparison_plan.json",
+        plan
+        | {
+            "planned": len(jobs),
+            "request_limit": request_limit,
+            "credential_limits": {CREDENTIAL: request_limit},
+            "rerun_of": str(source),
+            "rerun_reason": reason,
+            "rerun_job_ids": sorted(selected),
+            "git_sha": subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], text=True
+            ).strip(),
+        },
+    )
+    return rerun
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--directory", type=Path, required=True)
@@ -234,10 +340,21 @@ def main():
     parser.add_argument("--cell", action="append", help="smoke runs only")
     parser.add_argument("--method", action="append", choices=METHODS)
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--rerun-of", type=Path, help="source batch to rerun jobs from")
+    parser.add_argument("--rerun-jobs", type=Path, help="JSON list of job ids")
+    parser.add_argument("--rerun-reason")
     parser.add_argument("--create-only", action="store_true")
     args = parser.parse_args()
     directory = args.directory.resolve()
-    if not args.resume:
+    if args.rerun_of:
+        create_rerun(
+            directory,
+            source=args.rerun_of,
+            job_ids=json.loads(args.rerun_jobs.read_text()),
+            reason=args.rerun_reason,
+            max_workers=args.max_workers or 64,
+        )
+    elif not args.resume:
         create(
             directory,
             model_name=args.model,
@@ -253,6 +370,7 @@ def main():
             directory,
             resume=args.resume,
             max_workers=args.max_workers if args.resume else None,
+            wrap_gate=health_gate(args.model),
         )
         print(
             json.dumps(
