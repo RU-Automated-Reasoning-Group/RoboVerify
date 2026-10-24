@@ -82,9 +82,12 @@ model in both directions: EPR counterexamples need at most `k*(k+1)` physical
 blocks for `k` declared names plus existential variables. This is a proved
 formula-dependent bound, not finite-instance verification promoted to an
 unbounded result. The literal AFR-preservation claim remains open; the concrete
-construction establishes AER closure. Arbitrary extra environment axioms,
-production Python correspondence, and an emitted closed EPR-query interface
-are separate from this model-relative decision theorem.
+construction establishes AER closure. Arbitrary extra environment axioms
+and production Python correspondence remain separate from this model-relative
+decision theorem. `GroundEPR.generated_vc_reduction` additionally constructs a
+closed EPR query with exact SAT/counterexample and UNSAT/validity correspondence.
+It uses formula-dependent finite scene diagrams and quantifier expansion; this
+is a decidability reduction, not a compact axiomatization or a performance claim.
 
 ## 2. Rollouts from segment-initial states are required but never addressed
 

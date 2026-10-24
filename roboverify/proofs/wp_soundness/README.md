@@ -276,15 +276,27 @@ current/frozen scenes, and `verified_program` connects success to the concrete
 program safety theorem. Program names are indexed by `Fin v`; this is a finite
 set of declared variables, not a finite assumption about the block domain.
 The procedure is a decidability construction, not an efficient solver, a
-termination checker, or an invariant-synthesis procedure. An explicit emitted
-closed EPR query for this finite search is a further interface to provide.
+termination checker, or an invariant-synthesis procedure.
+
+[GroundEPR.lean](RoboVerify/GroundEPR.lean) also constructs a closed EPR query.
+It enumerates bounded candidate scenes, describes their complete atomic diagrams
+using the existing relational vocabulary, and expands the refutation's object
+quantifiers over each candidate domain. The refutation remains a formula in
+this construction; the reduction does not first decide it and then emit True
+or False. All object constants are existentially closed. `reduction_exact`
+proves that ordinary satisfiability of this query is equivalent to a genuine
+well-formed block-model counterexample, and `generated_vc_reduction` proves
+the requested exact EPR reduction for every concrete generated VC. This is a
+potentially very large finite expansion, not a compact EPR axiomatization of
+all well-formed scenes. The WP transformation itself does not enumerate block
+values or introduce additional relation symbols.
 
 The literal AFR-to-AFR action-preservation claim remains unproved: the placement
 construction proves AER closure. Exact block-model VC decidability no longer
 depends on leaving the model-to-finite-counterexample correspondence as an
 assumption, but that does not establish the paper's stronger AFR claim. The
-decision theorem concerns the stated scene model, not arbitrary additional
-background axioms or the production Python/controller pipeline.
+decision and reduction theorems concern the stated scene model, not arbitrary
+additional background axioms or the production Python/controller pipeline.
 
 ## Model assumptions to review
 

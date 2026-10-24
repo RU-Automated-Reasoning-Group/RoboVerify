@@ -5,6 +5,7 @@ import RoboVerify.FragmentSoundness
 import RoboVerify.Placement
 import RoboVerify.BlockProgram
 import RoboVerify.FiniteDecision
+import RoboVerify.GroundEPR
 import Lean
 
 /- Audit every declaration in this development, including generated helpers.
@@ -56,6 +57,8 @@ run_elab do
 #print axioms RoboVerify.FiniteDecision.counterexample_exact
 #print axioms RoboVerify.FiniteDecision.check_exact
 #print axioms RoboVerify.FiniteDecision.verified_program
+#print axioms RoboVerify.GroundEPR.reduction_exact
+#print axioms RoboVerify.GroundEPR.generated_vc_reduction
 #print axioms RoboVerify.RelationalSummary.rewrite_correct
 #print axioms RoboVerify.RelationalSummary.wp_exact
 #print axioms RoboVerify.RelationalSummary.wp_weakest
