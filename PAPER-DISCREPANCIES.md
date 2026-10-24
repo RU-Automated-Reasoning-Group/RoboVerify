@@ -76,9 +76,15 @@ including value-based aliases and all predicate replacements; its transformer
 is proved exact against the existing Lean `Action.put` semantics. The concrete
 block language now instantiates the program theorem with these Put rules and
 assignment, discharging action and immutable-table binding preservation.
-An exact decision argument for validity over the complete block model and
-the literal AFR-preservation claim remain open; EPR syntax alone does not
-establish either result.
+An exact small-model theorem and executable finite decision procedure now
+establish validity of these VCs over the stated complete current/frozen block
+model in both directions: EPR counterexamples need at most `k*(k+1)` physical
+blocks for `k` declared names plus existential variables. This is a proved
+formula-dependent bound, not finite-instance verification promoted to an
+unbounded result. The literal AFR-preservation claim remains open; the concrete
+construction establishes AER closure. Arbitrary extra environment axioms,
+production Python correspondence, and an emitted closed EPR-query interface
+are separate from this model-relative decision theorem.
 
 ## 2. Rollouts from segment-initial states are required but never addressed
 

@@ -243,18 +243,48 @@ connections are explicit: production guard matrices may themselves contain
 universals; current/frozen top-existence background axioms are not EPR as
 written; relational summaries quantify successor arrays; and no checked
 Python-to-Lean translator exists. Concrete placement-to-AER translation and
-program integration are now checked. Well-formed scenes are semantic
-hypotheses, not a proved EPR encoding of all environment axioms.
-EPR decidability follows from the usual fragment theorem; this development
-does not mechanize an EPR decision procedure or certify Z3.
+program integration are now checked. These results alone do not turn arbitrary
+environment axioms into EPR or certify Z3.
 
-The full requested block-system theorem remains open at two explicit points:
-the literal AFR-to-AFR action-preservation claim (the placement construction
-proves AER closure); and an exact decision/reduction theorem for validity over
-the complete block model. The user requires exact model validity: a sound
-relational overapproximation with possibly spurious SAT countermodels is not
-sufficient. Neither the AER type of the generated formula nor the kernel
-axiom audit alone establishes those remaining properties.
+## Exact validity over the block model
+
+[BlockSmallModel.lean](RoboVerify/BlockSmallModel.lean) proves an exact small-model
+theorem for EPR counterexamples over the complete-tower model, including a
+well-formed frozen entry scene. If there are `v` declared program variables and
+`e` existential variables in the refutation, a counterexample exists precisely
+when one exists with at most `k * (k + 1)` physical blocks, where `k = v + e`.
+The bound is derived from the formula; it is not an assumed bound on the task,
+original tower heights, or original object domain. Names and witnesses may alias.
+
+The proof retains the named objects and existential witnesses, then completes
+their columns at the finitely many retained heights. Compressing height gaps
+preserves current ON*, Higher and Scattered. Independently compressing each
+retained frozen chain preserves frozen ON*. Equality is preserved by an
+injective embedding. The EPR universal matrix survives restriction to these
+objects. The reconstructed pair of scenes satisfies every `Scene.WellFormed`
+condition, so the reverse direction also produces a real block-model
+counterexample. See [SceneCompression.lean](RoboVerify/SceneCompression.lean),
+[FiniteRestriction.lean](RoboVerify/FiniteRestriction.lean), and
+[FiniteModel.lean](RoboVerify/FiniteModel.lean) for the components.
+
+[FiniteDecision.lean](RoboVerify/FiniteDecision.lean) implements and proves a
+finite exhaustive decision procedure, using explicit finite enumerations rather
+than a classical proposition-decider or an SMT oracle. `counterexample_exact`
+decides model-relative EPR satisfiability in both directions. `check_exact`
+decides exactly whether all generated VCs are valid over all well-formed
+current/frozen scenes, and `verified_program` connects success to the concrete
+program safety theorem. Program names are indexed by `Fin v`; this is a finite
+set of declared variables, not a finite assumption about the block domain.
+The procedure is a decidability construction, not an efficient solver, a
+termination checker, or an invariant-synthesis procedure. An explicit emitted
+closed EPR query for this finite search is a further interface to provide.
+
+The literal AFR-to-AFR action-preservation claim remains unproved: the placement
+construction proves AER closure. Exact block-model VC decidability no longer
+depends on leaving the model-to-finite-counterexample correspondence as an
+assumption, but that does not establish the paper's stronger AFR claim. The
+decision theorem concerns the stated scene model, not arbitrary additional
+background axioms or the production Python/controller pipeline.
 
 ## Model assumptions to review
 
