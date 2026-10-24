@@ -70,7 +70,12 @@ closure on a fixed nonempty domain. The restricted generator also has an
 execution/no-fault soundness proof. A shared-height-witness Put WP is separately
 proved exact under the complete-tower model; its individual atom replacements
 are QF. This does not establish the original AFR claim or certify current
-Python VCs, quantified guards, or non-EPR background axioms.
+Python VCs, quantified guards, or non-EPR background axioms. The concrete
+placement-to-AER connection is now checked for both block and table placement,
+including value-based aliases and all predicate replacements; its transformer
+is proved exact against the existing Lean `Action.put` semantics. Concrete
+program integration with an immutable table constant and a decision argument
+for the complete block-model assumptions remain open.
 
 ## 2. Rollouts from segment-initial states are required but never addressed
 

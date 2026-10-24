@@ -150,6 +150,28 @@ The complete WP still has quantifiers. The change places universal selectors
 in implication antecedents around the **whole** rewritten postcondition,
 which is the polarity needed for the AER closure argument.
 
+[Placement.lean](RoboVerify/Placement.lean) now constructs these replacements
+in the function-free AER syntax itself. Its concrete `wp : AE V -> AE V`
+rewrites every matrix atom, handles physical/table aliases by value, and
+rejects illegal sources or occupied/equal block operands. There is no assumed
+primitive transformer in this construction. `wpBlock_exact`, `wpTable_exact`,
+and `wp_exact` prove equality with the corresponding scene update for every
+AER postcondition, including arbitrary input universal/existential prefixes.
+
+[FormulaBridge.lean](RoboVerify/FormulaBridge.lean) embeds AER formulas into the
+original assertion language and proves preservation of meaning. The placement
+theorems `wpBlock_equivWitness` and `wpTable_equivWitness` use this bridge to
+prove equivalence with the concrete `WitnessWP` formulas. `wp_action_exact`
+then proves the nonblocking/demonic WP contract directly for the existing
+`Action.put` operational semantics. These close the concrete placement-to-AER
+translation gap recorded in the first version of this development.
+
+The distinguished table term must denote `none` in the input name valuation.
+This is an explicit hypothesis, and `put_preserves_table` proves Put preserves
+it. A concrete program integration must also preserve this constant under
+assignment and witness binding; it cannot silently treat the table as a
+mutable name. No extra root/height axioms were introduced to prove placement.
+
 ## Restricted AER/EPR VC theorem
 
 [Fragments.lean](RoboVerify/Fragments.lean) uses a separate deep syntax to
@@ -205,12 +227,21 @@ soundness, not EPR membership of the current Python pipeline. Remaining
 connections are explicit: production guard matrices may themselves contain
 universals; current/frozen top-existence background axioms are not EPR as
 written; relational summaries quantify successor arrays; and no checked
-Python-to-Lean translator exists. The concrete `WitnessWP` formulas and the
-deep-syntax AER schema are proved separately; a complete compiler from the
-concrete action WP into that schema has not been checked. Well-formed scenes
+Python-to-Lean translator exists. The concrete placement-to-AER translation is
+now checked, but the generic program theorem has not yet been instantiated
+with a concrete action vocabulary and an immutable table constant.
+Well-formed scenes
 are semantic hypotheses, not a proved EPR encoding of all environment axioms.
 EPR decidability follows from the usual fragment theorem; this development
 does not mechanize an EPR decision procedure or certify Z3.
+
+The full requested block-system theorem remains open at three explicit points:
+concrete program integration with stable table bindings; the literal
+AFR-to-AFR action-preservation claim (the placement construction proves AER
+closure); and a decision/reduction theorem that accounts for the complete
+block-model assumptions, rather than assuming their background encoding is
+EPR. Neither the AER type of the generated formula nor the kernel axiom audit
+alone establishes those remaining properties.
 
 ## Model assumptions to review
 
