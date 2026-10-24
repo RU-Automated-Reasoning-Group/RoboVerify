@@ -24,10 +24,11 @@ Implementation fixes listed below are already complete unless marked open.
 | §5.5 / motion claims | State waypoint geometry, intentional Pick/Release contact, Release support, input alignment, and checked geometric loop invariants. Bound the claim to that model; controller refinement is unproved. | 4, 12, 18, 26, 27 |
 | §6.2 | Explain bounded initial-state witness search, replay of solver guard choices, physical reproduction of the selected VC failure, normal-exit sampling, and separate counts for verification attempts, executions and learner updates. | 34 |
 
-**Formal claims need correction or additional proof.** Theorem 5.2's
-no-new-quantifiers argument does not establish AFR closure; reconcile the AFR
-definitions and prove the applicable fragment or qualify the Higher case
-(1, 14, 16). Reconcile strict/non-strict Higher and direct-on definitions, and
+**Formal claims need correction or additional proof.** Exact Put WP is now
+proved not to preserve the adopted CAV AF^R fragment, with a finite legal-scene
+counterexample to every proposed AF^R rewrite. Replace Theorem 5.2 with the
+checked AER-closure and exact EPR-reduction result (1, 14, 16).
+Reconcile strict/non-strict Higher and direct-on definitions, and
 limit finite-instantiation claims to the supported equisatisfiability argument
 (14). Theorem 5.7 should state partial correctness unless a separate termination
 argument is supplied (15).
@@ -69,9 +70,9 @@ EPR negations. Uniform AFR action preservation implies the required AER
 closure on a fixed nonempty domain. The restricted generator also has an
 execution/no-fault soundness proof. A shared-height-witness Put WP is separately
 proved exact under the complete-tower model; its individual atom replacements
-are QF. This does not establish the original AFR claim or certify current
-Python VCs, quantified guards, or non-EPR background axioms. The concrete
-placement-to-AER connection is now checked for both block and table placement,
+are QF. This does not certify current Python VCs, quantified guards, or non-EPR
+background axioms. The concrete placement-to-AER connection is now checked for
+both block and table placement,
 including value-based aliases and all predicate replacements; its transformer
 is proved exact against the existing Lean `Action.put` semantics. The concrete
 block language now instantiates the program theorem with these Put rules and
@@ -81,9 +82,15 @@ establish validity of these VCs over the stated complete current/frozen block
 model in both directions: EPR counterexamples need at most `k*(k+1)` physical
 blocks for `k` declared names plus existential variables. This is a proved
 formula-dependent bound, not finite-instance verification promoted to an
-unbounded result. The literal AFR-preservation claim remains open; the concrete
-construction establishes AER closure. Arbitrary extra environment axioms
-and production Python correspondence remain separate from this model-relative
+unbounded result. AFR preservation is now disproved even under the CAV paper's
+broader Boolean-combination definition, adopted by the user. The existential
+postcondition `exists x. x!=a and Higher(a,x) and Higher(x,a) and ON*_zero(x,d)`
+has no equivalent AF^R exact WP for Put. `AFPreservation.finite_counterexample`
+provides a finite well-formed scene with an enabled Put refuting each proposed
+AF^R rewrite, and `no_exact_af_wp` relates this directly to operational WP.
+This is semantic nondefinability, not merely syntactic quantifier growth.
+The concrete alternative construction establishes AER closure. Arbitrary extra
+environment axioms and production Python correspondence remain separate from this model-relative
 decision theorem. `GroundEPR.generated_vc_reduction` additionally constructs a
 closed EPR query with exact SAT/counterexample and UNSAT/validity correspondence.
 It uses formula-dependent finite scene diagrams and quantifier expansion; this
@@ -388,9 +395,14 @@ separate; motion checks already prove the complete abstract effects.
 
 ## 14. AFR and predicate definitions are inconsistent across the paper
 
-**Paper formalization open.** §5.1 calls an existential followed by a universal
-AFR, unlike Definition 5.1's single block. Its universal-only learner description
-also conflicts with existential classifiers (§3.2.1) and guards (§3.3).
+**AF choice settled; paper definitions need correction.** The user adopted the
+CAV paper's AF^R: Boolean combinations of QF formulas and single universal or
+existential blocks. `Fragments.AF` implements that definition. It permits
+`(forall x. P(x)) and (exists y. Q(y))`, while dependent nested alternation
+requires an expressible equivalent to qualify. §5.1 calls an existential
+followed by a universal AFR, unlike Definition 5.1's single block. Its
+universal-only learner description also conflicts with existential classifiers
+(§3.2.1) and guards (§3.3).
 
 Higher is non-strict in §2.2/Appendix A but strict in Definition 5.4. Direct-on
 vertical bands differ across §2.2, Definition 5.4 and Figure 12. Code uses

@@ -180,8 +180,9 @@ or quantifiers hidden in matrix atoms. A `Block` is a finite list-shaped tree
 of variable slots; it does not enumerate objects. The domain may be infinite.
 
 - `AF` permits Boolean combinations of universal-only or existential-only
-  blocks over quantifier-free matrices. This includes single-block AFR
-  specifications and explicitly fixes the paper's ambiguous terminology.
+  blocks over quantifier-free matrices. This is the CAV paper's Definition 1,
+  adopted by the user. It is broader than the RoboVerify draft's single-block
+  Definition 5.1; negation is handled by the checked De Morgan transformation.
 - `AE` is a finite `forall* exists*` prefix with a QF matrix (AER).
 - `EA` is a finite `exists* forall*` prefix with a QF matrix (EPR).
 
@@ -291,12 +292,41 @@ potentially very large finite expansion, not a compact EPR axiomatization of
 all well-formed scenes. The WP transformation itself does not enumerate block
 values or introduce additional relation symbols.
 
-The literal AFR-to-AFR action-preservation claim remains unproved: the placement
-construction proves AER closure. Exact block-model VC decidability no longer
-depends on leaving the model-to-finite-counterexample correspondence as an
-assumption, but that does not establish the paper's stronger AFR claim. The
-decision and reduction theorems concern the stated scene model, not arbitrary
-additional background axioms or the production Python/controller pipeline.
+The decision and reduction theorems concern the stated scene model, not
+arbitrary additional background axioms or the production Python/controller
+pipeline. The stronger AFR-preservation claim is refuted below.
+
+## AFR preservation is impossible in this model
+
+[AFPreservation.lean](RoboVerify/AFPreservation.lean) proves that exact Put WP
+does **not** preserve the CAV paper's full AF^R fragment, even with Boolean
+combinations of quantifier blocks. The postcondition used in the proof is
+already a single existential block:
+
+```text
+Q = exists x. x != a and Higher(a,x) and Higher(x,a) and ON*_zero(x,d)
+```
+
+After `Put(a,b)`, this asks whether a nonmoved object at the new height of `a`
+belongs to `d`'s frozen column. The two Higher atoms express equal height;
+ON*_zero is the existing frozen relation, not a new color predicate.
+
+`af_mutual_embeddings` proves that mutual relational embeddings preserving the
+named constants preserve every AF^R assertion. Two complete-column models with
+alternating frozen-column membership have such embeddings but disagree on the
+WP of Q. The proof then uses the exact small-model theorem to strengthen that
+obstruction to **finite** scenes: `finite_counterexample` proves that, for every
+proposed AF^R rewrite, some finite well-formed current/frozen scene with a legal
+Put makes the rewrite disagree with the exact WP. This is a semantic
+nondefinability theorem, not just a failure to normalize one proposed formula.
+
+`no_exact_af_wp` connects this result directly to independently defined action
+execution, witness existence, and correctness of every successor. Thus no
+alternative **exact** AF^R rule in the same vocabulary can restore general
+preservation under the current assumptions, even if the rule is only required
+to work when Put is enabled. A sound but stronger precondition is a different
+contract from weakest precondition. The AER-preserving construction and exact
+EPR reduction above provide the requested decidability fallback.
 
 ## Model assumptions to review
 

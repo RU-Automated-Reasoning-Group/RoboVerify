@@ -217,9 +217,14 @@ physical refinement remain separate obligations; see
 The Lean development also checks an exact shared-height-witness Put WP and a
 [restricted AER/EPR VC theorem](roboverify/proofs/wp_soundness/README.md#restricted-aerepr-vc-theorem),
 with execution/no-fault soundness for the restricted symbolic generator.
-This requires AF specifications, QF selection matrices, and sound AER action
-transformers. It does not establish EPR membership of the production pipeline
-or its background axioms; see [discrepancy 1](PAPER-DISCREPANCIES.md#1-theorem-52-contradicts-the-papers-own-table-7-r_higher).
+Concrete Put and assignment discharge the action obligations. For AF
+specifications and QF selection matrices, an exact small-model theorem and
+closed EPR reduction decide VC validity over all well-formed current/frozen
+block scenes. Preservation of the CAV paper's broader AF^R fragment is refuted
+for our Put by a checked finite-counterexample theorem; AER preservation suffices for the
+decidability result. This does not establish EPR membership of the production
+pipeline or arbitrary extra background axioms; see
+[discrepancy 1](PAPER-DISCREPANCIES.md#1-theorem-52-contradicts-the-papers-own-table-7-r_higher).
 
 [Higher and Scattered action summaries](roboverify/synthesis/verification_lib/RELATIONAL-SUMMARIES.md)
 now have an explicit framed, nondeterministic WP contract. CFG summary inference
