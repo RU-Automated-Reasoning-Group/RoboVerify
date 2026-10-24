@@ -73,9 +73,12 @@ are QF. This does not establish the original AFR claim or certify current
 Python VCs, quantified guards, or non-EPR background axioms. The concrete
 placement-to-AER connection is now checked for both block and table placement,
 including value-based aliases and all predicate replacements; its transformer
-is proved exact against the existing Lean `Action.put` semantics. Concrete
-program integration with an immutable table constant and a decision argument
-for the complete block-model assumptions remain open.
+is proved exact against the existing Lean `Action.put` semantics. The concrete
+block language now instantiates the program theorem with these Put rules and
+assignment, discharging action and immutable-table binding preservation.
+An exact decision argument for validity over the complete block model and
+the literal AFR-preservation claim remain open; EPR syntax alone does not
+establish either result.
 
 ## 2. Rollouts from segment-initial states are required but never addressed
 

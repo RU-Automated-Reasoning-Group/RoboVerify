@@ -3,6 +3,7 @@ import RoboVerify.RelationalSummary
 import RoboVerify.WitnessWP
 import RoboVerify.FragmentSoundness
 import RoboVerify.Placement
+import RoboVerify.BlockProgram
 import Lean
 
 /- Audit every declaration in this development, including generated helpers.
@@ -47,6 +48,9 @@ run_elab do
 #print axioms RoboVerify.Fragments.Placement.wpTable_equivWitness
 #print axioms RoboVerify.Fragments.Placement.wp_action_exact
 #print axioms RoboVerify.Fragments.Placement.put_preserves_table
+#print axioms RoboVerify.BlockProgram.Operation.wp_exact
+#print axioms RoboVerify.BlockProgram.verified_program
+#print axioms RoboVerify.BlockProgram.vcgen_epr
 #print axioms RoboVerify.RelationalSummary.rewrite_correct
 #print axioms RoboVerify.RelationalSummary.wp_exact
 #print axioms RoboVerify.RelationalSummary.wp_weakest

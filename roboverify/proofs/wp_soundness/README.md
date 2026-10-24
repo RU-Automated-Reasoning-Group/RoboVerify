@@ -168,9 +168,8 @@ translation gap recorded in the first version of this development.
 
 The distinguished table term must denote `none` in the input name valuation.
 This is an explicit hypothesis, and `put_preserves_table` proves Put preserves
-it. A concrete program integration must also preserve this constant under
-assignment and witness binding; it cannot silently treat the table as a
-mutable name. No extra root/height axioms were introduced to prove placement.
+it. The concrete program language below also preserves it under assignment
+and witness binding. No extra root/height axioms were introduced to prove placement.
 
 ## Restricted AER/EPR VC theorem
 
@@ -218,30 +217,44 @@ Fragments.Program.vcgen_background_epr:
 generator in the existing RoboVerify scene and name-store model, with
 independently defined execution and faults. `Fragments.Program.verified_program`
 proves that valid generated VCs imply partial correctness and no reachable
-modeled fault, **provided the used abstract action transformers are sound
-and preserve well-formed scenes**. Selection and loop binding are modeled
-directly, including arbitrary finite tuples of witnesses.
+modeled fault, **provided the used action transformers are sound and actions
+and witness bindings preserve the chosen admissible-state domain**. Atomic
+operations now have explicit labels and a transformer interface, so different
+operational actions are not identified merely by their transformer functions.
+Selection and loop binding are modeled directly, including arbitrary finite
+tuples of witnesses.
+
+[BlockProgram.lean](RoboVerify/BlockProgram.lean) instantiates this generator
+with concrete assignment and Put operations. A table literal is represented
+separately from mutable program variables; assignment and selection cannot
+overwrite it. Its `Admissible` domain requires both current and frozen entry
+scenes to be well formed and the table literal to denote the relational table.
+`Operation.wp_exact` and `Operation.preserves` discharge the atomic obligations,
+and `bindings_sound` proves every compiled witness binding preserves that
+domain. `BlockProgram.verified_program` consequently has no assumed action
+transformer, action-soundness hypothesis, or table-binding hypothesis left to
+the caller. Valid VCs imply partial correctness and absence of modeled faults
+for this concrete language. `BlockProgram.vcgen_epr` supplies the equivalent
+EPR negation for each concrete generated VC.
 
 This establishes the restricted symbolic theorem and the alternative WP's
 soundness, not EPR membership of the current Python pipeline. Remaining
 connections are explicit: production guard matrices may themselves contain
 universals; current/frozen top-existence background axioms are not EPR as
 written; relational summaries quantify successor arrays; and no checked
-Python-to-Lean translator exists. The concrete placement-to-AER translation is
-now checked, but the generic program theorem has not yet been instantiated
-with a concrete action vocabulary and an immutable table constant.
-Well-formed scenes
-are semantic hypotheses, not a proved EPR encoding of all environment axioms.
+Python-to-Lean translator exists. Concrete placement-to-AER translation and
+program integration are now checked. Well-formed scenes are semantic
+hypotheses, not a proved EPR encoding of all environment axioms.
 EPR decidability follows from the usual fragment theorem; this development
 does not mechanize an EPR decision procedure or certify Z3.
 
-The full requested block-system theorem remains open at three explicit points:
-concrete program integration with stable table bindings; the literal
-AFR-to-AFR action-preservation claim (the placement construction proves AER
-closure); and a decision/reduction theorem that accounts for the complete
-block-model assumptions, rather than assuming their background encoding is
-EPR. Neither the AER type of the generated formula nor the kernel axiom audit
-alone establishes those remaining properties.
+The full requested block-system theorem remains open at two explicit points:
+the literal AFR-to-AFR action-preservation claim (the placement construction
+proves AER closure); and an exact decision/reduction theorem for validity over
+the complete block model. The user requires exact model validity: a sound
+relational overapproximation with possibly spurious SAT countermodels is not
+sufficient. Neither the AER type of the generated formula nor the kernel
+axiom audit alone establishes those remaining properties.
 
 ## Model assumptions to review
 

@@ -133,32 +133,38 @@ theorem eval_exit [Nonempty D] (b : Block) (g : QF (V ⊕ b.Index))
 
 end Rules
 
-/-- The restricted symbolic VC generator. Each abstract action must supply an
+/- The restricted symbolic VC generator. Each abstract action must supply an
 AER transformer. Its semantic correctness is a separate premise: membership
 alone never certifies an action. lift_AF_action explains the proposed weaker
 uniform-AFR hypothesis. Guards here are QF matrices, including tuple choices. -/
-inductive Program (V : Type) where
-  | skip : Program V
-  | action : (AE V → AE V) → Program V
-  | get : (b : Block) → QF (V ⊕ b.Index) → (V → V ⊕ b.Index) → Program V
-  | seq : Program V → Program V → Program V
+/-- Atomic labels have a concrete transformer supplied by their vocabulary. -/
+class ActionWP (V A : Type) where
+  transform : A → AE V → AE V
+
+instance (V : Type) : ActionWP V (AE V → AE V) := ⟨id⟩
+
+inductive Program (V : Type) (A : Type := AE V → AE V) where
+  | skip : Program V A
+  | action : A → Program V A
+  | get : (b : Block) → QF (V ⊕ b.Index) → (V → V ⊕ b.Index) → Program V A
+  | seq : Program V A → Program V A → Program V A
   | branch : (b : Block) → QF (V ⊕ b.Index) → (V → V ⊕ b.Index) →
-      Program V → Program V → Program V
+      Program V A → Program V A → Program V A
   | loop : (b : Block) → QF (V ⊕ b.Index) → (V → V ⊕ b.Index) →
-      AF V → Program V → Program V
+      AF V → Program V A → Program V A
 
 namespace Program
-variable {V D : Type}
+variable {V D A : Type} [ActionWP V A]
 
-def wp : Program V → AE V → AE V
+def wp : Program V A → AE V → AE V
   | .skip, q => q
-  | .action transform, q => transform q
+  | .action a, q => ActionWP.transform a q
   | .get b g bind, q => Rules.get b g bind q
   | .seq c d, q => c.wp (d.wp q)
   | .branch b g bind c d, q => Rules.chooseIf b g bind (c.wp q) (d.wp q)
   | .loop _ _ _ inv _, _ => inv.toAE
 
-def vcs : Program V → AE V → List (AE V)
+def vcs : Program V A → AE V → List (AE V)
   | .skip, _ | .action _, _ | .get _ _ _, _ => []
   | .seq c d, q => c.vcs (d.wp q) ++ d.vcs q
   | .branch _ _ _ c d, q => c.vcs q ++ d.vcs q
@@ -166,20 +172,20 @@ def vcs : Program V → AE V → List (AE V)
     Rules.preserve b g bind inv (body.wp inv.toAE) ::
       Rules.exit b g inv q :: body.vcs inv.toAE
 
-def vcgen (p : AF V) (c : Program V) (q : AF V) : List (AE V) :=
+def vcgen (p : AF V) (c : Program V A) (q : AF V) : List (AE V) :=
   p.implies (c.wp q.toAE) :: c.vcs q.toAE
 
 /-- Every VC of this normalizing generator has an equivalent EPR refutation.
 No validity, domain-axiom encoding, or production Python correspondence is
 assumed by this syntactic theorem. -/
-theorem vcgen_epr (p q : AF V) (c : Program V) :
+theorem vcgen_epr (p q : AF V) (c : Program V A) :
     ∀ vc ∈ vcgen p c q, ∃ refutation : EA V,
       ∀ (D : Type) (M : Relation → D → D → Prop) (ρ : V → D),
         refutation.eval M ρ ↔ ¬vc.eval M ρ := by
   intro vc _
   exact ⟨vc.refute, fun _ M ρ => AE.eval_refute vc M ρ⟩
 
-theorem vcgen_background_epr (p q : AF V) (c : Program V) (background : EA V) :
+theorem vcgen_background_epr (p q : AF V) (c : Program V A) (background : EA V) :
     ∀ vc ∈ vcgen p c q, ∃ query : EA V,
       ∀ (D : Type) [Nonempty D] (M : Relation → D → D → Prop) (ρ : V → D),
         query.eval M ρ ↔ background.eval M ρ ∧ ¬vc.eval M ρ := by
