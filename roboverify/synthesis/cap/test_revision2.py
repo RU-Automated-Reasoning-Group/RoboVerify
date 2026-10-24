@@ -9,6 +9,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from synthesis.cfg.collection import STACK_SETTLING_STEPS
+
 from .audit import audit_run
 from .checker import AnalysisFailure, DSLContract, check_bundle
 from .config import ModelConfig, RunConfig
@@ -107,7 +109,8 @@ class Revision2RunnerTests(unittest.TestCase):
             "cap_method_2", ["if Pick(b0):\n    pass"] * 2, attempts=2
         )
         self.assertEqual(result["status"], "constraint_failed")
-        self.assertEqual(len(self.env.actions), 0)
+        # Only the post-rollout settled diagnostic steps the environment.
+        self.assertEqual(len(self.env.actions), STACK_SETTLING_STEPS)
         result = self.execute("cap_method_2", ["Move(b0,b0,b0,[99,99,99])"])
         self.assertEqual(result["status"], "primitive_failed")
         self.assertEqual(len(self.backend.prompts), 1)

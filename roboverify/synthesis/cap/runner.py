@@ -29,10 +29,12 @@ from .llm import HTTPModel, LoggedModel, ModelError
 from .logger import CapLogger
 from .prompt_package import package, prompt_provenance
 from .tasks import (
+    SUCCESS_CRITERION,
     TASK_INSTRUCTIONS,
     check_task,
     evaluate_terminal,
     prepare_environment,
+    settled_environment_success,
     validate_start,
 )
 
@@ -239,8 +241,14 @@ def run_once(
         model_config.transport_retries,
         recovery_feedback=recovery_feedback,
     )
-    env, recorder, entry = None, None, None
-    outcome = {"success": False, "environment_success": None, "dsl_postcondition": None}
+    env, recorder, entry, adapter = None, None, None, None
+    outcome = {
+        "success": False,
+        "environment_success": None,
+        "dsl_postcondition": None,
+        "task_spec_success": False,
+        "success_criterion": SUCCESS_CRITERION,
+    }
     status, reason = "failed", ""
     try:
         with deadline(budget):
@@ -268,7 +276,7 @@ def run_once(
                     method.policy._cfg["debug_mode"] = True
                     budget.timings.call("generation_control", method, instruction)
                 status = "generated"
-                outcome["success"] = None
+                outcome["success"] = outcome["task_spec_success"] = None
             else:
                 from synthesis.cfg.recordings import load_traces
                 from synthesis.cfg.reset import inner_env
@@ -370,9 +378,16 @@ def run_once(
                             "evaluation", evaluate_terminal, env, config.task, entry
                         )
                     )
-                    # Physical success is the primary metric; DSL agreement is
-                    # retained independently rather than silently changing it.
+                    # `success` keeps its physical definition for comparison with
+                    # earlier runs. `task_spec_success` is RoboVerify's demonstration
+                    # acceptance: normal completion, converged primitives, and the
+                    # shared pre/postcondition (Revision 5).
                     outcome["success"] = outcome["environment_success"]
+                    outcome["task_spec_success"] = (
+                        adapter.unconverged_primitives == 0
+                        and outcome["task_spec_precondition"] is True
+                        and outcome["task_spec_postcondition"] is True
+                    )
                     status = "completed" if outcome["success"] else "goal_failed"
     except Exception as exc:
         status = failure_status(exc)
@@ -393,12 +408,20 @@ def run_once(
                     )
             except Exception as evaluation_error:
                 logger.emit("evaluation_failure", error=str(evaluation_error))
-        outcome["success"] = (
+        outcome["success"] = outcome["task_spec_success"] = (
             None
             if generate_only or status in {"adapter_gap", "environment_unavailable"}
             else False
         )
     finally:
+        if env is not None and entry is not None:
+            # Diagnostic only, outside the trial deadline and after recording.
+            try:
+                outcome["settled_environment_success"] = budget.timings.call(
+                    "evaluation", settled_environment_success, env
+                )
+            except Exception as exc:
+                logger.emit("settled_evaluation_failure", error=str(exc))
         if env is not None:
             try:
                 budget.timings.call("cleanup", env.close)
@@ -410,6 +433,11 @@ def run_once(
             condition_mode=config.condition_mode,
             observation_api_version=OBSERVATION_API_VERSION,
             task=config.task,
+            unconverged_primitives=(
+                adapter.unconverged_primitives
+                if isinstance(adapter, RoboVerifyAdapter)
+                else None
+            ),
             model_calls=budget.calls,
             known_tokens=budget.tokens,
             unknown_usage_calls=budget.unknown_usage_calls,

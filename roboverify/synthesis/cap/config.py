@@ -146,6 +146,9 @@ class RecoveryConfig:
     total_sim_steps: int = 50000
     total_timeout: float = 3000.0
     context_tokens: int = 200000
+    # Attempt field that ends recovery. "task_success" preserves cap-recovery
+    # behavior; "task_spec_success" uses RoboVerify's criterion (Revision 5).
+    success_field: str = "task_success"
     feedback: RecoveryFeedbackConfig = field(default_factory=RecoveryFeedbackConfig)
     history: RecoveryHistoryConfig = field(default_factory=RecoveryHistoryConfig)
 
@@ -159,11 +162,16 @@ class RecoveryConfig:
                 "enabled",
                 "on_dsl_noncompliance",
                 "max_rounds",
+                "success_field",
                 "feedback",
                 "history",
             }:
                 if not math.isfinite(value) or value <= 0:
                     raise ValueError(f"Recovery {name} must be positive")
+        if self.success_field not in {"task_success", "task_spec_success"}:
+            raise ValueError(
+                "Recovery success_field must be task_success or task_spec_success"
+            )
         if (
             self.history.mode == "executed_programs"
             and not self.feedback.current_source

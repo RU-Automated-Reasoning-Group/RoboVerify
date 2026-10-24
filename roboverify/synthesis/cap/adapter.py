@@ -46,6 +46,8 @@ class RoboVerifyAdapter:
         self.trajectory = [self.entry_observation.copy()]
         self.query_depth = 0
         self.api_names = task_api_names(task)
+        # Counted independently: a generated policy may catch PrimitiveFailure.
+        self.unconverged_primitives = 0
 
     def observe(self):
         return self.inner.flatten_observation(self.inner._get_obs()).copy()
@@ -200,6 +202,7 @@ class RoboVerifyAdapter:
             controller_phase=result.phase if result else None,
         )
         if not result or not result.converged:
+            self.unconverged_primitives += 1
             raise PrimitiveFailure(
                 f"{name} did not converge within its shared primitive budget"
             )

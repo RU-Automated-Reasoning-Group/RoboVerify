@@ -64,13 +64,19 @@ those starts must satisfy the shared precondition. The per-trial `success`
 uses normal completion, primitive convergence, and the environment terminal
 check. Batch `first_attempt_success` and recovery `task_success` additionally
 use the DSL postcondition for Stack/Unstack. Upstream now defines shared
-specifications for every task. Because CaP is RoboVerify's baseline, Revision 5
-adopts RoboVerify's demonstration-acceptance criterion for every task: normal
-completion, primitive convergence, the shared precondition at entry, and the
-shared postcondition (goal occupancy for Grid/Pyramid) at the final state. It
-is reported as a new primary field, `task_spec_success`; the existing fields keep
-their definitions, and the physical evaluator becomes a final and settled diagnostic. Revision 5 also adds
-a `tbl` reference for Move/Release. See the
+specifications for every task. Because CaP is RoboVerify's baseline, every
+trial also reports `task_spec_success` (`success_criterion: task-spec-v1`),
+RoboVerify's demonstration-acceptance criterion: normal completion, every
+primitive converged (counted even if a policy catches the failure), and the
+shared pre/postcondition (`task_spec_precondition`, `task_spec_postcondition`)
+for Stack, Unstack, Reverse and ReStack. It is the primary metric for new runs;
+the existing fields keep their definitions. `settled_environment_success`
+re-checks the physical evaluator after 50 host steps with the gripper held,
+outside the trial budget and recording. Batch summaries report first-attempt and
+final task-spec success; recovery reports the first attempt satisfying it, and
+`recovery.success_field` (default `task_success`) selects which field ends
+recovery. The remaining Revision 5 work (goal tasks, `tbl` references, uniform
+time limits) is planned; see the
 [task expansion plan](docs/revision_5_add_tasks.md).
 
 Method 1 supports plain top-level function definitions, assignment, arithmetic

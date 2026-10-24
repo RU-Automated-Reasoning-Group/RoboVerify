@@ -83,6 +83,25 @@ class RecoveryTests(unittest.TestCase):
                 self.assertEqual(feedback["evidence"]["earlier_failures"], [])
                 self.assertIn('"earlier_failures":[]', backend.prompts[1])
 
+    def test_task_spec_outcome_is_the_first_attempt_that_satisfies_it(self):
+        for field in ("task_success", "task_spec_success"):
+            with self.subTest(success_field=field):
+                result, _ = self.execute(
+                    "cap_method_1",
+                    ["x=get(lambda x: not ON_star(x,x))", "pass"],
+                    enabled=True,
+                    success_field=field,
+                )
+                self.assertEqual(result["recovery_success_field"], field)
+                self.assertTrue(result["task_spec_success"])
+                self.assertFalse(result["first_attempt_task_spec_success"])
+                self.assertEqual(result["task_spec_success_round"], 1)
+                self.assertEqual(result["recovery_rounds"], 1)
+
+    def test_unknown_success_field_is_rejected(self):
+        with self.assertRaises(ValueError):
+            RecoveryConfig(success_field="success")
+
     def test_disabled_is_one_attempt_and_unchanged_prompt(self):
         failed = "x=get(lambda x: not ON_star(x,x))"
         off, off_model = self.execute("cap_method_2", [failed, "pass"], enabled=False)
@@ -149,6 +168,7 @@ class RecoveryTests(unittest.TestCase):
 
     def test_goal_primitive_tick_and_unknown_evaluation_failures_can_recover(self):
         from unittest.mock import patch
+
         from .tasks import evaluate_terminal
 
         for scenario, source in (

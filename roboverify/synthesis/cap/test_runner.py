@@ -183,6 +183,48 @@ class RunnerTests(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertFalse(result["dsl_postcondition"])
 
+    def test_task_spec_success_follows_shared_pre_and_postcondition(self):
+        result = self.execute("cap_method_1", ["pass"])
+        self.assertTrue(result["task_spec_success"])
+        self.assertEqual(result["success_criterion"], "task-spec-v1")
+        self.assertTrue(result["task_spec_precondition"])
+        self.assertTrue(result["task_spec_postcondition"])
+        self.assertTrue(result["settled_environment_success"])
+        self.assertEqual(result["unconverged_primitives"], 0)
+
+        config = RunConfig(num_blocks=2, save_video=False, output_root=self.tmp.name)
+        with contextlib.redirect_stdout(io.StringIO()):
+            scattered = run(
+                config,
+                ModelConfig(),
+                backend=ScriptedModel(["pass"]),
+                environment_factory=self.factory,
+                capture_stdout=False,
+            )
+        # Physically "successful" fixture, but the blocks never form a tower.
+        self.assertTrue(scattered["success"])
+        self.assertFalse(scattered["task_spec_postcondition"])
+        self.assertFalse(scattered["task_spec_success"])
+
+    def test_task_spec_success_requires_normal_completion(self):
+        result = self.execute("cap_google_baseline", ["pass\nmissing_value"])
+        self.assertEqual(result["status"], "failed")
+        self.assertTrue(result["task_spec_postcondition"])
+        self.assertFalse(result["task_spec_success"])
+
+    def test_caught_primitive_failure_is_not_task_spec_success(self):
+        result = self.execute(
+            "cap_google_baseline",
+            ["try:\n    Move(b0,b0,b0,[99,99,99])\nexcept Exception:\n    pass"],
+        )
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["unconverged_primitives"], 1)
+        self.assertFalse(result["task_spec_success"])
+
+    def test_generation_diagnostic_has_no_task_spec_outcome(self):
+        result = self.execute("cap_method_1", ["Pick(b0)"], generate_only=True)
+        self.assertIsNone(result["task_spec_success"])
+
     @unittest.skipUnless(
         shutil.which("ffmpeg"), "ffmpeg is required for video integration"
     )
@@ -205,3 +247,40 @@ class RunnerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TaskSpecEvaluationTests(unittest.TestCase):
+    """Shared task_spec evaluation for tasks whose formulas include the table."""
+
+    def evaluate(self, task, entry_positions, final_positions):
+        from .tasks import evaluate_terminal
+
+        env = RobotFixture(len(entry_positions), success=False)
+        for i, position in enumerate(entry_positions):
+            env.obs[10 + 12 * i : 13 + 12 * i] = position
+        entry = env.obs.copy()
+        for i, position in enumerate(final_positions):
+            env.obs[10 + 12 * i : 13 + 12 * i] = position
+        return evaluate_terminal(env, task, entry)
+
+    def test_reverse_uses_frozen_entry_order(self):
+        tower = [[0, 0, 0.025], [0, 0, 0.075]]
+        reversed_tower = [[0, 0, 0.075], [0, 0, 0.025]]
+        result = self.evaluate("reverse", tower, reversed_tower)
+        self.assertTrue(result["task_spec_precondition"])
+        self.assertTrue(result["task_spec_postcondition"])
+        # Earlier results had no DSL postcondition for Reverse; keep it that way.
+        self.assertIsNone(result["dsl_postcondition"])
+        self.assertFalse(
+            self.evaluate("reverse", tower, tower)["task_spec_postcondition"]
+        )
+
+    def test_restack_requires_every_block_over_b0(self):
+        loose = [[0, 0, 0.025], [0.2, 0, 0.025]]
+        stacked = [[0, 0, 0.025], [0, 0, 0.075]]
+        result = self.evaluate("restack", loose, stacked)
+        self.assertTrue(result["task_spec_precondition"])
+        self.assertTrue(result["task_spec_postcondition"])
+        self.assertFalse(
+            self.evaluate("restack", loose, loose)["task_spec_postcondition"]
+        )

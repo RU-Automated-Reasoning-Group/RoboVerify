@@ -1,6 +1,6 @@
 # Revision 5: extend CaP to the remaining RoboVerify tasks
 
-- **Status:** planned; not implemented. Decided on 2026-10-23: CaP adopts RoboVerify's success criterion (§3.3) as a new `task_spec_success` field (§3.5), `tbl` option A (§4.2), and uniform default time limits (§4.1).
+- **Status:** step 1 (§4.7) implemented on 2026-10-23; the remaining steps are planned. Decided on 2026-10-23: CaP adopts RoboVerify's success criterion (§3.3) as a new `task_spec_success` field (§3.5), `tbl` option A (§4.2), and uniform default time limits (§4.1).
 - **Goal:** run Unstack, Reverse, Restack, Grid and Pyramid in CaP with task definitions, scenes and success criteria that match RoboVerify's.
 - **References:** [shared task conditions](../../cfg/tasks.py), [goal-task validation](../../cfg/goal_collection.py), [collector](../../entry/collect_demos.py), [collection audit](../../entry/audit_demos.py), [environment evaluators](../../environment/cee_us_env/fpp_construction_env.py), [reference programs](../../examples/), [CaP task adapter](../tasks.py), [CaP DSL adapter](../adapter.py).
 
@@ -143,6 +143,18 @@ None of them equals RoboVerify's criterion (§3.3).
 - **Existing fields:** `success`, `first_attempt_success` and `task_success` keep their definitions, so Revision 4.x and Stage B results stay comparable. They become diagnostics.
 - **Missing values:** older results have no `task_spec_success`. Do not backfill it from their saved fields; recompute it from saved final states only when needed and label the result as recomputed.
 
+**Implementation (2026-10-23).**
+
+- `tasks.evaluate_terminal` reports `task_spec_precondition` (entry) and `task_spec_postcondition` (final) for Stack, Unstack, Reverse and Restack. It includes the table in the domain for the last three, as upstream collection does. `dsl_postcondition` remains Stack/Unstack-only.
+- The adapter counts `unconverged_primitives` itself, so a policy that catches `PrimitiveFailure` cannot report task-spec success.
+- `runner` sets `task_spec_success` only after normal completion, so a raised failure scores false. It also records `success_criterion` and computes `settled_environment_success` after recording ends, outside the trial deadline. The 50 settling steps are not charged to the simulation budget.
+- Recovery reports `task_spec_success`, `task_spec_success_round` and `first_attempt_task_spec_success`. The new `recovery.success_field` selects the field that ends recovery. Its default, `task_success`, preserves cap-recovery behavior; `task_spec_success` stops at the first attempt meeting RoboVerify's criterion.
+- Batch summaries add first-attempt and final task-spec success columns.
+- Validation:
+  - all 223 CaP tests pass;
+  - real MuJoCo Stack runs of a scripted reference policy (seeds 0 and 1) scored `task_spec_success` and `settled_environment_success` true;
+  - live OpenRouter smoke trials with failing outcomes recorded every new field.
+
 **Further consequences.**
 
 - Derive each task instruction from the shared specification and version it in the prompt package. The current Stack sentence matches `∀x. ON*(x, b0)` but does not mention the same-column tolerance.
@@ -227,7 +239,7 @@ Required CaP interface (names to be settled with the checker contract):
 
 ### 4.7 Implementation order
 
-1. `task_spec_success` (§3.5) with physical diagnostics, for all tasks.
+1. `task_spec_success` (§3.5) with physical diagnostics, for all tasks. **Implemented.**
 2. §4.1 shared changes, including the uniform time limits, and the §4.2 `tbl` handle.
 3. Unstack, then Reverse, then Restack.
 4. Goal interface, then Grid, then Pyramid.

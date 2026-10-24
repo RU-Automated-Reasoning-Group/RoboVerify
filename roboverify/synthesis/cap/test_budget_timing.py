@@ -8,6 +8,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from synthesis.cfg.collection import STACK_SETTLING_STEPS
+
 from .budget import Budget
 from .config import ModelConfig, RunConfig
 from .contracts import BudgetExceeded
@@ -150,7 +152,9 @@ class BudgetTimingTests(unittest.TestCase):
                 self.assertEqual(result["status"], "budget_exhausted")
                 self.assertEqual(result["budget_exhausted_by"], "simulation_steps")
                 self.assertFalse(result["success"])
-                self.assertEqual(len(env.actions), 2)
+                # The settled diagnostic steps the environment after the rollout,
+                # outside the policy budget.
+                self.assertEqual(len(env.actions), 2 + STACK_SETTLING_STEPS)
                 self.assertEqual(result["simulation_steps"], 2)
                 self.assertEqual(result["queue_wait_seconds"], 123)
                 self.assertAlmostEqual(

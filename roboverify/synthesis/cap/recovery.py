@@ -959,6 +959,8 @@ def run_recovery(config, model_config, **kwargs):
                 if config.task in {"stack", "unstack"}
                 else True
             )
+            # Seeds from runs before Revision 5 lack the field; never infer it.
+            result.setdefault("task_spec_success", None)
             attempts.append(result)
             logger.artifact(f"rounds/{index:03d}/result.json", result)
             try:
@@ -1004,12 +1006,13 @@ def run_recovery(config, model_config, **kwargs):
                 round=index,
                 status=result["status"],
                 task_success=result["task_success"],
+                task_spec_success=result["task_spec_success"],
                 duplicate_of=record["duplicate_of"],
                 calls=ledger.calls,
                 tokens=ledger.tokens,
                 charged_tokens=ledger.charged_tokens,
             )
-            trigger = not result["task_success"] or (
+            trigger = result[cfg.success_field] is not True or (
                 cfg.on_dsl_noncompliance and result.get("dsl_compliance") == "fail"
             )
             logger.emit(
@@ -1067,6 +1070,17 @@ def run_recovery(config, model_config, **kwargs):
                 attempts and attempts[-1]["task_success"] and stop == "success"
             ),
             first_attempt_success=bool(attempts and attempts[0]["task_success"]),
+            # The recovery outcome under RoboVerify's criterion: the first attempt
+            # for which it holds, independent of which field ended recovery.
+            task_spec_success=any(a["task_spec_success"] is True for a in attempts),
+            task_spec_success_round=next(
+                (i for i, a in enumerate(attempts) if a["task_spec_success"] is True),
+                None,
+            ),
+            first_attempt_task_spec_success=bool(
+                attempts and attempts[0]["task_spec_success"] is True
+            ),
+            recovery_success_field=cfg.success_field,
             recovery_rounds=max(0, len(attempts) - 1),
             rollout_count=sum(r["rolled_out"] for r in records),
             stop_reason=stop,
