@@ -56,12 +56,22 @@ There is no coordinate-bearing `tbl` handle or added placement macro.
 
 Grid/Pyramid explicitly return `adapter_gap` before model calls: their shared
 Goal traversal, occupancy, and physical-reference contract remains unfinished.
-ReStack uses the environment's PartialStack reset and terminal criterion;
+ReStack uses the upstream Restack reset (one source tower containing b0 plus
+loose blocks) and the Stack terminal criterion; its start is not yet validated.
 Reverse checks the canonical initial order and evaluates complete reversal.
-Shared DSL pre/post checks are additionally reported for Stack/Unstack. Initial
-states must satisfy the shared precondition. The primary success metric uses
-normal completion, primitive convergence, and the environment terminal check;
-the DSL postcondition is a separate diagnostic, not an extra scoring gate.
+Shared DSL pre/post checks are additionally reported for Stack/Unstack; only
+those starts must satisfy the shared precondition. The per-trial `success`
+uses normal completion, primitive convergence, and the environment terminal
+check. Batch `first_attempt_success` and recovery `task_success` additionally
+use the DSL postcondition for Stack/Unstack. Upstream now defines shared
+specifications for every task. Because CaP is RoboVerify's baseline, Revision 5
+adopts RoboVerify's demonstration-acceptance criterion for every task: normal
+completion, primitive convergence, the shared precondition at entry, and the
+shared postcondition (goal occupancy for Grid/Pyramid) at the final state. It
+is reported as a new primary field, `task_spec_success`; the existing fields keep
+their definitions, and the physical evaluator becomes a final and settled diagnostic. Revision 5 also adds
+a `tbl` reference for Move/Release. See the
+[task expansion plan](docs/revision_5_add_tasks.md).
 
 Method 1 supports plain top-level function definitions, assignment, arithmetic
 for action parameters, object equality, Boolean conditions, nested `if`/`while`,
@@ -286,7 +296,8 @@ failure, not grounds to silently alter the experiment.
 ## Resource budgets and timing
 
 CaP now defaults to a **600-second wall-clock safety cap** (`--timeout`).
-Unstack retains its 60-second end-to-end cap. Trial effort is also bounded by
+Unstack currently retains a 60-second end-to-end cap; Revision 5 removes this
+special case so that every task uses the same defaults. Trial effort is also bounded by
 model calls (`--max-model-calls`), provider-reported cumulative tokens
 (`--max-tokens`), helper/call depth (`--max-depth`), execution/query ticks
 (`--max-steps`), and policy simulation-step calls (`--max-sim-steps`, default
