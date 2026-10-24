@@ -21,6 +21,13 @@ optionally replaces that default. Collection support is broader than proof suppo
 | Pyramid | Supported, nested goal loops | Not supported |
 | Build3D | Supported, layer/row/column goal loops | Not supported |
 
+[Symbolic pre/postconditions](roboverify/synthesis/cfg/TASK-CONDITIONS.md) are now
+available for all seven tasks. Stack, Unstack, Reverse and Restack retain their
+shared block conditions; Grid, Pyramid and Build3D share an identity-independent
+occupancy contract with empty initial goals, scattered sources and one block per
+goal. These specifications add no layout-shape requirement and do not enable the
+unsupported verification pipelines listed above.
+
 The **2026-10-23 collection audit passed all 105 demonstrations**: seeds 0–14
 for four-block Stack/Unstack/Reverse, both five-block Restack source layouts,
 3×3 Grid, and a 4+3+2+1 Pyramid. Every archive passed current program/task
@@ -301,6 +308,7 @@ geometric model, not total termination or physical-controller refinement.
 | --- | --- |
 | [AGENTS.md](AGENTS.md) | Development rules, environment, commands, architecture and experiment reporting. |
 | [PAPER-DISCREPANCIES.md](PAPER-DISCREPANCIES.md) | The single paper-review record: stable entries, decisions/proofs, status and remaining actions. |
+| [Benchmark conditions](roboverify/synthesis/cfg/TASK-CONDITIONS.md) | Symbolic pre/postconditions for all seven tasks and their model scope. |
 | [CFG verification](roboverify/synthesis/cfg/VERIFICATION.md) | Integrated synthesis/verification workflow and model assumptions. |
 | [Motion API](roboverify/synthesis/verification_lib/README.md) | Motion contracts, collision/support checks, bounded noise and BMC distinctions. |
 | [Draft WP soundness proof](roboverify/synthesis/verification_lib/WP-SOUNDNESS-DRAFT.md) | Relational model, atomic rewrite proofs, and explicit assumptions for review. |

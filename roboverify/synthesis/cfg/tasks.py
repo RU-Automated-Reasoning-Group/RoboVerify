@@ -12,6 +12,10 @@ from synthesis.predicates.term import (
 
 
 def task_spec(task):
+    """Block-only terms used by the current pipeline.
+
+    Use ``symbolic_task_spec`` for Z3 conditions, including goal benchmarks.
+    """
     x, y, b0 = ref("x"), ref("y"), ref("b0")
     if task == "stack":
         different = negate(atom("eq", x, y))
@@ -84,6 +88,23 @@ def task_spec(task):
             ),
         )
     raise ValueError(f"Unsupported task: {task}")
+
+
+def symbolic_task_spec(task, context):
+    """Return Z3 pre/postconditions for any benchmark.
+
+    Tower tasks take HighLevelContext; goal tasks take GoalTaskContext. This
+    defines assertions only, without enabling unsupported CFG/WP backends.
+    """
+    if task in ("grid", "pyramid", "build3d"):
+        from synthesis.cfg.goal_specs import GoalTaskContext
+
+        if not isinstance(context, GoalTaskContext):
+            raise TypeError("Goal tasks require a GoalTaskContext")
+        return context.task_spec(task)
+    from synthesis.predicates.term import to_z3
+
+    return tuple(to_z3(term, context) for term in task_spec(task))
 
 
 def task_identity(task):

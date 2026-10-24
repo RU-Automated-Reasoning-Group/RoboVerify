@@ -1127,9 +1127,15 @@ the row-head-only nested axioms; this illustration mismatch is unresolved.
 row quantifies `g` but writes `reach(h0,x)`; its Grid/Pyramid Scattered clauses
 omit the distinct-block restriction. The displayed `reach` definition omits
 closure stars: immediate-successor composition cannot describe all visited
-goals. Specify closure-inclusive row traversal, including h0. Verification also
-needs a sufficient-block premise; otherwise the inner guard can stop with goals
-unfilled. The existing partial-correctness VCs alone do not establish termination
+goals. Specify closure-inclusive row traversal, including h0. The shared
+[goal-task specification](roboverify/synthesis/cfg/TASK-CONDITIONS.md)
+now supplies the distinct-block Scattered restriction, empty-goal entry condition,
+physical occupancy postcondition and an equal-count resource premise matching the
+benchmark factories. This addresses the specification gap without encoding row
+shapes or traversal into the task contract. Sound traversal/action rules and
+program proof integration remain separate work; without enough physical blocks,
+the inner guard can stop with goals unfilled. The existing partial-correctness
+VCs alone do not establish termination
 (15). No synthesis or formal verification result is claimed for these executions.
 
 ## 41. Restack needs a terminating first loop and an executable lateral layout

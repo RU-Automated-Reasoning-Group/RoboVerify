@@ -3,6 +3,11 @@
 `synthesis.entry.synthesize_cfg` runs the structured CFG synthesizer and both
 verification stages on the same candidate and task conditions.
 
+All seven benchmarks have [symbolic task conditions](TASK-CONDITIONS.md), exposed
+through `symbolic_task_spec`. Goal-task assertions use a separate physical
+occupancy vocabulary; adding these specifications does not add goal-aware
+inference, weakest-precondition rules or integrated proof support.
+
 ## Collection and pipeline modes
 
 Collection supports all seven current tasks: Stack, Unstack, Reverse, Restack,

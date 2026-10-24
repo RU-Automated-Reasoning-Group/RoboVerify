@@ -6,7 +6,7 @@ import z3
 
 from synthesis.api.instructions import Assign
 from synthesis.api.program import wp
-from synthesis.cfg.tasks import task_spec
+from synthesis.cfg.tasks import symbolic_task_spec, task_spec
 from synthesis.predicates.scene import Scene, evaluate
 from synthesis.predicates.term import to_z3
 from synthesis.util.on import TABLE
@@ -81,6 +81,50 @@ class ReverseTaskTests(unittest.TestCase):
         partial = dict(final)
         partial[0] = initial[0]
         self.assertFalse(evaluate(post, Scene(partial, bindings, initial)))
+
+
+class RemainingTowerTaskTests(unittest.TestCase):
+    def test_unstack_accepts_tower_entry_and_requires_complete_dismantling(self):
+        pre, post = task_spec("unstack")
+        bindings = {"b0": 0, "tbl": "tbl"}
+        tower = {0: (0, 0, 0.425), 1: (0, 0, 0.475), "tbl": TABLE}
+        self.assertTrue(evaluate(pre, Scene(tower, bindings)))
+        self.assertFalse(evaluate(post, Scene(tower, bindings)))
+        loose = {0: (0, 0, 0.425), 1: (0.15, 0, 0.425), "tbl": TABLE}
+        self.assertFalse(evaluate(pre, Scene(loose, bindings)))
+        self.assertTrue(evaluate(post, Scene(loose, bindings)))
+        singleton = Scene({0: tower[0], "tbl": TABLE}, bindings)
+        self.assertTrue(evaluate(pre, singleton))
+        self.assertTrue(evaluate(post, singleton))
+
+    def test_restack_allows_interior_base_and_separated_columns(self):
+        pre, post = task_spec("restack")
+        bindings = {"b0": 1, "tbl": "tbl"}
+        mixed = {0: (0, 0, 0.425), 1: (0, 0, 0.475), 2: (0.15, 0, 0.425), "tbl": TABLE}
+        self.assertTrue(evaluate(pre, Scene(mixed, bindings)))
+        self.assertFalse(evaluate(post, Scene(mixed, bindings)))
+        final = {
+            1: (0, -0.15, 0.425),
+            0: (0, -0.15, 0.475),
+            2: (0, -0.15, 0.525),
+            "tbl": TABLE,
+        }
+        self.assertTrue(evaluate(post, Scene(final, bindings)))
+        self.assertFalse(evaluate(post, Scene(final, dict(bindings, b0=0))))
+        self.assertFalse(evaluate(pre, Scene(mixed, dict(bindings, b0="tbl"))))
+
+    def test_all_tower_contracts_have_nonvacuous_symbolic_pre_and_post(self):
+        for task in ("stack", "unstack", "reverse", "restack"):
+            with self.subTest(task=task):
+                context = HighLevelContext(use_tbl=task != "stack")
+                pre, post = symbolic_task_spec(task, context)
+                b0 = context.get_consts("b0")
+                for condition in (pre, post):
+                    solver = context.new_solver(5000)
+                    solver.add(condition)
+                    if context.use_tbl:
+                        solver.add(b0 != context.get_consts("tbl"))
+                    self.assertEqual(solver.check(), z3.sat, solver.reason_unknown())
 
 
 if __name__ == "__main__":

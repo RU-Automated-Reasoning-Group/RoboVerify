@@ -58,6 +58,11 @@ are implemented; full synthesis acceptance is resolved. Stack reset bounds initi
 blocks to 0.70 m XY from the robot base.
 The current tasks are Stack, Unstack, Reverse, Restack, Grid, Pyramid and Build3D.
 `collect_demos --task TASK` defaults to a provided groundtruth for all seven.
+All seven have [symbolic pre/postconditions](roboverify/synthesis/cfg/TASK-CONDITIONS.md)
+through `cfg.tasks.symbolic_task_spec`. Tower conditions are unchanged;
+Grid/Pyramid/Build3D share `cfg.goal_specs.GoalTaskContext` occupancy assertions,
+with no shape/traversal restrictions. This supplies specifications only, not
+new goal-aware inference, WP rules or proof integration.
 The 2026-10-23 audit saved 15 seeds (0–14) for each of seven configurations,
 105 valid demonstrations including both five-block Restack layouts. Archives
 and audit reports are under `demos/pipeline-audit-20261023/`; see the
