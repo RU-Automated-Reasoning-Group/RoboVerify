@@ -108,4 +108,5 @@ A trial merge in a throwaway worktree (aborted, nothing committed) gave:
 
 - **Conclusion.** The merge leaves CaP Stack execution unchanged, so post-merge Stack results remain comparable with Revision 4.x results.
 - **Replay artifacts:** `runs/cap-merge-check/20261023-stack-replay/{old,new}`.
-- **Remaining step:** after Stage B finishes, fast-forward (or merge) `feature/cap` to this branch in the main worktree and push.
+- **Fast-forward (2026-10-24).** Stage B finished at 03:59 EDT (audit: no issues). `feature/cap` was then fast-forwarded in the main worktree from `f74a9c9` to `60fb26f`, the last validated commit pushed on this branch, and pushed.
+- Later commits on `merge/upstream-main-20261023` (Revision 5 work in the merge worktree) reach `feature/cap` by an ordinary merge.
