@@ -33,8 +33,9 @@ experiment guidance specific to `synthesis/cap/`.
   success alone is a result, not a reason. Record such a change as a new
   `config_frozen_vN.py` and apply it to all six tasks (§3.6).
 - Use the paper's block counts for each task (Stack/Unstack/Reverse 4, ReStack
-  5 with a 3-block tower, Grid/Pyramid 6), recorded with sources and CaP
-  settings in [task_specification.md](docs/task_specification.md). Repository
+  5, Grid/Pyramid 6; ReStack's 3-block tower is only drawn in Fig. 10d), and
+  check each task's pre/postconditions, in
+  [task_specification.md](docs/task_specification.md). Repository
   defaults differ, so set counts explicitly and use the same scenes for CaP and
   RoboVerify.
 - The repository's 60-second Unstack limit governs `synthesize_cfg`'s process

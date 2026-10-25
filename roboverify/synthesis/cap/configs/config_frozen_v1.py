@@ -110,6 +110,7 @@ TASKS = {
     "stack": {"num_blocks": 4},
     "unstack": {"num_blocks": 4},
     "reverse": {"num_blocks": 4},
+    # Tower height 3 is counted from Fig. 10d; the paper's text does not state it.
     "restack": {"num_blocks": 5, "initial_tower_blocks": 3},
     "grid": {"num_blocks": 6},  # layout (grid_rows, grid_cols) not yet chosen
     "pyramid": {"num_blocks": 6, "bottom_row_blocks": 3},
