@@ -1,6 +1,6 @@
 # Revision 4.3: experiment report
 
-**Status: both studies completed.** Prompt factorial: selected prompt set `p0001` (motion-planning limits only, Section 1.5.4). Feedback ablation: no feedback item has a detected effect after multiplicity correction (Section 2.5). Baseline configuration for RoboVerify comparisons, chosen on point estimates: Method 2, prompt set `p0101`, feedback profile `no_failure_events` (Section 3).
+**Status: both studies completed.** Prompt factorial: selected prompt set `p0001` (motion-planning limits only, Section 1.5.4). Feedback ablation: no feedback item has a detected effect after multiplicity correction (Section 2.5). Baseline configuration for RoboVerify comparisons, chosen on point estimates under RoboVerify's `task_spec_success` criterion: Method 2, prompt set `p0101`, feedback profile `full` (Section 3). Section 4 examines final states that satisfy the symbolic postcondition but not the physical evaluator.
 
 - **Prompt factorial:** [plan](revision_4_3_prompt_ablation_plan.md). Full 2⁴ factorial over the four primitive prompt blocks; 50 trials per cell × 16 cells × 3 methods × 2 models = 4,800 trials.
 - **Feedback ablation:** [plan](revision_4_3_ablation_experiment_plan.md). Runs after the prompt study, with the selected prompt set fixed.
@@ -383,7 +383,7 @@ By failure class (descriptive):
 
 ## 3. Selected CaP configuration for RoboVerify comparisons
 
-**Status: selected 2026-10-25; frozen for Revision 5.**
+**Status: selected 2026-10-25 and re-checked the same day under `task_spec_success`; frozen for Revision 5.** Method 2, prompt set `p0101`, feedback profile `full`.
 
 - **Purpose.** CaP is RoboVerify's baseline. It needs a reasonable, fixed configuration, not an optimum.
 - **Rule.** Choose on point estimates from Sections 1 and 2. Do not require statistical significance; differences inside the noise are tie-breaks, not findings. Use:
@@ -392,21 +392,55 @@ By failure class (descriptive):
   3. then token cost.
 - **Scope of the evidence.** One model, Stack only, three blocks, one saved initial scene for the prompt study.
 
-### 3.1 Method: Method 2
+### 3.1 Success criterion: `task_spec_success`
 
-Prompt factorial, the eight cells with the motion-planning block on (400 trials per method), and Stage B (70 seeds per method):
+CaP is scored with RoboVerify's criterion so that the comparison controls for it. RoboVerify accepts an execution (`cfg/collection.py:validate_trace`) when:
 
-| Method | Round-0 success | Final success (factorial) | Recovered, `full` | Recovered, all 15 profiles |
-| --- | ---: | ---: | ---: | ---: |
-| Baseline | 272 / 400 (68.0%) | 370 / 400 (92.5%) | 63 / 70 | 948 / 1,050 (90.3%) |
-| Method 1 | 291 / 400 (72.8%) | 372 / 400 (93.0%) | 64 / 70 | 985 / 1,050 (93.8%) |
-| **Method 2** | **295 / 400 (73.8%)** | **378 / 400 (94.5%)** | **67 / 70** | 978 / 1,050 (93.1%) |
+- the program completes normally;
+- every primitive converges;
+- the first state satisfies the shared precondition;
+- the final state satisfies the shared postcondition (`cfg/tasks.py:task_spec`).
 
-- **Method 2 is first** on round-0 success, final success and recovery under `full`.
-- **Method 1 is effectively tied.** Its pooled recovery over all profiles is 0.7 points higher, and its expected end-to-end success (round 0 plus recovery of the remainder) is the same as Method 2's to within 0.1 points.
+The physical evaluator `_is_success` is not part of RoboVerify's acceptance ([Revision 5, §3.2](revision_5_add_tasks.md#32-how-roboverify-judges-success)). CaP reports this criterion as `task_spec_success` ([Revision 5, §3.5](revision_5_add_tasks.md#35-result-fields)).
+
+**Sections 1 and 2 use the earlier fields.** `first_attempt_success` and `task_success` require the physical evaluator *and* the shared postcondition. Those sections are kept as recorded.
+
+**Recompute (2026-10-25).** `task_spec_success` was recomputed for every attempt from its saved trajectory, without new model calls:
+
+- **Coverage:** 10,939 attempts in 6,300 chains (2,400 factorial trials, 750 Stage A trials, 3,150 Stage B chains).
+- **Consistency checks:**
+  - every attempt has a trajectory;
+  - the recomputed postcondition equals the saved `dsl_postcondition` in all 10,939 attempts;
+  - the precondition holds in all of them.
+- **Differences:** 547 attempts (5.0%) satisfy `task_spec_success` but fail the physical evaluator, all with status `goal_failed`. No attempt is a success under the earlier field and a failure under `task_spec_success`; no policy caught a primitive failure and completed. The earlier `task_success` is therefore exactly `task_spec_success` ∧ physical success on these data. Section 4 explains the 547 attempts.
+- **Stage B seed set:** 27 of the 210 seeds already satisfy `task_spec_success` at round 0, so they are not failures under this criterion. The feedback comparison below uses the remaining 183 seeds (Baseline 63, Method 1 58, Method 2 62) and counts recovery in rounds 1–4.
+- **Artifacts:** `runs/cap-revision43/20261025-task-spec-recompute/`:
+  - `attempts.csv` (one row per attempt);
+  - `chains.csv` (one row per trial or chain);
+  - `selection_tables.txt`;
+  - `symbolic_only_settled.csv` (Section 4);
+  - the scripts `attempt.py`, `recompute.py` and `settle.py`.
+
+The selection below uses `task_spec_success`, with the earlier counts in parentheses.
+
+### 3.2 Method: Method 2
+
+Prompt factorial, the eight cells with the motion-planning block on (400 trials per method); Stage A (`p0001`, 250 per method); Stage B on the 183 task-spec failure seeds:
+
+| Method | Round 0, factorial | Final, factorial | Round 0, Stage A | Recovered, `full` | Recovered, all 15 profiles |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Baseline | 294 / 400 (73.5%) (272) | 374 / 400 (93.5%) (370) | 177 / 250 (70.8%) (171) | 58 / 63 | 872 / 945 (92.3%) |
+| Method 1 | 305 / 400 (76.3%) (291) | 373 / 400 (93.3%) (372) | 199 / 250 (79.6%) (185) | 56 / 58 | 838 / 870 (96.3%) |
+| **Method 2** | **310 / 400 (77.5%)** (295) | **379 / 400 (94.8%)** (378) | 180 / 250 (72.0%) (172) | **62 / 62** | 880 / 930 (94.6%) |
+
+- **Method 2 is first** on factorial round-0 success, factorial final success and recovery under `full`. In the selected cell `p0101` it leads clearly: round 0 42 / 50, against 36 for Method 1 and 35 for Baseline.
+- **Method 1 is effectively tied.**
+  - It is first on Stage A round 0 (19 trials ahead of Method 2) and on recovery pooled over all profiles. Pooling factorial and Stage A round-0 trials, it is ahead: 77.5% against 75.4% over 650 trials each.
+  - Expected end-to-end success (round 0 plus recovery of the remainder) is 99.2% for Method 1 and 98.7–100% for Method 2, depending on which round-0 and recovery estimates are combined.
+- **Method 2 is kept** because it leads on the factorial, the source from which the prompt is chosen, and in the selected cell. The choice between Methods 1 and 2 is a tie-break.
 - **Factorial caveat.** Final success in the factorial predates the reasoning-termination guard (Section 1.5.3), so it is understated for every method.
 
-### 3.2 Prompt set: `p0101`
+### 3.3 Prompt set: `p0101`
 
 `p0101` turns on convergence criteria and motion-planning limits; target offsets and partial execution stay off.
 
@@ -414,42 +448,39 @@ Method 2 cells with the motion-planning block on (50 trials each):
 
 | Cell | Round 0 | Final | Median tokens per trial |
 | --- | ---: | ---: | ---: |
-| **`p0101`** | **41 (82%)** | **50 (100%)** | 11,168 |
-| `p0001` | 38 (76%) | 48 (96%) | 11,419 |
-| `p1111` | 38 (76%) | 46 (92%) | 13,196 |
-| `p0011` | 38 (76%) | 44 (88%) | 11,197 |
-| `p0111` | 36 (72%) | 49 (98%) | 12,108 |
-| `p1011` | 36 (72%) | 46 (92%) | 12,544 |
-| `p1001` | 34 (68%) | 47 (94%) | 12,543 |
-| `p1101` | 34 (68%) | 48 (96%) | 12,622 |
+| **`p0101`** | **42 (84%)** (41) | **50 (100%)** (50) | 11,168 |
+| `p0001` | 40 (80%) (38) | 48 (96%) (48) | 11,419 |
+| `p0111` | 40 (80%) (36) | 49 (98%) (49) | 12,108 |
+| `p1001` | 39 (78%) (34) | 47 (94%) (47) | 12,543 |
+| `p1111` | 39 (78%) (38) | 46 (92%) (46) | 13,196 |
+| `p0011` | 38 (76%) (38) | 44 (88%) (44) | 11,197 |
+| `p1011` | 37 (74%) (36) | 46 (92%) (46) | 12,544 |
+| `p1101` | 35 (70%) (34) | 49 (98%) (48) | 12,622 |
 
-- **`p0101` is first on both round-0 and final success for Method 2, at the lowest median token count.** Its round-0 rate is three trials above `p0001`, the set chosen by the pre-registered rule in Section 1.5.4.
-- **Nearly all of the advantage comes from the motion-planning block** (Section 1.5.2). The convergence-criteria block has no detected effect, so `p0101` and `p0001` are equivalent within noise. With 50 trials, a cell's 95% interval is roughly ±12 points.
+- **`p0101` is first on both round-0 and final success for Method 2, at the lowest median token count, under either criterion.** Its round-0 rate is two trials above `p0001` and `p0111`.
+- **Nearly all of the advantage comes from the motion-planning block** (Section 1.5.2). Pooled over methods, round 0 is 443 / 1,200 without it and 909 / 1,200 with it under `task_spec_success` (earlier: 385 and 858). The convergence-criteria block has no detected effect, so `p0101` and `p0001` are equivalent within noise. With 50 trials, a cell's 95% interval is roughly ±12 points.
 - **Difference from Section 1.5.4.** That rule chose one prompt set for all methods and dropped blocks without an effect. This section chooses for Method 2 alone, on point estimates. Section 1.5.4 remains the pre-registered result; this section records a baseline configuration.
 
-### 3.3 Recovery feedback: `no_failure_events`
+### 3.4 Recovery feedback: `full`
 
-`no_failure_events` is `full` with two items removed: `failure_events` and `query_candidates`.
+Stage B on the 183 seeds that fail `task_spec_success` at round 0, recovery in rounds 1–4. *b* / *c*: seeds recovered under `full` only / under the profile only. Earlier selection under the old field in parentheses (Method 2 recovered, of 70 seeds).
 
-Stage B, ranked by Method 2 recovery (70 seeds). The pooled columns cover all three methods (210 seeds).
+| Profile | Method 2 recovered (of 62) | Method 2 round 1 | Pooled recovered (of 183) | Pooled round 1 | *b* / *c* | Mean tokens (pooled, Section 2.5.4) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| **`full`** | **62** (67) | 36 | 176 | 119 | — | 47,044 |
+| `no_failure_events` | 61 (68) | 45 | 176 | 130 | 7 / 7 | 43,038 |
+| `no_goal_clauses` | 61 (67) | 46 | 176 | 127 | 6 / 6 | 45,132 |
+| `no_target` | 61 (66) | 41 | 178 | 118 | 5 / 7 | — |
+| `history_none` | 61 (68) | 40 | 179 | 123 | 4 / 7 | 45,706 |
+| `no_phases` | 59 (65) | 37 | 179 | 113 | 3 / 6 | 46,207 |
+| `minimal` | 53 (61) | 41 | 162 | 115 | 21 / 7 | 30,246 |
+| `no_current_source` | 56 (63) | 43 | 161 | 112 | 20 / 5 | 49,015 |
 
-| Profile | Method 2 recovered | Method 2 round 1 | Pooled recovered | Pooled round 1 | Mean tokens (pooled) |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| **`no_failure_events`** | **68** | **42** | **199** | **130** | **43,038** |
-| `history_none` | 68 | 35 | 198 | 118 | 45,706 |
-| `no_goal_clauses` | 67 | 44 | 200 | 129 | 45,132 |
-| `full` | 67 | 34 | 194 | 122 | 47,044 |
-| `no_phases` | 65 | 39 | 201 | 115 | 46,207 |
-| `minimal` | 61 | 42 | 187 | 128 | 30,246 |
+- **The selection changes from `no_failure_events` to `full`.** Under `task_spec_success`, `full` recovers all 62 Method 2 failure seeds; `no_failure_events` and four other profiles recover 61. By the rule, the primary outcome decides before round 1 or tokens.
+- **The margin is one seed.** Pooled over methods, `full` and `no_failure_events` tie (176 of 183), with *b* / *c* = 7 / 7. `no_failure_events` recovers more often in round 1 (130 against 119) and uses about 9% fewer tokens. Either profile is defensible; `full` is first on the stated rule and is also the reference profile of the ablation.
+- **`minimal` and `no_current_source` remain the weakest** (pooled 162 and 161 of 183; *b* / *c* 21 / 7 and 20 / 5).
 
-- **`no_failure_events` ties for the highest Method 2 recovery.** It wins the tie with `history_none` on round-1 recovery and on its pooled numbers.
-- **Pooled across methods, it is in the top three for recovery** (199 of 210, one and two chains behind `no_goal_clauses` and `no_phases`). It is second for round 1 (130 of 210) and has the lowest token cost among the top profiles.
-- **Why not the alternatives.**
-  - `no_phases` leads the pooled ranking, but ranks below `full` for Method 2 (65 vs 67).
-  - `minimal` is the cheapest (36% fewer tokens), but it has the lowest Method 2 recovery (61 of 70).
-- **Margin.** All profiles except `no_current_source` are equivalent to `full` within ±10 points (Section 2.5.1). Keeping `full` would be an equally defensible choice. `no_failure_events` is chosen because it is first on the stated rule and slightly cheaper.
-
-### 3.4 Frozen configuration
+### 3.5 Frozen configuration
 
 | Setting | Value |
 | --- | --- |
@@ -458,26 +489,77 @@ Stage B, ranked by Method 2 recovery (70 seeds). The pooled columns cover all th
 | Method | `cap_method_2`, `condition_mode: dsl_only`, `prompt_version: typed_v3` |
 | Primitive prompt | `p0101`: `explain_convergence_criteria` and `explain_motion_planning_limits` on; `explain_target_offsets` and `explain_partial_execution` off |
 | Recovery | On, `max_rounds: 4` |
-| Feedback items | All `FEEDBACK_ITEMS` on except `failure_events` and `query_candidates`; `supporting_event_window: 40`, `evidence_layout: fixed_items`, `evidence_bytes: 32768` |
+| Feedback items | All `FEEDBACK_ITEMS` on (`full`); `supporting_event_window: 40`, `evidence_layout: fixed_items`, `evidence_bytes: 32768` |
 | Primitive enrichments | `target_derivation`, `controller_phases` and `action_context` on |
 | History | `executed_programs` (latest source plus earlier executed programs) |
 | Budgets | As in Section 1.1: 100k tokens initially, 200k per recovery round, 900k per trial; request timeout 2,400 s, 3,600 s per round, 18,000 s per trial |
-| Success criterion | `task_spec_success` (`task-spec-v1`, [Revision 5, §3.5](revision_5_add_tasks.md#35-result-fields)); recovery uses `success_field: task_spec_success` |
+| Success criterion | `task_spec_success` (`task-spec-v1`); recovery uses `success_field: task_spec_success`. The physical evaluator, final and after 50 settling steps, is reported as a diagnostic (Section 4) |
 
-- `profile_settings("no_failure_events")` in [revision43_feedback_experiment.py](../revision43_feedback_experiment.py) produces the feedback and enrichment settings above.
+- `profile_settings("full")` in [revision43_feedback_experiment.py](../revision43_feedback_experiment.py) produces the feedback and enrichment settings above.
 - **This exact combination was not run in Revision 4.3.** Stage B used prompt set `p0001`. The prompt and feedback choices are combined on the assumption that their effects are independent. Section 1.5.2 found no prompt-block interactions, and the convergence-criteria block had no detected effect.
-- **Expected Stack performance** from the components: about 82% at round 0, and about 97% of the remaining failures recovered.
+- **Expected Stack performance** from the components, under `task_spec_success`: about 84% at round 0, and nearly all remaining failures recovered (62 of 62 Method 2 seeds under `full`).
 
-### 3.5 Six-task evaluation
+### 3.6 Six-task evaluation
 
 - **Do not re-tune per task.** The configuration is frozen as above.
   - Repeating the prompt factorial or the feedback ablation for each new task would turn the baseline into a per-task optimisation, which RoboVerify does not receive either.
   - A configuration chosen on Stack and applied unchanged elsewhere is the conservative, reportable choice.
 - **Run one comparison over all six tasks once the five adapters are ready** ([Revision 5](revision_5_add_tasks.md)):
   - Stack is rerun under the frozen configuration rather than reused from Revision 4.3, for three reasons:
-    - the exact combination is new (Section 3.4);
-    - Revision 5 changes the success criterion;
+    - the exact combination is new (Section 3.5);
+    - the success criterion is now `task_spec_success`, applied during recovery as well;
     - the evaluation should use paired held-out scenes.
-  - Use the same scenes and seeds for CaP and RoboVerify.
+  - Use the same scenes and seeds for CaP and RoboVerify, and score both with the same criterion.
 - **Before the main run, a small smoke run per task** checks only the adapter: start checks, terminal scoring and the `tbl` and goal interfaces. Its results are not used to change the configuration.
 - **Exception.** Revisit the configuration only if a task fails for an interface reason, for example a prompt that is silent about `tbl` or goal handles. Record any such change as a new configuration version and apply it to all six tasks.
+
+## 4. Case study: symbolic success without physical success
+
+The shared Stack postcondition `∀x. ON*(x, b0)` is a column relation: x lies within 25 mm of b0 in X and Y and is not lower than b0. It does not model contact or support. The physical evaluator instead requires a contact chain from b0 on the table, each level within 1.5 block lengths of the one below ([Revision 5, §3.4](revision_5_add_tasks.md#34-where-the-symbolic-and-physical-criteria-differ)). Section 3.1 found 547 attempts where the first holds and the second does not.
+
+### 4.1 What the 547 final states are
+
+- **Mechanism.** The policy opens the gripper above the tower. Its loop guard, usually `exists(lambda x: not ON_star(x, b0))`, becomes false as soon as the released block is above b0's column, even while it is still in the air. The program ends normally, and the recording stops with the block in flight.
+- **Final-frame geometry:**
+  - 525 attempts have a vertical gap of at least 1.5 block lengths between consecutive blocks;
+  - 338 have a block within 3 cm of the gripper;
+  - these overlap.
+- **Settling check.** Each final state was restored in MuJoCo and stepped 50 times with the gripper held, as `audit_demos` does (`symbolic_only_settled.csv`):
+
+| After 50 settling steps | Attempts |
+| --- | ---: |
+| Physical success and shared postcondition | 466 |
+| Physical success only | 3 |
+| Physical failure (the block misses the tower) | 78 |
+
+- **Most of these are real towers caught early.** In 466 of 547 attempts, the falling block lands on the tower within 50 steps. The physical evaluator scored them as failures only because the final frame preceded the landing.
+- **78 attempts are false positives of the final-frame criterion.** The block falls off the tower, so the settled state satisfies neither criterion.
+  - By study: 17 factorial, 2 Stage A, 59 Stage B.
+  - By method: Baseline 21, Method 1 27, Method 2 30.
+  - They are 0.7% of all attempts.
+
+### 4.2 Cases
+
+Heights are block-centre heights above the resting height of a block on the table. Links point into `runs/`, which git ignores, so they work only in a checkout that has the run folders.
+
+| Case | Attempt | Policy ending | Final frame (z of three blocks) | After 50 settling steps | Links |
+| --- | --- | --- | --- | --- | --- |
+| A: lands | Baseline, `p1100`, trial 019, round 0 | `Move(b0, b0, b0, [0, 0, 0.25])`, then `Release(b0, 0.25)`: opens 25 cm above b0 | 0.000, 0.049, **0.243** | 0.000, 0.049, 0.099: tower; physical success | [attempt](../../../runs/cap-revision43/20261022b-prompt-factorial-qwen38-27b/trials/cap_google_baseline-dsl_only-019-recovery-on-p1100/cap/20261023-035408-8439434-cap_google_baseline-recovery-fc81efbe/attempts/round_000/cap/20261023-035410-8439434-cap_google_baseline-stack-baf07158) · [result](../../../runs/cap-revision43/20261022b-prompt-factorial-qwen38-27b/trials/cap_google_baseline-dsl_only-019-recovery-on-p1100/cap/20261023-035408-8439434-cap_google_baseline-recovery-fc81efbe/attempts/round_000/cap/20261023-035410-8439434-cap_google_baseline-stack-baf07158/result.json) · [policy](../../../runs/cap-revision43/20261022b-prompt-factorial-qwen38-27b/trials/cap_google_baseline-dsl_only-019-recovery-on-p1100/cap/20261023-035408-8439434-cap_google_baseline-recovery-fc81efbe/attempts/round_000/cap/20261023-035410-8439434-cap_google_baseline-stack-baf07158/artifacts/trial_001/checkpoints/cp_0002/executed.py) · [video](../../../runs/cap-revision43/20261022b-prompt-factorial-qwen38-27b/trials/cap_google_baseline-dsl_only-019-recovery-on-p1100/cap/20261023-035408-8439434-cap_google_baseline-recovery-fc81efbe/attempts/round_000/cap/20261023-035410-8439434-cap_google_baseline-stack-baf07158/artifacts/trial_001/execution/rollout_001/video.mp4) |
+| B: lands | Baseline, `p1011`, trial 001, round 0 | Places on the current top, then `Release(top, 0.05)` | 0.000, **0.128**, **0.179** | 0.000, 0.050, 0.099: tower; physical success | [attempt](../../../runs/cap-revision43/20261022b-prompt-factorial-qwen38-27b/trials/cap_google_baseline-dsl_only-001-recovery-on-p1011/cap/20261022-212231-b1a6ea9-cap_google_baseline-recovery-1fcf2b2b/attempts/round_000/cap/20261022-212236-b1a6ea9-cap_google_baseline-stack-b503bc4f) · [result](../../../runs/cap-revision43/20261022b-prompt-factorial-qwen38-27b/trials/cap_google_baseline-dsl_only-001-recovery-on-p1011/cap/20261022-212231-b1a6ea9-cap_google_baseline-recovery-1fcf2b2b/attempts/round_000/cap/20261022-212236-b1a6ea9-cap_google_baseline-stack-b503bc4f/result.json) · [policy](../../../runs/cap-revision43/20261022b-prompt-factorial-qwen38-27b/trials/cap_google_baseline-dsl_only-001-recovery-on-p1011/cap/20261022-212231-b1a6ea9-cap_google_baseline-recovery-1fcf2b2b/attempts/round_000/cap/20261022-212236-b1a6ea9-cap_google_baseline-stack-b503bc4f/artifacts/trial_001/checkpoints/cp_0002/executed.py) · [video](../../../runs/cap-revision43/20261022b-prompt-factorial-qwen38-27b/trials/cap_google_baseline-dsl_only-001-recovery-on-p1011/cap/20261022-212231-b1a6ea9-cap_google_baseline-recovery-1fcf2b2b/attempts/round_000/cap/20261022-212236-b1a6ea9-cap_google_baseline-stack-b503bc4f/artifacts/trial_001/execution/rollout_001/video.mp4) |
+| C: falls off | Baseline, `p1100`, trial 011, round 2 | Lowers the block to stack height, raises the gripper 12 cm *while still holding it*, then `Release(x, 0.05)` | 0.000, 0.049, **0.197** | the top block ends on the table 8 cm away; physical and symbolic failure | [attempt](../../../runs/cap-revision43/20261022b-prompt-factorial-qwen38-27b/trials/cap_google_baseline-dsl_only-011-recovery-on-p1100/cap/20261023-014101-b1a6ea9-cap_google_baseline-recovery-db8bacde/attempts/round_002/cap/20261023-015326-b1a6ea9-cap_google_baseline-stack-262cf37f) · [result](../../../runs/cap-revision43/20261022b-prompt-factorial-qwen38-27b/trials/cap_google_baseline-dsl_only-011-recovery-on-p1100/cap/20261023-014101-b1a6ea9-cap_google_baseline-recovery-db8bacde/attempts/round_002/cap/20261023-015326-b1a6ea9-cap_google_baseline-stack-262cf37f/result.json) · [policy](../../../runs/cap-revision43/20261022b-prompt-factorial-qwen38-27b/trials/cap_google_baseline-dsl_only-011-recovery-on-p1100/cap/20261023-014101-b1a6ea9-cap_google_baseline-recovery-db8bacde/attempts/round_002/cap/20261023-015326-b1a6ea9-cap_google_baseline-stack-262cf37f/artifacts/trial_001/checkpoints/cp_0002/executed.py) · [video](../../../runs/cap-revision43/20261022b-prompt-factorial-qwen38-27b/trials/cap_google_baseline-dsl_only-011-recovery-on-p1100/cap/20261023-014101-b1a6ea9-cap_google_baseline-recovery-db8bacde/attempts/round_002/cap/20261023-015326-b1a6ea9-cap_google_baseline-stack-262cf37f/artifacts/trial_001/execution/rollout_001/video.mp4) |
+| D: falls off | Baseline, `p0000`, trial 009, round 0 | `Move(b0, b0, b0, [0, 0, 0.15])`, then `Release(b0, 0.15)`: drops from 15 cm | 0.000, **0.154**, 0.050 | the airborne block ends on the table 9 cm away; physical and symbolic failure | [attempt](../../../runs/cap-revision43/20261022b-prompt-factorial-qwen38-27b/trials/cap_google_baseline-dsl_only-009-recovery-on-p0000/cap/20261023-005629-b1a6ea9-cap_google_baseline-recovery-090f8e52/attempts/round_000/cap/20261023-005631-b1a6ea9-cap_google_baseline-stack-28ba334c) · [result](../../../runs/cap-revision43/20261022b-prompt-factorial-qwen38-27b/trials/cap_google_baseline-dsl_only-009-recovery-on-p0000/cap/20261023-005629-b1a6ea9-cap_google_baseline-recovery-090f8e52/attempts/round_000/cap/20261023-005631-b1a6ea9-cap_google_baseline-stack-28ba334c/result.json) · [policy](../../../runs/cap-revision43/20261022b-prompt-factorial-qwen38-27b/trials/cap_google_baseline-dsl_only-009-recovery-on-p0000/cap/20261023-005629-b1a6ea9-cap_google_baseline-recovery-090f8e52/attempts/round_000/cap/20261023-005631-b1a6ea9-cap_google_baseline-stack-28ba334c/artifacts/trial_001/checkpoints/cp_0002/executed.py) · [video](../../../runs/cap-revision43/20261022b-prompt-factorial-qwen38-27b/trials/cap_google_baseline-dsl_only-009-recovery-on-p0000/cap/20261023-005629-b1a6ea9-cap_google_baseline-recovery-090f8e52/attempts/round_000/cap/20261023-005631-b1a6ea9-cap_google_baseline-stack-28ba334c/artifacts/trial_001/execution/rollout_001/video.mp4) |
+
+- All four attempts have status `goal_failed`: normal completion, no unconverged primitive, earlier `success` false, `task_spec_success` true.
+- **A and C share the drop-from-height pattern; only the landing differs.** The final-frame criterion cannot distinguish them.
+- **D's next attempt** (round 1 of the same trial) is again a symbolic-only success, but its dropped block lands on the tower after settling, as in A.
+
+### 4.3 Consequences for the RoboVerify comparison
+
+- **`task_spec_success` is RoboVerify's own acceptance criterion and remains the primary metric** (Section 3.5). Using it for CaP keeps the comparison controlled.
+- **The final-frame postcondition admits drops.** A program that releases above the tower passes even when the block later misses. RoboVerify's synthesized programs face the same criterion when executed. Their release primitives are verified against placement contracts, so they may be less exposed to this, but that has not been measured.
+- **Report two diagnostics next to `task_spec_success`, for CaP and RoboVerify executions alike:**
+  - `settled_environment_success` (already recorded per trial since Revision 5, step 1);
+  - the shared postcondition after the same 50 settling steps.
+
+  Section 4.1 suggests that a settled variant of the criterion would remove most of the disagreement in both directions.
+- **Open decision:** whether the primary criterion should also require the settled state, for example `task_spec_success` evaluated after 50 settling steps. This would change RoboVerify's criterion too, so it must be decided for both systems together, not for CaP alone.
