@@ -1,6 +1,6 @@
 # Revision 6: configurable demonstration input for CaP
 
-- **Status:** planned; not implemented. RoboVerify's demonstration collector is available (Section 1.1); the schema for CaP input still needs to be agreed with Yuning.
+- **Status:** planned; not implemented. RoboVerify's demonstration collector is available (Section 1.1). The information boundary and the demonstration compaction method were decided on 2026-10-25 (Section 3); the loader still needs to be agreed with Yuning.
 - **Goal:** give CaP access to the same selected demonstration data used by RoboVerify's demonstration-driven synthesis, with an explicit on/off setting for ablation.
 - **Dependencies:** [task support plan](revision_5_add_tasks.md), an agreed demonstration schema, and validated data. Stack is the first integration target.
 
@@ -145,12 +145,108 @@ actions[76] = [ 0.0110,  0.0034,  0.1210,  0.0000]   # last retreat step after R
 
 ## 3. Representation and prompt design
 
-- Agree on the schema with Yuning before implementing the loader/serializer.
-- Evaluate an explicit state/action representation that retains relevant object relations, positions, and action transitions; document any sampling or compression.
+### 3.1 Information boundary (decided 2026-10-25)
+
+RoboVerify learns from demonstrations, where a demonstration is a trajectory of states and actions. CaP receives the same kind of information and nothing derived from the expert program. What RoboVerify's synthesis actually reads from an archive:
+
+| Archive field | RoboVerify synthesis | CaP input |
+| --- | --- | --- |
+| `states` (block and gripper positions per step) | Imitation distance, predicate evaluation, PostScore, segment splits (`entry/synthesize_cfg.py`, `cfg/refine.py`, `cfg/straightline.py`) | **Yes** |
+| `actions` | Only to reset the simulator to a segment start (`cfg/reset.py:reset_segment`, replay mode) | **Yes**, as gripper open/close events (Section 3.3) |
+| `initial_bindings` (`b0`), task name | Yes | **Yes** |
+| Simulator snapshots (`gt`, `ctrl`, `mocap_*`, …) | Resetting segments | No (simulator internals) |
+| `program`, `events` (instruction boundaries, loop enter/head/exit, variable bindings), `task_spec` text, `fingerprint` | **Not used**: RoboVerify infers segments and loops itself (Algorithms 3–5) | **No** |
+
+`cfg/candidate_traces.py` reads events of RoboVerify's *own candidate* executions, not of the expert demonstrations. Giving CaP the expert's primitive boundaries or loop events would hand it the segmentation and loop structure that RoboVerify must discover, so they are excluded. They may appear only in a separately labelled ablation that reports the extra information.
+
+### 3.2 Token budget
+
+Measured with the Qwen3.8 27B tokenizer (vLLM `/tokenize`) on one seed-0 demonstration per task at the paper's block counts ([task_specification.md](task_specification.md)). The paper uses 15 demonstrations per environment (line 1833); its Fig. 11 x-axis counts simulator samples consumed by search, not demonstrations.
+
+| Task (blocks) | Steps | Per-step text: gripper, fingers, block positions, action | × 15 | Full observation vector per step (73–103 dims) | × 15 | Gripper-event keyframes (Section 3.3, positions only) | × 15 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Stack (4) | 131 | 16.5k | 248k | 61k | 908k | 880 (8 frames) | 13k |
+| Unstack (4) | 158 | 19.9k | 299k | 73k | 1.1M | 1.4k (13) | 21k |
+| Reverse (4) | 229 | 29.0k | 434k | 106k | 1.6M | 1.9k (17) | 28k |
+| ReStack (5) | 390 | 56.4k | 846k | 216k | 3.2M | 3.3k (25) | 49k |
+| Grid (6) | 331 | 53.8k | 807k | 213k | 3.2M | 3.8k (25) | 57k |
+| Pyramid (6) | 319 | 51.9k | 778k | 205k | 3.1M | 3.8k (25) | 57k |
+
+The frozen configuration allows 200k context tokens per request. Fifteen per-step demonstrations do not fit for any task; keyframe compaction fits all six with room for the API description and recovery feedback.
+
+### 3.3 Method
+
+Two stages, following the recursive summarization of Demo2Code [1] and the keyframe downsampling of KAT [2], adapted to RoboVerify's DSL predicates:
+
+1. **Deterministic compaction (main setting).** Keep the frames where the gripper command switches between open and close, plus the first and last frame. At each kept frame, report the DSL predicates that changed since the previous kept frame, as Demo2Code's per-step predicate deltas. Also report the positions needed to parameterize primitives. Predicates come from the shared scene evaluator, i.e. the abstraction RoboVerify itself evaluates on demonstration states.
+2. **LLM recursive summarization (ablation only).** Summarize each compacted demonstration, then summarize the set into a task specification, and give that specification to the synthesis request. Its calls and tokens are charged to the trial budget.
+
+```python
+def compact_demonstration(trace, task):
+    """State/action-only compaction; never reads trace.program or trace.events."""
+    n = trace.num_blocks
+    predicates = dsl_predicates(task)            # task's API set: ON, ON_star, Higher, Scattered,
+                                                 # ON_star_zero (Reverse), AtGoal/HasBlock (goal tasks)
+    closed = [action.gripper < 0 for action in trace.actions]
+    keyframes = [0] + [t + 1 for t in range(1, len(closed)) if closed[t] != closed[t - 1]] \
+                    + [len(trace.states) - 1]
+
+    record = Header(task=task, num_blocks=n, b0=trace.initial_bindings.get("b0"),
+                    goal_layout=trace.goal_layout)   # goals: positions and r/d links, once
+    previous = None
+    for t in unique_sorted(keyframes):
+        scene = scene_from_obs(trace.states[t], n, entry_obs=trace.states[0])
+        relations = {p(a, b) for p in predicates for a, b in operand_pairs(p, scene)
+                     if evaluate(p(a, b), scene)}
+        record.append(Keyframe(
+            step=t,
+            gripper=("closed" if t > 0 and closed[t - 1] else "open"),
+            gripper_position=round3(scene.gripper),
+            added=sorted(relations - previous) if previous is not None else sorted(relations),
+            removed=sorted(previous - relations) if previous is not None else [],
+            moved_blocks={i: round3(scene.positions[i]) for i in moved_since_last_keyframe(scene)},
+        ))
+        previous = relations
+    return serialize(record, version="demo-keyframes-v1")
+
+
+def synthesis_context(archive, selected_ids, task, *, summarize=False, model=None, budget=None):
+    demos = [compact_demonstration(load_trace(archive, i), task) for i in selected_ids]
+    if not summarize:                                      # main setting
+        return render_demonstrations(demos)                # appended to every policy/repair request
+    # Ablation (Demo2Code-style): per-demonstration summaries, then one joint specification.
+    summaries = [model.complete(SUMMARIZE_ONE.format(demo=d), budget=budget) for d in demos]
+    specification = model.complete(SUMMARIZE_ALL.format(summaries=summaries), budget=budget)
+    return render_specification(specification, keep_raw=False)
+
+
+def run_trial(config, archive, selected_ids, scene):
+    context = synthesis_context(archive, selected_ids, config.task,
+                                summarize=config.demonstrations.summarize, ...)
+    assert_disjoint(selected_ids, scene)                   # evaluation scene never in demonstrations
+    log(demonstration_hashes(selected_ids), serialization="demo-keyframes-v1",
+        rendered_context=context, tokens=count_tokens(context))
+    if count_tokens(context) > config.demonstrations.max_tokens:
+        raise DemonstrationBudgetExceeded                   # explicit failure, no silent truncation
+    return method(config).synthesize(instruction, demonstrations=context)   # unchanged methods
+```
+
+Design notes:
+
+- **Only state and action data.** The keyframe rule reads the gripper command from `actions`. Predicate changes and positions come from `states`.
+- **Deltas, not full relation sets.** Demo2Code reports that adding irrelevant predicates hurts [1]. The first keyframe lists the full initial relation set once, and later keyframes list only changes.
+- **Numbers.** Positions use 3 decimals (millimetres), the precision the controllers resolve. KAT found that a few tens of action tokens per demonstration perform better than dense trajectories [2].
+- **Same input for all methods.** Baseline, Method 1 and Method 2 receive identical demonstration context in every policy and repair request.
+- **To validate before experiments:**
+  - Token counts of the predicate-delta format, measured as in Section 3.2.
+  - A check that every compacted Stack demonstration still identifies each pick and place (which block moved onto which support).
+
+### 3.4 Prompt integration and accounting
+
+- Agree on the loader with Yuning before implementing it. The serializer above fixes only what the LLM sees.
 - Keep full simulator snapshots for restoration, but do not expose simulator internals to the LLM merely because they are present in the archive.
-- Do not provide the expert program source unless it is deliberately included as a shared input to the compared approaches.
-- Specify whether policy, helper, and repair requests receive the same demonstration context or documented subsets. Avoid accidental differences between methods.
-- Record demonstration hashes/IDs, ordering, serialization settings, exact rendered prompts, and token usage. Exceeding the input budget must be handled explicitly, not by silent truncation.
+- Version the demonstration block as a new prompt package; do not rewrite frozen packages.
+- Record demonstration hashes/IDs, ordering, serialization version, exact rendered prompts and token usage. Exceeding the input budget is an explicit failure, never silent truncation.
 
 ## 4. Experimental design
 
@@ -172,3 +268,14 @@ actions[76] = [ 0.0110,  0.0034,  0.1210,  0.0000]   # last retreat step after R
 - Validate at least one Stack integration end-to-end before extending to other tasks.
 - Preserve original benchmark results and report any new ablation as a separate batch.
 - This document does not authorize implementing these changes or launching new model experiments yet.
+
+## References
+
+1. Huaxiaoyue Wang, Gonzalo Gonzalez-Pumariega, Yash Sharma, Sanjiban Choudhury. *Demo2Code: From Summarizing Demonstrations to Synthesizing Code via Extended Chain-of-Thought.* NeurIPS 2023. [arXiv:2305.16744](https://arxiv.org/abs/2305.16744), [project page](https://portal.cs.cornell.edu/demo2code)
+2. Norman Di Palo, Edward Johns. *Keypoint Action Tokens Enable In-Context Imitation Learning in Robotics.* RSS 2024. [arXiv:2403.19578](https://arxiv.org/abs/2403.19578)
+3. Noah Patton, Kia Rahmani, Meghana Missula, Joydeep Biswas, Işıl Dillig. *Programming-by-Demonstration for Long-Horizon Robot Tasks.* POPL 2024. [arXiv:2305.03129](https://arxiv.org/abs/2305.03129)
+4. *Abstraction-Refinement-guided Program Synthesis for Robot Learning from Demonstrations* (RoboScribe). OOPSLA 2025. [SPLASH 2025 page](https://2025.splashcon.org/details/OOPSLA/59/Abstraction-Refinement-guided-Program-Synthesis-for-Robot-Learning-from-Demonstration)
+5. *ExoPredicator: Learning Abstract Models of Dynamic Worlds for Robot Planning.* [arXiv:2509.26255](https://arxiv.org/abs/2509.26255)
+6. Jacky Liang, Wenlong Huang, Fei Xia, Peng Xu, Karol Hausman, Brian Ichter, Pete Florence, Andy Zeng. *Code as Policies: Language Model Programs for Embodied Control.* ICRA 2023. [arXiv:2209.07753](https://arxiv.org/abs/2209.07753)
+
+References 3–5 synthesize programs or abstractions from demonstrations without an LLM context bottleneck; they are related work for RoboVerify rather than inputs to the CaP design.
