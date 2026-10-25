@@ -287,9 +287,18 @@ End-to-end check of the Stage B path on spare capacity of GPU 0, with requests s
 - **Forest plot:** the table's Δ for both outcomes. Thin lines are 95% intervals and thick lines 90% intervals; the green band is the ±10-point margin.
 - **Colour:** blue where the 90% interval lies inside the margin (equivalent); red where equivalence is not shown. Numbers at the right are *b* / *c*.
 
+![Feedback ablation by method: paired difference from full](plots/revision43_feedback_effects_by_method.png)
+
+- **By method** (70 seeds each): the same contrasts within each method, dodged per profile (blue Baseline, orange Method 1, green Method 2). Per-method intervals are about √3 times wider than the pooled ones, so this panel is descriptive.
+- The `no_current_source` deficit within four rounds comes from Baseline (Section 2.5.3). In round 1 the methods often move in opposite directions: Method 2 is above `full` for most profiles, because its `full` round-1 count (34 / 70) is the lowest of the three.
+
 ![Feedback ablation: round of recovery per profile](plots/revision43_feedback_rounds.png)
 
 - **Rounds to recovery** per profile, as a share of the 210 seeds. Unlabelled segments are below 5%.
+
+![Feedback ablation by method: round of recovery per profile](plots/revision43_feedback_rounds_by_method.png)
+
+- **By method:** the same bars for each method's 70 seeds; unlabelled segments are below 7%.
 
 #### 2.5.2 Pooled models
 
@@ -351,6 +360,10 @@ By failure class (descriptive):
 
 - **Heat maps** of the primary outcome per profile × method and profile × failure class, with counts in each cell. The colour scale starts at 60%.
 
+![Feedback ablation by method: recovery by failure class](plots/revision43_feedback_groups_by_method.png)
+
+- **Failure class within each method.** Grey cells marked "—" have no seeds: other runtime errors occur only for Baseline. Cells hold 6–28 seeds, so single cells are not interpretable on their own.
+
 #### 2.5.4 Cost
 
 | Profile | Mean tokens per chain | Median | Mean calls | Mean rounds when recovered |
@@ -368,6 +381,10 @@ By failure class (descriptive):
 ![Feedback ablation: recovery against token cost](plots/revision43_feedback_cost.png)
 
 - **Recovery against mean tokens per chain**, with 95% Wilson intervals. Orange marks the anchors (`full`, `minimal`, `legacy_v1`) and red marks `no_current_source`.
+
+![Feedback ablation by method: recovery and token cost per profile](plots/revision43_feedback_cost_by_method.png)
+
+- **By method:** recovery (95% Wilson interval, 70 seeds) and mean tokens per chain, with the methods dodged in each profile row. `minimal` is the cheapest profile for every method.
 - Recovery stops other than success:
   - exhausting the four rounds: 9–29 chains per profile;
   - `preparation_failure_no_rollout`: 0–4 chains per profile.
