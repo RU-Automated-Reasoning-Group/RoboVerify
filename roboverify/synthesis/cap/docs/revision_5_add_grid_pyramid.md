@@ -1,6 +1,6 @@
 # Revision 5: Grid and Pyramid in CaP
 
-- **Status:** design for review (2026-10-25); not implemented. Implementation starts after the user approves Sections 3–5.
+- **Status:** design reviewed 2026-10-25; the Section 5 decisions are settled. Not implemented yet.
 - **Goal:** run Grid and Pyramid in CaP with the same task definition, scenes and success criterion as RoboVerify, as steps 4 of [Revision 5](revision_5_add_tasks.md#47-implementation-order).
 - **Constraint (user decision, 2026-10-25):** CaP is RoboVerify's baseline and must use RoboVerify's DSL. The goal interface may only expose primitives, predicates and statements that RoboVerify's DSL already has. No new DSL elements are added.
 
@@ -96,32 +96,39 @@ A `null` reference is a runtime error. The adapter maps a goal handle to an upst
 - **`exists`, `forall` and `get` keep ranging over blocks only.** This covers the paper's guard `∃b'. ¬AtGoal(b')`.
 - **Goal-sorted quantification is not exposed.** Upstream guards can quantify over goals, but CaP lambdas carry no type annotation. Goal traversal is done with the cursor statements instead. This restricts the DSL; it adds nothing.
 
-### 3.7 Not added
+### 3.7 Observation API: goal positions
+
+- **`get_goal_position(g)` is added to CaP's observation API**, next to `get_gripper_position()` and `get_block_position(b)` (user decision, Section 5, decision 3).
+  - These readers are not RoboVerify DSL elements. They are the observation space from which a policy parameterizes primitives.
+  - It returns the goal centre as an immutable `Position3`; `null` is a runtime error.
+- **Condition rule unchanged:** in `dsl_only` mode, loop, branch and selection conditions must not depend on any position reader. Positions may only parameterize primitives. In `coordinate_predicates` mode they may be compared, as today.
+- **Version bump:** the observation API becomes `positions-v2`. It equals `positions-v1` plus goal positions in goal tasks.
+
+### 3.8 Not added
 
 - `right(g)` / `down(g)` as value-returning functions (the DSL has statements).
-- `get_goal_position(g)` (not in the DSL; placement uses goal references in Move/Release).
 - Goal binders in query lambdas (Section 3.6).
 
-### 3.8 Scenes and scoring
+### 3.9 Scenes and scoring
 
-- **Scenes:** `make_goal_env` with the frozen layout (Section 5, decision 1), 50 settling steps after reset (already in `SETTLING_TASKS`), snapshots restored without settling.
+- **Scenes:** `make_goal_env` with the frozen layout (Grid 3 rows × 2 columns; Pyramid `bottom_row_blocks: 3`), 50 settling steps after reset (already in `SETTLING_TASKS`), snapshots restored without settling.
 - **Start check:** every goal empty and physical blocks pairwise Scattered, as in `validate_goal_trace`. A violating start fails before any model call.
 - **`task_spec_success` for goal tasks** keeps the same structure as for the tower tasks:
   - normal completion;
   - every primitive converged;
   - the start check holds;
   - every goal is occupied in the final state (the terminal check of `validate_goal_trace`).
-- **Event-level checks are dropped.** `validate_goal_trace` also checks per-release events (a release must not displace an occupied goal; the released block must reach a goal). These checks follow the reference program's instruction paths, which CaP policies do not share. Revision 5 §3.3 allows dropping them if the choice is recorded (Section 5, decision 2).
+- **Event-level checks are dropped.** `validate_goal_trace` also checks per-release events (a release must not displace an occupied goal; the released block must reach a goal). These checks follow the reference program's instruction paths, which CaP policies do not share. Revision 5 §3.3 allows dropping them if the choice is recorded; dropped by user decision (Section 5, decision 2).
 - **Diagnostics:** `_roboverify_goal_layout_complete` (same occupancy function), final and after 50 settling steps.
 
-### 3.9 Recording and video
+### 3.10 Recording and video
 
 - **Snapshots:** capture the goal layout and the adapter's goal cursor bindings, using the upstream goal recording extension (recording version 2 with layout and bindings).
 - **Video and replay:** deferred video and restoration reuse `cfg/reset.restore`, which already restores goal layouts. Goal marker mocaps stay fixed.
 
-### 3.10 Prompt, instruction and configuration version
+### 3.11 Prompt, instruction and configuration version
 
-- **Prompt package `typed_v4`** = `typed_v3` plus API entries for `h0`/`null`, `MoveRight`, `MoveDown`, `AtGoal`, `HasBlock` and goal references in Move/Release. Entries are rendered only when a task's API set contains them. The rendered prompt for the four tower tasks is therefore byte-identical to `typed_v3`; implementation will verify this by hashing the rendered prompts.
+- **Prompt package `typed_v4`** = `typed_v3` plus API entries for `h0`/`null`, `MoveRight`, `MoveDown`, `AtGoal`, `HasBlock`, `get_goal_position` and goal references in Move/Release. Entries are rendered only when a task's API set contains them. The rendered prompt for the four tower tasks is therefore byte-identical to `typed_v3`; implementation will verify this by hashing the rendered prompts.
 - **Task instructions** for Grid and Pyramid follow the Stack template, derived from `goal-occupancy-v1`:
   - the inputs;
   - initial condition: goals empty, blocks pairwise Scattered;
@@ -129,7 +136,7 @@ A `null` reference is a runtime error. The adapter maps a goal handle to an upst
   - block size;
   - the physical-completion sentence;
   - the closing line.
-- **`config_frozen_v2`** = v1 with `prompt_version: typed_v4`, the two instructions and the goal layouts. This follows the AGENTS.md rule: an interface-driven change becomes a new version used for all six tasks. Because the tower-task prompts are unchanged, v1 tower-task results remain valid under v2, provided the rendered-prompt hashes match.
+- **`config_frozen_v2`** = v1 with `prompt_version: typed_v4`, observation API `positions-v2`, the two instructions and the goal layouts. This follows the AGENTS.md rule: an interface-driven change becomes a new version used for all six tasks. Because the tower-task prompts are unchanged, v1 tower-task results remain valid under v2, provided the rendered-prompt hashes match.
 
 ## 4. Checker for this version (`shared-contract-v4`)
 
@@ -166,7 +173,8 @@ A `null` reference is a runtime error. The adapter maps a goal handle to an upst
 | --- | --- | --- |
 | `exists(λ…)`, `forall(λ…)` | binders range over blocks | Unchanged |
 | `get(λx…)` | one block binder → object | Unchanged |
-| `get_gripper_position()`, `get_block_position(b)` | → position | Unchanged CaP observation API (`positions-v1`); not part of RoboVerify's DSL (Section 5, decision 3) |
+| `get_gripper_position()`, `get_block_position(b)` | → position | CaP observation API, not RoboVerify DSL; unchanged |
+| `get_goal_position(g)` | goal → position | **New for** Grid, Pyramid (observation API `positions-v2`); `null` fails at runtime |
 
 ### 4.5 New and changed rules
 
@@ -178,6 +186,7 @@ A `null` reference is a runtime error. The adapter maps a goal handle to an upst
 | `MoveRight`/`MoveDown` are statements only, never used as values | `TRAVERSAL_TARGET` (new) | Goal tasks |
 | `MoveRight`/`MoveDown` are not allowed in conditions, query lambdas or condition helpers | `ACTION_IN_CONDITION` (existing, extended to cursor updates) | Goal tasks |
 | Goals support only `==` and `!=` | `IDENTITY_COMPARISON` (existing, extended) | Goal tasks |
+| In `dsl_only` mode, conditions must not depend on any position reader, including `get_goal_position` | `NUMERIC_CONDITION` (existing, extended to goal positions) | All |
 | Query binders are blocks | `QUERY` (existing) | All |
 | APIs outside the task's set are rejected | `API_UNAVAILABLE` (existing) | All |
 
@@ -185,11 +194,14 @@ Condition modes, loop/helper/dependency rules and the bounded-analysis contract 
 
 **Version bump.** The accepted language changes (a new kind and new statements), so `CHECKER_VERSION` becomes `shared-contract-v4`. `DSLContract` will continue to accept recorded `v3` contracts for post-hoc audits of earlier runs. New checkpoints record v4, so recovery seeds recorded under v3 are not reused with v2 runs.
 
-## 5. Open decisions
+## 5. Decisions (user, 2026-10-25)
 
-1. **Grid layout.** Fig. 10e shows six goals without fixing rows versus columns. Proposal: the upstream default, 3 rows × 2 columns, with 10 cm spacing. Pyramid: `bottom_row_blocks: 3` (layers 3, 2, 1).
-2. **Event-level goal checks.** Proposal: drop them for CaP and score only start and final occupancy (Section 3.8).
-3. **Position getters.** `get_block_position`/`get_gripper_position` are a CaP addition from Revision 4, not RoboVerify DSL. They are used by the frozen configuration for all tasks. This design keeps them unchanged. Removing them would be a separate configuration change for all six tasks.
+1. **Grid layout:** the upstream default, 3 rows × 2 columns with 10 cm spacing. Fig. 10e shows six goals without fixing rows versus columns. Pyramid: `bottom_row_blocks: 3` (layers 3, 2, 1).
+2. **Event-level goal checks:** dropped. CaP scores only start and final occupancy (Section 3.9).
+3. **Observation space:**
+   - The position readers stay. In `dsl_only` mode they cannot appear in loop, branch or selection conditions, but the model needs block, gripper and goal positions to parameterize primitives.
+   - `get_goal_position(g)` is therefore added to the observation API (Section 3.7).
+   - The readers are an observation interface, not RoboVerify DSL elements.
 
 ## 6. Validation
 
