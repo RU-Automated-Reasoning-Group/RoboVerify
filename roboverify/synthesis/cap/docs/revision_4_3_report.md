@@ -1,6 +1,6 @@
 # Revision 4.3: experiment report
 
-**Status: both studies completed.** Prompt factorial: selected prompt set `p0001` (motion-planning limits only, Section 1.5.4). Feedback ablation: no feedback item has a detected effect after multiplicity correction (Section 2.5).
+**Status: both studies completed.** Prompt factorial: selected prompt set `p0001` (motion-planning limits only, Section 1.5.4). Feedback ablation: no feedback item has a detected effect after multiplicity correction (Section 2.5). Baseline configuration for RoboVerify comparisons, chosen on point estimates: Method 2, prompt set `p0101`, feedback profile `no_failure_events` (Section 3).
 
 - **Prompt factorial:** [plan](revision_4_3_prompt_ablation_plan.md). Full 2⁴ factorial over the four primitive prompt blocks; 50 trials per cell × 16 cells × 3 methods × 2 models = 4,800 trials.
 - **Feedback ablation:** [plan](revision_4_3_ablation_experiment_plan.md). Runs after the prompt study, with the selected prompt set fixed.
@@ -380,3 +380,104 @@ By failure class (descriptive):
   - The near-symmetric discordance shows that a single chain per seed × profile is noisy.
   - The design has no replicate chains, so this variance cannot be separated from profile effects at the seed level. The pooled paired comparisons remain valid.
 - **Scope:** one model (Qwen3.8 27B, FP8, guarded, `reasoning_effort=medium`), one task (Stack), natural round-0 failures sampled by class quota. No-witness `get` failures did not occur, and other runtime errors exist only for Baseline (6 seeds).
+
+## 3. Selected CaP configuration for RoboVerify comparisons
+
+**Status: selected 2026-10-25; frozen for Revision 5.**
+
+- **Purpose.** CaP is RoboVerify's baseline. It needs a reasonable, fixed configuration, not an optimum.
+- **Rule.** Choose on point estimates from Sections 1 and 2. Do not require statistical significance; differences inside the noise are tie-breaks, not findings. Use:
+  1. the primary outcome first (round-0 success for prompts, recovery within four rounds for feedback);
+  2. then round-1 recovery or final success;
+  3. then token cost.
+- **Scope of the evidence.** One model, Stack only, three blocks, one saved initial scene for the prompt study.
+
+### 3.1 Method: Method 2
+
+Prompt factorial, the eight cells with the motion-planning block on (400 trials per method), and Stage B (70 seeds per method):
+
+| Method | Round-0 success | Final success (factorial) | Recovered, `full` | Recovered, all 15 profiles |
+| --- | ---: | ---: | ---: | ---: |
+| Baseline | 272 / 400 (68.0%) | 370 / 400 (92.5%) | 63 / 70 | 948 / 1,050 (90.3%) |
+| Method 1 | 291 / 400 (72.8%) | 372 / 400 (93.0%) | 64 / 70 | 985 / 1,050 (93.8%) |
+| **Method 2** | **295 / 400 (73.8%)** | **378 / 400 (94.5%)** | **67 / 70** | 978 / 1,050 (93.1%) |
+
+- **Method 2 is first** on round-0 success, final success and recovery under `full`.
+- **Method 1 is effectively tied.** Its pooled recovery over all profiles is 0.7 points higher, and its expected end-to-end success (round 0 plus recovery of the remainder) is the same as Method 2's to within 0.1 points.
+- **Factorial caveat.** Final success in the factorial predates the reasoning-termination guard (Section 1.5.3), so it is understated for every method.
+
+### 3.2 Prompt set: `p0101`
+
+`p0101` turns on convergence criteria and motion-planning limits; target offsets and partial execution stay off.
+
+Method 2 cells with the motion-planning block on (50 trials each):
+
+| Cell | Round 0 | Final | Median tokens per trial |
+| --- | ---: | ---: | ---: |
+| **`p0101`** | **41 (82%)** | **50 (100%)** | 11,168 |
+| `p0001` | 38 (76%) | 48 (96%) | 11,419 |
+| `p1111` | 38 (76%) | 46 (92%) | 13,196 |
+| `p0011` | 38 (76%) | 44 (88%) | 11,197 |
+| `p0111` | 36 (72%) | 49 (98%) | 12,108 |
+| `p1011` | 36 (72%) | 46 (92%) | 12,544 |
+| `p1001` | 34 (68%) | 47 (94%) | 12,543 |
+| `p1101` | 34 (68%) | 48 (96%) | 12,622 |
+
+- **`p0101` is first on both round-0 and final success for Method 2, at the lowest median token count.** Its round-0 rate is three trials above `p0001`, the set chosen by the pre-registered rule in Section 1.5.4.
+- **Nearly all of the advantage comes from the motion-planning block** (Section 1.5.2). The convergence-criteria block has no detected effect, so `p0101` and `p0001` are equivalent within noise. With 50 trials, a cell's 95% interval is roughly ±12 points.
+- **Difference from Section 1.5.4.** That rule chose one prompt set for all methods and dropped blocks without an effect. This section chooses for Method 2 alone, on point estimates. Section 1.5.4 remains the pre-registered result; this section records a baseline configuration.
+
+### 3.3 Recovery feedback: `no_failure_events`
+
+`no_failure_events` is `full` with two items removed: `failure_events` and `query_candidates`.
+
+Stage B, ranked by Method 2 recovery (70 seeds). The pooled columns cover all three methods (210 seeds).
+
+| Profile | Method 2 recovered | Method 2 round 1 | Pooled recovered | Pooled round 1 | Mean tokens (pooled) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| **`no_failure_events`** | **68** | **42** | **199** | **130** | **43,038** |
+| `history_none` | 68 | 35 | 198 | 118 | 45,706 |
+| `no_goal_clauses` | 67 | 44 | 200 | 129 | 45,132 |
+| `full` | 67 | 34 | 194 | 122 | 47,044 |
+| `no_phases` | 65 | 39 | 201 | 115 | 46,207 |
+| `minimal` | 61 | 42 | 187 | 128 | 30,246 |
+
+- **`no_failure_events` ties for the highest Method 2 recovery.** It wins the tie with `history_none` on round-1 recovery and on its pooled numbers.
+- **Pooled across methods, it is in the top three for recovery** (199 of 210, one and two chains behind `no_goal_clauses` and `no_phases`). It is second for round 1 (130 of 210) and has the lowest token cost among the top profiles.
+- **Why not the alternatives.**
+  - `no_phases` leads the pooled ranking, but ranks below `full` for Method 2 (65 vs 67).
+  - `minimal` is the cheapest (36% fewer tokens), but it has the lowest Method 2 recovery (61 of 70).
+- **Margin.** All profiles except `no_current_source` are equivalent to `full` within ±10 points (Section 2.5.1). Keeping `full` would be an equally defensible choice. `no_failure_events` is chosen because it is first on the stated rule and slightly cheaper.
+
+### 3.4 Frozen configuration
+
+| Setting | Value |
+| --- | --- |
+| Model | Qwen3.8 27B FP8 (`Qwen/Qwen3.8-27B-FP8` @ `017b9c7a`), vLLM, `enable_thinking=true`, `reasoning_effort=medium`, reasoning-termination guard on |
+| Sampling and output | Checkpoint defaults (temperature 1.0, top_p 0.95, top_k 20); 32,768-token output cap |
+| Method | `cap_method_2`, `condition_mode: dsl_only`, `prompt_version: typed_v3` |
+| Primitive prompt | `p0101`: `explain_convergence_criteria` and `explain_motion_planning_limits` on; `explain_target_offsets` and `explain_partial_execution` off |
+| Recovery | On, `max_rounds: 4` |
+| Feedback items | All `FEEDBACK_ITEMS` on except `failure_events` and `query_candidates`; `supporting_event_window: 40`, `evidence_layout: fixed_items`, `evidence_bytes: 32768` |
+| Primitive enrichments | `target_derivation`, `controller_phases` and `action_context` on |
+| History | `executed_programs` (latest source plus earlier executed programs) |
+| Budgets | As in Section 1.1: 100k tokens initially, 200k per recovery round, 900k per trial; request timeout 2,400 s, 3,600 s per round, 18,000 s per trial |
+| Success criterion | `task_spec_success` (`task-spec-v1`, [Revision 5, §3.5](revision_5_add_tasks.md#35-result-fields)); recovery uses `success_field: task_spec_success` |
+
+- `profile_settings("no_failure_events")` in [revision43_feedback_experiment.py](../revision43_feedback_experiment.py) produces the feedback and enrichment settings above.
+- **This exact combination was not run in Revision 4.3.** Stage B used prompt set `p0001`. The prompt and feedback choices are combined on the assumption that their effects are independent. Section 1.5.2 found no prompt-block interactions, and the convergence-criteria block had no detected effect.
+- **Expected Stack performance** from the components: about 82% at round 0, and about 97% of the remaining failures recovered.
+
+### 3.5 Six-task evaluation
+
+- **Do not re-tune per task.** The configuration is frozen as above.
+  - Repeating the prompt factorial or the feedback ablation for each new task would turn the baseline into a per-task optimisation, which RoboVerify does not receive either.
+  - A configuration chosen on Stack and applied unchanged elsewhere is the conservative, reportable choice.
+- **Run one comparison over all six tasks once the five adapters are ready** ([Revision 5](revision_5_add_tasks.md)):
+  - Stack is rerun under the frozen configuration rather than reused from Revision 4.3, for three reasons:
+    - the exact combination is new (Section 3.4);
+    - Revision 5 changes the success criterion;
+    - the evaluation should use paired held-out scenes.
+  - Use the same scenes and seeds for CaP and RoboVerify.
+- **Before the main run, a small smoke run per task** checks only the adapter: start checks, terminal scoring and the `tbl` and goal interfaces. Its results are not used to change the configuration.
+- **Exception.** Revisit the configuration only if a task fails for an interface reason, for example a prompt that is silent about `tbl` or goal handles. Record any such change as a new configuration version and apply it to all six tasks.
