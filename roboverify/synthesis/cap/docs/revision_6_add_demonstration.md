@@ -1,6 +1,6 @@
 # Revision 6: configurable demonstration input for CaP
 
-- **Status:** planned; not implemented. Awaiting the demonstration-generation interface and data from Yuning.
+- **Status:** planned; not implemented. RoboVerify's demonstration collector is available (Section 1.1); the schema for CaP input still needs to be agreed with Yuning.
 - **Goal:** give CaP access to the same selected demonstration data used by RoboVerify's demonstration-driven synthesis, with an explicit on/off setting for ablation.
 - **Dependencies:** [task support plan](revision_5_add_tasks.md), an agreed demonstration schema, and validated data. Stack is the first integration target.
 
@@ -16,7 +16,25 @@
 
 - RoboVerify uses demonstration states, segment starts, and candidate rollouts during synthesis. Demonstration access does not imply prior knowledge of a held-out test scene.
 - Matching demonstrations controls information access, not all differences in representations, compute budgets, or search feedback.
-- The current collector supports Stack only. Earlier Stack collections are documented, but no demonstration archive was present in this checkout during the October 19 review.
+- The October 19 review found a Stack-only collector and no archive in this checkout. Both have since changed (Section 1.1).
+
+### 1.1 Demonstration collector and sample archive (2026-10-25)
+
+- **Collector:** [`synthesis/entry/collect_demos.py`](../../entry/collect_demos.py), run as `python -m synthesis.entry.collect_demos`. It executes a supplied DSL program (by default the task's groundtruth in [`synthesis/examples/`](../../examples/)) on distinct seeds and keeps only valid traces ([`validate_trace`](../../cfg/collection.py): normal completion, converged primitives, shared pre at the first state, shared post at the last). It covers all six tasks: `--task stack|unstack|reverse|restack|grid|pyramid`.
+- **Archive format:** one full-state NPZ per collection, written by [`synthesis/cfg/recordings.py`](../../cfg/recordings.py) and read with `load_traces`. Each trace holds the observations, actions, simulator snapshots, runtime events, initial bindings (`b0`) and initialization metadata. The [trace workflow](../../inference_lib/README.md) describes it.
+- **Sample collection:** Stack, 3 blocks, seeds 0–2, groundtruth program, with videos:
+
+  ```bash
+  python -m synthesis.entry.collect_demos --task stack --num-blocks 3 --seeds 0 1 2 --save-video --output-dir demos/cap-revision6-samples/stack-3-blocks
+  ```
+
+  | File | Content |
+  | --- | --- |
+  | [`demonstrations.npz`](../../../demos/cap-revision6-samples/stack-3-blocks/demonstrations.npz) | 3 valid traces: 78, 83 and 78 states (77, 82, 77 actions), each after 50 settling steps |
+  | [`collection.json`](../../../demos/cap-revision6-samples/stack-3-blocks/collection.json) | Collection report: per-seed validation, program serialization, configuration |
+  | [seed 0](../../../demos/cap-revision6-samples/stack-3-blocks/videos/seed_0000.mp4), [seed 1](../../../demos/cap-revision6-samples/stack-3-blocks/videos/seed_0001.mp4), [seed 2](../../../demos/cap-revision6-samples/stack-3-blocks/videos/seed_0002.mp4) | 20 FPS videos |
+
+- `demos/` holds generated data and is not committed, so these links work only in a checkout that has the collection. The upstream 2026-10-23 audit archives (`demos/pipeline-audit-20261023/`, all six tasks) are not present in this checkout.
 
 ## 2. Planned input interface
 
