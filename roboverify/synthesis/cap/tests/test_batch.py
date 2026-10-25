@@ -93,6 +93,37 @@ class BatchTests(unittest.TestCase):
                 any(r["process_status"] == "worker_failed" for r in summary["trials"])
             )
 
+    def test_seed_per_trial_assigns_consecutive_scene_seeds(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = RunConfig(
+                num_blocks=1, seed=5, save_video=False, prompt_version="typed_v3"
+            )
+            manifest = create_batch(
+                Path(tmp) / "batch",
+                config,
+                ModelConfig(),
+                methods=("cap_method_1",),
+                modes=("dsl_only",),
+                trials=3,
+                seed_per_trial=True,
+                responses=["Pick(b0)"],
+                fixture=True,
+            )
+            seeds = {j["trial"]: j["run_config"]["seed"] for j in manifest["jobs"]}
+            self.assertEqual(seeds, {1: 5, 2: 6, 3: 7})
+            self.assertTrue(manifest["seed_per_trial"])
+            fixed = create_batch(
+                Path(tmp) / "fixed",
+                config,
+                ModelConfig(),
+                methods=("cap_method_1",),
+                modes=("dsl_only",),
+                trials=2,
+                responses=["Pick(b0)"],
+                fixture=True,
+            )
+            self.assertEqual({j["run_config"]["seed"] for j in fixed["jobs"]}, {5})
+
     def test_resume_skips_interrupted_and_runs_only_pending(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "batch"

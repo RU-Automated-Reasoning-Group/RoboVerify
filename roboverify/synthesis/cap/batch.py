@@ -58,7 +58,11 @@ def create_batch(
     experiment_variants=None,
     render_workers=2,
     render_timeout=600.0,
+    seed_per_trial=False,
 ):
+    """Plan a batch. ``seed_per_trial`` gives trial k the scene seed
+    ``config.seed + k - 1`` (fresh resets); otherwise every trial uses ``config.seed``.
+    """
     directory = Path(directory).resolve()
     if (
         type(render_workers) is not int
@@ -68,6 +72,8 @@ def create_batch(
         raise ValueError("Invalid rendering worker count or timeout")
     if directory.exists():
         raise FileExistsError("Batch directory already exists; use resume")
+    if seed_per_trial and initial_state:
+        raise ValueError("Per-trial seeds apply to fresh resets, not a fixed snapshot")
     if (
         trials < 1
         or max_workers < 1
@@ -167,6 +173,7 @@ def create_batch(
             job_config |= {
                 "method": method,
                 "condition_mode": mode,
+                "seed": config.seed + trial - 1 if seed_per_trial else config.seed,
                 "recovery": job_config["recovery"] | {"enabled": recovery},
                 "output_root": str(directory / "trials" / ident),
             }
@@ -199,6 +206,7 @@ def create_batch(
         "gpu_config": asdict(gpu_config) if gpu_config else None,
         "experiment_variants": experiment_variants,
         "schedule_seed": schedule_seed,
+        "seed_per_trial": seed_per_trial,
         "snapshot_sha256": snapshot_hash,
         "fixture": fixture,
         "scripted": responses is not None,
