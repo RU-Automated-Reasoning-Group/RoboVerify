@@ -15,6 +15,11 @@ experiment guidance specific to `synthesis/cap/`.
   diagnostic, and score RoboVerify executions in a comparison with the same
   criterion. See [Revision 5, §3.5](docs/revision_5_add_tasks.md#35-result-fields)
   and [Revision 4.3 report, §3.1 and §4](docs/revision_4_3_report.md#31-success-criterion-task_spec_success).
+- Use the paper's block counts for each task (Stack/Unstack/Reverse 4, ReStack
+  5 with a 3-block tower, Grid/Pyramid 6), recorded with sources and CaP
+  settings in [task_specification.md](docs/task_specification.md). Repository
+  defaults differ, so set counts explicitly and use the same scenes for CaP and
+  RoboVerify.
 - The repository's 60-second Unstack limit governs `synthesize_cfg`'s process
   alarm, not CaP trials. Every CaP task uses the configured trial and recovery
   time limits.
