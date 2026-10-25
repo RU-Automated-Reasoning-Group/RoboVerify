@@ -24,7 +24,15 @@ class GoogleBaseline:
         if checkpoints.prompt_version != prompt_version:
             raise ValueError("Checkpoint and method prompt versions differ")
         self.logger = logger
-        core = load_core(model, logger, checkpoints, budget)
+        from ..contracts import TRAVERSALS
+
+        core = load_core(
+            model,
+            logger,
+            checkpoints,
+            budget,
+            traversals=TRAVERSALS & set(adapter.api_names),
+        )
         fixed = {}
         variable = adapter.namespace()
 

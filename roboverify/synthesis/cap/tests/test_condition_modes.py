@@ -14,7 +14,13 @@ from ..cap_method_1 import Method1
 from ..cap_method_1.generation import prompt
 from ..checkpoints import Checkpoints
 from ..config import RunConfig
-from ..contracts import CONDITION_MODES, Bundle, ConstraintFailure, Position3
+from ..contracts import (
+    CONDITION_MODES,
+    OBSERVATION_API_VERSION,
+    Bundle,
+    ConstraintFailure,
+    Position3,
+)
 from ..llm import LoggedModel, ScriptedModel
 from ..logger import CapLogger
 from ..runtime import Runtime
@@ -185,7 +191,9 @@ class ConditionModeTests(unittest.TestCase):
                 manifest = json.loads(path.read_text())
                 self.assertEqual(manifest["condition_mode"], "coordinate_predicates")
                 self.assertIsNotNone(manifest["checker_version"])
-                self.assertEqual(manifest["observation_api_version"], "positions-v1")
+                self.assertEqual(
+                    manifest["observation_api_version"], OBSERVATION_API_VERSION
+                )
 
     def test_strict_mode_repairs_numeric_predicate_before_actions(self):
         responses = [

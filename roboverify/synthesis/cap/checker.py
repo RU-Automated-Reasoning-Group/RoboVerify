@@ -11,15 +11,18 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from .contracts import (
+    ALL_API_NAMES,
     API_NAMES,
     CHECKER_VERSION,
     OBSERVATION_API_VERSION,
+    SUPPORTED_CHECKER_VERSIONS,
+    SUPPORTED_OBSERVATION_API_VERSIONS,
     BudgetExceeded,
     CapError,
     ConstraintFailure,
     Diagnostic,
     task_api_names,
-    task_inputs,
+    task_input_types,
     validate_condition_mode,
 )
 from .validation import OBJECT, Value, validate, validate_helper
@@ -39,11 +42,12 @@ class DSLContract:
 
     def __post_init__(self):
         validate_condition_mode(self.condition_mode)
-        if not set(self.api_names) <= API_NAMES:
+        if not set(self.api_names) <= ALL_API_NAMES:
             raise ValueError("Unknown contract API")
+        # Recorded v3/positions-v1 contracts remain readable for post-hoc audits.
         if (
-            self.checker_version != CHECKER_VERSION
-            or self.observation_api_version != OBSERVATION_API_VERSION
+            self.checker_version not in SUPPORTED_CHECKER_VERSIONS
+            or self.observation_api_version not in SUPPORTED_OBSERVATION_API_VERSIONS
         ):
             raise ValueError("Unsupported executable contract version")
 
@@ -52,7 +56,7 @@ class DSLContract:
         return cls(
             mode,
             tuple(sorted(task_api_names(task))),
-            tuple((name, "object") for name in sorted(task_inputs(task))),
+            task_input_types(task),
         )
 
     def identity(self):
@@ -165,6 +169,7 @@ def check_bundle(
                     role,
                     condition_mode=contract.condition_mode,
                     api_names=contract.api_names,
+                    inputs={name: Value(kind) for name, kind in contract.input_types},
                 )
             report.unresolved = [asdict(call) for call in pending]
             report.status = (

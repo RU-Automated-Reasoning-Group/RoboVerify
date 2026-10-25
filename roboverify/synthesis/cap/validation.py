@@ -11,9 +11,14 @@ from dataclasses import dataclass, field
 from .contracts import (
     ACTIONS,
     API_NAMES,
+    GOAL_API_NAMES,
+    GOAL_POSITION_QUERIES,
+    GOAL_PREDICATES,
     POSITION_QUERIES,
     PREDICATES,
+    PROTECTED_INPUTS,
     QUERIES,
+    TRAVERSALS,
     Bundle,
     CapError,
     ConstraintFailure,
@@ -21,7 +26,9 @@ from .contracts import (
     validate_condition_mode,
 )
 
-TYPE_KINDS = frozenset({"object", "number", "bool", "position", "vector", "none"})
+TYPE_KINDS = frozenset(
+    {"object", "goal", "number", "bool", "position", "vector", "none"}
+)
 MAX_ANALYSIS_STEPS = 100000
 
 
@@ -62,6 +69,7 @@ class Flow:
 UNKNOWN = Value("unknown")
 BOOL = Value("bool")
 OBJECT = Value("object")
+GOAL = Value("goal")
 NUMBER = Value("number")
 NONE = Value("none")
 
@@ -146,7 +154,7 @@ def diagnostic(node, rule, message, unit="policy"):
     )
 
 
-def parse(source, unit="policy"):
+def parse(source, unit="policy", protected=API_NAMES):
     try:
         tree = ast.parse(source)
     except SyntaxError as exc:
@@ -185,7 +193,7 @@ def parse(source, unit="policy"):
             )
         if isinstance(node, (ast.FunctionDef, ast.arg)):
             name = node.name if isinstance(node, ast.FunctionDef) else node.arg
-            if name in API_NAMES or name in FORBIDDEN or name.startswith("_"):
+            if name in protected or name in FORBIDDEN or name.startswith("_"):
                 raise ConstraintFailure(
                     [diagnostic(node, "PROTECTED_BINDING", name, unit)]
                 )
@@ -277,18 +285,28 @@ def parse(source, unit="policy"):
                 raise ConstraintFailure(
                     [diagnostic(node, "ASSIGNMENT", "Assign to one local name", unit)]
                 )
-            if node.targets[0].id in API_NAMES:
+            if node.targets[0].id in protected:
                 raise ConstraintFailure(
                     [diagnostic(node, "PROTECTED_BINDING", node.targets[0].id, unit)]
                 )
     return tree
 
 
-def definitions(bundle):
+def protected_names(api_names, inputs=()):
+    """API names and fixed goal inputs a policy may not rebind.
+
+    Goal names are protected only where the task exposes them, so tower tasks
+    accept exactly the programs they accepted before the goal interface.
+    """
+    available = set(api_names) & GOAL_API_NAMES
+    return API_NAMES | available | (PROTECTED_INPUTS & set(inputs))
+
+
+def definitions(bundle, protected=API_NAMES):
     functions = {}
     trees = {}
     for unit, source in [("policy", bundle.source), *bundle.helpers.items()]:
-        tree = parse(source, unit)
+        tree = parse(source, unit, protected)
         trees[unit] = tree
         if unit != "policy" and (
             len(tree.body) != 1
@@ -334,7 +352,19 @@ class Checker:
                 [Diagnostic("CONDITION_MODE", "Bundle and checker modes differ")]
             )
         self.bundle, self.complete, self.role = bundle, complete, role
-        self.trees, self.functions = definitions(bundle)
+        self.inputs = inputs or {"b0": OBJECT}
+        self.api_set = frozenset(api_names)
+        # Goal APIs are recognised only where the task exposes them; elsewhere a
+        # call such as AtGoal(x) remains an ordinary (unresolved) helper call.
+        self.known_api = API_NAMES | (self.api_set & GOAL_API_NAMES)
+        self.handle_kinds = (
+            frozenset({"object", "goal"})
+            if self.api_set & GOAL_API_NAMES
+            else frozenset({"object"})
+        )
+        self.trees, self.functions = definitions(
+            bundle, protected_names(api_names, self.inputs)
+        )
         for unit, tree in self.trees.items():
             for node in ast.walk(tree):
                 if isinstance(node, ast.Call) and node.func.id in API_NAMES - set(
@@ -343,7 +373,6 @@ class Checker:
                     raise ConstraintFailure(
                         [diagnostic(node, "API_UNAVAILABLE", node.func.id, unit)]
                     )
-        self.inputs = inputs or {"b0": OBJECT}
         self.globals = dict(self.inputs)
         self.stack = []
         self.unit = "policy"
@@ -444,7 +473,7 @@ class Checker:
                 "Only finite numeric, Boolean, and None constants are supported",
             )
         if isinstance(node, ast.Name):
-            if node.id in self.functions or node.id in API_NAMES:
+            if node.id in self.functions or node.id in self.known_api:
                 self.fail(
                     node, "FUNCTION_ALIAS", "Functions may only be used in direct calls"
                 )
@@ -499,7 +528,7 @@ class Checker:
                 identity = isinstance(op, (ast.Eq, ast.NotEq))
                 if self.condition_mode == "dsl_only":
                     if not identity or any(
-                        "object" not in self.domain(t)
+                        not self.domain(t) & self.handle_kinds
                         for value in (left, right)
                         for t in value.types
                     ):
@@ -508,25 +537,35 @@ class Checker:
                             "NUMERIC_CONDITION",
                             "dsl_only permits only object identity comparisons; numerical conditions require coordinate_predicates",
                         )
-                    self.constrain(node, [left, right], {"object"})
+                    self.constrain(node, [left, right], self.handle_kinds)
                 elif identity:
-                    self.constrain(node, [left, right], {"object", "number"})
+                    self.constrain(node, [left, right], self.handle_kinds | {"number"})
                 else:
                     if any(
-                        self.domain(t) == {"object"}
+                        self.domain(t) in ({"object"}, {"goal"})
                         for v in (left, right)
                         for t in v.types
                     ):
                         self.fail(
                             node,
                             "IDENTITY_COMPARISON",
-                            "Objects support only == and !=",
+                            (
+                                "Objects support only == and !="
+                                if "goal" not in self.handle_kinds
+                                else "Object and goal handles support only == and !="
+                            ),
                         )
                     self.constrain(node, [left, right], {"number"})
             return BOOL
         if not isinstance(node, ast.Call):
             self.fail(node, "EXPRESSION", type(node).__name__)
         name = node.func.id
+        if name in TRAVERSALS and name in self.known_api:
+            self.fail(
+                node,
+                "TRAVERSAL_TARGET",
+                f"{name}(x) is a statement on one goal variable, not a value",
+            )
         if name in QUERIES:
             if len(node.args) != 1 or not isinstance(node.args[0], ast.Lambda):
                 self.fail(node, "QUERY", "Queries require one lambda expression")
@@ -539,8 +578,14 @@ class Checker:
             self.condition(query.body, env | dict.fromkeys(params, OBJECT))
             return OBJECT if name == "get" else BOOL
         args = [self.expr(arg, env, role) for arg in node.args]
-        if name in POSITION_QUERIES:
-            expected = [] if name == "get_gripper_position" else ["object"]
+        if name in POSITION_QUERIES or (
+            name in GOAL_POSITION_QUERIES and name in self.known_api
+        ):
+            expected = (
+                []
+                if name == "get_gripper_position"
+                else ["goal"] if name in GOAL_POSITION_QUERIES else ["object"]
+            )
             if len(args) != len(expected):
                 self.fail(node, "ARITY", f"{name} expects {len(expected)} arguments")
             for arg, value, kind in zip(node.args, args, expected):
@@ -549,7 +594,18 @@ class Checker:
             if role == "condition" and acting:
                 self.fail(node, "ACTION_IN_CONDITION", name)
             return Value("position", acting)
+        if name in GOAL_PREDICATES and name in self.known_api:
+            expected = ["object"] if name == "AtGoal" else ["goal"]
+            if len(args) != 1:
+                self.fail(node, "ARITY", f"{name} expects 1 argument")
+            self.expect(node.args[0], args[0], expected[0])
+            acting = args[0].actions
+            if role == "condition" and acting:
+                self.fail(node, "ACTION_IN_CONDITION", name)
+            return Value("bool", acting)
         if name in API_NAMES:
+            # Move/Release references are blocks, or goals where the task has them.
+            reference = "reference"
             expected = (
                 ["object", "object"]
                 if name in PREDICATES
@@ -557,16 +613,19 @@ class Checker:
                     ["object"]
                     if name == "Pick"
                     else (
-                        ["object", "number"]
+                        [reference, "number"]
                         if name == "Release"
-                        else ["object", "object", "object", "vector"]
+                        else [reference, reference, reference, "vector"]
                     )
                 )
             )
             if len(args) != len(expected):
                 self.fail(node, "ARITY", f"{name} expects {len(expected)} arguments")
             for arg, value, kind in zip(node.args, args, expected):
-                self.expect(arg, value, kind)
+                if kind == reference:
+                    self.constrain(arg, [value], self.handle_kinds)
+                else:
+                    self.expect(arg, value, kind)
             acting = name in ACTIONS or any(a.actions for a in args)
             if role == "condition" and acting:
                 self.fail(node, "ACTION_IN_CONDITION", name)
@@ -648,6 +707,13 @@ class Checker:
             env[name] = value
             return Flow(env, actions=value.actions)
         if isinstance(stmt, ast.Expr):
+            call = stmt.value
+            if (
+                isinstance(call, ast.Call)
+                and call.func.id in TRAVERSALS
+                and call.func.id in self.known_api
+            ):
+                return self.traversal_flow(stmt, call, env, role)
             value = self.expr(stmt.value, env, role)
             return Flow(env, actions=value.actions)
         if isinstance(stmt, ast.Return):
@@ -681,6 +747,24 @@ class Checker:
         if isinstance(stmt, ast.Pass):
             return Flow(env)
         self.fail(stmt, "STATEMENT", type(stmt).__name__)
+
+    def traversal_flow(self, stmt, call, env, role):
+        """MoveRight(x)/MoveDown(x) rebind one goal variable in place (x := x.r/d)."""
+        name = call.func.id
+        if role == "condition":
+            self.fail(stmt, "ACTION_IN_CONDITION", f"{name} updates a goal cursor")
+        if len(call.args) != 1 or not isinstance(call.args[0], ast.Name):
+            self.fail(stmt, "TRAVERSAL_TARGET", f"{name} takes one goal variable name")
+        target = call.args[0].id
+        if target in PROTECTED_INPUTS:
+            self.fail(stmt, "TRAVERSAL_TARGET", f"{target} cannot be advanced")
+        if target in self.functions or target in self.known_api:
+            self.fail(stmt, "TRAVERSAL_TARGET", f"{target} is not a goal variable")
+        if target not in env:
+            self.fail(stmt, "UNBOUND_NAME", target)
+        self.expect(call.args[0], env[target], "goal")
+        env[target] = GOAL
+        return Flow(env)
 
     def loop_flow(self, stmt, entry, role, in_function, loop):
         head = dict(entry)
@@ -775,13 +859,21 @@ def validate(
 
 
 def validate_helper(
-    source, name, known, role, *, condition_mode="dsl_only", api_names=API_NAMES
+    source,
+    name,
+    known,
+    role,
+    *,
+    condition_mode="dsl_only",
+    api_names=API_NAMES,
+    inputs=None,
 ):
     """Check a helper locally before its caller supplies concrete argument types."""
     checker = Checker(
         Bundle("", known | {name: source}),
         complete=False,
         role=role,
+        inputs=inputs,
         condition_mode=condition_mode,
         api_names=api_names,
     )
@@ -797,9 +889,10 @@ def validate_helper(
     return list(checker.missing.values())
 
 
-def missing_calls(source, helpers=None, role="body"):
+def missing_calls(source, helpers=None, role="body", api_names=API_NAMES):
     """Syntactic discovery includes uncalled definitions and indirect guard uses."""
-    trees, functions = definitions(Bundle(source, helpers or {}))
+    known = API_NAMES | (set(api_names) & GOAL_API_NAMES)
+    trees, functions = definitions(Bundle(source, helpers or {}), known)
     calls, assignments, conditions = {}, {}, set()
     for tree in trees.values():
         for node in ast.walk(tree):
@@ -811,7 +904,7 @@ def missing_calls(source, helpers=None, role="body"):
                 )
             if (
                 isinstance(node, ast.Call)
-                and node.func.id not in API_NAMES
+                and node.func.id not in known
                 and node.func.id not in functions
             ):
                 calls[node.func.id] = node

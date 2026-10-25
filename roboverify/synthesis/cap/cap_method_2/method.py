@@ -42,7 +42,7 @@ class Method2:
         self.contract = DSLContract(
             condition_mode,
             tuple(sorted(adapter.api_names)),
-            tuple((name, "object") for name in sorted(adapter.inputs)),
+            adapter.input_types,
         )
         self.api = api_description(
             adapter.api_names,

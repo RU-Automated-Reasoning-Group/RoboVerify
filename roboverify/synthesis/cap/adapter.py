@@ -9,14 +9,20 @@ from dataclasses import asdict
 from .contracts import (
     ACTIONS,
     API_NAMES,
+    GOAL_POSITION_QUERIES,
+    GOAL_PREDICATES,
+    GOAL_TASKS,
     POSITION_QUERIES,
     PREDICATES,
     QUERIES,
+    TRAVERSALS,
     CapError,
+    GoalHandle,
     ObjectHandle,
     Position3,
     PrimitiveFailure,
     task_api_names,
+    task_input_types,
     task_inputs,
 )
 
@@ -32,20 +38,40 @@ class RoboVerifyAdapter:
             budget,
         )
         trial = uuid.uuid4().hex
-        base = self.inner.roboverify_base_block_id
-        if self.inner.symbolic_name_to_box_id.get("b0") != base:
-            raise CapError(
-                "Snapshot b0 binding does not match the environment's designated base"
-            )
+        self.goal_layout = None
+        if task in GOAL_TASKS:
+            # Goal tasks have no designated base block (Revision 5, Grid/Pyramid).
+            self.goal_layout = getattr(self.inner, "goal_layout", None)
+            if self.goal_layout is None:
+                raise CapError(f"{task} requires an environment with a goal layout")
+            base = None
+        else:
+            base = self.inner.roboverify_base_block_id
+            if self.inner.symbolic_name_to_box_id.get("b0") != base:
+                raise CapError(
+                    "Snapshot b0 binding does not match the environment's designated base"
+                )
         self.handles = tuple(
             ObjectHandle("b0" if i == base else f"object_{uuid.uuid4().hex}", trial)
             for i in range(self.inner.num_blocks)
         )
         self.ids = {handle: i for i, handle in enumerate(self.handles)}
-        self.b0 = self.handles[base]
+        self.b0 = self.handles[base] if base is not None else None
         # tbl is a Move/Release reference only: never picked, read or queried.
         self.tbl = ObjectHandle("tbl", trial) if "tbl" in task_inputs(task) else None
-        self.inputs = {"b0": self.b0} | ({"tbl": self.tbl} if self.tbl else {})
+        if self.goal_layout is not None:
+            # Goal 0 is the layout head h0; null is the empty goal.
+            self.goals = tuple(
+                GoalHandle("h0" if i == 0 else f"goal_{uuid.uuid4().hex}", trial)
+                for i in range(len(self.goal_layout.goals))
+            )
+            self.goal_ids = {handle: i for i, handle in enumerate(self.goals)}
+            self.null = GoalHandle("null", trial)
+            self.inputs = {"h0": self.goals[0], "null": self.null}
+        else:
+            self.goals, self.goal_ids, self.null = (), {}, None
+            self.inputs = {"b0": self.b0} | ({"tbl": self.tbl} if self.tbl else {})
+        self.input_types = task_input_types(task)
         self.entry_observation = self.observe()
         self.trajectory = [self.entry_observation.copy()]
         self.query_depth = 0
@@ -57,6 +83,8 @@ class RoboVerifyAdapter:
         return self.inner.flatten_observation(self.inner._get_obs()).copy()
 
     def object_id(self, handle):
+        if isinstance(handle, GoalHandle):
+            raise CapError("A goal is not a block; use it as a Move/Release reference")
         if self.tbl is not None and handle == self.tbl:
             raise CapError(
                 "tbl is not a block; use it only as a Move/Release reference"
@@ -71,6 +99,36 @@ class RoboVerifyAdapter:
             return "tbl"
         return self.object_id(handle)
 
+    def goal_index(self, handle):
+        """Goal index for a goal handle; None for null."""
+        if self.null is not None and handle == self.null:
+            return None
+        if not isinstance(handle, GoalHandle) or handle not in self.goal_ids:
+            raise CapError("Unknown or cross-trial goal handle")
+        return self.goal_ids[handle]
+
+    def goal_equal(self, left, right):
+        self.goal_index(left), self.goal_index(right)
+        return left == right
+
+    def located_goal(self, handle, name):
+        index = self.goal_index(handle)
+        if index is None:
+            raise CapError(f"{name} requires a goal location; null has none")
+        return index
+
+    def occupied(self):
+        """[block, goal] occupancy on the current observation (20 mm, 3D)."""
+        import numpy as np
+
+        from synthesis.environment.goal_layout import occupancy
+
+        obs = self.observe()
+        blocks = np.array(
+            [obs[10 + 12 * i : 13 + 12 * i] for i in range(self.inner.num_blocks)]
+        )
+        return occupancy(blocks, self.goal_layout.positions)
+
     def namespace(self):
         return self.inputs | {name: self._wrapper(name) for name in self.api_names}
 
@@ -84,6 +142,41 @@ class RoboVerifyAdapter:
         self.budget.tick()
         if name not in self.api_names:
             raise CapError(f"API unavailable for this task: {name}")
+        if name in GOAL_POSITION_QUERIES:
+            if len(args) != 1:
+                raise CapError(f"{name} requires 1 argument")
+            index = self.located_goal(args[0], name)
+            result = Position3(self.goal_layout.goals[index].position)
+            self.logger.emit(
+                "coordinate_query", query=name, arguments=args, result=result
+            )
+            return result
+        if name in GOAL_PREDICATES:
+            if len(args) != 1:
+                raise CapError(f"{name} requires 1 argument")
+            occupied = self.occupied()
+            if name == "AtGoal":
+                result = bool(occupied[self.object_id(args[0])].any())
+            else:
+                index = self.goal_index(args[0])
+                result = False if index is None else bool(occupied[:, index].any())
+            self.logger.emit("predicate", predicate=name, arguments=args, result=result)
+            return result
+        if name in TRAVERSALS:
+            if self.query_depth:
+                raise CapError("Queries cannot update goal cursors")
+            if len(args) != 1:
+                raise CapError(f"{name} requires 1 argument")
+            index = self.goal_index(args[0])
+            if index is None:
+                raise CapError(f"{name} cannot advance null")
+            goal = self.goal_layout.goals[index]
+            following = goal.r if name == "MoveRight" else goal.d
+            result = self.null if following is None else self.goals[following.index]
+            self.logger.emit(
+                "goal_traversal", statement=name, argument=args[0], result=result
+            )
+            return result
         if name in POSITION_QUERIES:
             expected = 0 if name == "get_gripper_position" else 1
             if len(args) != expected:
@@ -171,6 +264,16 @@ class RoboVerifyAdapter:
         for handle in references:
             if name == "Pick" and self.tbl is not None and handle == self.tbl:
                 raise CapError("Pick requires a block; tbl cannot be picked")
+            if isinstance(handle, GoalHandle):
+                if name == "Pick":
+                    raise CapError("Pick requires a block; goals cannot be picked")
+                goal = self.located_goal(handle, name)
+                from synthesis.environment.goal_layout import GoalRef
+
+                alias = f"cap_goal_{goal}"
+                self.inner.symbolic_name_to_goal[alias] = GoalRef(goal)
+                aliases.append(alias)
+                continue
             physical_id = self.reference(handle)
             alias = "cap_table" if physical_id == "tbl" else f"cap_object_{physical_id}"
             self.inner.symbolic_name_to_box_id[alias] = physical_id
@@ -239,10 +342,14 @@ class GenerationOnlyAdapter:
     """Expose signatures/identity for a generation diagnostic, never a rollout."""
 
     def __init__(self, task="stack"):
+        self.input_types = task_input_types(task)
         self.inputs = {
-            name: ObjectHandle(name, "generation-only") for name in task_inputs(task)
+            name: (GoalHandle if kind == "goal" else ObjectHandle)(
+                name, "generation-only"
+            )
+            for name, kind in self.input_types
         }
-        self.b0 = self.inputs["b0"]
+        self.b0 = self.inputs.get("b0")
         self.api_names = task_api_names(task)
 
     def call(self, name, args):

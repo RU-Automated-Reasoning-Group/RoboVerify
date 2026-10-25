@@ -38,7 +38,33 @@ class Unparse:
         )
 
 
-def load_core(model, logger, checkpoints, budget):
+class _TraversalStatements(ast.NodeTransformer):
+    """Give RoboVerify's MoveRight(x)/MoveDown(x) their in-place semantics.
+
+    exec'd Python cannot rebind a caller's variable from inside a call, so the
+    statement form is rewritten to ``x = MoveRight(x)`` before execution. Only
+    plain-name statements are rewritten; any other use runs unchanged.
+    """
+
+    def __init__(self, names):
+        self.names = names
+
+    def visit_Expr(self, node):
+        call = node.value
+        if (
+            isinstance(call, ast.Call)
+            and isinstance(call.func, ast.Name)
+            and call.func.id in self.names
+            and len(call.args) == 1
+            and isinstance(call.args[0], ast.Name)
+            and not call.keywords
+        ):
+            target = ast.Name(id=call.args[0].id, ctx=ast.Store())
+            return ast.copy_location(ast.Assign(targets=[target], value=call), node)
+        return node
+
+
+def load_core(model, logger, checkpoints, budget, *, traversals=frozenset()):
     core_path = Path(__file__).parents[1] / "vendor" / "google_cap" / "core.py"
     functions, execution_paths = {}, set()
     sources = {}
@@ -116,8 +142,15 @@ def load_core(model, logger, checkpoints, budget):
 
         try:
             sys.settrace(trace)
+            code = source
+            if traversals:
+                try:
+                    tree = _TraversalStatements(traversals).visit(ast.parse(source))
+                    code = ast.fix_missing_locations(tree)
+                except SyntaxError:
+                    pass  # compile() reports it as for any other source
             with budget.timings.measure("execution"):
-                builtins.exec(compile(source, filename, "exec"), gvars, lvars)
+                builtins.exec(compile(code, filename, "exec"), gvars, lvars)
         finally:
             sys.settrace(original_trace)
             if is_policy:

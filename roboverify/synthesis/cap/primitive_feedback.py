@@ -80,7 +80,16 @@ def object_xyz(obs, ident):
     return vector(obs[10 + 12 * ident : 13 + 12 * ident])
 
 
-def target_diagnostic(record, action, mapping):
+def reference(value, mapping, obs, goals):
+    """Block ID and XYZ of a Move/Release reference; goals use their fixed centre."""
+    if isinstance(value, dict) and value.get("goal_handle") in goals:
+        return None, vector(goals[value["goal_handle"]])
+    ident = object_id(value, mapping)
+    return ident, object_xyz(obs, ident)
+
+
+def target_diagnostic(record, action, mapping, goals=None):
+    goals = goals or {}
     start, end = action["start"], action["end"] or {}
     before = observation(record, start.get("state_index"))
     after = observation(record, end.get("state_index"))
@@ -103,21 +112,20 @@ def target_diagnostic(record, action, mapping):
         result["terminal_gripper_xyz"] = vector(after[:3])
     if name == "Move" and len(args) == 4:
         for axis, ref in enumerate(args[:3]):
-            ident = object_id(ref, mapping)
-            xyz = object_xyz(before, ident)
+            ident, xyz = reference(ref, mapping, before, goals)
             offset = float(args[3][axis])
             result["axes"].append(
                 {
                     "axis": "XYZ"[axis],
                     "reference_object": ident,
+                    **goal_reference(ref, goals),
                     "reference_coordinate": xyz[axis] if xyz else None,
                     "offset": offset,
                     "computed_target": xyz[axis] + offset if xyz else None,
                 }
             )
     elif name == "Release" and len(args) == 2:
-        ident = object_id(args[0], mapping)
-        xyz = object_xyz(before, ident)
+        ident, xyz = reference(args[0], mapping, before, goals)
         result["frozen_xy_before_open"] = (
             vector(before[:2]) if before is not None else None
         )
@@ -125,6 +133,7 @@ def target_diagnostic(record, action, mapping):
             {
                 "axis": "Z",
                 "reference_object": ident,
+                **goal_reference(args[0], goals),
                 "reference_coordinate": xyz[2] if xyz else None,
                 "offset": float(args[1]),
                 "computed_target": xyz[2] + float(args[1]) if xyz else None,
@@ -308,7 +317,14 @@ def context_candidates(record, actions, failed, mapping, config):
     }
 
 
-def build_diagnostics(record, mapping, config):
+def goal_reference(value, goals):
+    """Name a goal reference; tower-task diagnostics keep their original keys."""
+    if isinstance(value, dict) and value.get("goal_handle") in goals:
+        return {"reference_goal": value["goal_handle"]}
+    return {}
+
+
+def build_diagnostics(record, mapping, config, goals=None):
     if not config.enabled or record["result"].get("status") != "primitive_failed":
         return None, []
     actions = pair_actions(record["events"])
@@ -325,7 +341,7 @@ def build_diagnostics(record, mapping, config):
         }, []
     result = {"version": VERSION, "failed_action_id": failed["start"]["event_id"]}
     if config.target_derivation:
-        result["target_derivation"] = target_diagnostic(record, failed, mapping)
+        result["target_derivation"] = target_diagnostic(record, failed, mapping, goals)
     if config.controller_phases:
         result["controller_phases"] = phase_diagnostic(record, failed)
     candidates = []
