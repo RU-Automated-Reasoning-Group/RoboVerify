@@ -7,6 +7,14 @@ experiment guidance specific to `synthesis/cap/`.
 - Before starting any task under `synthesis/cap/`, read the [README](README.md)
   overview and the sections relevant to the task. Read historical experiment
   reports only when needed.
+- Use `task_spec_success` (`task-spec-v1`) as the default success criterion for
+  new experiments, analyses and reports, so that CaP is scored like RoboVerify
+  (`cfg/collection.py:validate_trace`). Set `recovery.success_field:
+  task_spec_success` explicitly in new recovery configurations. Report the
+  physical evaluator (`success`, `settled_environment_success`) only as a
+  diagnostic, and score RoboVerify executions in a comparison with the same
+  criterion. See [Revision 5, §3.5](docs/revision_5_add_tasks.md#35-result-fields)
+  and [Revision 4.3 report, §3.1 and §4](docs/revision_4_3_report.md#31-success-criterion-task_spec_success).
 - The repository's 60-second Unstack limit governs `synthesize_cfg`'s process
   alarm, not CaP trials. Every CaP task uses the configured trial and recovery
   time limits.
