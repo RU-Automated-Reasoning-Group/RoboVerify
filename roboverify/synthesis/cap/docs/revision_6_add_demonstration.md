@@ -163,67 +163,77 @@ RoboVerify learns from demonstrations, where a demonstration is a trajectory of 
 
 Measured with the Qwen3.8 27B tokenizer (vLLM `/tokenize`) on one seed-0 demonstration per task at the paper's block counts ([task_specification.md](task_specification.md)). The paper uses 15 demonstrations per environment (line 1833); its Fig. 11 x-axis counts simulator samples consumed by search, not demonstrations.
 
-| Task (blocks) | Steps | Per-step text: gripper, fingers, block positions, action | × 15 | Full observation vector per step (73–103 dims) | × 15 | Gripper-event keyframes (Section 3.3, positions only) | × 15 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Stack (4) | 131 | 16.5k | 248k | 61k | 908k | 880 (8 frames) | 13k |
-| Unstack (4) | 158 | 19.9k | 299k | 73k | 1.1M | 1.4k (13) | 21k |
-| Reverse (4) | 229 | 29.0k | 434k | 106k | 1.6M | 1.9k (17) | 28k |
-| ReStack (5) | 390 | 56.4k | 846k | 216k | 3.2M | 3.3k (25) | 49k |
-| Grid (6) | 331 | 53.8k | 807k | 213k | 3.2M | 3.8k (25) | 57k |
-| Pyramid (6) | 319 | 51.9k | 778k | 205k | 3.1M | 3.8k (25) | 57k |
+| Task (blocks) | Steps | Per-step text: gripper, fingers, block positions, action | × 15 | Full observation vector per step (73–103 dims) | × 15 | Gripper events only (positions) | × 15 | **Events + RDP waypoints (Section 3.3, positions only)** | **× 15** |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Stack (4) | 131 | 16.5k | 248k | 61k | 908k | 880 (8 frames) | 13k | 1.3k (8 + 14) | 20k |
+| Unstack (4) | 158 | 19.9k | 299k | 73k | 1.1M | 1.4k (13) | 21k | 1.9k (13 + 13) | 28k |
+| Reverse (4) | 229 | 29.0k | 434k | 106k | 1.6M | 1.9k (17) | 28k | 2.6k (17 + 20) | 38k |
+| ReStack (5) | 390 | 56.4k | 846k | 216k | 3.2M | 3.3k (25) | 49k | 4.2k (25 + 27) | 63k |
+| Grid (6) | 331 | 53.8k | 807k | 213k | 3.2M | 3.8k (25) | 57k | 4.8k (25 + 28) | 72k |
+| Pyramid (6) | 319 | 51.9k | 778k | 205k | 3.1M | 3.8k (25) | 57k | 4.8k (25 + 28) | 72k |
 
-Fifteen per-step demonstrations do not fit for any task. Keyframe compaction fits all six, but only after the context upgrade in Section 3.5: today the binding limit is the server's 98,304-token window, not the 200k CaP allowance.
+In the last column, “8 + 14” means 8 gripper-event frames plus 14 RDP waypoints; predicate deltas are not yet included.
 
-### 3.3 Method
+Fifteen per-step demonstrations do not fit for any task. The Section 3.3 compaction (20k–72k tokens for 15 demonstrations) fits all six, but only after the context upgrade in Section 3.5: today the binding limit is the server's 98,304-token window, not the 200k CaP allowance.
 
-Two stages, following the recursive summarization of Demo2Code [1] and the keyframe downsampling of KAT [2], adapted to RoboVerify's DSL predicates:
+### 3.3 Method: deterministic compaction
 
-1. **Deterministic compaction (main setting).** Keep the frames where the gripper command switches between open and close, plus the first and last frame. At each kept frame, report the DSL predicates that changed since the previous kept frame, as Demo2Code's per-step predicate deltas. Also report the positions needed to parameterize primitives. Predicates come from the shared scene evaluator, i.e. the abstraction RoboVerify itself evaluates on demonstration states.
-2. **LLM recursive summarization (ablation only).** Summarize each compacted demonstration, then summarize the set into a task specification, and give that specification to the synthesis request. Its calls and tokens are charged to the trial budget.
+The compaction keeps two kinds of frames. Both are computed from `states` and `actions` only.
+
+1. **Event frames.** These are the frames where the gripper command switches between open and close, plus the first and last frame. Each event frame records:
+   - every block's position;
+   - the DSL predicates that changed since the previous event frame, as in Demo2Code's per-step predicate deltas [1]. The predicates come from the shared scene evaluator, i.e. the abstraction RoboVerify itself evaluates on demonstration states.
+2. **Motion waypoints.** These are the corners of the gripper's 3D path, found by Ramer–Douglas–Peucker (RDP) simplification with a 1 cm tolerance.
+   - Each waypoint records only the gripper position and whether it holds a block. Between two events only the held block moves, so the other positions are not repeated.
+   - Waypoints keep the lift, transit and descent structure that gripper events alone lose. For example, the Stack demonstration in Section 3.2 lifts 10 cm after the grasp, moves across at that height, descends onto the tower, then retreats 15 cm before moving to the next block. Move does not plan around obstacles, so this structure is what avoids knocking the tower over.
+   - The approach follows KAT's downsampling of action trajectories to a few tens of waypoints [2].
 
 ```python
-def compact_demonstration(trace, task):
+def compact_demonstration(trace, task, *, waypoint_tolerance=0.01):
     """State/action-only compaction; never reads trace.program or trace.events."""
     n = trace.num_blocks
     predicates = dsl_predicates(task)            # task's API set: ON, ON_star, Higher, Scattered,
                                                  # ON_star_zero (Reverse), AtGoal/HasBlock (goal tasks)
     closed = [action.gripper < 0 for action in trace.actions]
-    keyframes = [0] + [t + 1 for t in range(1, len(closed)) if closed[t] != closed[t - 1]] \
-                    + [len(trace.states) - 1]
+    holding = lambda t: t > 0 and closed[t - 1]
+    last = len(trace.states) - 1
+
+    events = {0, last} | {t + 1 for t in range(1, len(closed)) if closed[t] != closed[t - 1]}
+    gripper_path = [state.gripper_position for state in trace.states]
+    waypoints = set(rdp(gripper_path, waypoint_tolerance)) - events
 
     record = Header(task=task, num_blocks=n, b0=trace.initial_bindings.get("b0"),
                     goal_layout=trace.goal_layout)   # goals: positions and r/d links, once
     previous = None
-    for t in unique_sorted(keyframes):
-        scene = scene_from_obs(trace.states[t], n, entry_obs=trace.states[0])
+    for t in sorted(events | waypoints):
+        state = trace.states[t]
+        if t in waypoints:
+            record.append(Waypoint(step=t, gripper=round3(state.gripper_position),
+                                   holding=holding(t)))
+            continue
+        scene = scene_from_obs(state, n, entry_obs=trace.states[0])
         relations = {p(a, b) for p in predicates for a, b in operand_pairs(p, scene)
                      if evaluate(p(a, b), scene)}
-        record.append(Keyframe(
+        record.append(Event(
             step=t,
-            gripper=("closed" if t > 0 and closed[t - 1] else "open"),
-            gripper_position=round3(scene.gripper),
+            gripper=round3(state.gripper_position),
+            holding=holding(t),
+            blocks={i: round3(scene.positions[i]) for i in range(n)},
             added=sorted(relations - previous) if previous is not None else sorted(relations),
             removed=sorted(previous - relations) if previous is not None else [],
-            moved_blocks={i: round3(scene.positions[i]) for i in moved_since_last_keyframe(scene)},
         ))
         previous = relations
     return serialize(record, version="demo-keyframes-v1")
 
 
-def synthesis_context(archive, selected_ids, task, *, summarize=False, model=None, budget=None):
+def synthesis_context(archive, selected_ids, task):
     demos = [compact_demonstration(load_trace(archive, i), task) for i in selected_ids]
-    if not summarize:                                      # main setting
-        return render_demonstrations(demos)                # appended to every policy/repair request
-    # Ablation (Demo2Code-style): per-demonstration summaries, then one joint specification.
-    summaries = [model.complete(SUMMARIZE_ONE.format(demo=d), budget=budget) for d in demos]
-    specification = model.complete(SUMMARIZE_ALL.format(summaries=summaries), budget=budget)
-    return render_specification(specification, keep_raw=False)
+    return render_demonstrations(demos)                    # the same block in every policy/repair request
 
 
 def run_trial(config, archive, selected_ids, scene):
-    context = synthesis_context(archive, selected_ids, config.task,
-                                summarize=config.demonstrations.summarize, ...)
     assert_disjoint(selected_ids, scene)                   # evaluation scene never in demonstrations
+    context = synthesis_context(archive, selected_ids, config.task)
     log(demonstration_hashes(selected_ids), serialization="demo-keyframes-v1",
         rendered_context=context, tokens=count_tokens(context))
     if count_tokens(context) > config.demonstrations.max_tokens:
@@ -231,15 +241,30 @@ def run_trial(config, archive, selected_ids, scene):
     return method(config).synthesize(instruction, demonstrations=context)   # unchanged methods
 ```
 
+Rendered (Stack, 4 blocks, seed 0; positions only, predicate deltas omitted):
+
+```text
+event    t=0   open   gripper=(1.345,0.749,0.531)  o0=(1.302,0.901,0.425) o1=(1.243,0.579,0.425) ...
+waypoint t=7   open   gripper=(1.244,0.580,0.531)   # above o1 at a safe height
+event    t=15  closed gripper=(1.244,0.579,0.424)  o0=(...) o1=(1.243,0.579,0.425) ...
+waypoint t=20  closed gripper=(1.243,0.580,0.524)   # lift 10 cm
+waypoint t=31  closed gripper=(1.302,0.899,0.524)   # transit above o0
+event    t=35  open   gripper=(1.302,0.901,0.475)  o0=(...) o1=(1.304,0.901,0.473) ...
+waypoint t=41  open   gripper=(1.302,0.901,0.627)   # retreat 15 cm
+waypoint t=46  open   gripper=(1.251,0.801,0.627)   # transit to the next block
+...
+```
+
 Design notes:
 
-- **Only state and action data.** The keyframe rule reads the gripper command from `actions`. Predicate changes and positions come from `states`.
-- **Deltas, not full relation sets.** Demo2Code reports that adding irrelevant predicates hurts [1]. The first keyframe lists the full initial relation set once, and later keyframes list only changes.
-- **Numbers.** Positions use 3 decimals (millimetres), the precision the controllers resolve. KAT found that a few tens of action tokens per demonstration perform better than dense trajectories [2].
+- **Only state and action data.** The event rule reads the gripper command from `actions`. Waypoints, positions and predicate changes come from `states`. The expert's Move targets are not read from the program; they appear only as corners of the observed gripper path.
+- **Deltas, not full relation sets.** Demo2Code reports that adding irrelevant predicates hurts [1]. The first event lists the full initial relation set once; later events list only changes.
+- **Numbers.** Positions use 3 decimals (millimetres), the precision the controllers resolve.
+- **Waypoint tolerance.** In the Stack sample, 1 cm keeps every lift, transit and descent corner (rendered above). A larger tolerance merges corners; a smaller one adds controller jitter. The validation below checks the other tasks.
 - **Same input for all methods.** Baseline, Method 1 and Method 2 receive identical demonstration context in every policy and repair request.
 - **To validate before experiments:**
-  - Token counts of the predicate-delta format, measured as in Section 3.2.
-  - A check that every compacted Stack demonstration still identifies each pick and place (which block moved onto which support).
+  - token counts including the predicate deltas, measured as in Section 3.2;
+  - a check that every compacted demonstration still identifies each pick, place and safe-height transit (which block moved onto which support, and at what clearance).
 
 ### 3.4 Prompt integration and accounting
 
@@ -270,11 +295,11 @@ The served window binds first. A request may carry at most 98,304 − 32,768 = 6
 | Served window `--max-model-len` | 98,304 | **262,144** | The checkpoint's native context. No RoPE/YaRN extension is needed. The KV cache (587,589 tokens) holds two full-length requests per instance. |
 | `recovery.context_tokens` | 200,000 | **262,144** | Match the served window |
 | `max_output_tokens` | 32,768 | 32,768 (unchanged) | Reasoning budget is not part of this change |
-| Demonstration block limit `demonstrations.max_tokens` | — | **131,072** | Fits 15 compacted demonstrations for every task (≤ 57k measured), with margin for the predicate deltas. Leaves ≥ 98k for the API description, instruction, recovery feedback and history. |
+| Demonstration block limit `demonstrations.max_tokens` | — | **131,072** | Fits 15 compacted demonstrations for every task (≤ 72k measured for events plus waypoints, Section 3.2), with margin for the predicate deltas. Leaves ≥ 98k for the API description, instruction, recovery feedback and history. |
 | Effort budgets (initial / round / trial) | 100k / 200k / 900k | Unchanged, **excluding the demonstration block** | See accounting below |
 | Serving: prefix caching | vLLM default | Required, verified at startup | The demonstration block is an identical prefix across calls and trials |
 
-**Token accounting.** Effort budgets count provider-reported total tokens per call. Charging a 13k–57k demonstration block to every call would exhaust the 100k initial budget within a few calls, and would make demonstration-on and demonstration-off runs differ in effective generation budget.
+**Token accounting.** Effort budgets count provider-reported total tokens per call. Charging a 20k–72k demonstration block to every call would exhaust the 100k initial budget within a few calls, and would make demonstration-on and demonstration-off runs differ in effective generation budget.
 
 - **v3 charges the demonstration block separately** (`demonstration_tokens`, per call and per trial). The existing budgets continue to bound everything else. Both totals are reported.
 - **The demonstration block is rendered first in every request**, before the method's prompt. Identical prefixes then hit vLLM's prefix cache, which bounds the prefill cost.
@@ -303,6 +328,14 @@ The served window binds first. A request may carry at most 98,304 − 32,768 = 6
 - Validate at least one Stack integration end-to-end before extending to other tasks.
 - Preserve original benchmark results and report any new ablation as a separate batch.
 - This document does not authorize implementing these changes or launching new model experiments yet.
+
+## Backlog (not implemented)
+
+- **LLM recursive summarization of demonstrations** (Demo2Code-style [1]): summarize each compacted demonstration with the LLM, summarize the set into one task specification, and give the specification to the synthesis request instead of the raw compaction.
+  - Intended as an ablation: does LLM pattern extraction help beyond the deterministic compaction?
+  - Its calls and tokens would be charged to the trial budget.
+  - Risks: numbers may be misstated or invented, and pattern extraction overlaps with synthesis itself, which blurs attribution.
+  - Deferred by user decision (2026-10-25); not part of `config_frozen_v3`.
 
 ## References
 
