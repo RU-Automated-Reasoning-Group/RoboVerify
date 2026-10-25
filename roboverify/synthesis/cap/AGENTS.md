@@ -22,9 +22,16 @@ experiment guidance specific to `synthesis/cap/`.
   `max_rounds: 4` and feedback profile `full`
   (`profile_settings("full")`), and `task_spec_success` as the success field.
   The full table (budgets, history, enrichments) is in the
-  [Revision 4.3 report, §3.5](docs/revision_4_3_report.md#35-frozen-configuration);
-  change it only for an interface failure, as a new version applied to all six
-  tasks (§3.6).
+  [Revision 4.3 report, §3.5](docs/revision_4_3_report.md#35-frozen-configuration).
+  Build experiments from [configs/config_frozen_v1.py](configs/config_frozen_v1.py)
+  (`configuration(task, seed=...)` returns the run config, model config and
+  instruction) rather than restating values; it also records the server-side
+  settings (`SERVING`, including the reasoning guard) and the per-task block
+  counts. Never edit a frozen version. Change the configuration only when a task
+  fails because the CaP interface does not expose or describe something the task
+  needs (for example, the prompt is silent about `tbl` or goal handles); low
+  success alone is a result, not a reason. Record such a change as a new
+  `config_frozen_vN.py` and apply it to all six tasks (§3.6).
 - Use the paper's block counts for each task (Stack/Unstack/Reverse 4, ReStack
   5 with a 3-block tower, Grid/Pyramid 6), recorded with sources and CaP
   settings in [task_specification.md](docs/task_specification.md). Repository
