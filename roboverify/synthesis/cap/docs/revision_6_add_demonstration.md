@@ -137,7 +137,15 @@ actions[76] = [ 0.0110,  0.0034,  0.1210,  0.0000]   # last retreat step after R
 
 ## 2. Planned input interface
 
-- Add explicit demonstration-input on/off configuration; exact option names remain to be designed.
+- Add explicit demonstration-input on/off configuration through a `demonstrations` block in `RunConfig`. Settings decided so far:
+
+  | Setting | Default | Meaning |
+  | --- | --- | --- |
+  | `demonstrations.enabled` | `false` | Off keeps the existing prompts unchanged |
+  | `demonstrations.waypoint_tolerance` | `0.01` (m) | RDP tolerance for motion waypoints (Section 3.3). Must be finite and positive. Recorded in every trial's configuration and in the serialized block header. |
+  | `demonstrations.max_tokens` | `131072` | Limit for the rendered demonstration block (Section 3.5); exceeding it is an explicit failure |
+
+  The remaining option names (archive path, trace selection) are still to be designed.
 - Configure archive paths, selected trace IDs, and a deterministic serialization version.
 - Validate task identity, block/goal bindings, trajectory completeness, and compatibility with the active primitive/predicate semantics.
 - Use the same selected demonstration identities and representation across Baseline, Method 1, and Method 2.
@@ -183,13 +191,13 @@ The compaction keeps two kinds of frames. Both are computed from `states` and `a
 1. **Event frames.** These are the frames where the gripper command switches between open and close, plus the first and last frame. Each event frame records:
    - every block's position;
    - the DSL predicates that changed since the previous event frame, as in Demo2Code's per-step predicate deltas [1]. The predicates come from the shared scene evaluator, i.e. the abstraction RoboVerify itself evaluates on demonstration states.
-2. **Motion waypoints.** These are the corners of the gripper's 3D path, found by Ramer–Douglas–Peucker (RDP) simplification with a 1 cm tolerance.
+2. **Motion waypoints.** These are the corners of the gripper's 3D path, found by Ramer–Douglas–Peucker (RDP) simplification. The tolerance is the configurable `demonstrations.waypoint_tolerance`, default 1 cm (Section 2).
    - Each waypoint records only the gripper position and whether it holds a block. Between two events only the held block moves, so the other positions are not repeated.
    - Waypoints keep the lift, transit and descent structure that gripper events alone lose. For example, the Stack demonstration in Section 3.2 lifts 10 cm after the grasp, moves across at that height, descends onto the tower, then retreats 15 cm before moving to the next block. Move does not plan around obstacles, so this structure is what avoids knocking the tower over.
    - The approach follows KAT's downsampling of action trajectories to a few tens of waypoints [2].
 
 ```python
-def compact_demonstration(trace, task, *, waypoint_tolerance=0.01):
+def compact_demonstration(trace, task, *, waypoint_tolerance):
     """State/action-only compaction; never reads trace.program or trace.events."""
     n = trace.num_blocks
     predicates = dsl_predicates(task)            # task's API set: ON, ON_star, Higher, Scattered,
@@ -223,18 +231,22 @@ def compact_demonstration(trace, task, *, waypoint_tolerance=0.01):
             removed=sorted(previous - relations) if previous is not None else [],
         ))
         previous = relations
+    record.header.waypoint_tolerance = waypoint_tolerance     # rendered settings are self-describing
     return serialize(record, version="demo-keyframes-v1")
 
 
-def synthesis_context(archive, selected_ids, task):
-    demos = [compact_demonstration(load_trace(archive, i), task) for i in selected_ids]
+def synthesis_context(archive, selected_ids, task, settings):
+    demos = [compact_demonstration(load_trace(archive, i), task,
+                                   waypoint_tolerance=settings.waypoint_tolerance)
+             for i in selected_ids]
     return render_demonstrations(demos)                    # the same block in every policy/repair request
 
 
 def run_trial(config, archive, selected_ids, scene):
     assert_disjoint(selected_ids, scene)                   # evaluation scene never in demonstrations
-    context = synthesis_context(archive, selected_ids, config.task)
+    context = synthesis_context(archive, selected_ids, config.task, config.demonstrations)
     log(demonstration_hashes(selected_ids), serialization="demo-keyframes-v1",
+        waypoint_tolerance=config.demonstrations.waypoint_tolerance,
         rendered_context=context, tokens=count_tokens(context))
     if count_tokens(context) > config.demonstrations.max_tokens:
         raise DemonstrationBudgetExceeded                   # explicit failure, no silent truncation
@@ -260,7 +272,11 @@ Design notes:
 - **Only state and action data.** The event rule reads the gripper command from `actions`. Waypoints, positions and predicate changes come from `states`. The expert's Move targets are not read from the program; they appear only as corners of the observed gripper path.
 - **Deltas, not full relation sets.** Demo2Code reports that adding irrelevant predicates hurts [1]. The first event lists the full initial relation set once; later events list only changes.
 - **Numbers.** Positions use 3 decimals (millimetres), the precision the controllers resolve.
-- **Waypoint tolerance.** In the Stack sample, 1 cm keeps every lift, transit and descent corner (rendered above). A larger tolerance merges corners; a smaller one adds controller jitter. The validation below checks the other tasks.
+- **Waypoint tolerance (`demonstrations.waypoint_tolerance`, default 0.01 m).**
+  - In the Stack sample, 1 cm keeps every lift, transit and descent corner (rendered above).
+  - A larger tolerance merges corners and saves tokens; a smaller one adds controller jitter.
+  - The token figures in Section 3.2 are for 1 cm. Changing the value changes the demonstration input, so it is a configuration change: record it, use one value for all methods and tasks within a comparison, and re-measure tokens.
+  - The validation below checks the default on the other tasks.
 - **Same input for all methods.** Baseline, Method 1 and Method 2 receive identical demonstration context in every policy and repair request.
 - **To validate before experiments:**
   - token counts including the predicate deltas, measured as in Section 3.2;
@@ -295,6 +311,7 @@ The served window binds first. A request may carry at most 98,304 − 32,768 = 6
 | Served window `--max-model-len` | 98,304 | **262,144** | The checkpoint's native context. No RoPE/YaRN extension is needed. The KV cache (587,589 tokens) holds two full-length requests per instance. |
 | `recovery.context_tokens` | 200,000 | **262,144** | Match the served window |
 | `max_output_tokens` | 32,768 | 32,768 (unchanged) | Reasoning budget is not part of this change |
+| Waypoint tolerance `demonstrations.waypoint_tolerance` | — | **0.01 m** | Section 3.3; the token figures in Section 3.2 assume it |
 | Demonstration block limit `demonstrations.max_tokens` | — | **131,072** | Fits 15 compacted demonstrations for every task (≤ 72k measured for events plus waypoints, Section 3.2), with margin for the predicate deltas. Leaves ≥ 98k for the API description, instruction, recovery feedback and history. |
 | Effort budgets (initial / round / trial) | 100k / 200k / 900k | Unchanged, **excluding the demonstration block** | See accounting below |
 | Serving: prefix caching | vLLM default | Required, verified at startup | The demonstration block is an identical prefix across calls and trials |
