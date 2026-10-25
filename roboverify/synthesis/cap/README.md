@@ -49,7 +49,7 @@ Configurable shared failure recovery is implemented as `cap-recovery-v1`; task e
 | --- | --- |
 | `*.py` (package root) | Shared runtime: task adapter and scoring (`adapter`, `tasks`, `runner`, `runtime`, `recovery`), DSL contract and checker (`contracts`, `checker`, `validation`, `audit`), model access and prompts (`llm`, `prompt_package`, `primitive_prompts`, `primitive_feedback`), batch execution (`batch`, `batch_worker`, `gpu_scheduler`, `request_control`, `deferred_video`), logging and budgets |
 | `cap_google_baseline/`, `cap_method_1/`, `cap_method_2/` | The three methods |
-| `configs/` | Versioned experiment configurations (`config_frozen_v1`) |
+| `configs/` | Versioned experiment configurations (`config_frozen_v1`, `config_frozen_v2`) |
 | `experiments/` | Batch launchers for the Revision 4.2 and 4.3 experiments (`python -m synthesis.cap.experiments.<module>`) |
 | `reports/` | Tables, figures and analyses of finished batches (`python -m synthesis.cap.reports.<module>`) |
 | `serving/` | vLLM-side code (reasoning-termination guard) |
@@ -75,8 +75,17 @@ for `(tbl, tbl)`). The model learns this from the task's input context, which
 the trial records as `input_context`; the prompt packages are unchanged, and
 Stack binds only `b0`. There is no added placement macro.
 
-Grid/Pyramid explicitly return `adapter_gap` before model calls: their shared
-Goal traversal, occupancy, and physical-reference contract remains unfinished.
+Grid and Pyramid expose RoboVerify's goal DSL ([design](docs/revision_5_add_grid_pyramid.md)):
+goal handles `h0` and `null` instead of `b0`, the in-place cursor statements
+`MoveRight(g)`/`MoveDown(g)`, the occupancy predicates `AtGoal(b)` and
+`HasBlock(g)` (20 mm, 3D), goals as Move/Release references, and
+`get_goal_position(g)` in the observation API (`positions-v2`). The checker
+(`shared-contract-v4`) types goals separately from blocks; tower tasks accept
+exactly the programs they accepted under `shared-contract-v3`. Goal tasks score
+`task_spec_success` with `goal-occupancy-v1`: goals empty and blocks Scattered
+at the start, every goal occupied at the end; `validate_goal_trace`'s per-release
+checks are not applied. Baseline runs `MoveRight(g)` as `g = MoveRight(g)`,
+because exec'd Python cannot rebind a caller's variable.
 ReStack uses the upstream Restack reset (one source tower containing b0 plus
 loose blocks; `initial_tower_blocks` sets its height, default `max(2, n-1)`)
 and the Stack terminal criterion. Fresh scenes settle as in upstream collection:
@@ -152,7 +161,7 @@ version are retained in config/checkpoints and the bounded run report.
 
 ## Prompt versions
 
-The runner accepts `--prompt-version legacy_v1|typed_v2|typed_v3`, independently of
+The runner accepts `--prompt-version legacy_v1|typed_v2|typed_v3|typed_v4`, independently of
 `--condition-mode`. The default is **legacy_v1**, preserving the previous
 policy/helper/repair text and method-specific whitespace/context assembly.
 Method 2 requires `typed_v3`, which retains typed_v2 shared API and existing
@@ -169,7 +178,8 @@ For example, an offline generation diagnostic using the existing scripted inputs
 ```
 
 The versioned resources are [legacy_v1.json](prompts/legacy_v1.json) and
-[typed_v2.json](prompts/typed_v2.json), and [typed_v3.json](prompts/typed_v3.json). Add a new version for future prompt changes;
+[typed_v2.json](prompts/typed_v2.json), [typed_v3.json](prompts/typed_v3.json), and [typed_v4.json](prompts/typed_v4.json)
+(typed_v3 plus the goal API; tower-task prompts render byte-identically to typed_v3). Add a new version for future prompt changes;
 keep existing versions fixed for reproducible comparisons. Package bytes are
 frozen on first load in each process. The existing contracts.py constants and
 legacy template files are preserved and checked against legacy_v1.

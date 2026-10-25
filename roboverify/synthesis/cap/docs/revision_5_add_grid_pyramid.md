@@ -1,6 +1,6 @@
 # Revision 5: Grid and Pyramid in CaP
 
-- **Status:** design reviewed 2026-10-25; the Section 5 decisions are settled. Not implemented yet.
+- **Status:** implemented and validated 2026-10-25 on branch `feature/cap-goal-interface` (Section 7). The 20-trial Grid/Pyramid runs under `config_frozen_v2` have not been run yet.
 - **Goal:** run Grid and Pyramid in CaP with the same task definition, scenes and success criterion as RoboVerify, as steps 4 of [Revision 5](revision_5_add_tasks.md#47-implementation-order).
 - **Constraint (user decision, 2026-10-25):** CaP is RoboVerify's baseline and must use RoboVerify's DSL. The goal interface may only expose primitives, predicates and statements that RoboVerify's DSL already has. No new DSL elements are added.
 
@@ -217,3 +217,37 @@ Condition modes, loop/helper/dependency rules and the bounded-analysis contract 
 - **Reference program through the CaP API:** the Section 2 program, written as a CaP policy, must score `task_spec_success` in real MuJoCo for Grid 3×2 and Pyramid 3 on several seeds. This checks the adapter, not CaP.
 - **Prompts:** rendered tower-task prompts under `typed_v4` hash-equal to `typed_v3`.
 - **Smoke run:** one real-model trial per goal task; then 20 trials each under `config_frozen_v2`, reported in `revision_5_report.md`.
+
+## 7. Implementation and validation (2026-10-25)
+
+### 7.1 What was built
+
+| Area | Change |
+| --- | --- |
+| Contracts | `GoalHandle`; `GOAL_TASKS`, `GOAL_PREDICATES`, `TRAVERSALS`, `get_goal_position`; per-task inputs and input kinds (`task_input_types`); `CHECKER_VERSION = shared-contract-v4`, `OBSERVATION_API_VERSION = positions-v2`, with v3/positions-v1 accepted for audits |
+| Checker (`validation.py`) | Kind `goal`; `MoveRight`/`MoveDown` checked as statements (`traversal_flow`, rule `TRAVERSAL_TARGET`); `h0`/`null` protected; goal predicates, goal positions and goal Move/Release references typed. Goal API names are recognised and protected only where the task exposes them, and tower-task diagnostics keep their exact messages. Local helper checks and Method 1's helper discovery receive the task's inputs and API set |
+| Runtime | Executes `MoveRight(x)`/`MoveDown(x)` by rebinding `x` in the current scope; goal identity comparisons; inputs typed by handle kind |
+| Adapter | Goal handles (`h0` = goal 0, `null`); traversal along the layout's r/d links; `AtGoal`/`HasBlock` from upstream `occupancy`; `get_goal_position`; goal references mapped to upstream goal aliases (`goal-center-xyz-v1`); Pick and block readers reject goals; `null` references fail |
+| Baseline | Before `exec`, rewrites the statement `MoveRight(g)` to `g = MoveRight(g)` (exec'd Python cannot rebind a caller's variable); applied only when the task exposes the goal API |
+| Tasks and runner | `make_goal_env` with the resolved layout; goal start check and `goal-occupancy-v1` scoring in `evaluate_terminal`; goal input context; `adapter_config.json` records the layout, goal handles, reference mode and tolerance |
+| Recording, video, recovery | Snapshots carry the goal layout and cursor bindings (upstream format); deferred video derives the layout options from the snapshot; logs serialise `{"goal_handle": token}`; `goal_clauses` feedback lists `HasBlock(goal_i)`; primitive target derivation resolves goal references to goal centres |
+| Prompt and config | `typed_v4` (goal-task header/footer/examples and Move/Release entries as a variant selected by the goal API); `configs/config_frozen_v2.py` (v1 + `typed_v4` + layouts + Grid/Pyramid instructions) |
+
+**Deviation from Section 3.3:** Baseline gets the in-place semantics by rewriting the statement before `exec`, not by interpreting it. Any other use of `MoveRight` in Baseline code (for example `x = MoveRight(g)`) runs unchanged and is reported by the post-hoc audit as `TRAVERSAL_TARGET`.
+
+### 7.2 Validation
+
+- **Unit tests:** 18 new tests in `tests/test_goal_interface.py`, covering the checker rules of Section 4.5, tower parity, the adapter and runtime on a goal fixture, Baseline's rewrite, prompt hashes and v1/v2. Full CaP suite and full repository suite (AGENTS.md): 665 tests, OK (4 skipped).
+- **Tower parity on real programs.** The base checker (main worktree, `6dd84a6`) and the new checker evaluated 3,000 executed policies sampled from the Revision 4.3 and Revision 5 runs.
+  - Each policy was checked under the Stack, Unstack and Reverse contracts in both condition modes: 18,000 checks.
+  - Verdict, rule, message, line and column were identical in all 18,000 (17,745 pass, 255 fail).
+- **Prompts:** the rendered API text for the four tower tasks is identical under `typed_v3` and `typed_v4` in both condition modes, and the method templates, baseline prefixes and rules are identical.
+- **Reference program (Section 2) in real MuJoCo,** scripted responses under `config_frozen_v2` settings:
+  - **12/12 trials** reached `task_spec_success`, physical success and settled physical success, with no unconverged primitive (Grid 3×2 and Pyramid 3; Method 2 seeds 0–2, Method 1 seed 3, Baseline seed 4, two deferred-video trials).
+  - The deferred videos rendered.
+  - Artifacts: `runs/cap-revision5/20261025-goal-interface-reference/`.
+- **Recovery path:** a deliberately unreachable round 0 followed by the reference program recovered in round 1 for both tasks. The feedback contained `HasBlock(goal_i)` clauses and goal-referenced target derivations.
+- **Real-model smoke** (`config_frozen_v2`, seed 100, one trial per task; `runs/cap-revision5/20261025-goal-interface-smoke/`):
+  - **Grid:** round 0 `goal_failed` (two goals left empty), recovered in round 1; `task_spec_success` and physical success true; 2 model calls, 28.5k tokens.
+  - **Pyramid:** round 0 failed because the policy used a cursor that had advanced to `null` as a Move reference (a runtime error by design), recovered in round 1; `task_spec_success` and physical success true; 2 model calls, 21.9k tokens.
+  - Every generated program passed the checker; the model used `h0`, cursor statements, `AtGoal` queries and goal references as documented.

@@ -17,15 +17,17 @@ experiment guidance specific to `synthesis/cap/`.
   and [Revision 4.3 report, §3.1 and §4](docs/revision_4_3_report.md#31-success-criterion-task_spec_success).
 - Use the frozen CaP baseline configuration for RoboVerify comparisons, without
   per-task re-tuning: Qwen3.8 27B FP8 (`reasoning_effort=medium`, reasoning
-  guard on), `cap_method_2` with `dsl_only` and `typed_v3`, primitive prompt
+  guard on), `cap_method_2` with `dsl_only` and `typed_v3` (`typed_v4` in v2), primitive prompt
   `p0101` (convergence criteria and motion-planning limits on), recovery on with
   `max_rounds: 4` and feedback profile `full`
   (`profile_settings("full")`), and `task_spec_success` as the success field.
   The full table (budgets, history, enrichments) is in the
   [Revision 4.3 report, §3.5](docs/revision_4_3_report.md#35-frozen-configuration).
-  Build experiments from [configs/config_frozen_v1.py](configs/config_frozen_v1.py)
-  (`configuration(task, seed=...)` returns the run config, model config and
-  instruction) rather than restating values; it also records the server-side
+  Build new experiments from [configs/config_frozen_v2.py](configs/config_frozen_v2.py),
+  the current version for all six tasks (v1 plus the Grid/Pyramid goal interface,
+  `typed_v4` and `positions-v2`; tower-task prompts unchanged). `configuration(task,
+  seed=...)` returns the run config, model config and instruction; use it rather
+  than restating values; it also records the server-side
   settings (`SERVING`, including the reasoning guard) and the per-task block
   counts. Never edit a frozen version. Change the configuration only when a task
   fails because the CaP interface does not expose or describe something the task

@@ -236,6 +236,8 @@ The rejected option B kept the block-only API and documented a table-placement i
 
 The upstream DSL uses goal-only pointer traversal: `GoalAssign`, `MoveRight`, `MoveDown`, goal equality/null guards, and the occupancy predicates `AtGoal`/`HasBlock`. `Move`/`Release` accept goal-center references; `Pick` accepts physical blocks only. CaP has no goal type.
 
+**Superseded by [Revision 5: Grid and Pyramid](revision_5_add_grid_pyramid.md)** (implemented 2026-10-25), which uses only RoboVerify's goal DSL: `MoveRight`/`MoveDown` statements instead of `right`/`down` functions; `get_goal_position` is an observation reader. The original proposal:
+
 Required CaP interface (names to be settled with the checker contract):
 
 | Element | Behavior |
@@ -258,7 +260,7 @@ Required CaP interface (names to be settled with the checker contract):
 1. `task_spec_success` (§3.5) with physical diagnostics, for all tasks. **Implemented.**
 2. §4.1 shared changes, including the uniform time limits, and the §4.2 `tbl` handle. **Implemented.**
 3. Unstack, then Reverse, then Restack.
-4. Goal interface, then Grid, then Pyramid.
+4. Goal interface, then Grid, then Pyramid. **Implemented** ([design and validation](revision_5_add_grid_pyramid.md)).
 
 ## 5. Validation and acceptance
 

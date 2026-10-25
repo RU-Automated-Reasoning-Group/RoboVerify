@@ -593,7 +593,11 @@ returns a `CheckReport`; `require_check` adapts it to Method 1/runtime exception
 `require_helper_check` preserves focused generic helper checking. Analysis has a
 10-second default cap and preserves any earlier enclosing trial deadline.
 Internal errors never become LLM repair feedback. `shared-contract-v3` identifies
-the revised checker; observation semantics remain `positions-v1`. The checker
+the revised checker; observation semantics remain `positions-v1`.
+`shared-contract-v4` (Revision 5) adds the goal kind and the Grid/Pyramid goal
+statements and predicates, with observation semantics `positions-v2`; tower-task
+contracts accept the same programs as v3, and recorded v3 contracts remain
+auditable ([design](revision_5_add_grid_pyramid.md#4-checker-for-this-version-shared-contract-v4)). The checker
 also bounds analysis to 100,000 operations; exhaustion is an analysis error,
 not an execution permit or a source-repair diagnostic.
 
