@@ -1,6 +1,6 @@
 # Revision 5: extend CaP to the remaining RoboVerify tasks
 
-- **Status:** step 1 (§4.7) implemented on 2026-10-23; the §4.1 shared changes on 2026-10-25; the remaining steps are planned. Decided on 2026-10-23: CaP adopts RoboVerify's success criterion (§3.3) as a new `task_spec_success` field (§3.5), `tbl` option A (§4.2), and uniform default time limits (§4.1).
+- **Status:** step 1 (§4.7) implemented on 2026-10-23; the §4.1 shared changes and the §4.2 `tbl` handle on 2026-10-25; the remaining steps are planned. Decided on 2026-10-23: CaP adopts RoboVerify's success criterion (§3.3) as a new `task_spec_success` field (§3.5), `tbl` option A (§4.2), and uniform default time limits (§4.1).
 - **Goal:** run Unstack, Reverse, Restack, Grid and Pyramid in CaP with task definitions, scenes and success criteria that match RoboVerify's.
 - **References:** [shared task conditions](../../cfg/tasks.py), [goal-task validation](../../cfg/goal_collection.py), [collector](../../entry/collect_demos.py), [collection audit](../../entry/audit_demos.py), [environment evaluators](../../environment/cee_us_env/fpp_construction_env.py), [reference programs](../../examples/), [CaP task adapter](../tasks.py), [CaP DSL adapter](../adapter.py).
 
@@ -200,6 +200,14 @@ The upstream controllers now resolve `tbl` in `Move`/`Release` through the physi
 - Predicates keep the relational semantics: only `ON*(tbl, tbl)` and `Higher(tbl, tbl)` hold, and Scattered is false for any pair involving `tbl`.
 - This matches the primitive vocabulary of RoboVerify's reference programs and requires a checker/API contract version bump.
 
+**Implementation (2026-10-25).**
+
+- `contracts.task_inputs` binds `b0` and, for Unstack, Reverse and Restack, `tbl`. The adapter, runtime, both methods' static checks and `DSLContract.for_task` use the same inputs, so `tbl` appears in the recorded contract's `input_types`. A Stack policy that names `tbl` fails the checker as an unknown name.
+- The adapter maps `tbl` to the upstream `"tbl"` reference for `Move`/`Release`, which the shared controller resolves with `TABLE_REFERENCE_MODE` (`table-surface-minus-half-block-v1`). `Pick(tbl)` and `get_block_position(tbl)` raise `CapError`; queries range over blocks only. Predicates evaluate `tbl` on a scene with the table included, so only `ON_star`, `Higher` and `eq` hold, and only for `(tbl, tbl)`.
+- The model-facing description is the method `context` (`tasks.task_context`), recorded as `input_context`; the three prompt packages are unchanged, so Stack prompts and `prompt_package_sha256` values are identical to Revision 4.x. `adapter_config.json` records `table_handle` (`cap-table-handle-v1` and the reference mode) and the predicate domain.
+- **No checker version bump.** The checker's rules are unchanged; the new input is visible in the contract's `input_types` and its digest. Bumping `CHECKER_VERSION` would invalidate existing checkpoints and recorded contracts, including the Stack round-0 seeds that recovery experiments reuse, without any change in what Stack checks.
+- Validation: unit tests for binding, table-frame targets, refused operations, relational predicates and the contract for all three methods. In real MuJoCo, scripted Method 1 policies modelled on the upstream Unstack and Reverse reference programs, placing with `tbl`, scored `task_spec_success`, `success` and `settled_environment_success` true for seeds 0 and 1 (3 blocks), with no unconverged primitive.
+
 The rejected option B kept the block-only API and documented a table-placement idiom. Collection-only motion references (`Y_min`, `Z_m`, `gripper`) used by the Unstack reference program stay unavailable: upstream synthesis/verification loading rejects them too.
 
 ### 4.3 Unstack
@@ -248,7 +256,7 @@ Required CaP interface (names to be settled with the checker contract):
 ### 4.7 Implementation order
 
 1. `task_spec_success` (§3.5) with physical diagnostics, for all tasks. **Implemented.**
-2. §4.1 shared changes, including the uniform time limits (**implemented**), and the §4.2 `tbl` handle.
+2. §4.1 shared changes, including the uniform time limits, and the §4.2 `tbl` handle. **Implemented.**
 3. Unstack, then Reverse, then Restack.
 4. Goal interface, then Grid, then Pyramid.
 

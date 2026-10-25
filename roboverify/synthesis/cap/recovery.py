@@ -122,6 +122,7 @@ def snapshot_hash(snapshot):
 
 def verify_restoration(env, reference, logger):
     import numpy as np
+
     from synthesis.cfg.reset import capture
 
     actual = capture(env)

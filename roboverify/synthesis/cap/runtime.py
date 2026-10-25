@@ -44,7 +44,7 @@ class Runtime:
     def execute(self, bundle, arguments=None, *, role="body", return_name=None):
         from .validation import OBJECT
 
-        arguments = arguments or {"b0": self.adapter.b0}
+        arguments = arguments or dict(self.adapter.inputs)
         if any(not isinstance(v, ObjectHandle) for v in arguments.values()):
             raise CapError("Module inputs must be object handles")
         self.budget.timings.call(

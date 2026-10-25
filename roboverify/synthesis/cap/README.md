@@ -52,7 +52,15 @@ predicate evaluator. Both methods expose current gripper/block XYZ through
 `Position3` snapshots in world-frame metres without stepping physics. Full raw
 observations, images, rewards, and simulator objects remain host-only. `ON_star_zero` is available for Reverse and retains the
 trial-entry geometry. Other tasks expose the current-state tower vocabulary.
-There is no coordinate-bearing `tbl` handle or added placement macro.
+Unstack, Reverse and ReStack also bind `tbl` (`cap-table-handle-v1`), a
+`Move`/`Release` reference resolved through the upstream table frame: X/Y are
+the table frame origin and Z is half a block below the surface, so `+0.05`
+places a block centre on the table. `tbl` cannot be picked, has no position
+getter and is outside the query domain; predicates give it the relational
+semantics of the shared specification (only `ON_star`, `Higher` and `eq` hold,
+for `(tbl, tbl)`). The model learns this from the task's input context, which
+the trial records as `input_context`; the prompt packages are unchanged, and
+Stack binds only `b0`. There is no added placement macro.
 
 Grid/Pyramid explicitly return `adapter_gap` before model calls: their shared
 Goal traversal, occupancy, and physical-reference contract remains unfinished.
@@ -79,8 +87,8 @@ re-checks the physical evaluator after 50 host steps with the gripper held,
 outside the trial budget and recording. Batch summaries report first-attempt and
 final task-spec success; recovery reports the first attempt satisfying it, and
 `recovery.success_field` (default `task_success`) selects which field ends
-recovery. The remaining Revision 5 work (`tbl` references, task instructions,
-goal tasks) is planned; see the
+recovery. The remaining Revision 5 work (task instructions, goal tasks) is
+planned; see the
 [task expansion plan](docs/revision_5_add_tasks.md).
 
 Method 1 supports plain top-level function definitions, assignment, arithmetic

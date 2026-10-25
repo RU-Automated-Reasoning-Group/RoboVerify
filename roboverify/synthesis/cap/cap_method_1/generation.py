@@ -14,7 +14,14 @@ from ..contracts import (
 )
 from ..prompt_package import package, validate_prompt_version
 from ..timing import timed
-from ..validation import definitions, missing_calls, parse, validate, validate_helper
+from ..validation import (
+    OBJECT,
+    definitions,
+    missing_calls,
+    parse,
+    validate,
+    validate_helper,
+)
 
 
 def prompt(
@@ -61,9 +68,11 @@ class Generator:
         condition_mode="dsl_only",
         prompt_version="legacy_v1",
         higher_tolerance=0.001,
+        inputs=("b0",),
     ):
         self.prompt_version = validate_prompt_version(prompt_version)
         self.higher_tolerance = higher_tolerance
+        self.inputs = dict.fromkeys(inputs, OBJECT)
         self.primitive_prompt = checkpoints.primitive_prompt
         if checkpoints.prompt_version != prompt_version:
             raise ValueError("Checkpoint and generator prompt versions differ")
@@ -158,6 +167,7 @@ class Generator:
                         role=role,
                         condition_mode=self.condition_mode,
                         api_names=self.api_names,
+                        inputs=self.inputs,
                         logger=self.logger,
                     )
                 else:
@@ -170,6 +180,7 @@ class Generator:
                         role,
                         condition_mode=self.condition_mode,
                         api_names=self.api_names,
+                        inputs=self.inputs,
                         logger=self.logger,
                     )
                 self.logger.emit(
@@ -226,6 +237,7 @@ class Generator:
                         role=role,
                         condition_mode=self.condition_mode,
                         api_names=self.api_names,
+                        inputs=self.inputs,
                         logger=self.logger,
                     )
                 # Parent-level complete checking uses actual argument types and value flow.

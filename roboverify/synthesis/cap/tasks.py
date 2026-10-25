@@ -1,6 +1,12 @@
 """Task construction and independent host-only scoring, imported lazily."""
 
-from .contracts import AdapterGap, BudgetExceeded, CapError, EnvironmentUnavailable
+from .contracts import (
+    TABLE_TASKS,
+    AdapterGap,
+    BudgetExceeded,
+    CapError,
+    EnvironmentUnavailable,
+)
 
 TASK_INSTRUCTIONS = {
     "stack": "Stack all blocks into a single tower rooted at the input block b0.",
@@ -10,6 +16,22 @@ TASK_INSTRUCTIONS = {
     "grid": "Place all blocks in the specified grid goal layout.",
     "pyramid": "Place all blocks in the specified pyramid goal layout.",
 }
+
+
+INPUT_CONTEXT = "b0 is the input block."
+TABLE_CONTEXT = (
+    " tbl is the table. Use it only as a Move/Release reference: X(tbl) and Y(tbl)"
+    " are the table frame origin, and Z(tbl) is half a block below the table"
+    " surface, so Z(tbl) + 0.05 is the centre height of a block resting on the"
+    " table. tbl cannot be picked, has no get_block_position, and is never"
+    " returned by queries. In predicates tbl relates only to itself: ON_star,"
+    " Higher and eq hold for (tbl, tbl); Scattered never holds for tbl."
+)
+
+
+def task_context(task):
+    """Model-facing description of the bound input handles."""
+    return INPUT_CONTEXT + (TABLE_CONTEXT if task in TABLE_TASKS else "")
 
 
 def check_task(task):
@@ -62,6 +84,7 @@ def prepare_environment(config, initial_snapshot=None):
     check_task(config.task)
     try:
         import numpy as np
+
         from synthesis.api.control import get_move_action
         from synthesis.cfg.reset import restore
         from synthesis.mcmc.synthesis import make_roboverify_env
@@ -97,7 +120,6 @@ def prepare_environment(config, initial_snapshot=None):
 # Shared task specifications exist for these tasks; the formulas of the last
 # three quantify over the relational table, as in upstream collection.
 TASK_SPEC_TASKS = frozenset({"stack", "unstack", "reverse", "restack"})
-TABLE_TASKS = frozenset({"unstack", "reverse", "restack"})
 SUCCESS_CRITERION = "task-spec-v1"
 
 

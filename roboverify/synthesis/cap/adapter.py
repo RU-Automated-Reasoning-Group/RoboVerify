@@ -17,6 +17,7 @@ from .contracts import (
     Position3,
     PrimitiveFailure,
     task_api_names,
+    task_inputs,
 )
 
 
@@ -42,6 +43,9 @@ class RoboVerifyAdapter:
         )
         self.ids = {handle: i for i, handle in enumerate(self.handles)}
         self.b0 = self.handles[base]
+        # tbl is a Move/Release reference only: never picked, read or queried.
+        self.tbl = ObjectHandle("tbl", trial) if "tbl" in task_inputs(task) else None
+        self.inputs = {"b0": self.b0} | ({"tbl": self.tbl} if self.tbl else {})
         self.entry_observation = self.observe()
         self.trajectory = [self.entry_observation.copy()]
         self.query_depth = 0
@@ -53,12 +57,22 @@ class RoboVerifyAdapter:
         return self.inner.flatten_observation(self.inner._get_obs()).copy()
 
     def object_id(self, handle):
+        if self.tbl is not None and handle == self.tbl:
+            raise CapError(
+                "tbl is not a block; use it only as a Move/Release reference"
+            )
         if not isinstance(handle, ObjectHandle) or handle not in self.ids:
             raise CapError("Unknown or cross-trial object handle")
         return self.ids[handle]
 
+    def reference(self, handle):
+        """Physical block ID, or the table for a Move/Release reference."""
+        if self.tbl is not None and handle == self.tbl:
+            return "tbl"
+        return self.object_id(handle)
+
     def namespace(self):
-        return {"b0": self.b0} | {name: self._wrapper(name) for name in self.api_names}
+        return self.inputs | {name: self._wrapper(name) for name in self.api_names}
 
     def _wrapper(self, name):
         def call(*args):
@@ -128,15 +142,19 @@ class RoboVerifyAdapter:
                 self.query_depth -= 1
         if name in PREDICATES:
             from synthesis.predicates.scene import evaluate, scene_from_obs
-            from synthesis.predicates.term import atom, block_id
+            from synthesis.predicates.term import atom, block_id, ref
 
             if len(args) != 2:
                 raise CapError(f"{name} requires two objects")
-            ids = [self.object_id(arg) for arg in args]
+            ids = [self.reference(arg) for arg in args]
             scene = scene_from_obs(
-                self.observe(), self.inner.num_blocks, entry_obs=self.entry_observation
+                self.observe(),
+                self.inner.num_blocks,
+                include_table=self.tbl is not None,
+                entry_obs=self.entry_observation,
             )
-            result = evaluate(atom(name, *(block_id(i) for i in ids)), scene)
+            terms = (ref(i) if i == "tbl" else block_id(i) for i in ids)
+            result = evaluate(atom(name, *terms), scene)
             self.logger.emit("predicate", predicate=name, arguments=args, result=result)
             return result
         if name not in ACTIONS:
@@ -151,8 +169,10 @@ class RoboVerifyAdapter:
         references = args[:3] if name == "Move" else args[:1]
         aliases = []
         for handle in references:
-            physical_id = self.object_id(handle)
-            alias = f"cap_object_{physical_id}"
+            if name == "Pick" and self.tbl is not None and handle == self.tbl:
+                raise CapError("Pick requires a block; tbl cannot be picked")
+            physical_id = self.reference(handle)
+            alias = "cap_table" if physical_id == "tbl" else f"cap_object_{physical_id}"
             self.inner.symbolic_name_to_box_id[alias] = physical_id
             aliases.append(alias)
         if name == "Pick":
@@ -219,14 +239,17 @@ class GenerationOnlyAdapter:
     """Expose signatures/identity for a generation diagnostic, never a rollout."""
 
     def __init__(self, task="stack"):
-        self.b0 = ObjectHandle("b0", "generation-only")
+        self.inputs = {
+            name: ObjectHandle(name, "generation-only") for name in task_inputs(task)
+        }
+        self.b0 = self.inputs["b0"]
         self.api_names = task_api_names(task)
 
     def call(self, name, args):
         raise CapError("Environment calls are unavailable in generation-only mode")
 
     def namespace(self):
-        return {"b0": self.b0} | {name: self._wrapper(name) for name in self.api_names}
+        return self.inputs | {name: self._wrapper(name) for name in self.api_names}
 
     def _wrapper(self, name):
         return lambda *args: self.call(name, args)

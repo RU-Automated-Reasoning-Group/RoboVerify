@@ -37,6 +37,8 @@ class RunnerTests(unittest.TestCase):
         config = RunConfig(
             method=method,
             condition_mode=options.pop("condition_mode", "dsl_only"),
+            task=options.pop("task", "stack"),
+            prompt_version=options.pop("prompt_version", "legacy_v1"),
             num_blocks=1,
             save_video=options.pop("save_video", False),
             output_root=self.tmp.name,
@@ -182,6 +184,27 @@ class RunnerTests(unittest.TestCase):
         # The fixture's evaluator deliberately reports true independently of geometry.
         self.assertTrue(result["success"])
         self.assertFalse(result["dsl_postcondition"])
+
+    def test_table_tasks_bind_tbl_for_every_method(self):
+        source = "if ON_star(tbl, tbl):\n    Pick(b0)"
+        for method in ("cap_method_1", "cap_method_2", "cap_google_baseline"):
+            with self.subTest(method=method):
+                result = self.execute(
+                    method, [source], task="unstack", prompt_version="typed_v3"
+                )
+                self.assertEqual(result["status"], "completed")
+                root = Path(result["run_dir"])
+                config = RunSummary(root).config["config"]
+                self.assertIn("tbl is the table", config["input_context"])
+                self.assertIn(["tbl", "object"], config["dsl_contract"]["input_types"])
+                adapter_config = json.loads(
+                    (root / "artifacts/trial_001/adapter_config.json").read_text()
+                )
+                self.assertEqual(
+                    adapter_config["table_handle"]["version"], "cap-table-handle-v1"
+                )
+        stack = self.execute("cap_method_1", [source] * 3)
+        self.assertEqual(stack["status"], "constraint_failed")
 
     def test_task_spec_success_follows_shared_pre_and_postcondition(self):
         result = self.execute("cap_method_1", ["pass"])

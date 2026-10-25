@@ -18,6 +18,7 @@ from .checkpoints import Checkpoints
 from .contracts import (
     CHECKER_VERSION,
     OBSERVATION_API_VERSION,
+    TABLE_HANDLE_VERSION,
     AdapterGap,
     BudgetExceeded,
     ConstraintFailure,
@@ -37,6 +38,7 @@ from .tasks import (
     prepare_environment,
     settled_environment_success,
     settling_steps,
+    task_context,
     validate_start,
 )
 
@@ -184,6 +186,7 @@ def run_once(
         "model": asdict(model_config),
         "generate_only": generate_only,
         "instruction": instruction,
+        "input_context": task_context(config.task),
         "initial_state": str(initial_state) if initial_state else None,
         "trace_index": trace_index,
         "validation_enabled": config.method != "cap_google_baseline",
@@ -274,11 +277,19 @@ def run_once(
                 )
                 if config.method != "cap_google_baseline":
                     budget.timings.call(
-                        "generation_control", method.generator.generate, instruction
+                        "generation_control",
+                        method.generator.generate,
+                        instruction,
+                        task_context(config.task),
                     )
                 else:
                     method.policy._cfg["debug_mode"] = True
-                    budget.timings.call("generation_control", method, instruction)
+                    budget.timings.call(
+                        "generation_control",
+                        method,
+                        instruction,
+                        task_context(config.task),
+                    )
                 status = "generated"
                 outcome["success"] = outcome["task_spec_success"] = None
             else:
@@ -327,6 +338,7 @@ def run_once(
                         from synthesis.api.control import (
                             DEFAULT_CONTROL,
                             DEFAULT_PICK_CONTROL,
+                            TABLE_REFERENCE_MODE,
                         )
 
                         logger.artifact(
@@ -336,7 +348,19 @@ def run_once(
                                 "pick_controller": asdict(DEFAULT_PICK_CONTROL),
                                 "primitive_step_limit": 50,
                                 "higher_tolerance": config.higher_tolerance,
-                                "predicate_domain": "physical_blocks",
+                                "predicate_domain": (
+                                    "physical_blocks_and_table"
+                                    if adapter.tbl
+                                    else "physical_blocks"
+                                ),
+                                "table_handle": (
+                                    {
+                                        "version": TABLE_HANDLE_VERSION,
+                                        "reference_mode": TABLE_REFERENCE_MODE,
+                                    }
+                                    if adapter.tbl
+                                    else None
+                                ),
                                 "entry_geometry": "frozen_trial_start",
                                 "api_names": sorted(adapter.api_names),
                                 "object_handles": {
@@ -375,7 +399,12 @@ def run_once(
                         higher_tolerance=config.higher_tolerance,
                     )
                     with recorder:
-                        budget.timings.call("generation_control", method, instruction)
+                        budget.timings.call(
+                            "generation_control",
+                            method,
+                            instruction,
+                            task_context(config.task),
+                        )
                     outcome.update(
                         budget.timings.call(
                             "evaluation", evaluate_terminal, env, config.task, entry

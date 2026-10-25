@@ -39,7 +39,11 @@ class Method2:
             budget,
             max_attempts,
         )
-        self.contract = DSLContract(condition_mode, tuple(sorted(adapter.api_names)))
+        self.contract = DSLContract(
+            condition_mode,
+            tuple(sorted(adapter.api_names)),
+            tuple((name, "object") for name in sorted(adapter.inputs)),
+        )
         self.api = api_description(
             adapter.api_names,
             condition_mode,

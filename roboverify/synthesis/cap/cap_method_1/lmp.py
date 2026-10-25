@@ -28,6 +28,7 @@ class Method1:
             condition_mode,
             prompt_version=prompt_version,
             higher_tolerance=higher_tolerance,
+            inputs=tuple(adapter.inputs),
         )
         self.runtime = Runtime(adapter, budget, logger, condition_mode)
 

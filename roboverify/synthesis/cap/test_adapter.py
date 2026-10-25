@@ -189,5 +189,83 @@ class AdapterTests(unittest.TestCase):
             self.adapter.call("Pick", [self.adapter.b0])
 
 
+class TableHandleTests(unittest.TestCase):
+    """tbl is a Move/Release reference for tasks whose spec includes the table."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.logger = CapLogger(self.tmp.name, console=False)
+        self.env = RobotFixture()
+        self.env.table_position = np.array([0.1, -0.1, 0.4])
+        self.adapter = RoboVerifyAdapter(
+            self.env, self.logger, Budget(), task="unstack"
+        )
+        self.tbl = self.adapter.namespace()["tbl"]
+
+    def tearDown(self):
+        self.logger.close()
+        self.tmp.cleanup()
+
+    def test_only_table_tasks_bind_tbl(self):
+        self.assertEqual(set(self.adapter.inputs), {"b0", "tbl"})
+        stack = RoboVerifyAdapter(RobotFixture(), self.logger, Budget(), task="stack")
+        self.assertEqual(set(stack.inputs), {"b0"})
+        self.assertNotIn("tbl", stack.namespace())
+
+    def test_move_and_release_resolve_the_table_frame(self):
+        targets, emit = [], self.logger.emit
+
+        def record(kind, **fields):
+            if kind == "controller_phase" and fields.get("target") is not None:
+                targets.append(fields["target"])
+            return emit(kind, **fields)
+
+        self.logger.emit = record
+        try:
+            self.adapter.call("Move", [self.tbl, self.tbl, self.tbl, [0, 0, 0.1]])
+        except PrimitiveFailure:
+            pass  # The fixture is not a convergent controller.
+        target = targets[0]
+        # Table frame origin, half a block below the surface, plus the offset.
+        np.testing.assert_allclose(target, [0.1, -0.1, 0.4 - 0.025 + 0.1])
+
+    def test_tbl_cannot_be_picked_read_or_queried(self):
+        with self.assertRaisesRegex(CapError, "tbl cannot be picked"):
+            self.adapter.call("Pick", [self.tbl])
+        with self.assertRaisesRegex(CapError, "not a block"):
+            self.adapter.call("get_block_position", [self.tbl])
+        self.assertFalse(
+            self.adapter.call(
+                "exists", [lambda x: self.adapter.call("eq", [x, self.tbl])]
+            )
+        )
+        self.assertEqual(self.env.actions, [])
+
+    def test_predicates_use_relational_table_semantics(self):
+        b0 = self.adapter.b0
+        for name, args, expected in [
+            ("ON_star", [self.tbl, self.tbl], True),
+            ("Higher", [self.tbl, self.tbl], True),
+            ("eq", [self.tbl, self.tbl], True),
+            ("ON", [self.tbl, self.tbl], False),
+            ("Scattered", [self.tbl, b0], False),
+            ("Scattered", [b0, self.tbl], False),
+            ("ON_star", [b0, self.tbl], False),
+            ("Higher", [b0, self.tbl], False),
+            ("eq", [b0, self.tbl], False),
+        ]:
+            with self.subTest(name=name, args=args):
+                self.assertIs(self.adapter.call(name, args), expected)
+
+    def test_checker_contract_declares_tbl_for_table_tasks(self):
+        from .checker import DSLContract
+
+        self.assertEqual(
+            DSLContract.for_task("unstack").input_types,
+            (("b0", "object"), ("tbl", "object")),
+        )
+        self.assertEqual(DSLContract.for_task("stack").input_types, (("b0", "object"),))
+
+
 if __name__ == "__main__":
     unittest.main()

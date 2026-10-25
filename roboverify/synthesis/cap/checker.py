@@ -19,6 +19,7 @@ from .contracts import (
     ConstraintFailure,
     Diagnostic,
     task_api_names,
+    task_inputs,
     validate_condition_mode,
 )
 from .validation import OBJECT, Value, validate, validate_helper
@@ -48,7 +49,11 @@ class DSLContract:
 
     @classmethod
     def for_task(cls, task, mode="dsl_only"):
-        return cls(mode, tuple(sorted(task_api_names(task))))
+        return cls(
+            mode,
+            tuple(sorted(task_api_names(task))),
+            tuple((name, "object") for name in sorted(task_inputs(task))),
+        )
 
     def identity(self):
         data = asdict(self)

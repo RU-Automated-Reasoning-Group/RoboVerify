@@ -130,6 +130,17 @@ def task_api_names(task):
     return API_NAMES if task == "reverse" else API_NAMES - {"ON_star_zero"}
 
 
+# Shared specifications for these tasks quantify over the relational table.
+TABLE_TASKS = frozenset({"unstack", "reverse", "restack"})
+# Move/Release resolve tbl through upstream TABLE_REFERENCE_MODE (Revision 5 §4.2).
+TABLE_HANDLE_VERSION = "cap-table-handle-v1"
+
+
+def task_inputs(task):
+    """Handles bound before a policy runs: b0, plus tbl where the spec uses it."""
+    return ("b0", "tbl") if task in TABLE_TASKS else ("b0",)
+
+
 CONDITION_RULES = {
     "dsl_only": """Condition mode: dsl_only.
 Loop, branch and selection conditions must use only DSL predicates, object identity,
