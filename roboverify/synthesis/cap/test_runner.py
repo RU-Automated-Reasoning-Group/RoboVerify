@@ -245,10 +245,6 @@ class RunnerTests(unittest.TestCase):
         self.assertIn("checkpoint_id", frames[-1])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TaskSpecEvaluationTests(unittest.TestCase):
     """Shared task_spec evaluation for tasks whose formulas include the table."""
 
@@ -284,3 +280,61 @@ class TaskSpecEvaluationTests(unittest.TestCase):
         self.assertFalse(
             self.evaluate("restack", loose, loose)["task_spec_postcondition"]
         )
+
+
+class StartValidationTests(unittest.TestCase):
+    """Every tower task checks its shared precondition before any model call."""
+
+    def validate(self, task, positions):
+        from .tasks import validate_start
+
+        env = RobotFixture(len(positions))
+        for i, position in enumerate(positions):
+            env.obs[10 + 12 * i : 13 + 12 * i] = position
+        validate_start(env, task, env.obs.copy())
+
+    def test_unstack_requires_one_tower_over_b0(self):
+        from .contracts import CapError
+
+        self.validate("unstack", [[0, 0, 0.025], [0, 0, 0.075]])
+        with self.assertRaisesRegex(CapError, "shared task precondition"):
+            self.validate("unstack", [[0, 0, 0.025], [0.2, 0, 0.025]])
+
+    def test_restack_requires_b0_inside_a_source_tower(self):
+        from .contracts import CapError
+
+        self.validate("restack", [[0, 0, 0.025], [0, 0, 0.075], [0.2, 0, 0.025]])
+        self.validate("restack", [[0, 0, 0.075], [0, 0, 0.025], [0.2, 0, 0.025]])
+        with self.assertRaisesRegex(CapError, "not inside a source tower"):
+            self.validate("restack", [[0.2, 0, 0.025], [0, 0, 0.025], [0, 0, 0.075]])
+
+
+class EnvironmentOptionTests(unittest.TestCase):
+    def test_settling_follows_upstream_collection(self):
+        from .tasks import settling_steps
+
+        for task, steps in (("stack", 50), ("restack", 50), ("unstack", 0)):
+            self.assertEqual(settling_steps(RunConfig(task=task)), steps)
+        self.assertEqual(settling_steps(RunConfig(task="reverse")), 0)
+        self.assertEqual(settling_steps(RunConfig(), initial_snapshot=object()), 0)
+
+    def test_layout_options_are_resolved_and_task_specific(self):
+        from .tasks import environment_options
+
+        self.assertEqual(
+            environment_options(RunConfig(task="restack", num_blocks=4)),
+            {"initial_tower_blocks": 3},
+        )
+        self.assertEqual(environment_options(RunConfig()), {})
+        with self.assertRaises(ValueError):
+            environment_options(
+                RunConfig(task="restack", num_blocks=3, initial_tower_blocks=4)
+            )
+        with self.assertRaisesRegex(ValueError, "applies only to restack"):
+            RunConfig(task="stack", initial_tower_blocks=2)
+        with self.assertRaisesRegex(ValueError, "applies only to pyramid"):
+            RunConfig(task="grid", bottom_row_blocks=3)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -21,11 +21,47 @@ def check_task(task):
         )
 
 
+# Upstream collection settles these tasks after a fresh reset; Unstack and
+# Reverse record from the reset state. Snapshots are never settled again.
+SETTLING_TASKS = frozenset({"stack", "restack", "grid", "pyramid"})
+
+
+def environment_options(config):
+    """Resolved layout options for the task, as upstream collection records them."""
+    if config.task == "restack":
+        from synthesis.environment.restack_reset import resolve_tower_blocks
+
+        return {
+            "initial_tower_blocks": resolve_tower_blocks(
+                config.num_blocks, config.initial_tower_blocks
+            )
+        }
+    if config.task in {"grid", "pyramid"}:
+        from synthesis.cfg.goal_collection import resolve_goal_configuration
+
+        options = {
+            name: getattr(config, name)
+            for name in ("grid_rows", "grid_cols", "bottom_row_blocks")
+            if getattr(config, name) is not None
+        }
+        return resolve_goal_configuration(
+            config.task, num_blocks=config.num_blocks, **options
+        )[1]
+    return {}
+
+
+def settling_steps(config, initial_snapshot=None):
+    from synthesis.cfg.collection import STACK_SETTLING_STEPS
+
+    if initial_snapshot is not None or config.task not in SETTLING_TASKS:
+        return 0
+    return STACK_SETTLING_STEPS
+
+
 def prepare_environment(config, initial_snapshot=None):
     check_task(config.task)
     try:
         import numpy as np
-
         from synthesis.api.control import get_move_action
         from synthesis.cfg.reset import restore
         from synthesis.mcmc.synthesis import make_roboverify_env
@@ -36,21 +72,19 @@ def prepare_environment(config, initial_snapshot=None):
             f"Simulator prerequisites are unavailable: {type(exc).__name__}: {exc}"
         ) from exc
 
-    # Upstream replaced PartialStack with a Restack environment (2026-10-23).
-    task = config.task
+    options = environment_options(config)
     previous_rng = np.random.get_state()
     env = None
     try:
         np.random.seed(config.seed)
-        env = make_roboverify_env(task, num_blocks=config.num_blocks)
+        env = make_roboverify_env(config.task, num_blocks=config.num_blocks, **options)
         if initial_snapshot is not None:
             restore(env, initial_snapshot)
         else:
             obs = env.reset()[0]
-            if config.task == "stack":
-                target = obs[:3].copy()
-                for _ in range(50):
-                    obs = env.step(get_move_action(obs, target, close_gripper=False))[0]
+            target = obs[:3].copy()
+            for _ in range(settling_steps(config)):
+                obs = env.step(get_move_action(obs, target, close_gripper=False))[0]
         return env
     except BaseException:
         if env is not None:
@@ -80,16 +114,31 @@ def _task_scene(inner, task, obs, entry_obs):
 
 
 def validate_start(env, task, entry_obs):
+    """Reject a start that violates the shared precondition before any model call.
+
+    Reverse must also be the evaluator's canonical tower, and Restack's b0 must
+    be inside its source tower; both are environment invariants beyond the spec.
+    """
     from synthesis.cfg.reset import inner_env
     from synthesis.cfg.tasks import task_spec
     from synthesis.predicates.scene import evaluate
+    from synthesis.predicates.term import (
+        atom,
+        conjunction,
+        disjunction,
+        exists,
+        negate,
+        ref,
+    )
 
     inner = inner_env(env)
-    if task in {"stack", "unstack"}:
-        pre, _ = task_spec(task)
-        if not evaluate(pre, _task_scene(inner, task, entry_obs, entry_obs)):
-            raise CapError("Initial state violates the shared task precondition")
-    elif task == "reverse":
+    if task not in TASK_SPEC_TASKS:
+        return
+    scene = _task_scene(inner, task, entry_obs, entry_obs)
+    pre, _ = task_spec(task)
+    if not evaluate(pre, scene):
+        raise CapError("Initial state violates the shared task precondition")
+    if task == "reverse":
         positions = [
             entry_obs[10 + 12 * i : 13 + 12 * i] for i in range(inner.num_blocks)
         ]
@@ -100,6 +149,18 @@ def validate_start(env, task, entry_obs):
             raise CapError(
                 "Reverse snapshot is not the evaluator's canonical initial tower"
             )
+    elif task == "restack":
+        x, b0 = ref("x"), ref("b0")
+        in_tower = exists(
+            ["x"],
+            conjunction(
+                negate(atom("eq", x, b0)),
+                negate(atom("eq", x, ref("tbl"))),
+                disjunction(atom("ON_star", x, b0), atom("ON_star", b0, x)),
+            ),
+        )
+        if not evaluate(in_tower, scene):
+            raise CapError("Restack b0 is not inside a source tower")
 
 
 def evaluate_terminal(env, task, entry_obs):

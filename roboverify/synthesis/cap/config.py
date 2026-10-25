@@ -227,6 +227,14 @@ class PrimitiveFeedbackConfig:
         return self.target_derivation or self.controller_phases or self.action_context
 
 
+TASK_OPTIONS = {
+    "initial_tower_blocks": {"restack"},
+    "grid_rows": {"grid"},
+    "grid_cols": {"grid"},
+    "bottom_row_blocks": {"pyramid"},
+}
+
+
 @dataclass
 class RunConfig:
     method: str = "cap_method_1"
@@ -255,8 +263,16 @@ class RunConfig:
     )
     baseline_audit: bool = True
     audit_timeout: float = 10.0
+    # Task layout options, resolved by the upstream resolvers (Revision 5).
+    initial_tower_blocks: int | None = None
+    grid_rows: int | None = None
+    grid_cols: int | None = None
+    bottom_row_blocks: int | None = None
 
     def __post_init__(self):
+        for name, tasks in TASK_OPTIONS.items():
+            if getattr(self, name) is not None and self.task not in tasks:
+                raise ValueError(f"{name} applies only to {'/'.join(sorted(tasks))}")
         if isinstance(self.recovery, dict):
             self.recovery = _nested(RecoveryConfig, self.recovery, "configuration")
         if isinstance(self.primitive_prompt, dict):

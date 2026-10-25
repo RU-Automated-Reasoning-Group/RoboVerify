@@ -176,7 +176,7 @@ class BudgetTimingTests(unittest.TestCase):
                     json.loads(timing.read_text())["queue_wait_seconds"], 123
                 )
 
-    def test_unstack_retains_sixty_second_cap(self):
+    def test_unstack_uses_the_configured_timeout(self):
         with (
             tempfile.TemporaryDirectory() as directory,
             contextlib.redirect_stdout(io.StringIO()),
@@ -191,7 +191,7 @@ class BudgetTimingTests(unittest.TestCase):
             from synthesis.experiment.report import RunSummary
 
             self.assertEqual(
-                RunSummary(Path(result["run_dir"])).config["config"]["timeout"], 60
+                RunSummary(Path(result["run_dir"])).config["config"]["timeout"], 600
             )
 
     def test_cli_defaults_and_simulation_limit(self):

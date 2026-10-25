@@ -32,9 +32,11 @@ from .tasks import (
     SUCCESS_CRITERION,
     TASK_INSTRUCTIONS,
     check_task,
+    environment_options,
     evaluate_terminal,
     prepare_environment,
     settled_environment_success,
+    settling_steps,
     validate_start,
 )
 
@@ -152,7 +154,9 @@ def run_once(
         raise ValueError("Unknown CaP method")
     if config.timeout <= 0 or config.max_attempts < 1:
         raise ValueError("Invalid trial budget")
-    timeout = min(config.timeout, 60) if config.task == "unstack" else config.timeout
+    # Every task uses the configured cap; the repository's 60-second Unstack rule
+    # governs synthesize_cfg's process alarm, not CaP trials (Revision 5).
+    timeout = config.timeout
     budget_class = Budget
     if shared_budget is not None:
         from .recovery import RoundBudget
@@ -342,9 +346,8 @@ def run_once(
                                 "initialization": (
                                     "snapshot" if snapshot else "fresh_scene"
                                 ),
-                                "settling_steps": (
-                                    0 if snapshot or config.task != "stack" else 50
-                                ),
+                                "settling_steps": settling_steps(config, snapshot),
+                                "environment_options": environment_options(config),
                             },
                         )
                         validate_start(env, config.task, entry)

@@ -122,7 +122,6 @@ def snapshot_hash(snapshot):
 
 def verify_restoration(env, reference, logger):
     import numpy as np
-
     from synthesis.cfg.reset import capture
 
     actual = capture(env)
@@ -860,11 +859,8 @@ def run_recovery(config, model_config, **kwargs):
     seed_path = kwargs.pop("seed_attempt", None)
     # Validate a seed before creating any run directory or ledger.
     seed = load_seed(seed_path, kwargs.get("initial_state")) if seed_path else None
-    timeout = (
-        min(cfg.total_timeout, 60) if config.task == "unstack" else cfg.total_timeout
-    )
     ledger = Budget(
-        timeout=timeout,
+        timeout=cfg.total_timeout,
         max_model_calls=cfg.total_calls,
         max_steps=cfg.total_steps,
         max_depth=config.max_depth,

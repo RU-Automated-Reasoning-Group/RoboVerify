@@ -1,6 +1,6 @@
 # Revision 5: extend CaP to the remaining RoboVerify tasks
 
-- **Status:** step 1 (§4.7) implemented on 2026-10-23; the remaining steps are planned. Decided on 2026-10-23: CaP adopts RoboVerify's success criterion (§3.3) as a new `task_spec_success` field (§3.5), `tbl` option A (§4.2), and uniform default time limits (§4.1).
+- **Status:** step 1 (§4.7) implemented on 2026-10-23; the §4.1 shared changes on 2026-10-25; the remaining steps are planned. Decided on 2026-10-23: CaP adopts RoboVerify's success criterion (§3.3) as a new `task_spec_success` field (§3.5), `tbl` option A (§4.2), and uniform default time limits (§4.1).
 - **Goal:** run Unstack, Reverse, Restack, Grid and Pyramid in CaP with task definitions, scenes and success criteria that match RoboVerify's.
 - **References:** [shared task conditions](../../cfg/tasks.py), [goal-task validation](../../cfg/goal_collection.py), [collector](../../entry/collect_demos.py), [collection audit](../../entry/audit_demos.py), [environment evaluators](../../environment/cee_us_env/fpp_construction_env.py), [reference programs](../../examples/), [CaP task adapter](../tasks.py), [CaP DSL adapter](../adapter.py).
 
@@ -39,8 +39,8 @@ CaP does not take its task definition from one source:
 | Stage | Current source | Location |
 | --- | --- | --- |
 | Model instruction | Hand-written sentence; not derived from `task_spec` or the evaluator | `tasks.py:TASK_INSTRUCTIONS` |
-| Initial scene | Environment reset or snapshot; only Stack settles for 50 steps | `tasks.py:prepare_environment` |
-| Start check | Stack/Unstack: shared pre. Reverse: canonical tower order. Restack: none | `tasks.py:validate_start` |
+| Initial scene | Environment reset or snapshot; Stack and Restack settle for 50 steps (§4.1, 2026-10-25; before that, Stack only) | `tasks.py:prepare_environment` |
+| Start check | Shared pre for all tower tasks; Reverse also canonical order, Restack also b0 inside a source tower (§4.1, 2026-10-25; before that, Stack/Unstack pre and Reverse order only) | `tasks.py:validate_start` |
 | Terminal check | Physical `_is_success` for all tasks; `dsl_postcondition` only for Stack/Unstack | `tasks.py:evaluate_terminal` |
 
 The derived success metrics are also inconsistent:
@@ -174,6 +174,14 @@ None of them equals RoboVerify's criterion (§3.3).
   - Remove the three Unstack special cases. Note in the CaP `AGENTS.md`/README that the repository's Unstack 60-second rule governs RoboVerify's `synthesize_cfg` process alarm, not CaP trials.
   - Record the effective caps in each trial's metadata. Earlier CaP Unstack results ran under the 60-second cap; do not mix them with uncapped results.
 
+**Implementation (2026-10-25).**
+
+- `RunConfig` has `initial_tower_blocks` (Restack) and `grid_rows`/`grid_cols`/`bottom_row_blocks` (goal tasks), with `run_cap` options of the same names. A value for another task is rejected. `tasks.environment_options` resolves them through `resolve_tower_blocks` and `resolve_goal_configuration`; `adapter_config.json` records the resolved values and the settling steps.
+- Fresh scenes settle for `STACK_SETTLING_STEPS` (50) for Stack, Restack, Grid and Pyramid; snapshots are not settled. The Stack settling loop is unchanged.
+- `validate_start` evaluates the shared precondition for all four tower tasks, with the table in the domain for Unstack, Reverse and Restack. Reverse also keeps its canonical-order check. Restack also requires b0 to share a column (`ON*` in either direction) with another physical block; the configured tower height is not checked, so older snapshots recorded as `partial_stack` still load.
+- The Unstack 60-second special cases are removed from `runner.py`, `recovery.py` and `batch.py`, and from the `run_cap` CLI, which no longer skips draining the deferred video queue for Unstack. The effective caps are the configured values, which `config.json` already records.
+- Real MuJoCo check: fresh starts for seeds 0–4 pass `validate_start` for Stack (3 blocks), Unstack (3), Reverse (3) and Restack (4 blocks, tower heights 3 and 2).
+
 ### 4.2 Table reference (Unstack, Reverse, Restack)
 
 `tbl` is the table as an element of the relational block domain:
@@ -240,7 +248,7 @@ Required CaP interface (names to be settled with the checker contract):
 ### 4.7 Implementation order
 
 1. `task_spec_success` (§3.5) with physical diagnostics, for all tasks. **Implemented.**
-2. §4.1 shared changes, including the uniform time limits, and the §4.2 `tbl` handle.
+2. §4.1 shared changes, including the uniform time limits (**implemented**), and the §4.2 `tbl` handle.
 3. Unstack, then Reverse, then Restack.
 4. Goal interface, then Grid, then Pyramid.
 

@@ -35,6 +35,12 @@ def main(argv=None):
     )
     parser.add_argument("--task", choices=TASK_INSTRUCTIONS, default="stack")
     parser.add_argument("--num-blocks", type=int, default=3)
+    parser.add_argument(
+        "--initial-tower-blocks", type=int, help="Restack source-tower height"
+    )
+    parser.add_argument("--grid-rows", type=int)
+    parser.add_argument("--grid-cols", type=int)
+    parser.add_argument("--bottom-row-blocks", type=int, help="Pyramid base width")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--instruction")
     parser.add_argument("--initial-state", type=Path)
@@ -130,6 +136,10 @@ def main(argv=None):
         prompt_version=args.prompt_version,
         task=args.task,
         num_blocks=args.num_blocks,
+        initial_tower_blocks=args.initial_tower_blocks,
+        grid_rows=args.grid_rows,
+        grid_cols=args.grid_cols,
+        bottom_row_blocks=args.bottom_row_blocks,
         seed=args.seed,
         timeout=args.timeout,
         max_attempts=args.max_attempts,
@@ -160,11 +170,7 @@ def main(argv=None):
         trace_index=args.trace_index,
         generate_only=args.generate_only,
     )
-    if (
-        config.video_mode == "deferred"
-        and not args.generate_only
-        and config.task != "unstack"
-    ):
+    if config.video_mode == "deferred" and not args.generate_only:
         from synthesis.cap.deferred_video import drain_queue
 
         result["video_rendering"] = drain_queue(result["run_dir"])

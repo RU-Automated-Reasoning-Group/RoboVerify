@@ -7,6 +7,9 @@ experiment guidance specific to `synthesis/cap/`.
 - Before starting any task under `synthesis/cap/`, read the [README](README.md)
   overview and the sections relevant to the task. Read historical experiment
   reports only when needed.
+- The repository's 60-second Unstack limit governs `synthesize_cfg`'s process
+  alarm, not CaP trials. Every CaP task uses the configured trial and recovery
+  time limits.
 - For new experiments, use `video_mode: "deferred"` by default. Save full rollout
   trajectories, then render videos through the shared background queue. Use
   `inline` only for an explicit comparison/debugging need and `off` when videos

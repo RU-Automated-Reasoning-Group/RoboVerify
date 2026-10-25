@@ -57,10 +57,14 @@ There is no coordinate-bearing `tbl` handle or added placement macro.
 Grid/Pyramid explicitly return `adapter_gap` before model calls: their shared
 Goal traversal, occupancy, and physical-reference contract remains unfinished.
 ReStack uses the upstream Restack reset (one source tower containing b0 plus
-loose blocks) and the Stack terminal criterion; its start is not yet validated.
-Reverse checks the canonical initial order and evaluates complete reversal.
-Shared DSL pre/post checks are additionally reported for Stack/Unstack; only
-those starts must satisfy the shared precondition. The per-trial `success`
+loose blocks; `initial_tower_blocks` sets its height, default `max(2, n-1)`)
+and the Stack terminal criterion. Fresh scenes settle as in upstream collection:
+50 held-gripper steps for Stack and ReStack, none for Unstack and Reverse;
+snapshots are never settled again. Every tower-task start must satisfy the
+shared precondition, with the table in the domain for Unstack, Reverse and
+ReStack; Reverse must also be the evaluator's canonical tower, and ReStack's b0
+must be inside a source tower. A violating start fails before any model call.
+`dsl_postcondition` is still reported for Stack/Unstack only. The per-trial `success`
 uses normal completion, primitive convergence, and the environment terminal
 check. Batch `first_attempt_success` and recovery `task_success` additionally
 use the DSL postcondition for Stack/Unstack. Upstream now defines shared
@@ -75,8 +79,8 @@ re-checks the physical evaluator after 50 host steps with the gripper held,
 outside the trial budget and recording. Batch summaries report first-attempt and
 final task-spec success; recovery reports the first attempt satisfying it, and
 `recovery.success_field` (default `task_success`) selects which field ends
-recovery. The remaining Revision 5 work (goal tasks, `tbl` references, uniform
-time limits) is planned; see the
+recovery. The remaining Revision 5 work (`tbl` references, task instructions,
+goal tasks) is planned; see the
 [task expansion plan](docs/revision_5_add_tasks.md).
 
 Method 1 supports plain top-level function definitions, assignment, arithmetic
@@ -278,11 +282,12 @@ uv run python -m synthesis.entry.run_cap --method cap_google_baseline --task sta
 ```
 
 Replace `<first-run>` with the actual directory before running. Saved snapshots
-restore directly; fresh Stack preparation performs the same 50 settling steps
-before recording. Trials record success only after normal completion and the
+restore directly; fresh Stack and ReStack preparation performs the same 50
+settling steps as upstream collection before recording. `--initial-tower-blocks`
+sets the ReStack source-tower height; `--grid-rows`/`--grid-cols` and
+`--bottom-row-blocks` are reserved for the goal tasks. Trials record success only after normal completion and the
 terminal task check. An earlier success flag or a successful state reached by
-a failed program is not counted as a success. Unstack's timeout is capped at
-60 seconds. `--max-model-calls`, `--max-attempts`, `--max-depth`, and `--max-steps`
+a failed program is not counted as a success. `--max-model-calls`, `--max-attempts`, `--max-depth`, and `--max-steps`
 additionally bound generation/repair/execution. `--max-tokens` limits reported
 token usage; when usage is unavailable, call/time limits still apply and the
 unknown-usage call count is reported explicitly.
@@ -301,9 +306,10 @@ failure, not grounds to silently alter the experiment.
 
 ## Resource budgets and timing
 
-CaP now defaults to a **600-second wall-clock safety cap** (`--timeout`).
-Unstack currently retains a 60-second end-to-end cap; Revision 5 removes this
-special case so that every task uses the same defaults. Trial effort is also bounded by
+CaP now defaults to a **600-second wall-clock safety cap** (`--timeout`) for
+every task. Unstack trials before Revision 5 ran under a 60-second end-to-end
+cap; do not pool them with later Unstack results. The repository's 60-second
+Unstack rule applies to `synthesize_cfg`, not to CaP trials. Trial effort is also bounded by
 model calls (`--max-model-calls`), provider-reported cumulative tokens
 (`--max-tokens`), helper/call depth (`--max-depth`), execution/query ticks
 (`--max-steps`), and policy simulation-step calls (`--max-sim-steps`, default
@@ -916,9 +922,7 @@ rendering processes; both pools share GPU reservations and the explicit allowlis
 Batch execution drains queued videos after trials finish, while marking experiment
 completion separately. Recovery may continue while earlier attempts render.
 
-Single-trial CLI runs drain their queue after policy execution. Unstack only
-enqueues videos, preserving its 60-second execution limit; drain its queue
-separately using the command below. Python `run()`
+Single-trial CLI runs drain their queue after policy execution. Python `run()`
 only records/enqueues jobs; call `drain_queue(result["run_dir"])` when convenient.
 A saved queue can also be processed without new model requests or policy rollouts:
 

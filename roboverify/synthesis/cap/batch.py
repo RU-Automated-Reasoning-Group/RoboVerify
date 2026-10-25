@@ -640,8 +640,6 @@ def _execute_batch(directory, *, resume=False, dispatch_gate=None, max_workers=N
                     + job["run_config"]["audit_timeout"]
                     + 60
                 )
-                if job["run_config"]["task"] == "unstack":
-                    timeout = min(timeout, 60)
                 expired = time.monotonic() - started > timeout
                 if expired and process.poll() is None:
                     os.killpg(process.pid, signal.SIGKILL)
