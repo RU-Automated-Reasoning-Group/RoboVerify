@@ -50,6 +50,32 @@ class SegmentResetTests(unittest.TestCase):
             finally:
                 env.close()
 
+    def test_restore_round_trips_a_quaternion_that_forward_renormalizes(self):
+        from synthesis.cfg.reset import restore
+
+        # A recorded Restack gripper quaternion one ulp off the forward() fixpoint.
+        quaternion = [
+            float.fromhex(v)
+            for v in (
+                "0x1.6a3ca7e43642dp-1",
+                "0x1.e31c0e2b088fdp-19",
+                "0x1.69d71dcce1864p-1",
+                "0x1.2a2d508435af6p-18",
+            )
+        ]
+        env = make_roboverify_stack_env(num_blocks=2)
+        try:
+            env.reset()
+            reference = capture(env)
+            reference.arrays["mocap_quat"] = np.array([quaternion])
+            restore(env, reference)
+            restored = capture(env)
+            np.testing.assert_array_equal(restored.gt_state, reference.gt_state)
+            for name, value in reference.arrays.items():
+                np.testing.assert_array_equal(restored.arrays[name], value, name)
+        finally:
+            env.close()
+
 
 if __name__ == "__main__":
     unittest.main()

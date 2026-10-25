@@ -85,8 +85,11 @@ def restore(env, snapshot):
         getattr(inner.sim.data, name)[:] = value
     inner.sim.forward()
     # Forward recomputes derived state; preserve the solver's recorded warm start.
-    if "qacc_warmstart" in snapshot.arrays:
-        inner.sim.data.qacc_warmstart[:] = snapshot.arrays["qacc_warmstart"]
+    # It also renormalizes mocap quaternions, which can move a recorded unit
+    # quaternion by one ulp; restore the recorded value so snapshots round-trip.
+    for name in ("qacc_warmstart", "mocap_quat"):
+        if name in snapshot.arrays:
+            getattr(inner.sim.data, name)[:] = snapshot.arrays[name]
     restore_bindings(env, snapshot)
     return inner.flatten_observation(inner._get_obs())
 
