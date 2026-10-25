@@ -15,6 +15,16 @@ experiment guidance specific to `synthesis/cap/`.
   diagnostic, and score RoboVerify executions in a comparison with the same
   criterion. See [Revision 5, §3.5](docs/revision_5_add_tasks.md#35-result-fields)
   and [Revision 4.3 report, §3.1 and §4](docs/revision_4_3_report.md#31-success-criterion-task_spec_success).
+- Use the frozen CaP baseline configuration for RoboVerify comparisons, without
+  per-task re-tuning: Qwen3.8 27B FP8 (`reasoning_effort=medium`, reasoning
+  guard on), `cap_method_2` with `dsl_only` and `typed_v3`, primitive prompt
+  `p0101` (convergence criteria and motion-planning limits on), recovery on with
+  `max_rounds: 4` and feedback profile `full`
+  (`profile_settings("full")`), and `task_spec_success` as the success field.
+  The full table (budgets, history, enrichments) is in the
+  [Revision 4.3 report, §3.5](docs/revision_4_3_report.md#35-frozen-configuration);
+  change it only for an interface failure, as a new version applied to all six
+  tasks (§3.6).
 - Use the paper's block counts for each task (Stack/Unstack/Reverse 4, ReStack
   5 with a 3-block tower, Grid/Pyramid 6), recorded with sources and CaP
   settings in [task_specification.md](docs/task_specification.md). Repository
