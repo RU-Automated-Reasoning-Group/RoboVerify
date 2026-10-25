@@ -6,7 +6,10 @@ import math
 from functools import lru_cache
 from pathlib import Path
 
-PROMPT_VERSIONS = ("legacy_v1", "typed_v2", "typed_v3")
+from .contracts import GOAL_API_NAMES
+
+# typed_v4 = typed_v3 plus the goal API, rendered only for goal tasks.
+PROMPT_VERSIONS = ("legacy_v1", "typed_v2", "typed_v3", "typed_v4")
 PROMPT_ROOT = Path(__file__).with_name("prompts")
 
 
@@ -47,12 +50,19 @@ def render_api(names, condition_mode, version, higher_tolerance, primitive_promp
     else:
         if not math.isfinite(higher_tolerance) or not 0 <= higher_tolerance < 0.025:
             raise ValueError("Higher tolerance must be finite and in [0, 0.025) metres")
-        description = data["api_header"] + "\n".join(
+        texts = dict(data)
+        variant = data.get("goal_variant")
+        if variant is not None and set(names) & GOAL_API_NAMES:
+            texts |= {k: variant[k] for k in ("api_header", "api_footer", "examples")}
+            entries = data["api_entries"] | variant["entry_overrides"]
+        else:
+            entries = data["api_entries"]
+        description = texts["api_header"] + "\n".join(
             entry.format(higher_tolerance=repr(float(higher_tolerance)))
-            for name, entry in data["api_entries"].items()
+            for name, entry in entries.items()
             if name in names
         )
-        description += data["api_footer"] + data["examples"]
+        description += texts["api_footer"] + texts["examples"]
         description = description.rstrip("\n")
     from .primitive_prompts import render
 
