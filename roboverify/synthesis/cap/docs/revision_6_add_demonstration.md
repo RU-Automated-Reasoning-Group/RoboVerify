@@ -197,60 +197,43 @@ The compaction keeps two kinds of frames. Both are computed from `states` and `a
    - The approach follows KAT's downsampling of action trajectories to a few tens of waypoints [2].
 
 ```python
-def compact_demonstration(trace, task, *, waypoint_tolerance):
-    """State/action-only compaction; never reads trace.program or trace.events."""
-    n = trace.num_blocks
-    predicates = dsl_predicates(task)            # task's API set: ON, ON_star, Higher, Scattered,
-                                                 # ON_star_zero (Reverse), AtGoal/HasBlock (goal tasks)
-    closed = [action.gripper < 0 for action in trace.actions]
-    holding = lambda t: t > 0 and closed[t - 1]
-    last = len(trace.states) - 1
+def compact_demonstration(trace, task, settings):
+    """Uses trace.states and trace.actions only; never trace.program or trace.events."""
+    events = gripper_events(trace.actions) | {first(trace), last(trace)}
+    waypoints = motion_waypoints(gripper_path(trace.states),
+                                 tolerance=settings.waypoint_tolerance) - events
 
-    events = {0, last} | {t + 1 for t in range(1, len(closed)) if closed[t] != closed[t - 1]}
-    gripper_path = [state.gripper_position for state in trace.states]
-    waypoints = set(rdp(gripper_path, waypoint_tolerance)) - events
-
-    record = Header(task=task, num_blocks=n, b0=trace.initial_bindings.get("b0"),
-                    goal_layout=trace.goal_layout)   # goals: positions and r/d links, once
-    previous = None
+    frames, previous = [], None
     for t in sorted(events | waypoints):
-        state = trace.states[t]
         if t in waypoints:
-            record.append(Waypoint(step=t, gripper=round3(state.gripper_position),
-                                   holding=holding(t)))
-            continue
-        scene = scene_from_obs(state, n, entry_obs=trace.states[0])
-        relations = {p(a, b) for p in predicates for a, b in operand_pairs(p, scene)
-                     if evaluate(p(a, b), scene)}
-        record.append(Event(
-            step=t,
-            gripper=round3(state.gripper_position),
-            holding=holding(t),
-            blocks={i: round3(scene.positions[i]) for i in range(n)},
-            added=sorted(relations - previous) if previous is not None else sorted(relations),
-            removed=sorted(previous - relations) if previous is not None else [],
-        ))
-        previous = relations
-    record.header.waypoint_tolerance = waypoint_tolerance     # rendered settings are self-describing
-    return serialize(record, version="demo-keyframes-v1")
+            frames.append(Waypoint(t, gripper(trace, t), holding(trace, t)))
+        else:
+            relations = dsl_relations(task, trace.states[t])     # shared scene evaluator
+            frames.append(Event(t, gripper(trace, t), holding(trace, t),
+                                block_positions(trace, t),
+                                changes(previous, relations)))  # all relations at the first event
+            previous = relations
+    return serialize(header(task, trace, settings), frames)
 
 
-def synthesis_context(archive, selected_ids, task, settings):
-    demos = [compact_demonstration(load_trace(archive, i), task,
-                                   waypoint_tolerance=settings.waypoint_tolerance)
-             for i in selected_ids]
-    return render_demonstrations(demos)                    # the same block in every policy/repair request
+def gripper_events(actions):
+    """Steps where the gripper command switches between open and close."""
+
+def motion_waypoints(path, tolerance):
+    """Corners of the gripper's 3D path: Ramer-Douglas-Peucker simplification."""
+
+def dsl_relations(task, state):
+    """True DSL predicates (task API set) on the state, via the shared scene evaluator."""
 
 
-def run_trial(config, archive, selected_ids, scene):
-    assert_disjoint(selected_ids, scene)                   # evaluation scene never in demonstrations
-    context = synthesis_context(archive, selected_ids, config.task, config.demonstrations)
-    log(demonstration_hashes(selected_ids), serialization="demo-keyframes-v1",
-        waypoint_tolerance=config.demonstrations.waypoint_tolerance,
-        rendered_context=context, tokens=count_tokens(context))
-    if count_tokens(context) > config.demonstrations.max_tokens:
-        raise DemonstrationBudgetExceeded                   # explicit failure, no silent truncation
-    return method(config).synthesize(instruction, demonstrations=context)   # unchanged methods
+def run_trial(config, demonstrations, scene):
+    assert_disjoint(demonstrations, scene)            # evaluation scene never in demonstrations
+    context = render([compact_demonstration(d, config.task, config.demonstrations)
+                      for d in demonstrations])
+    record(demonstrations, config.demonstrations, context)   # hashes, settings, prompt, tokens
+    if tokens(context) > config.demonstrations.max_tokens:
+        raise DemonstrationBudgetExceeded              # explicit failure, no silent truncation
+    return method(config).synthesize(instruction, demonstrations=context)   # same for all methods
 ```
 
 Rendered (Stack, 4 blocks, seed 0; positions only, predicate deltas omitted):
