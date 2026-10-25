@@ -172,7 +172,7 @@ Measured with the Qwen3.8 27B tokenizer (vLLM `/tokenize`) on one seed-0 demonst
 | Grid (6) | 331 | 53.8k | 807k | 213k | 3.2M | 3.8k (25) | 57k |
 | Pyramid (6) | 319 | 51.9k | 778k | 205k | 3.1M | 3.8k (25) | 57k |
 
-The frozen configuration allows 200k context tokens per request. Fifteen per-step demonstrations do not fit for any task; keyframe compaction fits all six with room for the API description and recovery feedback.
+Fifteen per-step demonstrations do not fit for any task. Keyframe compaction fits all six, but only after the context upgrade in Section 3.5: today the binding limit is the server's 98,304-token window, not the 200k CaP allowance.
 
 ### 3.3 Method
 
@@ -247,6 +247,41 @@ Design notes:
 - Keep full simulator snapshots for restoration, but do not expose simulator internals to the LLM merely because they are present in the archive.
 - Version the demonstration block as a new prompt package; do not rewrite frozen packages.
 - Record demonstration hashes/IDs, ordering, serialization version, exact rendered prompts and token usage. Exceeding the input budget is an explicit failure, never silent truncation.
+
+### 3.5 Context window upgrade (`config_frozen_v3`)
+
+**Current limits (checked 2026-10-25):**
+
+| Limit | Value | Source |
+| --- | ---: | --- |
+| Checkpoint context (`max_position_embeddings`, no RoPE scaling) | 262,144 | `Qwen/Qwen3.8-27B-FP8` @ `017b9c7a`, `config.json` |
+| **Served window** (`--max-model-len`, input + output) | **98,304** | Both 27B instances (ports 8126, 8127), `/v1/models` |
+| KV cache per instance | 587,589 tokens (5.98 × 98,304) | vLLM startup log, `gpu-memory-utilization 0.85` |
+| CaP allowance `recovery.context_tokens` (input + output) | 200,000 | `config_frozen_v1/v2` |
+| Output cap `max_output_tokens` | 32,768 | `config_frozen_v1/v2` |
+| CaP effort budgets (provider-reported total tokens) | 100k initial, 200k per round, 900k per trial | `config_frozen_v1/v2` |
+
+The served window binds first. A request may carry at most 98,304 − 32,768 = 65,536 input tokens, so the 200k CaP allowance is never reached. With 15 compacted demonstrations, Grid and Pyramid need about 57k tokens before the API description, instruction and recovery feedback, which does not fit.
+
+**Upgrade for Revision 6** (a new configuration version, `config_frozen_v3`; v1 and v2 are not edited):
+
+| Setting | v2 | v3 | Reason |
+| --- | ---: | ---: | --- |
+| Served window `--max-model-len` | 98,304 | **262,144** | The checkpoint's native context. No RoPE/YaRN extension is needed. The KV cache (587,589 tokens) holds two full-length requests per instance. |
+| `recovery.context_tokens` | 200,000 | **262,144** | Match the served window |
+| `max_output_tokens` | 32,768 | 32,768 (unchanged) | Reasoning budget is not part of this change |
+| Demonstration block limit `demonstrations.max_tokens` | — | **131,072** | Fits 15 compacted demonstrations for every task (≤ 57k measured), with margin for the predicate deltas. Leaves ≥ 98k for the API description, instruction, recovery feedback and history. |
+| Effort budgets (initial / round / trial) | 100k / 200k / 900k | Unchanged, **excluding the demonstration block** | See accounting below |
+| Serving: prefix caching | vLLM default | Required, verified at startup | The demonstration block is an identical prefix across calls and trials |
+
+**Token accounting.** Effort budgets count provider-reported total tokens per call. Charging a 13k–57k demonstration block to every call would exhaust the 100k initial budget within a few calls, and would make demonstration-on and demonstration-off runs differ in effective generation budget.
+
+- **v3 charges the demonstration block separately** (`demonstration_tokens`, per call and per trial). The existing budgets continue to bound everything else. Both totals are reported.
+- **The demonstration block is rendered first in every request**, before the method's prompt. Identical prefixes then hit vLLM's prefix cache, which bounds the prefill cost.
+
+**Ablation hygiene.** Demonstration-on and demonstration-off runs both use v3 serving and limits, so the demonstrations are the only difference. Prompts that fit in 98,304 tokens are served by the same checkpoint, template and sampling at either window size. The window change is still recorded in each plan's `serving` block.
+
+**When to apply.** Restarting the 27B instances with the larger window interrupts any running batch. Apply it only after the Revision 5 runs (tower tasks, then Grid/Pyramid) have finished, using the drain procedure from [Revision 4.3.1](revision_4_3_1_inference_backend_optimization.md). Then confirm `/v1/models` reports `max_model_len` 262,144 and check the KV-cache size in the startup log.
 
 ## 4. Experimental design
 
