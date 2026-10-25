@@ -34,8 +34,12 @@ class FrozenConfigTests(unittest.TestCase):
 
     def test_missing_instructions_fail_closed(self):
         self.assertIn("ON_star(x,b0)", frozen.instruction("stack"))
-        with self.assertRaises(NotImplementedError):
-            frozen.configuration("unstack")
+        for task in ("unstack", "reverse", "restack"):
+            self.assertIn("tbl", frozen.instruction(task))
+            frozen.configuration(task)
+        for task in ("grid", "pyramid"):
+            with self.assertRaises(NotImplementedError):
+                frozen.configuration(task)
 
     def test_settings_are_copies(self):
         frozen.run_settings("stack")["recovery"]["feedback"]["keyframes"] = False
