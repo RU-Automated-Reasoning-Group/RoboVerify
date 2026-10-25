@@ -190,7 +190,7 @@ All 137 successful final policies passed the saved DSL audit. This batch contain
 - Select recovery-on trials whose initial program did not succeed. Exclude recovery-off trials and initially successful recovery-on trials from this analysis. Keep initial preparation failures in the selected denominator, but distinguish them from executed policies.
 - **159 selected trials: 130 eventually recovered and 29 did not.** Three never entered their initial rollout. The other 156 supplied an initial failed execution; 130 of these recovered. There are **325 feedback-to-replacement transitions** across the selected trials.
 - Haiku uses the corrected original five plus additional fifteen trials per setting; additional-cohort IDs 1–15 map to accumulated IDs 6–20. MiniMax uses its 50-trial-per-setting cohort. The excluded diagnostic batch and compatibility probe remain excluded.
-- The [analysis script](../recovery_analysis.py) reads existing artifacts only. It makes no model requests and executes no generated policies or simulations. The recovery implementation and saved experiment outcomes are unchanged.
+- The [analysis script](../reports/recovery_analysis.py) reads existing artifacts only. It makes no model requests and executes no generated policies or simulations. The recovery implementation and saved experiment outcomes are unchanged.
 
 | Analysis step | Inputs and checks | Output |
 | --- | --- | --- |
@@ -202,12 +202,12 @@ All 137 successful final policies passed the saved DSL audit. This batch contain
 | Review mechanisms | Selected source diffs, controller targets, query conditions, and all ten NameError cases | Evidence-linked explanations and explicit limits on causal interpretation |
 
 - **All 325 transitions passed the feedback/source/request consistency checks.** See [machine-readable analysis](../../../runs/cap-recovery-analysis/20261020-history-review/analysis.json), the [159-trial index](../../../runs/cap-recovery-analysis/20261020-history-review/index.md), and [manual case annotations](../../../runs/cap-recovery-analysis/20261020-history-review/case_reviews.json). Every trial page contains each actual feedback excerpt, full-payload/prompt links, immediate model response, net code diff, next outcome, and all attributable source bundles.
-- Ten focused tests pass, including duplicate-source normalization, absent responses, failure classification, prompt parsing, and a reproduction of the pinned baseline executor’s namespace behavior. See [tests](../test_recovery_analysis.py).
+- Ten focused tests pass, including duplicate-source normalization, absent responses, failure classification, prompt parsing, and a reproduction of the pinned baseline executor’s namespace behavior. See [tests](../tests/test_recovery_analysis.py).
 
 Reproduce from `roboverify/` using the existing environment; this command writes only derived analysis files:
 
 ```bash
-.venv/bin/python -m synthesis.cap.recovery_analysis \
+.venv/bin/python -m synthesis.cap.reports.recovery_analysis \
   --batch haiku 0 runs/cap-revision4-haiku55/20261019-225124 \
   --batch haiku 5 runs/cap-revision4-haiku55/20261020-001210-additional15 \
   --batch minimax 0 runs/cap-revision4-minimax31flash/20261020-152924-free-300 \

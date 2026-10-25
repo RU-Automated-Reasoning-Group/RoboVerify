@@ -104,11 +104,11 @@ flowchart LR
   to retain its execution deadline. See [usage](../README.md#deferred-video-rendering).
 - Regression suite: **210 passed, two opt-in hardware tests skipped** (212 discovered).
   The deferred-video hardware test was also run explicitly and passed.
-- [Focused tests](../test_deferred_video.py) cover configuration, all three methods,
+- [Focused tests](../tests/test_deferred_video.py) cover configuration, all three methods,
   failed primitives/recovery, unchanged policy results, matching feedback, frame
   decoding, archive/metadata errors, locking, interruption, retry, render-worker
   launch failure isolation, and batch resume.
-- The opt-in [physical test](../test_deferred_video_simulator.py) completed **9
+- The opt-in [physical test](../tests/test_deferred_video_simulator.py) completed **9
   scripted trials / 18 attempts / 12 videos**, without model API calls. Every
   method recovered successfully in every video mode. Actions matched exactly;
   normalized inline/deferred feedback matched exactly; all six video pairs had
@@ -143,5 +143,5 @@ allowlist, `CAP_DEFERRED_SNAPSHOT` to the Stack archive, and `CAP_DEFERRED_OUTPU
 to a fresh directory, then run (with the normal simulator environment):
 
 ```bash
-.venv/bin/python -m unittest synthesis.cap.test_deferred_video_simulator -v
+.venv/bin/python -m unittest synthesis.cap.tests.test_deferred_video_simulator -v
 ```

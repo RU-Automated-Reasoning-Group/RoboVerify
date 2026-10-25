@@ -26,7 +26,7 @@ primitive controllers.
 | [batch.py](../batch.py) | Existing isolated trial queue, total worker limit, GPU admission, resume, telemetry, and `python -m synthesis.cap.batch` entry point |
 | [batch_worker.py](../batch_worker.py) | Claim assignment and verify rendering before importing trial machinery; retain the assignment across recovery attempts |
 | [config.py](../config.py) | Validated optional `GPUConfig`, separate from policy and recovery configuration |
-| [test_gpu_scheduler.py](../test_gpu_scheduler.py) | Mocked admission/lifecycle tests and opt-in real simulator/rendering parity test |
+| [test_gpu_scheduler.py](../tests/test_gpu_scheduler.py) | Mocked admission/lifecycle tests and opt-in real simulator/rendering parity test |
 | [AGENTS.md](../AGENTS.md) | Default parallel experiment execution within authorized resource limits |
 
 ```mermaid
@@ -219,7 +219,7 @@ comparison uses the self-contained top-level scripted policy for all methods.
 Reproduce focused tests from `roboverify/`:
 
 ```bash
-.venv/bin/python -m unittest synthesis.cap.test_gpu_scheduler.GPUTests -v
+.venv/bin/python -m unittest synthesis.cap.tests.test_gpu_scheduler.GPUTests -v
 ```
 
 For hardware validation, configure the existing MuJoCo runtime first, set the
@@ -231,5 +231,5 @@ repeating trials.
 export CAP_GPU_TEST_UUIDS=GPU-ALLOWED-UUID-1,GPU-ALLOWED-UUID-2
 export CAP_GPU_TEST_SNAPSHOT=/absolute/path/to/three-block-stack-initial_state.npz
 export CAP_GPU_TEST_OUTPUT=/absolute/path/to/new-validation-directory
-.venv/bin/python -m unittest synthesis.cap.test_gpu_scheduler.GPUIntegrationTests -v
+.venv/bin/python -m unittest synthesis.cap.tests.test_gpu_scheduler.GPUIntegrationTests -v
 ```

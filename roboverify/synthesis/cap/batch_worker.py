@@ -61,7 +61,7 @@ def main(path):
         )
     factory = None
     if spec.get("fixture"):
-        from .test_adapter import RobotFixture
+        from .tests.test_adapter import RobotFixture
 
         def factory(config, snapshot):
             from synthesis.cfg.reset import restore

@@ -210,7 +210,7 @@
 
 ## 9. Launcher implementation
 
-[revision43_feedback_experiment.py](../revision43_feedback_experiment.py) implements the design; no live run has been made with it.
+[revision43_feedback_experiment.py](../experiments/revision43_feedback_experiment.py) implements the design; no live run has been made with it.
 
 | Subcommand | Behavior |
 | --- | --- |

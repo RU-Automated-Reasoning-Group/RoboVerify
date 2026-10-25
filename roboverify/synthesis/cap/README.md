@@ -43,6 +43,19 @@ in the shared checker (`shared-contract-v3`). All 106 CaP tests pass, including
 contract for new runs. See [implementation and validation](docs/revision_3.md).
 Configurable shared failure recovery is implemented as `cap-recovery-v1`; task expansion and demonstration input remain deferred plans.
 
+## Package layout
+
+| Path | Contents |
+| --- | --- |
+| `*.py` (package root) | Shared runtime: task adapter and scoring (`adapter`, `tasks`, `runner`, `runtime`, `recovery`), DSL contract and checker (`contracts`, `checker`, `validation`, `audit`), model access and prompts (`llm`, `prompt_package`, `primitive_prompts`, `primitive_feedback`), batch execution (`batch`, `batch_worker`, `gpu_scheduler`, `request_control`, `deferred_video`), logging and budgets |
+| `cap_google_baseline/`, `cap_method_1/`, `cap_method_2/` | The three methods |
+| `configs/` | Versioned experiment configurations (`config_frozen_v1`) |
+| `experiments/` | Batch launchers for the Revision 4.2 and 4.3 experiments (`python -m synthesis.cap.experiments.<module>`) |
+| `reports/` | Tables, figures and analyses of finished batches (`python -m synthesis.cap.reports.<module>`) |
+| `serving/` | vLLM-side code (reasoning-termination guard) |
+| `tests/` | Unit and integration tests, with fixtures in `tests/testdata/` |
+| `prompts/`, `vendor/`, `examples/`, `docs/` | Prompt packages, vendored Google CaP code, example options, documentation |
+
 ## Implemented scope
 
 The adapter connects Stack, Unstack, Reverse, and ReStack to the existing
@@ -396,7 +409,7 @@ diagnostics and pre-repair source. Console output is also saved to `stdout.log`.
 ## Tests and validation limits
 
 ```bash
-python -m unittest synthesis.cap.test_validation synthesis.cap.test_methods synthesis.cap.test_llm synthesis.cap.test_logger -v
+python -m unittest synthesis.cap.tests.test_validation synthesis.cap.tests.test_methods synthesis.cap.tests.test_llm synthesis.cap.tests.test_logger -v
 uv run python -m unittest discover -s synthesis/cap -t . -p 'test_*.py' -v
 ```
 
@@ -858,9 +871,9 @@ preserves the exact rendered text and existing supplement hashes; the base
 The reproducible 220-trial design is provided by:
 
 ```bash
-.venv/bin/python -m synthesis.cap.revision42_experiment --directory runs/cap-revision42/NEW_BATCH
-.venv/bin/python -m synthesis.cap.revision42_experiment --directory runs/cap-revision42/EXISTING_BATCH --resume
-.venv/bin/python -m synthesis.cap.revision42_report --directory runs/cap-revision42/EXISTING_BATCH --videos
+.venv/bin/python -m synthesis.cap.experiments.revision42_experiment --directory runs/cap-revision42/NEW_BATCH
+.venv/bin/python -m synthesis.cap.experiments.revision42_experiment --directory runs/cap-revision42/EXISTING_BATCH --resume
+.venv/bin/python -m synthesis.cap.reports.revision42_report --directory runs/cap-revision42/EXISTING_BATCH --videos
 ```
 
 `--model` reruns the same design with another model; only the model identifier

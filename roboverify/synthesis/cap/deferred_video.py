@@ -197,6 +197,7 @@ def render_job(path, *, environment_factory=None, assignment=None):
         temporary = directory / "video.partial.mp4"
         try:
             import numpy as np
+
             from synthesis.cfg.collection import VideoRecorder
             from synthesis.cfg.recordings import load_traces
             from synthesis.cfg.reset import inner_env, restore
@@ -234,9 +235,9 @@ def render_job(path, *, environment_factory=None, assignment=None):
             if (
                 environment_factory is None
                 and job["environment"]["class"]
-                == "synthesis.cap.test_adapter.RobotFixture"
+                == "synthesis.cap.tests.test_adapter.RobotFixture"
             ):
-                from .test_adapter import RobotFixture
+                from .tests.test_adapter import RobotFixture
 
                 env = RobotFixture(trace.num_blocks)
                 restore(env, trace.snapshots[0])
@@ -264,7 +265,7 @@ def render_job(path, *, environment_factory=None, assignment=None):
                     raise ValueError(f"Restored observation mismatch at frame {i}")
                 if (
                     job["environment"]["class"]
-                    == "synthesis.cap.test_adapter.RobotFixture"
+                    == "synthesis.cap.tests.test_adapter.RobotFixture"
                 ):
                     inner.actions = [
                         None

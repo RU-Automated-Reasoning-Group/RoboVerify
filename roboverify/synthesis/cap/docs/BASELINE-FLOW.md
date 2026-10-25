@@ -207,4 +207,4 @@ are in [revision_1.md](revision_1.md).
 - [Adapter queries and primitive results](../adapter.py).
 - [Trial lifecycle](../runner.py), [task instructions and scoring](../tasks.py),
   and [text request construction](../llm.py).
-- [Prompt parity and generation tests](../test_methods.py).
+- [Prompt parity and generation tests](../tests/test_methods.py).

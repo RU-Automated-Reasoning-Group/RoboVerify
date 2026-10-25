@@ -1,7 +1,7 @@
 import unittest
 from dataclasses import asdict
 
-from ..revision43_feedback_experiment import profile_settings, prompt_flags
+from ..experiments.revision43_feedback_experiment import profile_settings, prompt_flags
 from . import config_frozen_v1 as frozen
 
 

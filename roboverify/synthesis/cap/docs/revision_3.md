@@ -124,13 +124,13 @@ policy(b0)
 | 5 | Ran the full CaP suite and focused boundary tests | Preserve condition-mode semantics, prompt-version behavior, helper repair, and artifact capture |
 | 6 | Recorded `shared-contract-v3`, source hashes, and analysis limits | Record the implementation version/source hash and any remaining unsupported cases |
 
-- Relevant files: [validation.py](../validation.py), [checker.py](../checker.py), [runtime.py](../runtime.py), [condition-mode tests](../test_condition_modes.py), and [shared-method/audit tests](../test_revision2.py).
+- Relevant files: [validation.py](../validation.py), [checker.py](../checker.py), [runtime.py](../runtime.py), [condition-mode tests](../tests/test_condition_modes.py), and [shared-method/audit tests](../tests/test_revision2.py).
 - Preserve original source, calls, rollouts, and audit verdicts from completed experiments. Any retrospective assessment with the revised checker must be explicitly versioned and stored separately.
 - Do not claim that the fixes change historical success rates without a separately identified evaluation. Static contract compliance remains distinct from physical success and formal task verification.
 
 ## 5. Completed validation and remaining scope
 
-- **106 CaP unittest tests passed**, including **18 new Revision 3 tests** in [test_revision3.py](../test_revision3.py).
+- **106 CaP unittest tests passed**, including **18 new Revision 3 tests** in [test_revision3.py](../tests/test_revision3.py).
   - Coverage includes longer loop-carried dependencies, nested loops, branch joins, `break`/`continue`, loop `else`, helper return/argument effects, valid object/position helpers, incompatible callers, unused definitions, and analysis exhaustion.
   - Method 1 and Method 2 reject delayed effects before actions and accept valid object-valued loops in both modes.
   - Baseline still executes without a DSL gate; post-hoc checking detects the delayed effect without changing actions or model calls.

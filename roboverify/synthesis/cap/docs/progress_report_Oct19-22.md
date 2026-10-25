@@ -191,7 +191,7 @@ Full report: [revision_4_2_report.md](revision_4_2_report.md). Recovery is on in
 | Request pacing and quota admission | A shared request gate. A trial starts only if the remaining quota covers its full 76-call allowance. Batches can resume safely, which makes free-tier runs possible. |
 | [Revision 4.1](revision_4_1_gpu_scheduling.md): GPU scheduling | Reserves GPUs from an allowlist across processes. Scripted 6-trial check: 49.69 s with one worker vs. 30.14 s with two. |
 | [Revision 4.2.1](revision_4_2_1_deferred_video_rendering.md): deferred video | Videos render on a shared GPU queue after the trial, so recovery doesn't wait for rendering. Every video is checked against its trajectory. |
-| Recovery history analysis ([recovery_analysis.py](../recovery_analysis.py)) | Offline review of every recovery transition from saved artifacts only, with no model calls |
+| Recovery history analysis ([recovery_analysis.py](../reports/recovery_analysis.py)) | Offline review of every recovery transition from saved artifacts only, with no model calls |
 | Multi-model launcher and report | `--model`, `--variant PROFILE=METHOD`, and paid/free admission. The report merges batches by model, distinguishes models by hatching in plots, and lists the terminal path of every unsuccessful trial. |
 
 ## 4. Limits

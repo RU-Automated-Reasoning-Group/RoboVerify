@@ -342,12 +342,12 @@ The experiment design moved to [revision_4_3_ablation_experiment_plan.md](revisi
 
 ### 8.2 Validation
 
-- **v1 golden file.** [testdata/revision43_v1_golden.json](../testdata/revision43_v1_golden.json) was recorded from the unmodified code: seven scripted scenarios covering all three methods, no-witness histories, primitive failures with all three Revision 4.2 enrichments, goal failure, NameError and tick budget. With default configuration, the implementation reproduces every prepared feedback object and recovery prompt exactly.
+- **v1 golden file.** [testdata/revision43_v1_golden.json](../tests/testdata/revision43_v1_golden.json) was recorded from the unmodified code: seven scripted scenarios covering all three methods, no-witness histories, primitive failures with all three Revision 4.2 enrichments, goal failure, NameError and tick budget. With default configuration, the implementation reproduces every prepared feedback object and recovery prompt exactly.
 - **Offline replay of archived Revision 4.2 attempts.** The default configuration regenerated the feedback and recovery prompt of every ready archived recovery round, using each run's own recorded configuration.
   - **485/485 feedback objects** and **485/485 delivered recovery prompts** were byte-identical.
   - Coverage: MiniMax, Haiku and Qwen batches.
   - Each trial's `cap/latest` symlink duplicates its run directory; counting those links would give 970.
-- **Focused tests** ([test_revision43.py](../test_revision43.py)), 13 tests. They cover:
+- **Focused tests** ([test_revision43.py](../tests/test_revision43.py)), 13 tests. They cover:
   - configuration validation and round trips;
   - batch variant merging;
   - per-item gating, checked against the evidence actually serialized into the prompt;
