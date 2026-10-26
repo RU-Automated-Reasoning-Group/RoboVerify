@@ -8,7 +8,7 @@ experiment guidance specific to `synthesis/cap/`.
   overview and the sections relevant to the task. Read historical experiment
   reports only when needed.
 - Use `task_spec_success` under `task-spec-v2` (`post_settling_steps: 50`,
-  [configs/config_frozen_v4.py](configs/config_frozen_v4.py)) as the success
+  [configs/config_frozen_v5.py](configs/config_frozen_v5.py)) as the success
   criterion for new experiments, analyses and reports: the shared checker
   `cfg/task_success.py` decides success on the state 50 unrecorded settling
   steps after the rollout, so that CaP is scored like RoboVerify
@@ -29,19 +29,29 @@ experiment guidance specific to `synthesis/cap/`.
   (`profile_settings("full")`), and `task_spec_success` as the success field.
   The full table (budgets, history, enrichments) is in the
   [Revision 4.3 report, §3.5](docs/revision_4_3_report.md#35-frozen-configuration).
-  Build new experiments from [configs/config_frozen_v4.py](configs/config_frozen_v4.py),
-  the current version for all six tasks: v3 (v2's goal interface, `typed_v4`/`typed_v5`
-  prompts and `positions-v2`, plus demonstration input) with `post_settling_steps: 50`
-  and the Unstack/Reverse demonstration archives re-collected from settled starts.
+  Build new experiments from [configs/config_frozen_v5.py](configs/config_frozen_v5.py),
+  the current version for all six tasks: v4 (v3's goal interface, `typed_v4`/`typed_v5`
+  prompts, `positions-v2` and demonstration input, plus `post_settling_steps: 50`
+  and the Unstack/Reverse archives re-collected from settled starts) with the
+  primitive prompt package `primitive-prompt-v2`, which drops v1's sentence
+  telling the model to express lift, transfer and descent stages
+  ([Revision 7](docs/revision_7_update_prompt_and_config.md)).
   Use it for both the demonstration-on and -off arms (`configuration(task,
-  demonstrations=False, ...)`). Earlier results used v1–v3 (v3: Revision 6
-  demonstrations); every fresh reset now settles for 50 steps, so Unstack and
-  Reverse scenes differ from runs made before 2026-10-26.
+  demonstrations=False, ...)`). Earlier results used v1–v4 (v3: Revision 6
+  demonstrations; v1–v4 prompts contain the motion-strategy sentence); every
+  fresh reset now settles for 50 steps, so Unstack and Reverse scenes differ
+  from runs made before 2026-10-26.
+- Keep every prompt an API description: what each primitive does and does not
+  do, its parameters, limits and failure behavior. Never state a task
+  decomposition or motion strategy in words (for example lift, transfer,
+  descend, approach heights, waypoint order) in the initial, repair or recovery
+  prompts. Strategy may reach the model only through demonstrations (when
+  enabled) and measured feedback ([Revision 7, §3](docs/revision_7_update_prompt_and_config.md#3-rules-for-later-changes)).
   Initial settling is `RunConfig.initial_settling_steps`, **on by default**
   (50 steps after every fresh reset, all six tasks, all frozen versions). Keep
   the default; set 0 only to reproduce an earlier unsettled Unstack/Reverse run,
   and record that override with the results. Restored snapshots are never
-  settled again. See the [cfg agent guide](../cfg/AGENTS.md#settling). v3 and v4 need the 262,144-token served window
+  settled again. See the [cfg agent guide](../cfg/AGENTS.md#settling). v3–v5 need the 262,144-token served window
   ([Revision 6, §3.5](docs/revision_6_add_demonstration.md#35-context-window-upgrade-config_frozen_v3)). `configuration(task,
   seed=...)` returns the run config, model config and instruction; use it rather
   than restating values; it also records the server-side
@@ -52,12 +62,11 @@ experiment guidance specific to `synthesis/cap/`.
   success alone is a result, not a reason. Record such a change as a new
   `config_frozen_vN.py` and apply it to all six tasks (§3.6).
 - Build demonstration-input experiments (Revision 6) from
-  [configs/config_frozen_v4.py](configs/config_frozen_v4.py) (earlier runs:
+  [configs/config_frozen_v5.py](configs/config_frozen_v5.py) (earlier runs:
   v3), for both the demonstrations-on and demonstrations-off arms, so that the
-  demonstrations are the only difference. Its `SERVING` block records the intended 262,144-token
-  window and prefix caching. That upgrade is pending (Revision 6, §3.5); until it
-  is applied, only Stack, Unstack and Reverse requests with 15 demonstrations fit
-  the served 98,304-token window. Report `demonstration_tokens` next to the
+  demonstrations are the only difference. Its `SERVING` block records the
+  262,144-token window and prefix caching (applied 2026-10-26, Revision 6,
+  §3.5). Report `demonstration_tokens` next to the
   effort tokens (`known_tokens`). Never include an evaluation scene among the
   demonstrations.
 - Use the paper's block counts for each task (Stack/Unstack/Reverse 4, ReStack

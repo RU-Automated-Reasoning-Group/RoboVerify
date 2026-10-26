@@ -37,7 +37,8 @@ methods. Baseline modes are prompt-only; method-1 modes are checked:
 - [Revision 4.2.1: deferred video rendering — implemented](docs/revision_4_2_1_deferred_video_rendering.md).
 - [Revision 4: deferred improvements](docs/revision_4_unimplemented.md).
 - [Revision 5: task expansion plan](docs/revision_5_add_tasks.md).
-- [Revision 6: demonstration input — implemented; real-model smoke and window upgrade pending](docs/revision_6_add_demonstration.md).
+- [Revision 6: demonstration input — implemented](docs/revision_6_add_demonstration.md).
+- [Revision 7: primitive prompt without the motion-strategy sentence (`config_frozen_v5`) — implemented](docs/revision_7_update_prompt_and_config.md).
 
 Revision 3 fixes loop-carried effect propagation and generic helper type merging
 in the shared checker (`shared-contract-v3`). All 106 CaP tests pass, including
@@ -51,7 +52,7 @@ Configurable shared failure recovery is implemented as `cap-recovery-v1`. Demons
 | --- | --- |
 | `*.py` (package root) | Shared runtime: task adapter and scoring (`adapter`, `tasks`, `runner`, `runtime`, `recovery`), DSL contract and checker (`contracts`, `checker`, `validation`, `audit`), model access and prompts (`llm`, `prompt_package`, `primitive_prompts`, `primitive_feedback`), batch execution (`batch`, `batch_worker`, `gpu_scheduler`, `request_control`, `deferred_video`), logging and budgets |
 | `cap_google_baseline/`, `cap_method_1/`, `cap_method_2/` | The three methods |
-| `configs/` | Versioned experiment configurations (`config_frozen_v1`, `config_frozen_v2`, `config_frozen_v3`) |
+| `configs/` | Versioned experiment configurations (`config_frozen_v1` to `config_frozen_v5`; use v5 for new experiments) |
 | `experiments/` | Batch launchers for the Revision 4.2, 4.3 and 6 experiments (`python -m synthesis.cap.experiments.<module>`). `revision6_experiment` runs one batch per (model, task) under `config_frozen_v3`, local or OpenRouter models, and writes the combined report. |
 | `reports/` | Tables, figures and analyses of finished batches (`python -m synthesis.cap.reports.<module>`). Each batch writes its own `report.md`; `batch_set_report ROOT` combines every batch below `ROOT` into `ROOT/report.md`. |
 | `serving/` | vLLM-side code (reasoning-termination guard) |
@@ -228,11 +229,11 @@ methods. Its tokens are measured once per trial, charged as
 scene that matches a selected demonstration is rejected. Demonstrations off
 leaves every prompt byte-identical.
 
-Use [configs/config_frozen_v3.py](configs/config_frozen_v3.py) for
-demonstration experiments, for both the on and off arms:
+Use [configs/config_frozen_v5.py](configs/config_frozen_v5.py) for
+demonstration experiments, for both the on and off arms (earlier runs: v3):
 
 ```python
-from synthesis.cap.configs import config_frozen_v3 as frozen
+from synthesis.cap.configs import config_frozen_v5 as frozen
 
 config, model, instruction = frozen.configuration("stack", seed=0)
 off, _, _ = frozen.configuration("stack", seed=0, demonstrations=False)
@@ -922,6 +923,11 @@ The four new prompt blocks and their heading are stored in
 blocks, substitutes controller values, and records provenance. The resource move
 preserves the exact rendered text and existing supplement hashes; the base
 `legacy_v1`, `typed_v2`, and `typed_v3` packages remain unchanged.
+[prompts/primitive_v2.json](prompts/primitive_v2.json) (`primitive-prompt-v2`,
+Revision 7) is v1 without the motion-planning block's sentence "Express any
+required lift, transfer, and descent stages explicitly."; select it with
+`RunConfig.primitive_prompt_version` (default `primitive-prompt-v1`; v2 in
+`config_frozen_v5`).
 
 The reproducible 220-trial design is provided by:
 
