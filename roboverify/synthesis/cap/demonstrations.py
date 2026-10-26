@@ -504,14 +504,21 @@ def render_inputs(demonstration):
     return lines
 
 
-def render_demonstration(demonstration, frames, position, total):
+def summary_line(demonstration, frames):
+    """Task, blocks, recorded states and frame counts of one compacted trace."""
     count = demonstration.num_blocks
     steps = len(demonstration.states)
-    lines = [
-        f"DEMONSTRATION {position}/{total}: {demonstration.task}, {count} blocks"
+    return (
+        f"{demonstration.task}, {count} blocks"
         f" {block_name(0)}..{block_name(count - 1)}, {steps} states"
         f" (t=0..{steps - 1}), {sum(f.kind == 'event' for f in frames)} events,"
         f" {sum(f.kind == 'waypoint' for f in frames)} waypoints"
+    )
+
+
+def render_demonstration(demonstration, frames, position, total):
+    lines = [
+        f"DEMONSTRATION {position}/{total}: " + summary_line(demonstration, frames)
     ]
     lines += render_inputs(demonstration)
     lines += [render_frame(frame) for frame in frames]

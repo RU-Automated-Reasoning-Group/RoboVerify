@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import numpy as np
 
 from ..config import RecoveryConfig, RecoveryFeedbackConfig
-from ..recovery_keyframes import VERSION, rdp_keyframes
+from ..recovery_keyframes import TITLE, VERSION, rdp_keyframes
 from . import test_recovery
 
 
@@ -37,8 +37,8 @@ def synthetic_trace(cycles=6):
     )
 
 
-def size(item):
-    return len(json.dumps(item, sort_keys=True, separators=(",", ":")).encode())
+def size(text):
+    return len(text.encode("utf-8"))
 
 
 class KeyframeConfigTests(unittest.TestCase):
@@ -59,33 +59,54 @@ class KeyframeConfigTests(unittest.TestCase):
 
 
 class RdpKeyframeTests(unittest.TestCase):
-    def test_complete_rendering_uses_the_demonstration_format(self):
-        item, delivered, available = rdp_keyframes(synthetic_trace(), 0.01, 10**6)
+    def test_complete_section_uses_the_demonstration_layout(self):
+        text, delivered, available = rdp_keyframes(synthetic_trace(), 2, 0.01, 10**6)
         self.assertEqual(delivered, available)
-        self.assertEqual((item["method"], item["version"]), ("rdp", VERSION))
-        self.assertNotIn("omitted_frames", item)
-        self.assertEqual(item["inputs"], ["inputs: b0=o0"])
-        self.assertTrue(item["frames"][0].startswith("t=0 event "))
-        self.assertIn("holds:", item["frames"][0])
-        self.assertTrue(any(" waypoint " in f for f in item["frames"]))
-        self.assertTrue(any("changes:" in f for f in item["frames"]))
+        lines = text.splitlines()
+        self.assertEqual(lines[0], f"{TITLE} ({VERSION})")
+        body = next(
+            i for i, line in enumerate(lines) if line.startswith("FAILED EXECUTION (")
+        )
+        self.assertRegex(
+            lines[body], r"^FAILED EXECUTION \(round 2\): stack, 2 blocks o0\.\.o1, "
+        )
+        self.assertEqual(lines[body + 1], "inputs: b0=o0")
+        self.assertTrue(lines[body + 2].startswith("t=0 event "))
+        self.assertTrue(lines[body + 3].startswith("  blocks: o0="))
+        self.assertTrue(lines[body + 4].startswith("  holds: "))
+        self.assertEqual(lines[-1], "END OF FAILED EXECUTION")
+        self.assertNotIn("\\n", text)
+        self.assertTrue(any(" waypoint " in line for line in lines))
+        self.assertTrue(any(line.startswith("  changes: ") for line in lines))
+
+    def test_frames_match_the_demonstration_rendering(self):
+        from ..demonstrations import compact, render_frame
+        from ..recovery_keyframes import demonstration_view
+
+        trace = synthetic_trace()
+        text, _, _ = rdp_keyframes(trace, 0, 0.01, 10**6)
+        rendered = "\n".join(
+            render_frame(f) for f in compact(demonstration_view(trace), 0.01)
+        )
+        self.assertIn(rendered, text)
 
     def test_budget_keeps_first_and_latest_frames_with_full_atoms(self):
         trace = synthetic_trace()
-        full, _, available = rdp_keyframes(trace, 0.01, 10**6)
-        budget = size(full) // 2
-        item, delivered, _ = rdp_keyframes(trace, 0.01, budget)
-        self.assertLessEqual(size(item), budget)
+        full, _, available = rdp_keyframes(trace, 0, 0.01, 10**6)
+        budget = size(full) * 2 // 3
+        text, delivered, _ = rdp_keyframes(trace, 0, 0.01, budget)
+        self.assertLessEqual(size(text), budget)
         self.assertLess(delivered, available)
-        self.assertEqual(item["omitted_frames"]["count"], available - delivered)
-        self.assertEqual(item["frames"][0], full["frames"][0])
-        self.assertEqual(item["frames"][-1], full["frames"][-1])
-        kept_events = [f for f in item["frames"][1:] if " event " in f.split("\n")[0]]
-        self.assertIn("holds:", kept_events[0])
+        lines = text.splitlines()
+        marker = next(i for i, line in enumerate(lines) if line.startswith("... "))
+        self.assertIn(f"{available - delivered} frames omitted", lines[marker])
+        self.assertEqual(lines[-2], full.splitlines()[-2])
+        after = [line for line in lines[marker + 1 :] if line.startswith("  ")]
+        self.assertTrue(after[1].startswith("  holds: "))
 
     def test_no_frame_fits(self):
-        item, delivered, available = rdp_keyframes(synthetic_trace(), 0.01, 10)
-        self.assertIsNone(item)
+        text, delivered, available = rdp_keyframes(synthetic_trace(), 0, 0.01, 10)
+        self.assertIsNone(text)
         self.assertEqual(delivered, 0)
         self.assertGreater(available, 0)
 
@@ -129,12 +150,15 @@ class RdpRecoveryTests(unittest.TestCase):
             feedback={"evidence_layout": "fixed_items", "keyframe_method": "rdp"},
         )
         self.assertTrue(result["success"], result)
-        self.assertIn(VERSION, backend.prompts[1])
-        self.assertIn("t=0 event", backend.prompts[1])
+        prompt = backend.prompts[1]
+        self.assertIn(f"\n\n{TITLE} ({VERSION})\n", prompt)
+        self.assertIn("\nt=0 event ", prompt)
+        self.assertLess(prompt.index('"keyframes":{'), prompt.index(TITLE + " ("))
         root = Path(result["attempts"][1]["run_dir"]) / "artifacts/trial_001"
         feedback = json.loads((root / "recovery_feedback.json").read_text())
         self.assertEqual(feedback["keyframe_method"], "rdp")
         self.assertEqual(feedback["evidence"]["keyframes"]["method"], "rdp")
+        self.assertIn(feedback["keyframe_text"], prompt)
         self.assertEqual(feedback["item_delivery"]["keyframes"], "complete")
 
 

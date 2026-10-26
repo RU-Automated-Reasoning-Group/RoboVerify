@@ -516,39 +516,46 @@ def select_relevant_evidence(
         if "selected_event_ids" in required:
             required["selected_event_ids"].remove(removed["event_id"])
             required["omitted_event_count"] += 1
-    keyframe_delivery = None
+    keyframe_delivery, keyframe_text = None, None
     if not legacy and items.keyframes and items.keyframe_method == "rdp":
-        # Revision 7.2: the rollout compacted like a demonstration, in the room
-        # the other (fixed-size) items leave under the cap.
+        # Revision 7.2: the rollout compacted like a demonstration, rendered as
+        # a plain-text section after the evidence object, in the room the other
+        # (fixed-size) items leave under the cap. The object keeps an index.
+        from .recovery_keyframes import TITLE
         from .recovery_keyframes import VERSION as KEYFRAME_VERSION
         from .recovery_keyframes import rdp_keyframes
 
-        required.pop("keyframes", None)
-        room = token_limit - token_bound(encoded(required)) - 16
-        item, delivered, available = rdp_keyframes(
+        required["keyframes"] = {
+            "method": "rdp",
+            "version": KEYFRAME_VERSION,
+            "section": TITLE + " (plain text after this object)",
+            "delivered_frames": 0,
+            "available_frames": 0,
+        }
+        room = token_limit - token_bound(encoded(required)) - 32
+        keyframe_text, delivered, available = rdp_keyframes(
             trace,
+            len(earlier),
             items.keyframe_waypoint_tolerance,
             min(items.keyframe_bytes, room),
         )
-        required["keyframes"] = item or {
-            "method": "rdp",
-            "version": KEYFRAME_VERSION,
-            "omitted_frames": {
-                "count": available,
-                "note": "no frame fits the remaining evidence cap",
-            },
-        }
+        required["keyframes"].update(
+            delivered_frames=delivered, available_frames=available
+        )
+        if keyframe_text is None:
+            required["keyframes"]["section"] = "omitted: no frame fits the cap"
         keyframe_delivery = (
             "complete"
             if delivered == available
             else {"partial": delivered, "available": available}
         )
-    if token_bound(encoded(required)) > token_limit:
+    keyframe_bytes = token_bound(keyframe_text) if keyframe_text else 0
+    if token_bound(encoded(required)) + keyframe_bytes > token_limit:
         return {"ready": False, "reason": "required_feedback_exceeds_token_limit"}
     feedback = {
         "ready": True,
         "evidence": required,
-        "feedback_token_bound": token_bound(encoded(required)),
+        "feedback_token_bound": token_bound(encoded(required)) + keyframe_bytes,
         "current_sources": record["sources"],
         "execution_bindings": record["bindings"],
     }
@@ -599,6 +606,7 @@ def select_relevant_evidence(
     feedback.update(
         item_delivery=delivery,
         keyframe_method=items.keyframe_method,
+        keyframe_text=keyframe_text,
         history_mode=cfg.history.mode,
         evidence_layout=items.evidence_layout,
         evidence_cap=token_limit,
@@ -666,7 +674,15 @@ def recovery_prompt(original, feedback):
         if feedback.get("history_mode") == "summaries"
         else "OBSERVED FAILURE (latest attempt)"
     )
-    return prompt + heading + "\n" + encoded(feedback["evidence"]) + RECOVERY_OUTPUT
+    keyframes = feedback.get("keyframe_text")
+    return (
+        prompt
+        + heading
+        + "\n"
+        + encoded(feedback["evidence"])
+        + ("\n\n" + keyframes if keyframes else "")
+        + RECOVERY_OUTPUT
+    )
 
 
 UNIT = re.compile(r"(?:^|/)checkpoints/[^/]+/(.+)$")

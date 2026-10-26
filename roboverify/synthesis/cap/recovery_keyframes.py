@@ -3,41 +3,61 @@
 The recorded rollout is compacted exactly like a demonstration
 (``demonstrations.compact``): event frames at the first and last state and at
 every gripper-command switch, with block positions and DSL predicate changes,
-plus Ramer-Douglas-Peucker corners of the gripper path between events. Frames
-are rendered with the demonstration line format.
+plus Ramer-Douglas-Peucker corners of the gripper path between events.
 
-The keyframe item has its own byte budget. When the frames do not fit, the
-first frame and the most recent frames (nearest the failure) are kept, and the
-omitted span is declared; the first event kept after the gap lists every true
-atom instead of changes relative to an omitted frame.
+The result is a plain-text section laid out like one demonstration of the
+demonstration block: a summary line, the inputs (and goals) lines and the
+rendered frames (``recovery-keyframes-v2``). It follows the evidence object in
+the recovery request, which carries only an index entry for it.
+
+The section has its own byte budget. When the frames do not fit, the first
+frame and the most recent frames (nearest the failure) are kept, a marker line
+declares the omitted span, and the first event kept after the gap lists every
+true atom instead of changes relative to an omitted frame.
 """
 
-import json
 from dataclasses import replace
 
 from .demonstrations import (
     Demonstration,
     compact,
+    number,
     relations,
     render_frame,
     render_inputs,
+    summary_line,
 )
 
-VERSION = "recovery-keyframes-v1"
-FORMAT = (
-    "Recorded execution of the failed attempt, compacted like the demonstrations"
-    " (demo-keyframes-v1). o<i> is physical block i (block_<i> elsewhere in this"
-    " evidence; see object_handle_to_physical_id) and g<j> is goal j (goal_<j>)."
-    " Positions are world-frame (x,y,z) centres in metres; t is the recorded"
-    " control step. Gripper command: the latest open/closed command before step t;"
-    " holding names the block within 0.030 m of a closed gripper, or none. event"
-    " frames are the first and last step and every gripper-command switch; they"
-    " list every block position and the DSL predicates of your API: holds lists"
-    " every true atom, changes lists atoms that became true (+) or false (-) since"
-    " the previous listed event. waypoint frames are corners of the gripper's 3D"
-    " path between events (Ramer-Douglas-Peucker with waypoint_tolerance) and list"
-    " only the gripper and the held block."
-)
+VERSION = "recovery-keyframes-v2"
+TITLE = "FAILED EXECUTION KEYFRAMES"
+END = "END OF FAILED EXECUTION"
+
+
+def header(tolerance):
+    return (
+        f"{TITLE} ({VERSION})\n"
+        "The latest attempt's recorded execution, compacted with the demonstration"
+        " format (demo-keyframes-v1). It is debugging evidence of the failed"
+        " attempt, not a demonstration.\n"
+        "Format:\n"
+        f"- Settings: waypoint_tolerance={number(tolerance)} m. Positions are"
+        " world-frame (x,y,z) block or gripper centres in metres with 3 decimals;"
+        " t is the recorded control step.\n"
+        "- o<i> is physical block i: block_<i> in the evidence above (see"
+        " object_handle_to_physical_id); g<j> is goal j (goal_<j>). The inputs line"
+        " gives this execution's value of each input handle.\n"
+        "- Gripper command: open or closed, the latest gripper command issued"
+        " before step t. holding names the block within 0.030 m of a closed"
+        " gripper, or none.\n"
+        "- event frames are the first and last step and every step at which the"
+        " gripper command switches between open and closed. They list every block"
+        " position and the DSL predicates of your API: holds lists every true atom,"
+        " and changes lists the atoms that became true (+) or false (-) since the"
+        " previous listed event.\n"
+        "- waypoint frames are corners of the gripper's 3D path between events"
+        " (Ramer-Douglas-Peucker simplification with waypoint_tolerance). They list"
+        " only the gripper and the held block.\n\n"
+    )
 
 
 def demonstration_view(trace):
@@ -60,66 +80,47 @@ def demonstration_view(trace):
     )
 
 
-def _size(value):
-    return len(json.dumps(value, separators=(",", ":"), sort_keys=True).encode())
-
-
 def _with_full_atoms(view, frame):
     """An event frame that lists every true atom (after an omitted span)."""
     if frame.kind != "event" or frame.relations is not None:
         return frame
     return replace(
-        frame,
-        relations=tuple(relations(view, frame.t)),
-        added=None,
-        removed=None,
+        frame, relations=tuple(relations(view, frame.t)), added=None, removed=None
     )
 
 
-def _assemble(item, view, frames, tail):
+def _render(view, frames, tail, round_index, tolerance):
     """Frame 0, then frames[tail:]; frames 1..tail-1 are declared omitted."""
-    result = dict(item)
+    lines = [f"FAILED EXECUTION (round {round_index}): " + summary_line(view, frames)]
+    lines += render_inputs(view)
     if tail <= 1:
-        result["frames"] = [render_frame(f) for f in frames]
-        return result
-    kept = [frames[0]] + list(frames[tail:])
-    # Changes would refer to an omitted event: list every true atom instead.
-    first_event = next((i for i, f in enumerate(kept) if i and f.kind == "event"), None)
-    if first_event is not None:
-        kept[first_event] = _with_full_atoms(view, kept[first_event])
-    result["frames"] = [render_frame(f) for f in kept]
-    result["omitted_frames"] = {
-        "count": tail - 1,
-        "from_t": frames[1].t,
-        "to_t": frames[tail - 1].t,
-        "note": "frames after the first are omitted up to the most recent frames"
-        " that fit the keyframe budget",
-    }
-    return result
+        lines += [render_frame(f) for f in frames]
+    else:
+        kept = list(frames[tail:])
+        # Changes would refer to an omitted event: list every true atom instead.
+        first = next((i for i, f in enumerate(kept) if f.kind == "event"), None)
+        if first is not None:
+            kept[first] = _with_full_atoms(view, kept[first])
+        lines.append(render_frame(frames[0]))
+        lines.append(
+            f"... {tail - 1} frames omitted (t={frames[1].t}..{frames[tail - 1].t})"
+            " to fit the keyframe budget ..."
+        )
+        lines += [render_frame(f) for f in kept]
+    return header(tolerance) + "\n".join(lines) + "\n" + END + "\n"
 
 
-def rdp_keyframes(trace, waypoint_tolerance, budget):
-    """Keyframe item within ``budget`` bytes, or None when even frame 0 cannot fit.
+def rdp_keyframes(trace, round_index, waypoint_tolerance, budget):
+    """Plain-text keyframe section within ``budget`` UTF-8 bytes.
 
-    Returns ``(item, delivered_frames, available_frames)``.
+    Returns ``(text, delivered_frames, available_frames)``; ``text`` is None when
+    even the first frame cannot fit.
     """
     view = demonstration_view(trace)
     frames = compact(view, waypoint_tolerance)
-    steps = len(view.states)
-    item = {
-        "method": "rdp",
-        "version": VERSION,
-        "waypoint_tolerance": waypoint_tolerance,
-        "format": FORMAT,
-        "summary": (
-            f"{trace.task}, {view.num_blocks} blocks, {steps} states"
-            f" (t=0..{steps - 1}), {sum(f.kind == 'event' for f in frames)} events,"
-            f" {sum(f.kind == 'waypoint' for f in frames)} waypoints"
-        ),
-        "inputs": render_inputs(view),
-    }
     for tail in range(1, len(frames) + 1):
-        result = _assemble(item, view, frames, tail)
-        if _size(result) <= budget:
-            return result, len(result["frames"]), len(frames)
+        text = _render(view, frames, tail, round_index, waypoint_tolerance)
+        if len(text.encode("utf-8")) <= budget:
+            delivered = len(frames) if tail <= 1 else len(frames) - tail + 1
+            return text, delivered, len(frames)
     return None, 0, len(frames)
