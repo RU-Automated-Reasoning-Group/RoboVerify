@@ -76,9 +76,11 @@ of the 2026-10-26 change are in
   `audit_demos --post-settling-steps 50`.
 - CaP `config_frozen_v1`–`v3` keep `post_settling_steps: 0`. `config_frozen_v4`
   is v3 plus `post_settling_steps: 50` and the Unstack/Reverse archives
-  re-collected from settled starts (`demos/cap-revision6-v4/`). Never edit a
-  frozen version; record a change as a new `config_frozen_vN.py`.
+  re-collected from settled starts (`demos/cap-revision6-v4/`); `config_frozen_v5`
+  (current) keeps v4's settling and changes only the primitive prompt
+  (Revision 7). Never edit a frozen version; record a change as a new
+  `config_frozen_vN.py`.
 - Unstack and Reverse runs made before 2026-10-26 started from unsettled scenes.
   Recomputing them under v2 settles only the final state; say so when reporting
   them. To rerun one of them exactly, set `initial_settling_steps: 0`; all
-  frozen CaP versions, v1–v4, otherwise use the default 50.
+  frozen CaP versions, v1–v5, otherwise use the default 50.
