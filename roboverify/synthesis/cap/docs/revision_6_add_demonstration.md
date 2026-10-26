@@ -520,6 +520,22 @@ Implements Section 3.6 in [serving/prefix_cache.py](../serving/prefix_cache.py) 
   - the probe through a balancer and against a plain endpoint, and refusal when reuse or its report is missing;
   - which jobs require the probe.
 - **Deployment check (2026-10-26).** After restarting both instances with the new flag, the probe verified both: the second request had 3,920 of 4,373 prompt tokens cached, and its time fell from 1.52 s to 0.19 s.
+- **Trial check (2026-10-26, `runs/cap-revision6/20261026-prefix-cache-check/`, scene seed 1).**
+  - Stack succeeded in one call; the batch probe was recorded in `execution_metadata.json`.
+  - Reverse used all 4 recovery rounds and ended `primitive_failed`. All 6 of its requests were served by one instance (8127).
+
+  | Round | Purpose | Prompt tokens | Cached | Seconds |
+  | ---: | --- | ---: | ---: | ---: |
+  | 0 | policy | 49,287 | 0 | 572 |
+  | 1 | policy | 57,297 | 48,608 | 388 |
+  | 2 | policy | 58,507 | 48,608 | 421 |
+  | 3 | policy | 58,250 | 48,608 | 404 |
+  | 3 | repair | 49,684 | 0 | 435 |
+  | 4 | policy | 59,242 | 49,392 | 341 |
+
+  - The trial reused 195,216 of 332,267 prompt tokens.
+  - **The round-3 repair request missed even though it shares the 46,814-token block.** Our likely explanation (not yet confirmed in vLLM's source): this checkpoint mixes attention with Mamba-style layers, and in vLLM's `align` cache mode a recurrent state is kept only at the block-aligned end of each cached prompt. A request can then resume only from such a point. Each policy request extends round 0's cached prompt (hit at 48,608 tokens). The repair prompt diverges after the block, before that point, so no saved state applies. Round 4 extends the repair prompt and hits at 49,392.
+  - Consequence: for this checkpoint, reuse is guaranteed only for requests that extend an earlier request's whole prompt, not for every request that shares the block. Generation time dominates these requests (minutes) in any case.
 
 ## Backlog (not implemented)
 
