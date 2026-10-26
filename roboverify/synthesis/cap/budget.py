@@ -7,6 +7,16 @@ from .contracts import BudgetExceeded
 from .timing import PhaseTimings
 
 
+def effort_tokens(count, demonstration_tokens=0):
+    """Provider total tokens of one request, excluding its demonstration block.
+
+    The block is measured once per trial with the same tokenizer; joining it to
+    the method prompt can change the count at the boundary by a token, so the
+    difference is clamped at zero.
+    """
+    return max(0, int(count) - int(demonstration_tokens))
+
+
 @dataclass
 class Budget:
     timeout: float = 600.0
@@ -22,6 +32,9 @@ class Budget:
     calls: int = 0
     steps: int = 0
     tokens: int = 0
+    # Revision 6: tokens of the demonstration block, charged separately from the
+    # effort budget (``tokens``/``max_tokens``), once per request that carries it.
+    demonstration_tokens: int = 0
     unknown_usage_calls: int = 0
     started: float = field(default_factory=time.monotonic)
 
@@ -60,11 +73,13 @@ class Budget:
             self.exhaust("model_calls", "Model-call budget exhausted")
         self.calls += 1
 
-    def account_tokens(self, count):
+    def account_tokens(self, count, demonstration_tokens=0):
+        """Charge provider-reported total tokens, minus the demonstration block."""
+        self.demonstration_tokens += demonstration_tokens
         if count is None:
             self.unknown_usage_calls += 1
         else:
-            self.tokens += int(count)
+            self.tokens += effort_tokens(count, demonstration_tokens)
             if self.tokens > self.max_tokens:
                 self.exhaust("tokens", "Token budget exhausted")
 

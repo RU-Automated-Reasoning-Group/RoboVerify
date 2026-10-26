@@ -96,6 +96,30 @@ def main(argv=None):
     )
     parser.add_argument("--video-mode", choices=("inline", "deferred", "off"))
     parser.add_argument("--output-dir", default="runs")
+    demonstrations = parser.add_argument_group(
+        "demonstration input (Revision 6; requires --prompt-version typed_v5)"
+    )
+    demonstrations.add_argument(
+        "--demonstrations",
+        type=Path,
+        help="demonstrations.npz archive; enables demonstration input",
+    )
+    demonstrations.add_argument(
+        "--demonstration-traces",
+        nargs="+",
+        help="Trace ids in rendering order (d0 d1 ...); all when omitted",
+    )
+    demonstrations.add_argument("--demonstration-archive-sha256")
+    demonstrations.add_argument(
+        "--waypoint-tolerance", type=float, default=0.01, help="RDP tolerance (m)"
+    )
+    demonstrations.add_argument("--demonstration-max-tokens", type=int, default=131072)
+    demonstrations.add_argument(
+        "--demonstration-token-counter",
+        choices=("server_tokenize", "utf8_bytes"),
+        default="server_tokenize",
+    )
+    demonstrations.add_argument("--tokenizer-url")
     args = parser.parse_args(argv)
     defaults = {
         "openrouter": ("https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"),
@@ -152,6 +176,16 @@ def main(argv=None):
         save_video=args.save_video,
         video_mode=args.video_mode,
         output_root=args.output_dir,
+        demonstrations={
+            "enabled": args.demonstrations is not None,
+            "archive": str(args.demonstrations) if args.demonstrations else None,
+            "trace_ids": args.demonstration_traces,
+            "archive_sha256": args.demonstration_archive_sha256,
+            "waypoint_tolerance": args.waypoint_tolerance,
+            "max_tokens": args.demonstration_max_tokens,
+            "token_counter": args.demonstration_token_counter,
+            "tokenizer_url": args.tokenizer_url,
+        },
     )
     backend = None
     if args.responses_file:

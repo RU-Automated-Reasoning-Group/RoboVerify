@@ -9,7 +9,9 @@ from pathlib import Path
 from .contracts import GOAL_API_NAMES
 
 # typed_v4 = typed_v3 plus the goal API, rendered only for goal tasks.
-PROMPT_VERSIONS = ("legacy_v1", "typed_v2", "typed_v3", "typed_v4")
+# typed_v5 = typed_v4 plus the demonstration block templates (Revision 6); with
+# demonstrations off it renders typed_v4 text.
+PROMPT_VERSIONS = ("legacy_v1", "typed_v2", "typed_v3", "typed_v4", "typed_v5")
 PROMPT_ROOT = Path(__file__).with_name("prompts")
 
 

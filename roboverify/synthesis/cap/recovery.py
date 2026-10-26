@@ -11,7 +11,7 @@ from collections import Counter
 from dataclasses import asdict, replace
 from pathlib import Path
 
-from .budget import Budget
+from .budget import Budget, effort_tokens
 from .contracts import BudgetExceeded
 
 VERSION = "cap-recovery-v1"
@@ -55,14 +55,16 @@ class RoundBudget(Budget):
             self.parent.model_call()
         super().model_call()
 
-    def reserve_request(self, prompt):
+    def reserve_request(self, prompt, demonstration_tokens=0):
+        """Reserve a request's effort tokens; ``prompt`` excludes the demonstration
+        block, whose measured tokens count only toward the context allowance."""
         self.remaining()
         if self.calls >= self.max_model_calls:
             self.exhaust("model_calls", "Round model-call budget exhausted")
         if self.parent.calls >= self.parent.max_model_calls:
             self.parent.exhaust("model_calls", "Trial model-call budget exhausted")
         amount = token_bound(prompt) + self.output_tokens
-        if amount > self.context_tokens:
+        if amount + demonstration_tokens > self.context_tokens:
             self.exhaust(
                 "context_tokens", "Input plus output exceeds context allowance"
             )
@@ -75,21 +77,27 @@ class RoundBudget(Budget):
         self.charged_tokens += amount
         self.parent.charged_tokens += amount
         self.reservation = amount
-        return {
+        reservation = {
             "input_bound": token_bound(prompt),
             "output_cap": self.output_tokens,
             "reserved_tokens": amount,
             "counting_method": "utf8-byte-upper-bound",
         }
+        if demonstration_tokens:
+            reservation["demonstration_tokens"] = demonstration_tokens
+        return reservation
 
     def abandon_request(self):
         self.unknown_usage_calls += 1
         self.parent.unknown_usage_calls += 1
         self.reservation = 0
 
-    def account_tokens(self, count):
+    def account_tokens(self, count, demonstration_tokens=0):
+        self.demonstration_tokens += demonstration_tokens
+        self.parent.demonstration_tokens += demonstration_tokens
         if count is not None:
-            difference = int(count) - self.reservation
+            count = effort_tokens(count, demonstration_tokens)
+            difference = count - self.reservation
             self.charged_tokens += difference
             self.parent.charged_tokens += difference
         # Unknown/failed usage retains the reservation rather than becoming free.
@@ -97,8 +105,8 @@ class RoundBudget(Budget):
             self.unknown_usage_calls += 1
             self.parent.unknown_usage_calls += 1
         else:
-            self.tokens += int(count)
-            self.parent.tokens += int(count)
+            self.tokens += count
+            self.parent.tokens += count
         if self.charged_tokens > self.max_tokens:
             self.exhaust("tokens", "Actual usage exceeds round token allowance")
         if self.parent.charged_tokens > self.parent.max_tokens:
@@ -897,7 +905,12 @@ def run_recovery(config, model_config, **kwargs):
             "seed_attempt": str(seed_path) if seed_path else None,
             "instruction": kwargs.get("instruction"),
             "initial_state": str(kwargs.get("initial_state")),
-        },
+        }
+        | (
+            {"demonstration_input": kwargs["demonstrations"].manifest}
+            if kwargs.get("demonstrations") is not None
+            else {}
+        ),
         slug=f"{config.method}-recovery-{uuid.uuid4().hex[:8]}",
         capture_stdout=False,
     )
@@ -978,6 +991,14 @@ def run_recovery(config, model_config, **kwargs):
             result.setdefault("task_spec_success", None)
             attempts.append(result)
             logger.artifact(f"rounds/{index:03d}/result.json", result)
+            if (
+                result.get("budget_exhausted_by") == "demonstration_tokens"
+                or result.get("status") == "demonstration_rejected"
+            ):
+                # The demonstration input itself was rejected; another round
+                # would receive the same input (Revision 6).
+                stop = "demonstration_input_rejected"
+                break
             try:
                 record = collect_failure(result)
             except Exception as exc:
@@ -1109,6 +1130,15 @@ def run_recovery(config, model_config, **kwargs):
             active_wall_seconds=time.monotonic() - ledger.started,
             queue_wait_seconds=kwargs.get("queue_wait_seconds", 0),
         )
+        if kwargs.get("demonstrations") is not None:
+            context = kwargs["demonstrations"]
+            final.update(
+                demonstration_tokens=ledger.demonstration_tokens,
+                demonstration_block_tokens=context.tokens,
+                demonstration_context_sha256=context.sha256,
+                demonstration_trace_ids=context.manifest["trace_ids"],
+                provider_total_tokens=ledger.tokens + ledger.demonstration_tokens,
+            )
         phases = Counter()
         for attempt in attempts:
             phases.update(attempt.get("phase_seconds", {}))
