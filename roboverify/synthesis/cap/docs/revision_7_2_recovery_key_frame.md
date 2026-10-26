@@ -1,6 +1,6 @@
 # Revision 7.2: demonstration-style (RDP) keyframes in recovery feedback
 
-- **Status:** implemented 2026-10-26 (Section 4); experiment in Section 5, results in [revision_7_2_report.md](revision_7_2_report.md).
+- **Status:** implemented and run 2026-10-26 (Sections 4 and 5). Results: [revision_7_2_report.md](revision_7_2_report.md): RDP recovered 40 and legacy 33 of the 49 failed round-0 attempts (11 vs 4 discordant, p = 0.12).
 - **Goal:** show the model the failed rollout the same way it sees a demonstration: gripper-command events with block positions and DSL predicate changes, plus Ramer-Douglas-Peucker (RDP) corners of the gripper path. The method is a configuration option; the legacy keyframes stay the default.
 
 ## 1. Current recovery keyframes (`legacy`, cap-recovery-v1/v2)
