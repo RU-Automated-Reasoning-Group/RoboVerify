@@ -35,13 +35,13 @@ methods. Baseline modes are prompt-only; method-1 modes are checked:
 - [Revision 4.2.1: deferred video rendering — implemented](docs/revision_4_2_1_deferred_video_rendering.md).
 - [Revision 4: deferred improvements](docs/revision_4_unimplemented.md).
 - [Revision 5: task expansion plan](docs/revision_5_add_tasks.md).
-- [Revision 6: demonstration input plan](docs/revision_6_add_demonstration.md).
+- [Revision 6: demonstration input — implemented; real-model smoke and window upgrade pending](docs/revision_6_add_demonstration.md).
 
 Revision 3 fixes loop-carried effect propagation and generic helper type merging
 in the shared checker (`shared-contract-v3`). All 106 CaP tests pass, including
 18 new regressions. Baseline execution is unchanged; its audit uses the revised
 contract for new runs. See [implementation and validation](docs/revision_3.md).
-Configurable shared failure recovery is implemented as `cap-recovery-v1`; task expansion and demonstration input remain deferred plans.
+Configurable shared failure recovery is implemented as `cap-recovery-v1`. Demonstration input (Revision 6) is implemented as `RunConfig.demonstrations` (off by default) with the `demo-keyframes-v1` compaction and the `typed_v5` package; see [Demonstration input](#demonstration-input).
 
 ## Package layout
 
@@ -49,7 +49,7 @@ Configurable shared failure recovery is implemented as `cap-recovery-v1`; task e
 | --- | --- |
 | `*.py` (package root) | Shared runtime: task adapter and scoring (`adapter`, `tasks`, `runner`, `runtime`, `recovery`), DSL contract and checker (`contracts`, `checker`, `validation`, `audit`), model access and prompts (`llm`, `prompt_package`, `primitive_prompts`, `primitive_feedback`), batch execution (`batch`, `batch_worker`, `gpu_scheduler`, `request_control`, `deferred_video`), logging and budgets |
 | `cap_google_baseline/`, `cap_method_1/`, `cap_method_2/` | The three methods |
-| `configs/` | Versioned experiment configurations (`config_frozen_v1`, `config_frozen_v2`) |
+| `configs/` | Versioned experiment configurations (`config_frozen_v1`, `config_frozen_v2`, `config_frozen_v3`) |
 | `experiments/` | Batch launchers for the Revision 4.2 and 4.3 experiments (`python -m synthesis.cap.experiments.<module>`) |
 | `reports/` | Tables, figures and analyses of finished batches (`python -m synthesis.cap.reports.<module>`) |
 | `serving/` | vLLM-side code (reasoning-termination guard) |
@@ -178,8 +178,9 @@ For example, an offline generation diagnostic using the existing scripted inputs
 ```
 
 The versioned resources are [legacy_v1.json](prompts/legacy_v1.json) and
-[typed_v2.json](prompts/typed_v2.json), [typed_v3.json](prompts/typed_v3.json), and [typed_v4.json](prompts/typed_v4.json)
-(typed_v3 plus the goal API; tower-task prompts render byte-identically to typed_v3). Add a new version for future prompt changes;
+[typed_v2.json](prompts/typed_v2.json), [typed_v3.json](prompts/typed_v3.json), [typed_v4.json](prompts/typed_v4.json)
+(typed_v3 plus the goal API; tower-task prompts render byte-identically to typed_v3), and [typed_v5.json](prompts/typed_v5.json)
+(typed_v4 plus the demonstration block templates; with demonstrations off it renders typed_v4 text). Add a new version for future prompt changes;
 keep existing versions fixed for reproducible comparisons. Package bytes are
 frozen on first load in each process. The existing contracts.py constants and
 legacy template files are preserved and checked against legacy_v1.
@@ -198,6 +199,43 @@ both condition modes retain their behavior. Offline tests check old prompt bytes
 role-specific repairs, retries, and fixture action parity across versions.
 No live performance improvement is established. See
 [Revision 2 section 1](docs/revision_2.md#1-make-api-types-and-semantics-explicit-in-the-prompt).
+
+## Demonstration input
+
+`RunConfig.demonstrations` (Revision 6) gives CaP selected expert demonstrations
+from a `cfg/recordings.py` archive. The loader reads only states, actions,
+task, block count, initial bindings and the goal layout. The generating program,
+runtime events, task_spec text, fingerprints and simulator snapshots never reach
+the model.
+
+Each trajectory is compacted (`demo-keyframes-v1`) into two kinds of frames:
+
+- gripper-command events, with block positions and DSL predicate changes;
+- RDP waypoints of the gripper path, with tolerance
+  `demonstrations.waypoint_tolerance` (default 0.01 m).
+
+The rendered block (`typed_v5`) is the first part of every request of all three
+methods. Its tokens are measured once per trial, charged as
+`demonstration_tokens` and excluded from the effort budgets. A block over
+`demonstrations.max_tokens` fails the trial before any request. An evaluation
+scene that matches a selected demonstration is rejected. Demonstrations off
+leaves every prompt byte-identical.
+
+Use [configs/config_frozen_v3.py](configs/config_frozen_v3.py) for
+demonstration experiments, for both the on and off arms:
+
+```python
+from synthesis.cap.configs import config_frozen_v3 as frozen
+
+config, model, instruction = frozen.configuration("stack", seed=0)
+off, _, _ = frozen.configuration("stack", seed=0, demonstrations=False)
+```
+
+It pins 15 demonstrations per task (seeds 1000–1014) under
+`demos/cap-revision6/`. ReStack, Grid and Pyramid blocks need the 262,144-token
+served window, which is still pending; until then only Stack, Unstack and
+Reverse requests fit. Details, measured tokens and validation are in
+[Revision 6, Section 6](docs/revision_6_add_demonstration.md#6-implementation-2026-10-26).
 
 ## Shared checker, final-output audit, and Method 2
 

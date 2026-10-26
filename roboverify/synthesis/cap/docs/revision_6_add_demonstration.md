@@ -1,6 +1,6 @@
 # Revision 6: configurable demonstration input for CaP
 
-- **Status:** planned; not implemented. RoboVerify's demonstration collector is available (Section 1.1). The information boundary and the demonstration compaction method were decided on 2026-10-25 (Section 3); the loader still needs to be agreed with Yuning.
+- **Status:** implemented on branch `feature/cap-demonstrations` (2026-10-26; Section 6), with the user's approval of this design. Offline validation passes; the real-model smoke trial is still pending because the model server was stopped (Section 6.6). The served-window upgrade of Section 3.5 is pending. The loader has not yet been reviewed with Yuning.
 - **Goal:** give CaP access to the same selected demonstration data used by RoboVerify's demonstration-driven synthesis, with an explicit on/off setting for ablation.
 - **Dependencies:** [task support plan](revision_5_add_tasks.md), an agreed demonstration schema, and validated data. Stack is the first integration target.
 
@@ -145,7 +145,7 @@ actions[76] = [ 0.0110,  0.0034,  0.1210,  0.0000]   # last retreat step after R
   | `demonstrations.waypoint_tolerance` | `0.01` (m) | RDP tolerance for motion waypoints (Section 3.3). Must be finite and positive. Recorded in every trial's configuration and in the serialized block header. |
   | `demonstrations.max_tokens` | `131072` | Limit for the rendered demonstration block (Section 3.5); exceeding it is an explicit failure |
 
-  The remaining option names (archive path, trace selection) are still to be designed.
+  The remaining options were added with the implementation: `archive`, `trace_ids`, `archive_sha256`, `token_counter` and `tokenizer_url` (Section 6.1).
 - Configure archive paths, selected trace IDs, and a deterministic serialization version.
 - Validate task identity, block/goal bindings, trajectory completeness, and compatibility with the active primitive/predicate semantics.
 - Use the same selected demonstration identities and representation across Baseline, Method 1, and Method 2.
@@ -267,7 +267,7 @@ Design notes:
 
 ### 3.4 Prompt integration and accounting
 
-- Agree on the loader with Yuning before implementing it. The serializer above fixes only what the LLM sees.
+- The loader was implemented with the user's approval (Section 6.1); a review with Yuning is still open. The serializer above fixes only what the LLM sees.
 - Keep full simulator snapshots for restoration, but do not expose simulator internals to the LLM merely because they are present in the archive.
 - Version the demonstration block as a new prompt package; do not rewrite frozen packages.
 - Record demonstration hashes/IDs, ordering, serialization version, exact rendered prompts and token usage. Exceeding the input budget is an explicit failure, never silent truncation.
@@ -327,7 +327,161 @@ The served window binds first. A request may carry at most 98,304 − 32,768 = 6
 - Reject incompatible/malformed datasets and prevent evaluation-scene data from entering demonstration inputs unintentionally.
 - Validate at least one Stack integration end-to-end before extending to other tasks.
 - Preserve original benchmark results and report any new ablation as a separate batch.
-- This document does not authorize implementing these changes or launching new model experiments yet.
+- This document did not originally authorize implementation; the user approved implementing it on 2026-10-26 (Section 6). New model experiments still need a separate decision.
+
+## 6. Implementation (2026-10-26)
+
+Implemented on branch `feature/cap-demonstrations`. The LLM summarization in the Backlog is not implemented.
+
+### 6.1 Configuration and loading
+
+`RunConfig.demonstrations` ([config.py](../config.py), `DemonstrationConfig`):
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `enabled` | `false` | Off leaves every prompt byte-identical (Section 6.5) |
+| `archive` | `null` | `demonstrations.npz` written by `cfg/recordings.py`; required when enabled |
+| `trace_ids` | `null` | Selected trajectories and their rendering order (`"d0"`, `"d1"`, …); `null` selects all in archive order |
+| `archive_sha256` | `null` | Optional pin of the archive bytes |
+| `waypoint_tolerance` | `0.01` | RDP tolerance in metres; finite and > 0 |
+| `max_tokens` | `131072` | Limit for the rendered block |
+| `token_counter` | `server_tokenize` | `server_tokenize`: the vLLM `/tokenize` endpoint; `utf8_bytes`: a conservative byte bound for offline diagnostics |
+| `tokenizer_url` | `null` | Default: the model base URL's root plus `/tokenize` |
+
+- Enabling demonstrations requires a prompt package with demonstration templates (`typed_v5`); other packages are rejected.
+- `run_cap` exposes the same settings (`--demonstrations ARCHIVE`, `--demonstration-traces`, `--waypoint-tolerance`, `--demonstration-max-tokens`, `--demonstration-token-counter`, `--tokenizer-url`, `--demonstration-archive-sha256`). Batch configurations set `run_config.demonstrations`.
+- The loader ([demonstrations.py](../demonstrations.py), `load_demonstrations`) opens the NPZ directly and reads only each trace's `states`, `actions` and `indices`, its task, block count, seed and initial bindings, the goal layout and the initial goal bindings, plus `metadata.status`, `metadata.higher_tolerance` and `metadata.environment` for validation. It does not call `load_traces`, which would also materialize snapshots and events.
+- Validation rejects a missing or unpinned archive, an unknown format, unknown trace ids, another task or block count, other layout options (ReStack tower height, Grid rows/columns, Pyramid base), another Higher tolerance, a trace not marked `valid` by collection, malformed or non-finite arrays, actions outside [−1, 1], incomplete recordings (`indices` must be `0..T−1`, i.e. a state after every action), unexpected input bindings, and repeated seeds.
+- `seed` is read only for the evaluation-scene check: a trial is rejected (`status: demonstration_rejected`) if its fresh-scene seed, or the seed of its snapshot trace, equals a selected demonstration's seed, if its snapshot is a selected trace of the same archive, or if every block centre of its start lies within 1 mm of a demonstration's first state.
+
+### 6.2 Compaction (`demo-keyframes-v1`)
+
+- **Gripper command:** the latest nonzero gripper action (positive opens, negative closes; zero keeps the command). Before any command the gripper counts as open. State t follows action t − 1, so the command at state t reflects `actions[:t]`.
+- **Event frames:** the first and last state and every state whose command differs from the previous state's. Each lists every block position and the DSL atoms of the task API (`ON`, `ON_star`, `Higher`, `Scattered`, plus `ON_star_zero` for Reverse) over distinct blocks, evaluated with `predicates.scene.evaluate` under the configured Higher tolerance. Goal tasks add `AtGoal`/`HasBlock` (`goal_layout.occupancy`, 20 mm). The first event lists every true atom (`holds:`); later events list `+`/`−` changes since the previous event (`changes:`).
+- Atoms involving `tbl` are omitted, because in the shared semantics none holds for a block. `Scattered` is listed once per unordered pair. `ON_star_zero` uses the demonstration's first state as entry geometry.
+- **Motion waypoints:** RDP on the gripper path, applied separately to the path between consecutive event frames. Distances are to the chord segment, not the infinite line, so a lift followed by a descent along the same vertical keeps its top. Each waypoint lists the gripper position and the held block only.
+- **Held block:** with the command closed, the block whose centre is nearest the gripper, if it is within 3 cm.
+- **Names and numbers:** blocks are `o<i>` and goals `g<j>` (physical indices). The `inputs:` line gives `b0` (or `h0`), and goal tasks list the layout once per demonstration with `right`/`down` links. Positions use 3 decimals.
+- **Header:** the header template in `typed_v5` states the serialization version, waypoint tolerance, Higher tolerance and the format. The block ends with `END OF DEMONSTRATIONS` and a blank line.
+
+### 6.3 Prompt integration and records
+
+- `prompts/typed_v5.json` is `typed_v4` plus a `demonstrations` section (header, footer, serialization version); typed_v3/v4 are unchanged.
+- `LoggedModel.complete` prefixes the block to every request: policy, helper, repair and recovery requests of all three methods. The method prompt follows unchanged, so the block is an identical prefix across calls, methods and trials.
+- `run()` prepares the block once per trial, and every recovery round reuses it.
+- Each attempt writes:
+  - `artifacts/trial_001/demonstrations/context.txt`: the exact block;
+  - `demonstrations/manifest.json`: archive path and SHA-256, trace ids in order, per-demonstration seed, source hash (states, actions, bindings, layout) and text hash, frame steps, settings, serialization version, prompt-package hash, block hash, bytes and token count with its measurement method.
+- `config.json` contains the manifest as `demonstration_input`. Each request's `prompt_metadata.json` and `generation_end` event record `demonstration_context_sha256`, `demonstration_tokens` and `method_prompt_sha256`.
+- A block over `max_tokens` fails the trial before any request (`status: budget_exhausted`, `budget_exhausted_by: demonstration_tokens`). Recovery then stops with `demonstration_input_rejected`; rejected scenes stop recovery the same way.
+
+### 6.4 Token accounting
+
+- The block is tokenized once per trial. With `server_tokenize`, the runner sends `{"model", "prompt": block, "add_special_tokens": false}` to `/tokenize`.
+- Every request is charged `demonstration_tokens` = that count, separately. The effort budgets (`max_tokens`, round and trial totals) receive the provider's `total_tokens` minus the block count (`budget.effort_tokens`, clamped at 0).
+- The recovery reservation bounds only the method prompt plus output. The context check (`recovery.context_tokens`) also counts the block.
+- Results report `known_tokens` (effort, the existing meaning when demonstrations are off), `demonstration_tokens` (per trial, summed over requests), `demonstration_block_tokens` and `provider_total_tokens`. Batch summaries subtract each request's recorded block tokens from `known_tokens` and show `(+N demo)` in the token column.
+- Joining the block and the method prompt could change the count at the boundary. The block ends in a blank line, and the Stack Method 2 request measured exactly 25,838 + 2,264 = 28,102 tokens (block + method prompt = whole).
+- Tests use a fixture tokenizer with exactly additive counts and a fixture model that reports usage. They check that effort tokens are identical with demonstrations on and off, and that an effort budget the off trial exactly uses up still suffices with demonstrations on.
+
+### 6.5 Configuration `config_frozen_v3`
+
+[configs/config_frozen_v3.py](../configs/config_frozen_v3.py) is v2 plus:
+
+- `prompt_version: typed_v5`;
+- `recovery.context_tokens: 262144`;
+- `demonstrations` enabled with the defaults above and the pinned archive per task (`ARCHIVES`; `configuration(task, demonstrations=False)` gives the ablation's off arm).
+
+`SERVING` records `max_model_len: 262144` and `enable_prefix_caching: true`, marked pending. v1 and v2 are unchanged. With demonstrations off, v3 renders exactly v2's prompts.
+
+### 6.6 Data and validation
+
+**Archives.** `synthesis.entry.collect_demos` with the provided groundtruth programs, seeds 1000–1014, at the paper's counts (Stack/Unstack/Reverse 4 blocks, ReStack 5 with a 3-block tower, Grid 3×2, Pyramid 3+2+1). All 15 seeds were valid for every task. The archives are in `demos/cap-revision6/<task>/demonstrations.npz`, with collection reports and logs. They are not committed; v3 pins their SHA-256.
+
+**Tests.**
+
+- [tests/test_demonstrations.py](../tests/test_demonstrations.py) (23 tests, synthetic archives and fixture environments) covers:
+  - configuration validation;
+  - prompt parity: all requests of generate-only trials for 6 tasks × 3 methods × 2 condition modes, hashed before the change ([golden file](../tests/testdata/demonstrations_off_prompt_hashes.json)) and compared with typed_v4 and typed_v5 with demonstrations off;
+  - command events, RDP and tolerance;
+  - pick/place structure and deltas;
+  - determinism;
+  - absence of program, events, task_spec, fingerprint, source and snapshot values from the block;
+  - loader rejections;
+  - the server tokenize request;
+  - identical prefixes in every request of all three methods;
+  - token accounting;
+  - the explicit over-budget failure;
+  - evaluation-scene rejection (seed and geometry);
+  - recovery stop;
+  - reservation and context accounting.
+- [configs/test_config_frozen_v3.py](../configs/test_config_frozen_v3.py) covers v3 against v2.
+
+**Measured tokens.** Tokens of the rendered block for 15 demonstrations per task: the whole block including header and predicate deltas. Counts use the checkpoint's own tokenizer (`Qwen/Qwen3.8-27B-FP8` @ `017b9c7a`, `tokenizer.json`, no special tokens). It gave token ids identical to the server's `/tokenize` on a reference string; the server was stopped during this measurement.
+
+| Task (blocks) | States per demo | Events + waypoints per demo | Block tokens (15 demos) | Per demo | Positions only (no `holds`/`changes`) | Fits the current 98,304 window? |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Stack (4) | 112–136 | 8 + 11 | 25,838 | 1,696–1,705 | 20,573 | Yes |
+| Unstack (4) | 158–161 | 14 + 8 | 35,636 | 2,334–2,369 | 29,965 | Yes |
+| Reverse (4) | 214–232 | 18 + 11 | 46,814 | 3,093–3,106 | 38,611 | Yes, but recovery feedback may exceed it |
+| ReStack (5) | 379–400 | 26 + 17 | 75,974 | 5,039–5,047 | 64,109 | No |
+| Grid (6) | 325–345 | 26 + 17 | 83,581 | 5,526–5,609 | 74,691 | No |
+| Pyramid (6) | 312–330 | 26 + 17 | 86,752 | 5,740–5,812 | 74,693 | No |
+
+- All six blocks fit `max_tokens` = 131,072. The predicate deltas add 5k–12k tokens.
+- The Stack Method 2 policy request is 28,102 input tokens (block 25,838 + method prompt 2,264). At the current window a request may carry 98,304 − 32,768 = 65,536 input tokens. ReStack, Grid and Pyramid therefore need the Section 3.5 upgrade, as predicted.
+- Grid and Pyramid demonstrations close the gripper while empty in transit, so they have 26 events per demonstration (12 of them empty-handed close/open switches).
+
+**Waypoint check (default 0.01 m, all 90 demonstrations).** For every transfer the check finds, in the full state sequence:
+
+- the true approach corner above the block;
+- the lift corner (where lateral motion starts after the grasp);
+- the transit end above the support;
+- the retreat corner after the release;
+- the maximum transit height.
+
+It then compares them with the kept frames.
+
+- The largest distance from a true corner to the nearest kept frame was 1.9 mm, except one Pyramid retreat corner at 7.2 mm. The compacted maximum transit height matched within 0.2 mm.
+- Every place event identifies the moved block and its support exactly as the full state does: `+ON(block,support)` for block supports, and the resting table height with no `ON` atom for table placements.
+- Pyramid's upper-layer blocks straddle two lower blocks and are identified by `+AtGoal`/`+HasBlock` and their positions.
+- Transfers per demonstration:
+  - Stack: 3 (onto o0, o1, o2, at about 5 cm transit clearance above the higher of grasp and release);
+  - Unstack: 3 (to the table at about 15 cm);
+  - Reverse: 4 (table, then the new tower at 10 to 15 cm);
+  - ReStack: 6;
+  - Grid and Pyramid: 6 each (at about 15 cm).
+- Artifacts are in `runs/cap-revision6/20261026-compaction-check/` (rendered blocks, `compaction_check.json`, `tokens_local_tokenizer.json`).
+
+**End-to-end, scripted responses** (`runs/cap-revision6/20261026-scripted-stack/`): Stack, seed 0, real MuJoCo, config v3 (recovery on, videos off). The scripted Stack policy was used for all three methods, after one invalid response for Methods 1 and 2.
+
+- All six trials (demonstrations on and off) completed with `task_spec_success`.
+- With demonstrations on, every request began with the same block (one context hash across methods), and `demonstration_tokens` was 25,838 per request.
+- The method prompts after the block were byte-identical to the demonstrations-off requests.
+
+**Real-model smoke trial: pending.** The 27B servers on GPUs 6–7 were stopped to free memory. Starting them from this session was not permitted, so no Qwen3.8 request with demonstrations has been made. Once the server answers `/v1/models`, run it from `roboverify/` with `VLLM_API_KEY` set. Stack fits the current window:
+
+```python
+from synthesis.cap.configs import config_frozen_v3 as v3
+from synthesis.cap.runner import run
+
+config, model, instruction = v3.configuration(
+    "stack", seed=0, output_root="runs/cap-revision6/<date>-smoke"
+)
+run(config, model, instruction=instruction)
+```
+
+### 6.7 Deviations and open points
+
+- **Event frame index:** an event is the first state after the first action with the new command (t = k + 1). The Section 3.3 illustration shows the closed event at the end of the closing steps. In the 3-block sample of Section 1.2, closing actions 13 and 14 put the closed event at t = 14, not 15.
+- **RDP is applied between consecutive event frames** rather than to the whole path at once. Event frames are always kept, so this only makes the corners around them more stable. Distances use the chord segment.
+- **Empty-handed gripper switches are events:** the Grid/Pyramid programs close the gripper during empty transits, which adds event frames with full block positions.
+- **Not committed:** the archives (`demos/` is generated data). Regenerate the parity golden file only for an intentional prompt change ([tests/prompt_parity.py](../tests/prompt_parity.py)).
+- **Open:**
+  - the real-model smoke trial;
+  - live `/tokenize` counts (expected to equal the table, since the ids matched);
+  - the served-window upgrade and its prefix-caching check;
+  - a loader review with Yuning.
 
 ## Backlog (not implemented)
 
