@@ -483,15 +483,9 @@ def render_frame(frame):
     return "\n".join(lines)
 
 
-def render_demonstration(demonstration, frames, position, total):
-    count = demonstration.num_blocks
-    steps = len(demonstration.states)
-    lines = [
-        f"DEMONSTRATION {position}/{total}: {demonstration.task}, {count} blocks"
-        f" {block_name(0)}..{block_name(count - 1)}, {steps} states"
-        f" (t=0..{steps - 1}), {sum(f.kind == 'event' for f in frames)} events,"
-        f" {sum(f.kind == 'waypoint' for f in frames)} waypoints"
-    ]
+def render_inputs(demonstration):
+    """The inputs line and, for goal tasks, the goal layout line."""
+    lines = []
     if demonstration.goal_layout is not None:
         layout = demonstration.goal_layout
         lines.append(f"inputs: h0={goal_name(layout['head'])}")
@@ -507,6 +501,19 @@ def render_demonstration(demonstration, frames, position, total):
         lines.append("goals: " + "; ".join(goals))
     else:
         lines.append(f"inputs: b0={block_name(demonstration.initial_bindings['b0'])}")
+    return lines
+
+
+def render_demonstration(demonstration, frames, position, total):
+    count = demonstration.num_blocks
+    steps = len(demonstration.states)
+    lines = [
+        f"DEMONSTRATION {position}/{total}: {demonstration.task}, {count} blocks"
+        f" {block_name(0)}..{block_name(count - 1)}, {steps} states"
+        f" (t=0..{steps - 1}), {sum(f.kind == 'event' for f in frames)} events,"
+        f" {sum(f.kind == 'waypoint' for f in frames)} waypoints"
+    ]
+    lines += render_inputs(demonstration)
     lines += [render_frame(frame) for frame in frames]
     return "\n".join(lines) + "\n"
 

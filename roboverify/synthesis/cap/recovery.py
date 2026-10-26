@@ -516,6 +516,33 @@ def select_relevant_evidence(
         if "selected_event_ids" in required:
             required["selected_event_ids"].remove(removed["event_id"])
             required["omitted_event_count"] += 1
+    keyframe_delivery = None
+    if not legacy and items.keyframes and items.keyframe_method == "rdp":
+        # Revision 7.2: the rollout compacted like a demonstration, in the room
+        # the other (fixed-size) items leave under the cap.
+        from .recovery_keyframes import VERSION as KEYFRAME_VERSION
+        from .recovery_keyframes import rdp_keyframes
+
+        required.pop("keyframes", None)
+        room = token_limit - token_bound(encoded(required)) - 16
+        item, delivered, available = rdp_keyframes(
+            trace,
+            items.keyframe_waypoint_tolerance,
+            min(items.keyframe_bytes, room),
+        )
+        required["keyframes"] = item or {
+            "method": "rdp",
+            "version": KEYFRAME_VERSION,
+            "omitted_frames": {
+                "count": available,
+                "note": "no frame fits the remaining evidence cap",
+            },
+        }
+        keyframe_delivery = (
+            "complete"
+            if delivered == available
+            else {"partial": delivered, "available": available}
+        )
     if token_bound(encoded(required)) > token_limit:
         return {"ready": False, "reason": "required_feedback_exceeds_token_limit"}
     feedback = {
@@ -550,6 +577,8 @@ def select_relevant_evidence(
             delivery[item] = "not_applicable"
         else:
             delivery[item] = "complete"
+    if keyframe_delivery is not None:
+        delivery["keyframes"] = keyframe_delivery
     if items.supporting_events and len(supporting) < len(window):
         delivery["supporting_events"] = {
             "partial": len(supporting),
@@ -569,6 +598,7 @@ def select_relevant_evidence(
             delivery[item] = "complete"
     feedback.update(
         item_delivery=delivery,
+        keyframe_method=items.keyframe_method,
         history_mode=cfg.history.mode,
         evidence_layout=items.evidence_layout,
         evidence_cap=token_limit,
@@ -843,18 +873,26 @@ def file_sha256(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def load_seed(path, initial_state=None):
-    """Archived failed round-0 attempt used as the frozen start of a recovery branch."""
+def load_seed(path, initial_state=None, success_field="task_success"):
+    """Archived failed round-0 attempt used as the frozen start of a recovery branch.
+
+    A seed must have failed under the field that ends recovery
+    (``RecoveryConfig.success_field``).
+    """
     path = Path(path).resolve()
     result = read_json(path)
     root = Path(result["run_dir"]) / "artifacts/trial_001"
     if not (root / "timeline.jsonl").is_file():
         raise ValueError(f"Seed attempt artifacts are missing: {root}")
-    if result.get("task_success") is True or (
-        "task_success" not in result
-        and result.get("success") is True
-        and result.get("dsl_postcondition") is not False
-    ):
+    if success_field == "task_spec_success":
+        succeeded = result.get("task_spec_success") is True
+    else:
+        succeeded = result.get("task_success") is True or (
+            "task_success" not in result
+            and result.get("success") is True
+            and result.get("dsl_postcondition") is not False
+        )
+    if succeeded:
         raise ValueError("Seed attempt succeeded; there is no failure to recover")
     state = root / "initial_state.npz"
     if not state.is_file():
@@ -889,7 +927,11 @@ def run_recovery(config, model_config, **kwargs):
     cfg = config.recovery
     seed_path = kwargs.pop("seed_attempt", None)
     # Validate a seed before creating any run directory or ledger.
-    seed = load_seed(seed_path, kwargs.get("initial_state")) if seed_path else None
+    seed = (
+        load_seed(seed_path, kwargs.get("initial_state"), cfg.success_field)
+        if seed_path
+        else None
+    )
     ledger = Budget(
         timeout=cfg.total_timeout,
         max_model_calls=cfg.total_calls,

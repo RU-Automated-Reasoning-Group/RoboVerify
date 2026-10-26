@@ -61,6 +61,9 @@ FEEDBACK_ITEMS = (
 )
 
 
+KEYFRAME_METHODS = ("legacy", "rdp")
+
+
 def _nested(cls, value, label):
     if isinstance(value, cls):
         return value
@@ -90,6 +93,13 @@ class RecoveryFeedbackConfig:
     evidence_layout: str = "legacy_fill"
     # None keeps RecoveryConfig.feedback_tokens as the evidence cap.
     evidence_bytes: int | None = None
+    # Revision 7.2: "legacy" keeps the three cap-recovery keyframes (entry, start
+    # of the last primitive, end); "rdp" renders the failed rollout like a
+    # demonstration (gripper-command events and RDP waypoints of the gripper
+    # path), within keyframe_bytes and the evidence cap.
+    keyframe_method: str = "legacy"
+    keyframe_waypoint_tolerance: float = 0.01
+    keyframe_bytes: int = 8192
 
     def __post_init__(self):
         for name in FEEDBACK_ITEMS:
@@ -104,6 +114,19 @@ class RecoveryFeedbackConfig:
             type(self.evidence_bytes) is not int or self.evidence_bytes <= 0
         ):
             raise ValueError("evidence_bytes must be a positive integer or null")
+        if self.keyframe_method not in KEYFRAME_METHODS:
+            raise ValueError(f"keyframe_method must be one of {KEYFRAME_METHODS}")
+        if self.keyframe_method == "rdp" and self.evidence_layout != "fixed_items":
+            raise ValueError("RDP keyframes require the fixed_items evidence layout")
+        tolerance = self.keyframe_waypoint_tolerance
+        if (
+            type(tolerance) not in (int, float)
+            or not math.isfinite(tolerance)
+            or tolerance <= 0
+        ):
+            raise ValueError("keyframe_waypoint_tolerance must be positive")
+        if type(self.keyframe_bytes) is not int or self.keyframe_bytes <= 0:
+            raise ValueError("keyframe_bytes must be a positive integer")
 
     def disabled(self):
         return [name for name in FEEDBACK_ITEMS if not getattr(self, name)]
