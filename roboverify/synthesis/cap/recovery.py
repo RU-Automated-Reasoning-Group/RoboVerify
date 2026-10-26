@@ -87,6 +87,10 @@ class RoundBudget(Budget):
             reservation["demonstration_tokens"] = demonstration_tokens
         return reservation
 
+    def record_prefix_cache(self, cached, backend=None):
+        super().record_prefix_cache(cached, backend)
+        self.parent.record_prefix_cache(cached, backend)
+
     def abandon_request(self):
         self.unknown_usage_calls += 1
         self.parent.unknown_usage_calls += 1
@@ -1138,6 +1142,7 @@ def run_recovery(config, model_config, **kwargs):
                 demonstration_context_sha256=context.sha256,
                 demonstration_trace_ids=context.manifest["trace_ids"],
                 provider_total_tokens=ledger.tokens + ledger.demonstration_tokens,
+                prefix_cache=ledger.prefix_cache_summary(),
             )
         phases = Counter()
         for attempt in attempts:

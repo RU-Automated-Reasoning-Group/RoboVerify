@@ -35,6 +35,11 @@ class Budget:
     # Revision 6: tokens of the demonstration block, charged separately from the
     # effort budget (``tokens``/``max_tokens``), once per request that carries it.
     demonstration_tokens: int = 0
+    # Revision 6, §3.6: server-reported cached prompt tokens and the serving
+    # instance per request. Diagnostics only; no budget reads them.
+    cached_prompt_tokens: int = 0
+    cache_unreported_calls: int = 0
+    served_by: dict = field(default_factory=dict)
     unknown_usage_calls: int = 0
     started: float = field(default_factory=time.monotonic)
 
@@ -82,6 +87,21 @@ class Budget:
             self.tokens += effort_tokens(count, demonstration_tokens)
             if self.tokens > self.max_tokens:
                 self.exhaust("tokens", "Token budget exhausted")
+
+    def record_prefix_cache(self, cached, backend=None):
+        if cached is None:
+            self.cache_unreported_calls += 1
+        else:
+            self.cached_prompt_tokens += cached
+        if backend:
+            self.served_by[backend] = self.served_by.get(backend, 0) + 1
+
+    def prefix_cache_summary(self):
+        return {
+            "cached_prompt_tokens": self.cached_prompt_tokens,
+            "cache_unreported_calls": self.cache_unreported_calls,
+            "served_by": dict(self.served_by),
+        }
 
     def simulation_step(self):
         self.remaining()

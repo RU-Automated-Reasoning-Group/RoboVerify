@@ -17,6 +17,7 @@ from pathlib import Path
 
 from .config import GPUConfig, ModelConfig, RunConfig
 from .prompt_package import package
+from .serving.prefix_cache import verify_prefix_caching
 
 METHODS = ("cap_google_baseline", "cap_method_1", "cap_method_2")
 MODES = ("dsl_only", "coordinate_predicates")
@@ -545,6 +546,10 @@ def _execute_batch(directory, *, resume=False, dispatch_gate=None, max_workers=N
     metadata["sessions"].append(
         {"started_epoch": time.time(), "resume": resume, "max_workers": workers}
     )
+    cache_model = prefix_cache_model(pending)
+    if cache_model is not None:
+        # Required before dispatch; a failure stops the batch (Revision 6, §3.6).
+        metadata["sessions"][-1]["prefix_cache"] = verify_prefix_caching(cache_model)
     atomic_json(metadata_path, metadata)
     blocked_since = None
     saved_gpu_sample = None
@@ -764,6 +769,21 @@ def _execute_batch(directory, *, resume=False, dispatch_gate=None, max_workers=N
         atomic_json(directory / "schedule.json", schedule)
         write_report(directory, manifest, schedule)
     return json.loads((directory / "summary.json").read_text())
+
+
+def prefix_cache_model(jobs):
+    """The vLLM model whose prefix cache pending demonstration jobs rely on."""
+    models = {
+        json.dumps(job["model_config"], sort_keys=True)
+        for job in jobs
+        if job["run_config"].get("demonstrations", {}).get("enabled")
+        and job["model_config"].get("provider") == "vllm"
+        and job.get("responses") is None
+        and not job.get("fixture")
+    }
+    if len(models) > 1:
+        raise ValueError("Demonstration jobs in one batch must share one model")
+    return ModelConfig(**json.loads(models.pop())) if models else None
 
 
 def execute_batch(directory, *, resume=False, dispatch_gate=None, max_workers=None):

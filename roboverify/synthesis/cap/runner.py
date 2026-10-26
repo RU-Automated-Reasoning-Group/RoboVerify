@@ -35,6 +35,7 @@ from .demonstrations import (
 from .llm import HTTPModel, LoggedModel, ModelError
 from .logger import CapLogger
 from .prompt_package import package, prompt_provenance
+from .serving.prefix_cache import affinity_key
 from .tasks import (
     SUCCESS_CRITERION,
     TASK_INSTRUCTIONS,
@@ -549,6 +550,7 @@ def run_once(
                 demonstration_context_sha256=demonstrations.sha256,
                 demonstration_trace_ids=demonstrations.manifest["trace_ids"],
                 provider_total_tokens=budget.tokens + budget.demonstration_tokens,
+                prefix_cache=budget.prefix_cache_summary(),
             )
         if config.method != "cap_google_baseline":
             outcome["dsl_compliance"] = (
@@ -621,6 +623,12 @@ def prepare_demonstrations(config, model_config, token_counter=None):
 
 
 def run(config, model_config, **kwargs):
+    if kwargs.get("backend") is None:
+        # Once per trial: one affinity key keeps every round's requests on one
+        # vLLM instance, so they reuse its prefix cache (Revision 6, §3.6).
+        kwargs["backend"] = HTTPModel(
+            model_config, affinity_key=affinity_key(uuid.uuid4().hex)
+        )
     if config.demonstrations.enabled and kwargs.get("demonstrations") is None:
         # Once per trial: every attempt and request reuses the same block.
         kwargs["demonstrations"] = prepare_demonstrations(

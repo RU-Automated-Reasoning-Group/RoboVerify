@@ -8,6 +8,7 @@ from pathlib import Path
 from .batch import atomic_json
 from .config import ModelConfig, RunConfig
 from .llm import HTTPModel, ScriptedModel
+from .serving.prefix_cache import affinity_key
 
 
 def main(path):
@@ -58,6 +59,8 @@ def main(path):
         backend = HTTPModel(
             model,
             opener=gate(**spec["transport_control"], job_id=spec["id"]),
+            # Stable per job, so a resumed trial returns to the same instance.
+            affinity_key=affinity_key(spec["batch_dir"], spec["id"]),
         )
     factory = None
     if spec.get("fixture"):

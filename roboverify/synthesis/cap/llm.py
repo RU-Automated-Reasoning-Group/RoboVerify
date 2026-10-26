@@ -9,6 +9,7 @@ import urllib.request
 from dataclasses import dataclass, field
 
 from .contracts import CapError
+from .serving.prefix_cache import AFFINITY_HEADER, BACKEND_HEADER, cached_prompt_tokens
 from .timing import timed
 
 
@@ -28,14 +29,18 @@ class Response:
     usage: dict = field(default_factory=dict)
     finish_reason: str | None = None
     raw: dict = field(default_factory=dict)
+    # The serving instance, when a CaP balancer names it (Revision 6, §3.6).
+    backend: str | None = None
 
 
 class HTTPModel:
     """OpenRouter/OpenAI/vLLM chat API, plus a separate Responses wire adapter."""
 
-    def __init__(self, config, opener=None):
+    def __init__(self, config, opener=None, affinity_key=None):
         self.config = config
         self.opener = opener or urllib.request.urlopen
+        # Keeps a trial's requests on one vLLM instance for prefix-cache reuse.
+        self.affinity_key = affinity_key
 
     def payload(self, prompt):
         c = self.config
@@ -70,6 +75,8 @@ class HTTPModel:
         headers = {"Content-Type": "application/json"}
         if key:
             headers["Authorization"] = f"Bearer {key}"
+        if self.affinity_key and c.provider == "vllm":
+            headers[AFFINITY_HEADER] = self.affinity_key
         route = "responses" if c.api_style == "responses" else "chat/completions"
         request = urllib.request.Request(
             c.base_url.rstrip("/") + "/" + route,
@@ -82,6 +89,7 @@ class HTTPModel:
                 request, timeout=min(timeout, c.request_timeout)
             ) as handle:
                 raw = json.load(handle)
+                served_by = (getattr(handle, "headers", None) or {}).get(BACKEND_HEADER)
         except urllib.error.HTTPError as exc:
             detail = exc.read(8192).decode("utf-8", errors="replace")
             if key:
@@ -111,7 +119,7 @@ class HTTPModel:
             choice = raw.get("choices", [{}])[0]
             text = choice.get("message", {}).get("content") or ""
             reason = choice.get("finish_reason")
-        return Response(text, raw.get("usage") or {}, reason, raw)
+        return Response(text, raw.get("usage") or {}, reason, raw, served_by)
 
 
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
@@ -328,6 +336,10 @@ class LoggedModel:
                 raise
             self.logger.artifact(f"{path}/response.json", response.raw)
             self.logger.artifact(f"{path}/response.txt", response.text)
+            cached = cached_prompt_tokens(response.usage)
+            serving = {"served_by": response.backend} if response.backend else {}
+            if hasattr(self.budget, "record_prefix_cache"):
+                self.budget.record_prefix_cache(cached, response.backend)
             self.logger.emit(
                 "generation_end",
                 **(
@@ -340,6 +352,7 @@ class LoggedModel:
                         usage=response.usage,
                         finish_reason=response.finish_reason,
                         **demonstration,
+                        **serving,
                     )
                 ),
             )
