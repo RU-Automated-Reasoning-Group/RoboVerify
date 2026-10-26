@@ -54,7 +54,7 @@ The evidence object keeps an index entry (`keyframes`: method, version, delivere
 | Stack | success, round 0 | 0 | 1 | 8,206 (+26,668) |
 | Unstack | success, round 0 | 0 | 1 | 9,288 (+34,199) |
 | Reverse | goal not reached after 5 rounds | 4 | 5 | 125,908 (+230,545) |
-| ReStack | Move/Release nonconvergence after 5 rounds | 4 | 6 | 195,775 (+433,518) |
+| ReStack | not recovered after 5 rounds (Pick nonconvergence ×3, Release nonconvergence, `get` found no object; last: Pick) | 4 | 6 | 195,775 (+433,518) |
 | Grid | success, round 0 | 0 | 1 | 7,838 (+76,593) |
 | Pyramid | success, round 0 | 0 | 1 | 7,342 (+81,503) |
 
