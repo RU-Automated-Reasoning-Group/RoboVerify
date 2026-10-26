@@ -11,7 +11,8 @@ parallel, then one combined report at ``ROOT/report.md``
 Run configs come from ``config_frozen_v3`` (demonstrations on unless
 ``--demonstrations off``); ``--frozen v6`` selects ``config_frozen_v6``
 (Revision 7.1), whose demonstration ablation runs both arms on the same scene
-seeds under separate roots. The local model uses v3's model config unchanged.
+seeds under separate roots, and ``--frozen v7`` the hosted-model
+``config_frozen_v7`` (Revision 7.3). The local model uses v3's model config unchanged.
 Hosted OpenRouter models replace only the endpoint, the model name and the
 reasoning option (OpenRouter's ``reasoning.effort`` in place of vLLM's chat
 template switch), and measure the demonstration block with the provider's
@@ -30,7 +31,7 @@ from pathlib import Path
 
 from ..batch import atomic_json, create_batch, execute_batch
 from ..config import GPUConfig
-from ..configs import config_frozen_v3, config_frozen_v6
+from ..configs import config_frozen_v3, config_frozen_v6, config_frozen_v7
 from ..reports import batch_set_report
 from .revision42_experiment import GPU_UUIDS
 
@@ -44,11 +45,13 @@ MODELS = {
     "local-qwen3.8-27b-fp8": None,  # config_frozen_v3.MODEL (local vLLM)
     "qwen3.8-27b": OPENROUTER | {"model": "qwen/qwen3.8-27b"},
     "claude-haiku-5.5": OPENROUTER | {"model": "anthropic/claude-haiku-5.5"},
+    "claude-opus-5.5": OPENROUTER | {"model": "anthropic/claude-opus-5.5"},
 }
-FROZEN = {"v3": config_frozen_v3, "v6": config_frozen_v6}
+FROZEN = {"v3": config_frozen_v3, "v6": config_frozen_v6, "v7": config_frozen_v7}
 EXPERIMENTS = {
     "v3": "revision6_frozen_v3_demonstrations",
     "v6": "revision7_1_frozen_v6_demonstrations",
+    "v7": "revision7_3_frozen_v7",
 }
 TASKS = tuple(config_frozen_v3.TASKS)
 
@@ -59,9 +62,12 @@ def configuration(task, label, *, demonstrations=True, seed=0, frozen="v3"):
     config, model, instruction = frozen.configuration(task, demonstrations, seed=seed)
     overrides = {}
     if MODELS[label] is not None:
-        model = frozen.model_config(**MODELS[label])
-        overrides["model_config"] = MODELS[label]
-        if demonstrations:
+        # Record only what differs from the frozen version (v7 is hosted).
+        hosted = frozen.model_config(**MODELS[label])
+        if hosted != model:
+            model = hosted
+            overrides["model_config"] = MODELS[label]
+        if demonstrations and config.demonstrations.token_counter != "provider_usage":
             config.demonstrations = replace(
                 config.demonstrations, token_counter="provider_usage"
             )
