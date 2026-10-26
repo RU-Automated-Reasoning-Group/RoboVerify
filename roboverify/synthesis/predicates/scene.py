@@ -107,6 +107,7 @@ def evaluate(term, scene, bindings=None):
             "ON_star": on.on_star_implementation,
             "ON_star_zero": on.on_star_implementation,
             "Higher": on.higher_implementation,
+            "EqualHeight": on.equal_height_implementation,
             "Scattered": on.scattered_implementation,
         }[node.op]
         return bool(predicate(positions[a], positions[b]))

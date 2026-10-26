@@ -10,11 +10,8 @@ outside the paper's claimed AFR fragment.
 import itertools
 
 import z3
-
 from synthesis.api.instructions import Instruction
 from synthesis.util.symbols import fresh_const, open_quantifier
-
-MUTABLE_RELATIONS = ("ON_star", "Higher", "Scattered")
 
 
 class SuccessorRelations(dict):
@@ -29,8 +26,10 @@ class RelationalSummary(Instruction):
     """Verification-only contract; operand order is independent of the mover."""
 
     def __init__(self, relation, left, right, *, moved=None):
-        if relation not in ("Higher", "Scattered"):
-            raise ValueError("Relational summaries support Higher or Scattered")
+        if relation not in ("Higher", "EqualHeight", "Scattered"):
+            raise ValueError(
+                "Relational summaries support Higher, EqualHeight or Scattered"
+            )
         self.relation = relation
         self.left = left
         self.right = right
@@ -78,7 +77,7 @@ def domain_axioms(context):
 
     collector = Collector()
     context.add_axiom(collector)
-    context.add_axiom_higher(collector)
+    context.add_axiom_height(collector)
     context.add_axiom_scattered(collector)
     return tuple(collector.rows)
 
@@ -139,6 +138,8 @@ def successor_contract(summary, context, *, avoid=(), admissibility=None):
     """
     if not isinstance(summary, RelationalSummary):
         raise TypeError("Expected a RelationalSummary")
+    if summary.relation not in context.mutable_relations:
+        raise ValueError("Summary height relation differs from the selected algebra")
     relation_sort = z3.ArraySort(
         context.BoxSort, z3.ArraySort(context.BoxSort, z3.BoolSort())
     )
@@ -147,12 +148,13 @@ def successor_contract(summary, context, *, avoid=(), admissibility=None):
         if admissibility is None
         else admissibility
     )
+    context.validate_height_formula(domain)
     surroundings = (*avoid, domain, summary.atom(context))
     if context.mode == "enum":
         # A finite context has an exact Boolean encoding, avoiding quantified
         # array incompleteness. This is not a bound on the unbounded WP rule.
         after, variables = {}, []
-        for name in MUTABLE_RELATIONS:
+        for name in context.mutable_relations:
             matrix = z3.K(context.BoxSort, z3.K(context.BoxSort, z3.BoolVal(False)))
             for x in context.enum_blocks:
                 row = z3.K(context.BoxSort, z3.BoolVal(False))
@@ -168,7 +170,7 @@ def successor_contract(summary, context, *, avoid=(), admissibility=None):
     else:
         after = {
             name: fresh_const(relation_sort, "summary_" + name, avoid=surroundings)
-            for name in MUTABLE_RELATIONS
+            for name in context.mutable_relations
         }
         after = SuccessorRelations(after, after.values())
     x = fresh_const(context.BoxSort, "frame_x", avoid=surroundings)
@@ -182,7 +184,7 @@ def successor_contract(summary, context, *, avoid=(), admissibility=None):
                 *(
                     z3.Select(z3.Select(after[name], x), y)
                     == getattr(context, name)(x, y)
-                    for name in MUTABLE_RELATIONS
+                    for name in context.mutable_relations
                 )
             ),
         ),
@@ -203,6 +205,7 @@ def summary_wp(summary, postcondition, context, *, admissibility=None):
     Existence prevents an impossible endpoint from proving every postcondition.
     Every allowed successor, not one convenient placement, must satisfy Q.
     """
+    context.validate_height_formula(postcondition)
     after, contract = successor_contract(
         summary, context, avoid=(postcondition,), admissibility=admissibility
     )

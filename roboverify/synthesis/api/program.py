@@ -1251,11 +1251,18 @@ def put_effect(instruction, postcondition, context):
     Separate enabling conditions from effects: a failed precondition does not
     mean that every relation in the successor becomes false.
     """
+    from synthesis.api.equal_height import rewrite_equal_height
+
+    context.validate_height_formula(postcondition)
     source = context.get_consts(instruction.upper_block)
     table_post = None
     if context.use_tbl or _put_base_is_tbl(instruction):
         table_post = rewrite_for_put_on_tbl_for_ON_star(postcondition, source, context)
-        table_post = rewrite_for_put_on_tbl_for_Higher(table_post, source, context)
+        table_post = (
+            rewrite_equal_height(table_post, source, None, context)
+            if context.height_predicate == "EqualHeight"
+            else rewrite_for_put_on_tbl_for_Higher(table_post, source, context)
+        )
         table_post = rewrite_for_put_on_tbl_for_scattered(table_post, source, context)
     if _put_base_is_tbl(instruction):
         return table_post
@@ -1265,7 +1272,11 @@ def put_effect(instruction, postcondition, context):
         source,
         context,
     )
-    block_post = rewrite_for_put_for_higher(block_post, source, target, context)
+    block_post = (
+        rewrite_equal_height(block_post, source, target, context)
+        if context.height_predicate == "EqualHeight"
+        else rewrite_for_put_for_higher(block_post, source, target, context)
+    )
     block_post = rewrite_for_put_for_scattered(block_post, source, target, context)
     if context.use_tbl:
         return And(

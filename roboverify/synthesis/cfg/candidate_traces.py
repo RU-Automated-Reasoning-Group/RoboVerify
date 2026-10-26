@@ -134,7 +134,7 @@ def prepare_candidate(
         )
         vocabulary = InferenceVocabulary(
             variables,
-            tuple(relations or ("ON_star", "Higher", "Scattered", "equality")),
+            tuple(relations or (*context.mutable_relations, "equality")),
             names,
         )
         for row in store._states:

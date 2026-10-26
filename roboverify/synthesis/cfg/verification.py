@@ -8,7 +8,6 @@ Unsupported summary shapes remain explicit failures.
 from copy import deepcopy
 
 import z3
-
 from synthesis.api.instructions import (
     Assign,
     Get,
@@ -98,7 +97,7 @@ def propose_summaries(cfg, context):
             elif isinstance(i, ReleaseByName):
                 if held is None:
                     raise ValueError("Release requires a currently held object")
-                if post.op in ("Higher", "Scattered"):
+                if post.op in ("Higher", "EqualHeight", "Scattered"):
                     if any(arg.op != "ref" for arg in post.args) or held not in (
                         post.args[0].value,
                         post.args[1].value,
@@ -219,7 +218,11 @@ def verify_cfg_motion(
         )
 
     witness_count = extrema_count(cfg)
-    low = LowLevelContext(default_L=0.05, use_tbl=context.use_tbl)
+    low = LowLevelContext(
+        default_L=0.05,
+        use_tbl=context.use_tbl,
+        height_predicate=context.height_predicate,
+    )
     checks = []
     count = 0
     physical_names = [n for n in constants if n != "tbl"]
@@ -526,6 +529,7 @@ def symbolic_problem(cfg, original_context, size=None):
         ),
         use_tbl=original_context.use_tbl,
         exists_top=original_context.exists_top,
+        height_predicate=original_context.height_predicate,
         sort_name="Box" if size is None else "CFGBox_" + uuid4().hex,
     )
     clone = deepcopy(cfg)

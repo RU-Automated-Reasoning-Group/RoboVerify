@@ -1,6 +1,12 @@
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+from synthesis.util.symbols import fresh_const
+from synthesis.verification_lib.height_predicate import (
+    get_height_predicate,
+    validate_height_predicate,
+)
+from synthesis.verification_lib.solver_options import get_minimize_unsat_core
 from z3 import (
     And,
     BoolSort,
@@ -20,9 +26,6 @@ from z3 import (
     sat,
     unsat,
 )
-
-from synthesis.util.symbols import fresh_const
-from synthesis.verification_lib.solver_options import get_minimize_unsat_core
 
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -57,7 +60,11 @@ class HighLevelContext:
         visualization_prefix: str = "highlevel_scene",
         verification_mode: str = "box",
         sort_name: str = "Box",
+        height_predicate: Optional[str] = None,
     ):
+        self.height_predicate = validate_height_predicate(
+            height_predicate or get_height_predicate()
+        )
         self.sort_name = sort_name
         self.mode = mode
         self.num_blocks = num_blocks
@@ -99,6 +106,9 @@ class HighLevelContext:
             "ON_star_zero", self.BoxSort, self.BoxSort, BoolSort()
         )
         self.Higher = Function("Higher", self.BoxSort, self.BoxSort, BoolSort())
+        self.EqualHeight = Function(
+            "EqualHeight", self.BoxSort, self.BoxSort, BoolSort()
+        )
         self.Scattered = Function("Scattered", self.BoxSort, self.BoxSort, BoolSort())
 
     def _resolve_goal_enum_names(self) -> List[str]:
@@ -158,6 +168,65 @@ class HighLevelContext:
             )
         (c,) = Consts(symbol, self.GoalSort)
         return c
+
+    @property
+    def mutable_relations(self):
+        return ("ON_star", self.height_predicate, "Scattered")
+
+    def validate_height_formula(self, expression):
+        """Reject use of an inactive height relation instead of framing it."""
+        from z3 import is_app, is_quantifier
+
+        inactive = (
+            self.Higher if self.height_predicate == "EqualHeight" else self.EqualHeight
+        )
+        pending, seen = [expression], set()
+        while pending:
+            node = pending.pop()
+            if node.get_id() in seen:
+                continue
+            seen.add(node.get_id())
+            if is_quantifier(node):
+                pending.append(node.body())
+            elif is_app(node):
+                if node.decl() == inactive:
+                    raise ValueError(
+                        "Formula height predicate differs from the selected algebra"
+                    )
+                pending.extend(node.children())
+
+    def add_axiom_height(self, s: Solver):
+        if self.height_predicate == "EqualHeight":
+            self.add_axiom_equal_height(s)
+        else:
+            self.add_axiom_higher(s)
+
+    def add_axiom_equal_height(self, s: Solver):
+        """Height equivalence and exclusion of distinct blocks in one column.
+
+        No Higher ordering or link to Higher is assumed in this algebra.
+        Complete, uniformly supported towers justify the placement rewrite;
+        these weaker axioms alone do not assert completeness of support chains.
+        """
+        x, y, z = [fresh_const(self.BoxSort, n) for n in ("x", "y", "z")]
+        equal = self.EqualHeight
+        s.assert_and_track(ForAll([x], equal(x, x)), "equal_height_reflexive")
+        s.assert_and_track(
+            ForAll([x, y], equal(x, y) == equal(y, x)), "equal_height_symmetric"
+        )
+        s.assert_and_track(
+            ForAll([x, y, z], Implies(And(equal(x, y), equal(y, z)), equal(x, z))),
+            "equal_height_transitive",
+        )
+        s.assert_and_track(
+            ForAll([x, y], Implies(And(self.ON_star(x, y), equal(x, y)), x == y)),
+            "equal_height_on_star",
+        )
+        if self.use_tbl:
+            tbl = self.get_consts("tbl")
+            s.assert_and_track(
+                ForAll([x], equal(x, tbl) == (x == tbl)), "equal_height_tbl"
+            )
 
     def add_axiom_higher(self, s: Solver):
         x, y, c = [fresh_const(self.BoxSort, name) for name in ("x", "y", "c")]
@@ -638,7 +707,7 @@ class HighLevelContext:
         s = Solver()
         self.add_axiom(s)
         self.add_axiom_on_star_zero(s)
-        self.add_axiom_higher(s)
+        self.add_axiom_height(s)
         self.add_axiom_scattered(s)
         self.add_axiom_goal_nested(s)
         if vc is not None:
@@ -667,7 +736,7 @@ class HighLevelContext:
         else:
             self.add_axiom(solver)
             self.add_axiom_on_star_zero(solver)
-            self.add_axiom_higher(solver)
+            self.add_axiom_height(solver)
             self.add_axiom_scattered(solver)
         return solver
 
@@ -695,7 +764,7 @@ class HighLevelContext:
         else:
             self.add_axiom(s)
             self.add_axiom_on_star_zero(s)
-            self.add_axiom_higher(s)
+            self.add_axiom_height(s)
             self.add_axiom_scattered(s)
 
         if formula is not None:
@@ -735,7 +804,7 @@ class HighLevelContext:
         else:
             self.add_axiom(s)
             self.add_axiom_on_star_zero(s)
-            self.add_axiom_higher(s)
+            self.add_axiom_height(s)
             self.add_axiom_scattered(s)
 
         if p is not None:
@@ -771,6 +840,7 @@ class HighLevelContext:
             "ON_star": self.ON_star,
             "ON_star_zero": self.ON_star_zero,
             "Higher": self.Higher,
+            "EqualHeight": self.EqualHeight,
             "Scattered": self.Scattered,
         }
         for name in known_const_names or []:
@@ -832,6 +902,9 @@ class highlevel_z3_solver:
 
     def add_axiom_higher(self, s: Solver):
         return self.context.add_axiom_higher(s)
+
+    def add_axiom_height(self, s: Solver):
+        return self.context.add_axiom_height(s)
 
     def add_axiom_scattered(self, s: Solver):
         return self.context.add_axiom_scattered(s)

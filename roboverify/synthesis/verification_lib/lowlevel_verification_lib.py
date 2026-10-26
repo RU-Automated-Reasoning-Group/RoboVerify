@@ -3,8 +3,11 @@ from typing import List, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
+import synthesis.api.instructions as instructions
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from scipy.spatial import ConvexHull
+from synthesis.util import on
+from synthesis.util.symbols import fresh_const, open_quantifier
 from z3 import (
     Z3_OP_DISTINCT,
     Z3_OP_EQ,
@@ -38,10 +41,6 @@ from z3 import (
     sat,
     unsat,
 )
-
-import synthesis.api.instructions as instructions
-from synthesis.util import on
-from synthesis.util.symbols import fresh_const, open_quantifier
 
 
 class UnsupportedMotionInstruction(Exception):
@@ -155,7 +154,16 @@ class LowLevelContext:
         default_L: float = 1.0,
         use_tbl: bool = False,
         higher_tolerance: float | None = None,
+        height_predicate: str | None = None,
     ):
+        from synthesis.verification_lib.height_predicate import (
+            get_height_predicate,
+            validate_height_predicate,
+        )
+
+        self.height_predicate = validate_height_predicate(
+            height_predicate or get_height_predicate()
+        )
         self.sort_name = sort_name
         self.default_L = default_L
         self.higher_tolerance = (
@@ -301,6 +309,15 @@ class LowLevelContext:
         """b1 is at least as high as b2; mirrors ``on.higher_implementation``."""
         return self._isolate_table(
             on.higher_z3(self.Z(b1), self.Z(b2), tolerance=self.higher_tolerance),
+            b1,
+            b2,
+            reflexive=True,
+        )
+
+    def lowlevel_equal_height(self, b1, b2):
+        """Mirrors the shared symmetric comparison and table isolation."""
+        return self._isolate_table(
+            on.equal_height_z3(self.Z(b1), self.Z(b2), tolerance=self.higher_tolerance),
             b1,
             b2,
             reflexive=True,
@@ -680,6 +697,8 @@ class LowLevelContext:
                     return self.lowlevel_on_star_zero(children[0], children[1])
                 if name == "Higher":
                     return self.lowlevel_higher(children[0], children[1])
+                if name == "EqualHeight":
+                    return self.lowlevel_equal_height(children[0], children[1])
                 if name == "Scattered":
                     return self.lowlevel_scattered(children[0], children[1])
                 raise NotImplementedError(f"Unhandled high-level predicate: {name}")
@@ -761,6 +780,7 @@ class LowLevelContext:
                 "ON_star": self.lowlevel_on_star,
                 "ON_star_zero": self.lowlevel_on_star_zero,
                 "Higher": self.lowlevel_higher,
+                "EqualHeight": self.lowlevel_equal_height,
                 "Scattered": self.lowlevel_scattered,
             }
             if str(decl.name()) not in relations:

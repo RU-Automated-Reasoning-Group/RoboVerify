@@ -47,6 +47,26 @@ def higher_z3(z1, z2, *, tolerance=None):
     return z1 >= z2 - z3.RealVal(repr(tolerance))
 
 
+def equal_height_z3(z1, z2, *, tolerance=None):
+    """Same height level, using the shared height tolerance (default 1 mm)."""
+    return z3.And(
+        higher_z3(z1, z2, tolerance=tolerance),
+        higher_z3(z2, z1, tolerance=tolerance),
+    )
+
+
+def equal_height_implementation(block1, block2, *, tolerance=None):
+    """Symmetric height comparison; tbl is isolated, including reflexivity.
+
+    Like Higher, tolerance is not transitive on arbitrary continuous heights.
+    Equivalence axioms require separated levels with within-level spread at
+    most the tolerance; this function does not impose that domain assumption.
+    """
+    return higher_implementation(
+        block1, block2, tolerance=tolerance
+    ) and higher_implementation(block2, block1, tolerance=tolerance)
+
+
 class NoGeometry:
     """Placeholder position for a ``Box``-sort element that is not a real block.
 

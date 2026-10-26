@@ -60,7 +60,15 @@ def boolean(value):
 
 
 def atom(name, left, right):
-    if name not in {"ON_star", "ON_star_zero", "Higher", "Scattered", "ON", "eq"}:
+    if name not in {
+        "ON_star",
+        "ON_star_zero",
+        "Higher",
+        "EqualHeight",
+        "Scattered",
+        "ON",
+        "eq",
+    }:
         raise ValueError(f"Unknown predicate: {name}")
     if left.op not in ("ref", "id") or right.op not in ("ref", "id"):
         raise TypeError("Predicate arguments must be object references")
@@ -184,6 +192,8 @@ def to_z3(term, context, bindings=None):
                 ),
             ),
         )
+    if term.op in ("Higher", "EqualHeight") and term.op != context.height_predicate:
+        raise ValueError("Formula height predicate differs from the selected algebra")
     return getattr(context, term.op)(*args)
 
 
@@ -203,9 +213,8 @@ def open_existentials(term, prefix, occupied=()):
 def from_z3(expr):
     """Convert the executable relational guard subset, preserving binder scope."""
     import z3
-    from z3.z3util import get_vars
-
     from synthesis.util.symbols import fresh_name
+    from z3.z3util import get_vars
 
     occupied = {str(v) for v in get_vars(expr)}
 
@@ -248,6 +257,7 @@ def from_z3(expr):
             "ON_star",
             "ON_star_zero",
             "Higher",
+            "EqualHeight",
             "Scattered",
         }:
             return atom(str(node.decl().name()), *args)

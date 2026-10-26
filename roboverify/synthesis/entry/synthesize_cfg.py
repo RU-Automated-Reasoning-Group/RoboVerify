@@ -48,12 +48,15 @@ from synthesis.mcmc.synthesis import (
 from synthesis.predicates.language import Language
 from synthesis.util.on import DEFAULT_HIGHER_TOLERANCE, using_higher_tolerance
 from synthesis.verification_lib.bmc_lib import NoiseSpec
+from synthesis.verification_lib.height_predicate import using_height_predicate
 from synthesis.verification_lib.highlevel_verification_lib import HighLevelContext
 from synthesis.verification_lib.solver_options import using_unsat_core_minimization
 
 
 def run(args, logger):
-    with using_invariant_minimizer(
+    with using_height_predicate(
+        getattr(args, "height_predicate", "Higher")
+    ), using_invariant_minimizer(
         getattr(args, "invariant_minimizer", None)
     ), using_higher_tolerance(
         getattr(args, "higher_tolerance", DEFAULT_HIGHER_TOLERANCE)
@@ -99,7 +102,7 @@ def _run(args, logger):
         )
         for i, t in enumerate(traces)
     ]
-    pre, post = task_spec(args.task)
+    pre, post = task_spec(args.task, height_predicate=context.height_predicate)
     from synthesis.cfg.demo_validation import validate_demonstrations
 
     validation = validate_demonstrations(segments, pre, post)
@@ -266,7 +269,17 @@ def _run(args, logger):
         from synthesis.cfg.quotient import quotient
 
         quotient_fn = partial(
-            quotient, language=Language(timeout_seconds=args.predicate_seconds)
+            quotient,
+            language=Language(
+                relations=(
+                    "ON",
+                    "ON_star",
+                    context.height_predicate,
+                    "Scattered",
+                    "eq",
+                ),
+                timeout_seconds=args.predicate_seconds,
+            ),
         )
     extra_paths = iter(args.additional_demos)
 
@@ -357,7 +370,10 @@ def _run(args, logger):
             "exact_column_alignment": args.task != "unstack",
         },
         max_refinements=args.refinements,
-        language=Language(timeout_seconds=args.predicate_seconds),
+        language=Language(
+            relations=("ON", "ON_star", context.height_predicate, "Scattered", "eq"),
+            timeout_seconds=args.predicate_seconds,
+        ),
         logger=logger,
     )
     import json
@@ -440,7 +456,20 @@ def main(argv=None):
     parser.add_argument(
         "--invariant-relations",
         nargs="+",
-        choices=("ON_star", "ON_star_zero", "Higher", "Scattered", "equality"),
+        choices=(
+            "ON_star",
+            "ON_star_zero",
+            "Higher",
+            "EqualHeight",
+            "Scattered",
+            "equality",
+        ),
+    )
+    parser.add_argument(
+        "--height-predicate",
+        choices=("Higher", "EqualHeight"),
+        default="Higher",
+        help="Height algebra for supplied-program verification (default Higher)",
     )
     parser.add_argument("--invariant-variables", type=int, default=2)
     add_inference_options(parser)
@@ -478,8 +507,22 @@ def main(argv=None):
         parser.error("Reverse currently supports supplied-program verification only")
     if args.loop_invariant and args.mode != "verify":
         parser.error("--loop-invariant requires --mode verify")
+    if args.height_predicate == "EqualHeight" and args.mode != "verify":
+        parser.error(
+            "EqualHeight currently supports supplied-program verification only"
+        )
+    other_height = "Higher" if args.height_predicate == "EqualHeight" else "EqualHeight"
+    if other_height in (args.invariant_relations or ()):
+        parser.error("Invariant height relation must match --height-predicate")
     if args.task == "reverse" and args.invariant_relations is None:
         args.invariant_relations = ["ON_star", "ON_star_zero", "equality"]
+    if args.invariant_relations is None:
+        args.invariant_relations = [
+            "ON_star",
+            args.height_predicate,
+            "Scattered",
+            "equality",
+        ]
     if args.wall_timeout_seconds is None and args.task == "unstack":
         args.wall_timeout_seconds = 60
     if (

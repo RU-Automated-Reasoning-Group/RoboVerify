@@ -11,7 +11,6 @@ from time import perf_counter
 from typing import Optional
 
 import z3
-
 from synthesis.api.instructions import Assign, PickPlaceByName, Skip
 from synthesis.util.symbols import fresh_const
 from synthesis.verification_lib.bmc_lib import NoiseSpec, bounded_noise
@@ -555,7 +554,10 @@ def check_abstract_effects(problem):
                 for c in problem.initial_condition
             )
         )
-        high = HighLevelContext(use_tbl=problem.context.use_tbl)
+        high = HighLevelContext(
+            use_tbl=problem.context.use_tbl,
+            height_predicate=problem.context.height_predicate,
+        )
         put = Put(problem.contract.source, problem.contract.target)
         # Prove the public action's enabling conditions at transfer entry.
         # These are separate obligations, not part of an atom's truth value.
@@ -597,7 +599,7 @@ def check_abstract_effects(problem):
                 (problem.context.X, problem.context.Y, problem.context.Z)
             )
         ]
-        for relation in ("ON_star", "Higher", "Scattered"):
+        for relation in high.mutable_relations:
             violations = []
             for left, right in pairs:
                 atom = getattr(high, relation)(
@@ -781,7 +783,18 @@ def verify_motion_block(
             ],
             noise,
         )
-    context = context or LowLevelContext(default_L=0.05, use_tbl="tbl" in constants)
+    context = context or LowLevelContext(
+        default_L=0.05,
+        use_tbl="tbl" in constants,
+        height_predicate=(
+            symbolic_context.height_predicate if symbolic_context else None
+        ),
+    )
+    if (
+        symbolic_context
+        and symbolic_context.height_predicate != context.height_predicate
+    ):
+        raise ValueError("Symbolic and motion height predicates must agree")
     from synthesis.api.instructions import Get, MoveByName, PickByName, ReleaseByName
     from synthesis.verification_lib.primitive_motion import (
         PrimitiveMotionProblem,
@@ -817,7 +830,9 @@ def verify_motion_block(
     from synthesis.verification_lib.root_selection import RootContext
 
     high = symbolic_context or HighLevelContext(
-        sort_name=context.sort_name, use_tbl=context.use_tbl
+        sort_name=context.sort_name,
+        use_tbl=context.use_tbl,
+        height_predicate=context.height_predicate,
     )
     roots = RootContext(high, z3.And(*initial_condition), timeout_ms)
     assume_input_alignment(problem, roots.initial_roots(constants))

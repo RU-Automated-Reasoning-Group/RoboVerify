@@ -104,6 +104,12 @@ def add_all_pairs(vocabulary, r, all_vars):
                 # Keep equality vocabulary non-trivial.
                 if str(v1) != str(v2):
                     vocabulary.append(v1 == v2)
+            elif str(r) == "EqualHeight":
+                # A symmetric pair has one feature. Including both directions
+                # lets the partition learner predict each from its duplicate,
+                # producing only symmetry tautologies instead of state facts.
+                if str(v1) < str(v2):
+                    vocabulary.append(r(v1, v2))
             elif str(r) == "Higher":
                 if str(v1) != str(v2):
                     vocabulary.append(r(v1, v2))
@@ -387,7 +393,7 @@ def compute_data(
                     state_zero[block2_name],
                 )
             )
-        elif str(predicate).startswith("Higher"):
+        elif str(predicate).startswith(("Higher", "EqualHeight")):
             arg0, arg1 = predicate.arg(0), predicate.arg(1)
             block1_name = (
                 var_mapping[arg0] if arg0 in var_mapping else constants_mapping[arg0]
@@ -401,7 +407,11 @@ def compute_data(
                     f"got {block1_name!r} and {block2_name!r}"
                 )
             data.append(
-                on.higher_implementation(
+                (
+                    on.equal_height_implementation
+                    if str(predicate.decl()) == "EqualHeight"
+                    else on.higher_implementation
+                )(
                     state[block1_name],
                     state[block2_name],
                 )
@@ -550,7 +560,7 @@ def compute_data_with_function(
                     state_zero[block2_name],
                 )
             )
-        elif str(predicate).startswith("Higher"):
+        elif str(predicate).startswith(("Higher", "EqualHeight")):
             arg0, arg1 = predicate.arg(0), predicate.arg(1)
             block1_name = _resolve_term_to_object_name(arg0)
             block2_name = _resolve_term_to_object_name(arg1)
@@ -560,7 +570,11 @@ def compute_data_with_function(
                     f"got {block1_name!r} and {block2_name!r}"
                 )
             data.append(
-                on.higher_implementation(
+                (
+                    on.equal_height_implementation
+                    if str(predicate.decl()) == "EqualHeight"
+                    else on.higher_implementation
+                )(
                     state[block1_name],
                     state[block2_name],
                 )
@@ -886,7 +900,7 @@ def check_tautology(
     else:
         active_context.add_axiom(solver)
         active_context.add_axiom_on_star_zero(solver)
-        active_context.add_axiom_higher(solver)
+        active_context.add_axiom_height(solver)
         active_context.add_axiom_scattered(solver)
 
     solver.add(z3.Not(clause))
@@ -1600,7 +1614,7 @@ def loop_inference(
 
     active_context.add_axiom(solver)
     active_context.add_axiom_on_star_zero(solver)
-    active_context.add_axiom_higher(solver)
+    active_context.add_axiom_height(solver)
     active_context.add_axiom_scattered(solver)
     # (b0,) = constants
     x, y, z = z3.Consts("x y z", active_context.BoxSort)
@@ -1828,7 +1842,7 @@ def check_redundancy(
         else:
             active_context.add_axiom(solver)
             active_context.add_axiom_on_star_zero(solver)
-            active_context.add_axiom_higher(solver)
+            active_context.add_axiom_height(solver)
             active_context.add_axiom_scattered(solver)
 
         for existing in filtered_invariants:

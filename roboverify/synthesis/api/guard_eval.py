@@ -7,7 +7,6 @@ from contextvars import ContextVar
 from copy import deepcopy
 
 import z3
-
 from synthesis.environment.goal_layout import GoalRef, occupancy
 from synthesis.predicates.scene import Scene, evaluate, scene_from_obs
 from synthesis.predicates.term import Term
@@ -111,6 +110,7 @@ def evaluate_z3(expr, scene, bindings=None, *, goal_layout=None, goal_bindings=N
             "ON_star": on.on_star_implementation,
             "ON_star_zero": on.on_star_implementation,
             "Higher": on.higher_implementation,
+            "EqualHeight": on.equal_height_implementation,
             "Scattered": on.scattered_implementation,
         }
         if name not in predicates:
