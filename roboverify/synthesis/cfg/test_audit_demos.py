@@ -36,6 +36,35 @@ class AuditDemosTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "seeds"):
                 audit_archive(path, seeds=[0, 1])
 
+    def test_settled_audit_and_sidecar_revalidation(self):
+        from synthesis.cfg.task_success import (
+            SIDECAR,
+            revalidate_archive,
+            stored_settled_results,
+            write_sidecar,
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "demo.npz"
+            save_traces(path, [self.trace])
+            result = audit_archive(path, seeds=[0], post_settling_steps=50)
+            self.assertTrue(result["valid"], result)
+            row = result["trajectories"][0]
+            self.assertEqual(row["settled_task_success"]["criterion"], "task-spec-v2")
+            self.assertTrue(row["settled_task_success"]["success"])
+            # Without a stored result the archive needs a sidecar.
+            with self.assertRaisesRegex(ValueError, "post_settling_steps=50"):
+                stored_settled_results(path, [self.trace], 50)
+            before = path.read_bytes()
+            report = revalidate_archive(path, 50)
+            self.assertEqual(write_sidecar(path, report).name, SIDECAR)
+            self.assertEqual(path.read_bytes(), before)
+            self.assertEqual((report["passed"], report["failed_seeds"]), (1, []))
+            stored = stored_settled_results(path, [self.trace], 50)
+            self.assertEqual(stored[0], row["settled_task_success"])
+            with self.assertRaises(ValueError):
+                stored_settled_results(path, [self.trace], 20)
+
     def test_stale_program_and_corrupted_actions_are_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "demo.npz"

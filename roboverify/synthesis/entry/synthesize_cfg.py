@@ -90,9 +90,30 @@ def _run(args, logger):
     ]
     pre, post = task_spec(args.task)
     from synthesis.cfg.demo_validation import validate_demonstrations
+    from synthesis.cfg.task_success import (
+        criterion,
+        settled_issues,
+        stored_settled_results,
+    )
 
-    validation = validate_demonstrations(segments, pre, post)
+    # 0 keeps the last-state check; a positive count reads the stored settled
+    # result (trace metadata or sidecar) without running the simulator.
+    post_settling_steps = getattr(args, "post_settling_steps", 0)
+    validation = validate_demonstrations(
+        segments, pre, post, require_final_post=not post_settling_steps
+    )
+    if post_settling_steps:
+        validation.issues.extend(
+            settled_issues(
+                stored_settled_results(args.demos, traces, post_settling_steps)
+            )
+        )
     demo_checks = validation.as_dict()
+    if post_settling_steps:
+        demo_checks.update(
+            post_settling_steps=post_settling_steps,
+            criterion=criterion(post_settling_steps),
+        )
     logger.log_event(
         "demo_validation", f"Task predicate checks: {demo_checks}", force=True
     )
@@ -270,6 +291,12 @@ def _run(args, logger):
             raise ValueError(
                 "Additional demonstrations must use the same task, specification, and block count"
             )
+        if post_settling_steps:
+            failed = settled_issues(
+                stored_settled_results(path, extra, post_settling_steps)
+            )
+            if failed:
+                raise ValueError(f"Additional demonstrations failed: {failed}")
         return [
             DemoSegment(
                 i,
@@ -314,6 +341,7 @@ def _run(args, logger):
             revision=revision,
         ),
         demo_provider=provide_demos,
+        require_final_post=not post_settling_steps,
         repair_motion=repair,
         # Concrete IDs assume the demonstrated universe exists. Checking a
         # smaller universe can make fixed-alias premises inconsistent. The
@@ -372,6 +400,15 @@ def main(argv=None):
     )
     parser.add_argument("--max-loop-iterations", type=int, default=100)
     parser.add_argument("--trajectory-timeout-seconds", type=float, default=60)
+    parser.add_argument(
+        "--post-settling-steps",
+        type=int,
+        default=0,
+        help=(
+            "Validate demonstrations by their stored settled result (task-spec-v2)"
+            " with this many final settling steps; 0 checks the last recorded state"
+        ),
+    )
     parser.add_argument(
         "--demos",
         required=True,
@@ -449,6 +486,8 @@ def main(argv=None):
         "inf"
     ):
         parser.error("Execution budgets must be positive and finite")
+    if args.post_settling_steps < 0:
+        parser.error("--post-settling-steps must be nonnegative")
     if args.smoke:
         args.iterations, args.cem_iterations, args.cem_samples, args.cem_elites = (
             2,

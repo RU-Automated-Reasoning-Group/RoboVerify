@@ -323,6 +323,48 @@ class SimulatorCheckerTests(unittest.TestCase):
         self.assertEqual(settled.metadata["validation"]["criterion"], "task-spec-v2")
         self.assertEqual(settled.metadata["validation"]["settled"], stored)
 
+    def test_rollouts_settle_initially_and_report_the_settled_criterion(self):
+        import tempfile
+
+        from synthesis.cfg.program_source import load_program
+        from synthesis.cfg.reset import inner_env
+        from synthesis.entry.run_rollouts import run_program_rollouts
+        from synthesis.mcmc.synthesis import make_roboverify_env
+        from synthesis.verification_lib.highlevel_verification_lib import (
+            HighLevelContext,
+        )
+
+        definition = load_program(
+            "synthesis.examples.stack:build_program", HighLevelContext(), 2
+        )
+
+        def factory(seed):
+            env = make_roboverify_env("stack", num_blocks=2)
+            inner_env(env).symbolic_name_to_box_id.update(definition.initial_bindings)
+            return env
+
+        with tempfile.TemporaryDirectory() as directory:
+            summary = run_program_rollouts(
+                definition.program,
+                env_factory=factory,
+                num_seeds=1,
+                return_img=False,
+                save_dir=directory,
+                task="stack",
+                post_settling_steps=SETTLING_STEPS,
+            )
+        row = summary["results"][0]
+        self.assertTrue(row["task_spec_success"], row["task_success"])
+        self.assertEqual(summary["success_criterion"], "task-spec-v2")
+        self.assertEqual(row["task_success"]["unconverged"], 0)
+        with self.assertRaisesRegex(ValueError, "task"):
+            run_program_rollouts(
+                definition.program,
+                env_factory=factory,
+                num_seeds=1,
+                post_settling_steps=SETTLING_STEPS,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

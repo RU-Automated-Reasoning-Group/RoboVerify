@@ -250,3 +250,107 @@ def check_recorded_task_success(
     finally:
         if environment is None:
             env.close()
+
+
+SIDECAR = "settled_validation.json"
+
+
+class MissingSettledValidation(ValueError):
+    """An archive has no stored settled result for the requested step count."""
+
+
+def file_sha256(path):
+    import hashlib
+    from pathlib import Path
+
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def revalidate_archive(path, post_settling_steps=SETTLING_STEPS):
+    """Settled report for every trace of an archive; the archive is not modified."""
+    from synthesis.cfg.recordings import load_traces
+
+    steps = check_steps(post_settling_steps)
+    if not steps:
+        raise ValueError("Settled revalidation requires post_settling_steps > 0")
+    rows = []
+    for index, trace in enumerate(load_traces(path)):
+        row = dict(index=index, seed=trace.seed, status=trace.metadata.get("status"))
+        try:
+            row["result"] = check_recorded_task_success(trace, steps).as_dict()
+            row["success"] = row["result"]["success"]
+        except (KeyError, ValueError, TypeError) as exc:
+            row.update(success=False, error=f"{type(exc).__name__}: {exc}")
+        rows.append(row)
+    return dict(
+        archive=str(path),
+        archive_sha256=file_sha256(path),
+        criterion=criterion(steps),
+        post_settling_steps=steps,
+        traces=rows,
+        passed=sum(row["success"] for row in rows),
+        failed_seeds=[row["seed"] for row in rows if not row["success"]],
+        valid=all(row["success"] for row in rows),
+    )
+
+
+def write_sidecar(path, report):
+    import json
+    from pathlib import Path
+
+    sidecar = Path(path).with_name(SIDECAR)
+    sidecar.write_text(json.dumps(report, indent=2) + "\n")
+    return sidecar
+
+
+def stored_settled_results(path, traces, post_settling_steps):
+    """Stored settled results for ``traces``, simulator-free.
+
+    Results come from each trace's ``metadata["validation"]["settled"]`` or,
+    for archives collected before the option existed, from a
+    ``settled_validation.json`` sidecar that names this archive's SHA-256.
+    Raises ``MissingSettledValidation`` when neither has the step count.
+    """
+    import json
+    from pathlib import Path
+
+    steps = check_steps(post_settling_steps)
+    stored = [
+        (trace.metadata.get("validation") or {}).get("settled") for trace in traces
+    ]
+    if all(r is not None and r["post_settling_steps"] == steps for r in stored):
+        return stored
+    sidecar = Path(path).with_name(SIDECAR)
+    if sidecar.exists():
+        report = json.loads(sidecar.read_text())
+        if (
+            report.get("archive_sha256") == file_sha256(path)
+            and report.get("post_settling_steps") == steps
+            and len(report.get("traces", ())) == len(traces)
+            and all(
+                row["seed"] == trace.seed
+                for row, trace in zip(report["traces"], traces)
+            )
+        ):
+            return [
+                row.get("result") or dict(success=False, issues=[row.get("error")])
+                for row in report["traces"]
+            ]
+    raise MissingSettledValidation(
+        f"{path} has no settled task check with post_settling_steps={steps}."
+        " Re-collect with --post-settling-steps, or write a sidecar with"
+        f" `python -m synthesis.entry.revalidate_settled --demos {path}"
+        f" --post-settling-steps {steps}`"
+    )
+
+
+def settled_issues(results, *, offset=0):
+    return [
+        dict(
+            demo=offset + index,
+            reason="Settled task check failed",
+            issues=result.get("issues", []),
+        )
+        for index, result in enumerate(results)
+        if not result.get("success")
+    ]
