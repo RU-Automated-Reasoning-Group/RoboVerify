@@ -40,6 +40,7 @@ methods. Baseline modes are prompt-only; method-1 modes are checked:
 - [Revision 6: demonstration input — implemented](docs/revision_6_add_demonstration.md).
 - [Revision 7: primitive prompt without the motion-strategy sentence (`config_frozen_v5`) — implemented](docs/revision_7_update_prompt_and_config.md).
 - [Revision 7.1: general task specification, no block or goal counts (`config_frozen_v6`) — implemented](docs/revision_7_1_general_task_spec.md).
+- [Revision 7.2: RDP recovery keyframes (`recovery.feedback.keyframe_method`) — implemented](docs/revision_7_2_recovery_key_frame.md); [report](docs/revision_7_2_report.md).
 
 Revision 3 fixes loop-carried effect propagation and generic helper type merging
 in the shared checker (`shared-contract-v3`). All 106 CaP tests pass, including

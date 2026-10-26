@@ -56,6 +56,11 @@ experiment guidance specific to `synthesis/cap/`.
   layout size) is not given, and never state a particular count; the evaluated
   counts are run settings (`TASKS`) only
   ([Revision 7.1](docs/revision_7_1_general_task_spec.md)).
+  Recovery keyframes are `recovery.feedback.keyframe_method`: `legacy` (default
+  and every frozen version: entry, start of the last primitive, end) or `rdp`
+  (the failed rollout compacted like a demonstration; needs `fixed_items`).
+  Size `keyframe_bytes` and `evidence_bytes` so that the frames fit, and report
+  partial delivery ([Revision 7.2](docs/revision_7_2_recovery_key_frame.md)).
   Initial settling is `RunConfig.initial_settling_steps`, **on by default**
   (50 steps after every fresh reset, all six tasks, all frozen versions). Keep
   the default; set 0 only to reproduce an earlier unsettled Unstack/Reverse run,
