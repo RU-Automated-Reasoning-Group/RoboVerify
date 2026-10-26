@@ -40,7 +40,9 @@ def responses(method, task):
     ]
 
 
-def rendered_prompts(method, mode, task, run_overrides=None, run_kwargs=None):
+def rendered_prompts(
+    method, mode, task, run_overrides=None, run_kwargs=None, instruction=None
+):
     """Prompts of one generate-only trial, in request order."""
     model = ScriptedModel(responses(method, task))
     with tempfile.TemporaryDirectory() as root:
@@ -52,7 +54,7 @@ def rendered_prompts(method, mode, task, run_overrides=None, run_kwargs=None):
             result = run(
                 config,
                 frozen.model_config(),
-                instruction=frozen.instruction(task),
+                instruction=instruction or frozen.instruction(task),
                 backend=model,
                 generate_only=True,
                 capture_stdout=False,

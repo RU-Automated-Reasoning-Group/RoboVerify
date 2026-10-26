@@ -3,6 +3,7 @@
 import json
 import tempfile
 import unittest
+from dataclasses import asdict
 from pathlib import Path
 
 from ..experiments import revision6_experiment as experiment
@@ -113,7 +114,7 @@ class DriverConfigurationTests(unittest.TestCase):
         config, model, _, overrides = experiment.configuration(
             "stack", "local-qwen3.8-27b-fp8"
         )
-        frozen, frozen_model, _ = experiment.frozen.configuration("stack", seed=0)
+        frozen, frozen_model, _ = experiment.FROZEN["v3"].configuration("stack", seed=0)
         self.assertEqual(config, frozen)
         self.assertEqual(model, frozen_model)
         self.assertEqual(overrides, {})
@@ -121,7 +122,9 @@ class DriverConfigurationTests(unittest.TestCase):
     def test_hosted_models_change_only_endpoint_reasoning_and_token_counter(self):
         for label in ("qwen3.8-27b", "claude-haiku-5.5"):
             config, model, _, overrides = experiment.configuration("grid", label)
-            frozen, frozen_model, _ = experiment.frozen.configuration("grid", seed=0)
+            frozen, frozen_model, _ = experiment.FROZEN["v3"].configuration(
+                "grid", seed=0
+            )
             self.assertEqual(model.provider, "openrouter")
             self.assertEqual(model.extra_body, {"reasoning": {"effort": "medium"}})
             self.assertEqual(model.max_output_tokens, frozen_model.max_output_tokens)
@@ -138,6 +141,30 @@ class DriverConfigurationTests(unittest.TestCase):
         )
         self.assertFalse(off.demonstrations.enabled)
         self.assertEqual(set(overrides), {"model_config"})
+
+    def test_frozen_v6_supplies_its_run_config_and_instruction(self):
+        v6 = experiment.FROZEN["v6"]
+        for demonstrations in (True, False):
+            config, _, instruction, _ = experiment.configuration(
+                "pyramid",
+                "claude-haiku-5.5",
+                demonstrations=demonstrations,
+                frozen="v6",
+            )
+            frozen, _, frozen_instruction = v6.configuration(
+                "pyramid", demonstrations, seed=0
+            )
+            self.assertEqual(instruction, frozen_instruction)
+            changed = {
+                key
+                for key, value in asdict(config)["demonstrations"].items()
+                if asdict(frozen)["demonstrations"][key] != value
+            }
+            self.assertEqual(changed, {"token_counter"} if demonstrations else set())
+            self.assertEqual(
+                asdict(config) | {"demonstrations": None},
+                asdict(frozen) | {"demonstrations": None},
+            )
 
 
 if __name__ == "__main__":

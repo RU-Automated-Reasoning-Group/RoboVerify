@@ -1,4 +1,4 @@
-"""Revision 6 demonstration experiments under ``config_frozen_v3``.
+"""Revision 6 demonstration experiments under ``config_frozen_v3`` (or ``v6``).
 
 One batch per (model, task) at ``ROOT/<model>/<task>``, all batches in
 parallel, then one combined report at ``ROOT/report.md``
@@ -9,7 +9,9 @@ parallel, then one combined report at ``ROOT/report.md``
         --task stack --task grid --trials 5 --seed-start 0 --workers 5
 
 Run configs come from ``config_frozen_v3`` (demonstrations on unless
-``--demonstrations off``). The local model uses v3's model config unchanged.
+``--demonstrations off``); ``--frozen v6`` selects ``config_frozen_v6``
+(Revision 7.1), whose demonstration ablation runs both arms on the same scene
+seeds under separate roots. The local model uses v3's model config unchanged.
 Hosted OpenRouter models replace only the endpoint, the model name and the
 reasoning option (OpenRouter's ``reasoning.effort`` in place of vLLM's chat
 template switch), and measure the demonstration block with the provider's
@@ -28,7 +30,7 @@ from pathlib import Path
 
 from ..batch import atomic_json, create_batch, execute_batch
 from ..config import GPUConfig
-from ..configs import config_frozen_v3 as frozen
+from ..configs import config_frozen_v3, config_frozen_v6
 from ..reports import batch_set_report
 from .revision42_experiment import GPU_UUIDS
 
@@ -43,11 +45,17 @@ MODELS = {
     "qwen3.8-27b": OPENROUTER | {"model": "qwen/qwen3.8-27b"},
     "claude-haiku-5.5": OPENROUTER | {"model": "anthropic/claude-haiku-5.5"},
 }
-TASKS = tuple(frozen.TASKS)
+FROZEN = {"v3": config_frozen_v3, "v6": config_frozen_v6}
+EXPERIMENTS = {
+    "v3": "revision6_frozen_v3_demonstrations",
+    "v6": "revision7_1_frozen_v6_demonstrations",
+}
+TASKS = tuple(config_frozen_v3.TASKS)
 
 
-def configuration(task, label, *, demonstrations=True, seed=0):
+def configuration(task, label, *, demonstrations=True, seed=0, frozen="v3"):
     """(RunConfig, ModelConfig, instruction, overrides) for one batch."""
+    frozen = FROZEN[frozen]
     config, model, instruction = frozen.configuration(task, demonstrations, seed=seed)
     overrides = {}
     if MODELS[label] is not None:
@@ -61,7 +69,7 @@ def configuration(task, label, *, demonstrations=True, seed=0):
     return config, model, instruction, overrides
 
 
-def serving_record(model):
+def serving_record(model, frozen):
     if model.provider == "vllm":
         return frozen.SERVING | {
             "endpoint": model.base_url,
@@ -74,10 +82,14 @@ def serving_record(model):
     }
 
 
-def create(directory, task, label, *, trials, seed_start, workers, demonstrations):
+def create(
+    directory, task, label, *, trials, seed_start, workers, demonstrations, frozen
+):
     config, model, instruction, overrides = configuration(
-        task, label, demonstrations=demonstrations, seed=seed_start
+        task, label, demonstrations=demonstrations, seed=seed_start, frozen=frozen
     )
+    version = frozen
+    frozen = FROZEN[version]
     request_limit = trials * config.recovery.total_calls
     create_batch(
         directory,
@@ -110,9 +122,12 @@ def create(directory, task, label, *, trials, seed_start, workers, demonstration
     atomic_json(
         directory / "comparison_plan.json",
         {
-            "experiment": "revision6_frozen_v3_demonstrations",
+            "experiment": EXPERIMENTS[version],
             "frozen_config": frozen.VERSION,
-            "frozen_config_source": "synthesis/cap/configs/config_frozen_v3.py",
+            "frozen_config_source": f"synthesis/cap/configs/config_frozen_{version}.py",
+            "instruction_version": getattr(
+                frozen, "INSTRUCTION_VERSION", "task-instructions-v1"
+            ),
             "driver": "synthesis/cap/experiments/revision6_experiment.py",
             "overrides": overrides,
             "task": task,
@@ -121,7 +136,7 @@ def create(directory, task, label, *, trials, seed_start, workers, demonstration
             "trials": trials,
             "scene_seeds": [seed_start, seed_start + trials - 1],
             "task_settings": frozen.TASKS[task],
-            "serving": serving_record(model),
+            "serving": serving_record(model, frozen),
             "worker_gpus": GPU_UUIDS,
             "request_limit": request_limit,
             "git_sha": subprocess.check_output(
@@ -156,6 +171,7 @@ def main():
     parser.add_argument("--seed-start", type=int, default=0)
     parser.add_argument("--workers", type=int, default=5, help="per batch")
     parser.add_argument("--demonstrations", choices=("on", "off"), default="on")
+    parser.add_argument("--frozen", choices=sorted(FROZEN), default="v3")
     parser.add_argument("--report-only", action="store_true")
     parser.add_argument("--title", default="Revision 6 demonstrations")
     parser.add_argument("--note", action="append", default=[])
@@ -169,6 +185,7 @@ def main():
         seed_start=args.seed_start,
         workers=args.workers,
         demonstrations=args.demonstrations == "on",
+        frozen=args.frozen,
     )
     if args.batch:
         label, task = args.batch
@@ -215,6 +232,8 @@ def main():
                     str(args.workers),
                     "--demonstrations",
                     args.demonstrations,
+                    "--frozen",
+                    args.frozen,
                 ]
                 processes.append(
                     (
