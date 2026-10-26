@@ -1,6 +1,6 @@
 # Revision 7.3: `config_frozen_v7` for hosted Claude models
 
-- **Status:** implemented 2026-10-26. Smoke results in Section 4.
+- **Status:** implemented and smoke-tested 2026-10-26 (Section 4).
 - **Decisions (2026-10-26):** later CaP experiments use Claude Haiku 5.5 and Claude Opus 5.5. Raise `max_output_tokens` to 64k, and make RDP recovery keyframes ([Revision 7.2](revision_7_2_recovery_key_frame.md)) the default of the next version. Budgets may grow so that prompt items fit.
 
 ## 1. Changes from `config_frozen_v6`
@@ -47,4 +47,17 @@ The evidence object keeps an index entry (`keyframes`: method, version, delivere
 
 ## 4. Smoke
 
-Pending.
+[`runs/cap-revision7-3/20261026-smoke-v7/report.md`](../../../runs/cap-revision7-3/20261026-smoke-v7/report.md): Haiku 5.5, demonstrations on, scene seed 0, one trial per task, git `02335bb` (clean). Cost about $0.2.
+
+| Task | Result | Recovery rounds | Calls | Effort tokens (+ demonstration block) |
+| --- | --- | ---: | ---: | --- |
+| Stack | success, round 0 | 0 | 1 | 8,206 (+26,668) |
+| Unstack | success, round 0 | 0 | 1 | 9,288 (+34,199) |
+| Reverse | goal not reached after 5 rounds | 4 | 5 | 125,908 (+230,545) |
+| ReStack | Move/Release nonconvergence after 5 rounds | 4 | 6 | 195,775 (+433,518) |
+| Grid | success, round 0 | 0 | 1 | 7,838 (+76,593) |
+| Pyramid | success, round 0 | 0 | 1 | 7,342 (+81,503) |
+
+- All 8 recovery requests carried the `recovery-keyframes-v2` section, complete (19–27 KB evidence including the section), after the evidence object.
+- No attempt was cut at the output limit, and no request was refused by a token budget.
+- The two failures are task outcomes, as in the v6 smoke (Reverse) and the Revision 7.2 arms.
