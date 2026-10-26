@@ -7,8 +7,10 @@ import operator
 from .checker import require_check
 from .contracts import (
     ACTIONS,
+    TRAVERSALS,
     BudgetExceeded,
     CapError,
+    GoalHandle,
     ObjectHandle,
     Position3,
     validate_condition_mode,
@@ -42,16 +44,21 @@ class Runtime:
 
     @timed("execution")
     def execute(self, bundle, arguments=None, *, role="body", return_name=None):
-        from .validation import OBJECT
+        from .validation import GOAL, OBJECT
 
         arguments = arguments or dict(self.adapter.inputs)
-        if any(not isinstance(v, ObjectHandle) for v in arguments.values()):
+        if any(
+            not isinstance(v, (ObjectHandle, GoalHandle)) for v in arguments.values()
+        ):
             raise CapError("Module inputs must be object handles")
         self.budget.timings.call(
             "validation",
             require_check,
             bundle,
-            inputs=dict.fromkeys(arguments, OBJECT),
+            inputs={
+                name: GOAL if isinstance(value, GoalHandle) else OBJECT
+                for name, value in arguments.items()
+            },
             role=role,
             condition_mode=self.condition_mode,
             api_names=self.adapter.api_names,
@@ -135,6 +142,13 @@ class Runtime:
                         raise CapError("Objects support only identity comparisons")
                     equal = self.adapter.call("eq", [left, right])
                     result = equal if isinstance(op, ast.Eq) else not equal
+                elif isinstance(left, GoalHandle) and isinstance(right, GoalHandle):
+                    if not isinstance(op, (ast.Eq, ast.NotEq)):
+                        raise CapError("Goals support only identity comparisons")
+                    equal = self.adapter.goal_equal(left, right)
+                    result = equal if isinstance(op, ast.Eq) else not equal
+                elif isinstance(left, GoalHandle) or isinstance(right, GoalHandle):
+                    raise CapError("A goal can only be compared with another goal")
                 elif self.condition_mode == "coordinate_predicates":
                     operations = {
                         ast.Eq: operator.eq,
@@ -163,8 +177,10 @@ class Runtime:
             query.arity = len(names)
             return query
         if isinstance(node, ast.Call):
-            args = [self.expr(arg, env) for arg in node.args]
             name = node.func.id
+            if name in TRAVERSALS and name not in self.functions:
+                raise CapError(f"{name}(x) is a statement, not a value")
+            args = [self.expr(arg, env) for arg in node.args]
             if name not in self.functions:
                 if self.condition_depth and name in ACTIONS:
                     raise CapError("Action attempted during condition evaluation")
@@ -210,6 +226,23 @@ class Runtime:
                 if isinstance(stmt, ast.Assign):
                     name = stmt.targets[0].id
                     env[name] = self.expr(stmt.value, env)
+                    self.logger.emit("assignment", name=name, value=env[name])
+                elif (
+                    isinstance(stmt, ast.Expr)
+                    and isinstance(stmt.value, ast.Call)
+                    and stmt.value.func.id in TRAVERSALS
+                    and stmt.value.func.id not in self.functions
+                ):
+                    # RoboVerify's MoveRight/MoveDown rebind the goal variable in place.
+                    if self.condition_depth:
+                        raise CapError(
+                            "Goal cursor updated during condition evaluation"
+                        )
+                    call = stmt.value
+                    if len(call.args) != 1 or not isinstance(call.args[0], ast.Name):
+                        raise CapError(f"{call.func.id} takes one goal variable name")
+                    name = call.args[0].id
+                    env[name] = self.adapter.call(call.func.id, [env[name]])
                     self.logger.emit("assignment", name=name, value=env[name])
                 elif isinstance(stmt, ast.Expr):
                     value = self.expr(stmt.value, env)

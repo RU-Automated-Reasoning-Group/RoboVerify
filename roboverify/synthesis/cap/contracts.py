@@ -63,9 +63,27 @@ class ObjectHandle:
         return f"ObjectHandle({self.token!r})"
 
 
+@dataclass(frozen=True)
+class GoalHandle:
+    """Opaque goal identity (Grid/Pyramid); goal indices stay in the adapter."""
+
+    token: str
+    trial: str = field(repr=False)
+
+    def __repr__(self):
+        return f"GoalHandle({self.token!r})"
+
+
 CONDITION_MODES = ("dsl_only", "coordinate_predicates")
-OBSERVATION_API_VERSION = "positions-v1"
-CHECKER_VERSION = "shared-contract-v3"
+# positions-v2 adds goal positions in goal tasks (Revision 5, Grid/Pyramid).
+OBSERVATION_API_VERSION = "positions-v2"
+# shared-contract-v4 adds the goal kind and goal statements (Grid/Pyramid).
+CHECKER_VERSION = "shared-contract-v4"
+# Recorded contracts that post-hoc audits still accept.
+SUPPORTED_OBSERVATION_API_VERSIONS = frozenset(
+    {"positions-v1", OBSERVATION_API_VERSION}
+)
+SUPPORTED_CHECKER_VERSIONS = frozenset({"shared-contract-v3", CHECKER_VERSION})
 
 
 def validate_condition_mode(mode):
@@ -126,7 +144,19 @@ Emit top-level statements that invoke the policy; defining a function alone does
 """
 
 
+# RoboVerify's goal DSL (Revision 5, Grid/Pyramid): occupancy predicates and the
+# in-place cursor statements MoveRight/MoveDown, plus the goal position reader.
+GOAL_TASKS = frozenset({"grid", "pyramid"})
+GOAL_PREDICATES = frozenset({"AtGoal", "HasBlock"})
+TRAVERSALS = frozenset({"MoveRight", "MoveDown"})
+GOAL_POSITION_QUERIES = frozenset({"get_goal_position"})
+GOAL_API_NAMES = GOAL_PREDICATES | TRAVERSALS | GOAL_POSITION_QUERIES
+ALL_API_NAMES = API_NAMES | GOAL_API_NAMES
+
+
 def task_api_names(task):
+    if task in GOAL_TASKS:
+        return (API_NAMES - {"ON_star_zero"}) | GOAL_API_NAMES
     return API_NAMES if task == "reverse" else API_NAMES - {"ON_star_zero"}
 
 
@@ -137,8 +167,22 @@ TABLE_HANDLE_VERSION = "cap-table-handle-v1"
 
 
 def task_inputs(task):
-    """Handles bound before a policy runs: b0, plus tbl where the spec uses it."""
+    """Handles bound before a policy runs: b0, plus tbl where the spec uses it.
+
+    Goal tasks have no designated base block; their inputs are the goal head and
+    the empty goal, which a policy cannot reassign.
+    """
+    if task in GOAL_TASKS:
+        return ("h0", "null")
     return ("b0", "tbl") if task in TABLE_TASKS else ("b0",)
+
+
+INPUT_KINDS = {"b0": "object", "tbl": "object", "h0": "goal", "null": "goal"}
+PROTECTED_INPUTS = frozenset({"h0", "null"})
+
+
+def task_input_types(task):
+    return tuple((name, INPUT_KINDS[name]) for name in sorted(task_inputs(task)))
 
 
 CONDITION_RULES = {

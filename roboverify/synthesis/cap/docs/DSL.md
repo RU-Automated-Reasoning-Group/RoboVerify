@@ -287,6 +287,11 @@ of ON from a default invariant vocabulary does not exclude it from the DSL.
 
 ## 7. Goal Support Needed for Grid/Pyramid
 
+> **Status (2026-10-25):** CaP now exposes RoboVerify's runtime goal DSL (`h0`,
+> `null`, `MoveRight`/`MoveDown`, `AtGoal`, `HasBlock`, goal references in
+> Move/Release); see [Revision 5: Grid and Pyramid](revision_5_add_grid_pyramid.md).
+> The table below records the earlier symbolic-model review.
+
 Paper Appendix B (p.45) and Figs.17/18 (pp.47–48) require the concepts below.
 They belong to the six-task DSL scope, but currently have only partial symbolic
 implementations.

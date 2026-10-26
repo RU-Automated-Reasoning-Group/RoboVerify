@@ -130,6 +130,23 @@ def failure_status(error):
     return "failed"
 
 
+def goal_metadata(adapter):
+    """Goal layout, handles and reference semantics for goal tasks (else empty)."""
+    if adapter.goal_layout is None:
+        return {}
+    from synthesis.environment.goal_layout import GOAL_REFERENCE_MODE, GOAL_TOLERANCE
+
+    return {
+        "goal_layout": adapter.goal_layout.as_dict(),
+        "goal_handles": {
+            handle.token: index for handle, index in adapter.goal_ids.items()
+        },
+        "goal_reference_mode": GOAL_REFERENCE_MODE,
+        "goal_tolerance": GOAL_TOLERANCE,
+        "task_definition": "goal-occupancy-v1 (event-level checks not applied)",
+    }
+
+
 def run_once(
     config,
     model_config,
@@ -367,6 +384,7 @@ def run_once(
                                     handle.token: physical_id
                                     for handle, physical_id in adapter.ids.items()
                                 },
+                                **goal_metadata(adapter),
                                 "initialization": (
                                     "snapshot" if snapshot else "fresh_scene"
                                 ),

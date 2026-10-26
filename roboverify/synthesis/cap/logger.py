@@ -6,13 +6,15 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .contracts import ObjectHandle
+from .contracts import GoalHandle, ObjectHandle
 from .timing import timed
 
 
 def json_value(value):
     if isinstance(value, ObjectHandle):
         return {"object_handle": value.token}
+    if isinstance(value, GoalHandle):
+        return {"goal_handle": value.token}
     if hasattr(value, "tolist"):
         return value.tolist()
     if isinstance(value, Path):

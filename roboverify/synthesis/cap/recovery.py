@@ -244,6 +244,18 @@ def goal_evidence(trace):
                     ),
                 }
             )
+    elif trace.snapshots[0].goal_layout is not None:
+        from synthesis.environment.goal_layout import occupancy
+
+        layout = trace.snapshots[0].goal_layout
+        blocks = [
+            trace.states[-1][10 + 12 * i : 13 + 12 * i] for i in range(trace.num_blocks)
+        ]
+        occupied = occupancy(blocks, layout.positions).any(axis=0)
+        for g in range(min(len(layout.goals), 16)):
+            clauses.append(
+                {"clause": f"HasBlock(goal_{g})", "value": bool(occupied[g])}
+            )
     elif trace.task == "unstack":
         for i in range(trace.num_blocks):
             for j in range(trace.num_blocks):
@@ -413,8 +425,14 @@ def select_relevant_evidence(
     from .primitive_feedback import build_diagnostics
 
     options = primitive_feedback or PrimitiveFeedbackConfig()
+    # Goal tasks: Move/Release references may be goals with fixed centres.
+    layout = adapter.get("goal_layout")
+    goals = {
+        token: layout["positions"][index]
+        for token, index in adapter.get("goal_handles", {}).items()
+    }
     diagnostics, action_candidates = build_diagnostics(
-        record, adapter["object_handles"], options
+        record, adapter["object_handles"], options, goals
     )
     if diagnostics is not None:
         required["primitive_diagnostics"] = diagnostics

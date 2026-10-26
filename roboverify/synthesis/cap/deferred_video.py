@@ -226,11 +226,22 @@ def render_job(path, *, environment_factory=None, assignment=None):
                 for i, row in enumerate(frames)
             ):
                 raise ValueError("Invalid frame/state mapping")
+            # Goal layouts are fixed by the recorded snapshot; derive the
+            # environment's dimensions from it rather than from defaults.
+            layout = trace.snapshots[0].goal_layout
+            options = {}
+            if layout is not None and job["task"] == "grid":
+                options = dict(
+                    grid_rows=len(layout.row_lengths), grid_cols=layout.row_lengths[0]
+                )
+            elif layout is not None and job["task"] == "pyramid":
+                options = dict(bottom_row_blocks=layout.row_lengths[0])
             config = RunConfig(
                 task=job["task"],
                 num_blocks=trace.num_blocks,
                 seed=job["seed"],
                 video_mode="off",
+                **options,
             )
             if (
                 environment_factory is None

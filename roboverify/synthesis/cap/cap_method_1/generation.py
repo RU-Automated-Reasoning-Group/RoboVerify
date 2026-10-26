@@ -15,7 +15,7 @@ from ..contracts import (
 from ..prompt_package import package, validate_prompt_version
 from ..timing import timed
 from ..validation import (
-    OBJECT,
+    Value,
     definitions,
     missing_calls,
     parse,
@@ -68,11 +68,12 @@ class Generator:
         condition_mode="dsl_only",
         prompt_version="legacy_v1",
         higher_tolerance=0.001,
-        inputs=("b0",),
+        inputs=(("b0", "object"),),
     ):
         self.prompt_version = validate_prompt_version(prompt_version)
         self.higher_tolerance = higher_tolerance
-        self.inputs = dict.fromkeys(inputs, OBJECT)
+        # (name, kind) pairs of the bound input handles (goal tasks bind goals).
+        self.inputs = {name: Value(kind) for name, kind in inputs}
         self.primitive_prompt = checkpoints.primitive_prompt
         if checkpoints.prompt_version != prompt_version:
             raise ValueError("Checkpoint and generator prompt versions differ")
@@ -186,7 +187,9 @@ class Generator:
                 self.logger.emit(
                     "local_validation_pass", checkpoint_id=cp, parent_event_id=event
                 )
-                for call in missing_calls(source, helpers, role):
+                for call in missing_calls(
+                    source, helpers, role, api_names=self.api_names
+                ):
                     if call.name in ancestry or call.name == unit:
                         raise ConstraintFailure(
                             [Diagnostic("DEPENDENCY_CYCLE", call.name, unit=unit)]

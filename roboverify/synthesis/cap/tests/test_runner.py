@@ -161,15 +161,16 @@ class RunnerTests(unittest.TestCase):
         query = next(e for e in events if e["kind"] == "predicate")
         self.assertEqual(query["state_index"], len(trace.states) - 1)
 
-    def test_goal_adapter_gap_is_explicit(self):
+    def test_goal_layout_conflict_fails_before_model_calls(self):
+        # Grid 3x2 needs six blocks; a conflicting count is a configuration error.
         config = RunConfig(task="grid", output_root=self.tmp.name)
         with contextlib.redirect_stdout(io.StringIO()):
             result = run(
                 config, ModelConfig(), backend=ScriptedModel([]), capture_stdout=False
             )
-        self.assertEqual(result["status"], "adapter_gap")
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("Layout requires 6 blocks", result["reason"])
         self.assertEqual(result["model_calls"], 0)
-        self.assertIsNone(result["success"])
 
     def test_environment_and_dsl_scores_are_distinct(self):
         config = RunConfig(num_blocks=2, save_video=False, output_root=self.tmp.name)

@@ -1,8 +1,8 @@
 """Task construction and independent host-only scoring, imported lazily."""
 
 from .contracts import (
+    GOAL_TASKS,
     TABLE_TASKS,
-    AdapterGap,
     BudgetExceeded,
     CapError,
     EnvironmentUnavailable,
@@ -29,18 +29,25 @@ TABLE_CONTEXT = (
 )
 
 
+GOAL_CONTEXT = (
+    "h0 is the head goal of the goal layout and null is the empty goal; neither"
+    " can be reassigned. Goals form rows: MoveRight(g) advances goal variable g"
+    " to the next goal in its row (null after the last), and MoveDown(g) advances"
+    " a row head to the next row's head (null after the last row). There is no"
+    " input block b0 and no tbl handle."
+)
+
+
 def task_context(task):
     """Model-facing description of the bound input handles."""
+    if task in GOAL_TASKS:
+        return GOAL_CONTEXT
     return INPUT_CONTEXT + (TABLE_CONTEXT if task in TABLE_TASKS else "")
 
 
 def check_task(task):
     if task not in TASK_INSTRUCTIONS:
         raise ValueError(f"Unknown task: {task}")
-    if task in {"grid", "pyramid"}:
-        raise AdapterGap(
-            f"{task} needs the shared Goal traversal/occupancy and physical reference interface"
-        )
 
 
 # Upstream collection settles these tasks after a fresh reset; Unstack and
@@ -100,7 +107,14 @@ def prepare_environment(config, initial_snapshot=None):
     env = None
     try:
         np.random.seed(config.seed)
-        env = make_roboverify_env(config.task, num_blocks=config.num_blocks, **options)
+        if config.task in GOAL_TASKS:
+            from synthesis.cfg.goal_collection import make_goal_env
+
+            env = make_goal_env(config.task, options)
+        else:
+            env = make_roboverify_env(
+                config.task, num_blocks=config.num_blocks, **options
+            )
         if initial_snapshot is not None:
             restore(env, initial_snapshot)
         else:
@@ -154,6 +168,13 @@ def validate_start(env, task, entry_obs):
     )
 
     inner = inner_env(env)
+    if task in GOAL_TASKS:
+        if not goal_start_holds(inner, entry_obs):
+            raise CapError(
+                "Initial state violates the goal-task precondition: goals must be"
+                " empty and blocks pairwise Scattered"
+            )
+        return
     if task not in TASK_SPEC_TASKS:
         return
     scene = _task_scene(inner, task, entry_obs, entry_obs)
@@ -185,6 +206,33 @@ def validate_start(env, task, entry_obs):
             raise CapError("Restack b0 is not inside a source tower")
 
 
+def _goal_occupancy(inner, obs):
+    import numpy as np
+
+    from synthesis.environment.goal_layout import occupancy
+
+    blocks = np.array([obs[10 + 12 * i : 13 + 12 * i] for i in range(inner.num_blocks)])
+    return blocks, occupancy(blocks, inner.goal_layout.positions)
+
+
+def goal_start_holds(inner, obs):
+    """goal-occupancy-v1 precondition, as in validate_goal_trace."""
+    from synthesis.util.on import scattered_implementation
+
+    blocks, occupied = _goal_occupancy(inner, obs)
+    return not occupied.any() and all(
+        scattered_implementation(blocks[i], blocks[j])
+        for i in range(len(blocks))
+        for j in range(i)
+    )
+
+
+def goal_terminal_holds(inner, obs):
+    """goal-occupancy-v1 postcondition: every goal occupied within 20 mm (3D)."""
+    _, occupied = _goal_occupancy(inner, obs)
+    return bool(occupied.any(axis=0).all())
+
+
 def evaluate_terminal(env, task, entry_obs):
     """Score the final state with the physical evaluator and the shared task_spec.
 
@@ -203,7 +251,12 @@ def evaluate_terminal(env, task, entry_obs):
         "task_spec_precondition": None,
         "task_spec_postcondition": None,
     }
-    if task in TASK_SPEC_TASKS:
+    if task in GOAL_TASKS:
+        # No task_spec formula exists; goal-occupancy-v1 replaces it. The
+        # event-level checks of validate_goal_trace are not applied (Revision 5).
+        result["task_spec_precondition"] = goal_start_holds(inner, entry_obs)
+        result["task_spec_postcondition"] = goal_terminal_holds(inner, observation)
+    elif task in TASK_SPEC_TASKS:
         pre, post = task_spec(task)
         result["task_spec_precondition"] = bool(
             evaluate(pre, _task_scene(inner, task, entry_obs, entry_obs))
