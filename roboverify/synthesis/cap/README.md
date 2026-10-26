@@ -50,8 +50,8 @@ Configurable shared failure recovery is implemented as `cap-recovery-v1`. Demons
 | `*.py` (package root) | Shared runtime: task adapter and scoring (`adapter`, `tasks`, `runner`, `runtime`, `recovery`), DSL contract and checker (`contracts`, `checker`, `validation`, `audit`), model access and prompts (`llm`, `prompt_package`, `primitive_prompts`, `primitive_feedback`), batch execution (`batch`, `batch_worker`, `gpu_scheduler`, `request_control`, `deferred_video`), logging and budgets |
 | `cap_google_baseline/`, `cap_method_1/`, `cap_method_2/` | The three methods |
 | `configs/` | Versioned experiment configurations (`config_frozen_v1`, `config_frozen_v2`, `config_frozen_v3`) |
-| `experiments/` | Batch launchers for the Revision 4.2 and 4.3 experiments (`python -m synthesis.cap.experiments.<module>`) |
-| `reports/` | Tables, figures and analyses of finished batches (`python -m synthesis.cap.reports.<module>`) |
+| `experiments/` | Batch launchers for the Revision 4.2, 4.3 and 6 experiments (`python -m synthesis.cap.experiments.<module>`). `revision6_experiment` runs one batch per (model, task) under `config_frozen_v3`, local or OpenRouter models, and writes the combined report. |
+| `reports/` | Tables, figures and analyses of finished batches (`python -m synthesis.cap.reports.<module>`). Each batch writes its own `report.md`; `batch_set_report ROOT` combines every batch below `ROOT` into `ROOT/report.md`. |
 | `serving/` | vLLM-side code (reasoning-termination guard) |
 | `tests/` | Unit and integration tests, with fixtures in `tests/testdata/` |
 | `prompts/`, `vendor/`, `examples/`, `docs/` | Prompt packages, vendored Google CaP code, example options, documentation |

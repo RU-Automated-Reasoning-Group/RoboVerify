@@ -1,0 +1,236 @@
+"""Revision 6 demonstration experiments under ``config_frozen_v3``.
+
+One batch per (model, task) at ``ROOT/<model>/<task>``, all batches in
+parallel, then one combined report at ``ROOT/report.md``
+(``reports/batch_set_report.py``)::
+
+    python -m synthesis.cap.experiments.revision6_experiment --root ROOT \\
+        --model local-qwen3.8-27b-fp8 --model claude-haiku-5.5 \\
+        --task stack --task grid --trials 5 --seed-start 0 --workers 5
+
+Run configs come from ``config_frozen_v3`` (demonstrations on unless
+``--demonstrations off``). The local model uses v3's model config unchanged.
+Hosted OpenRouter models replace only the endpoint, the model name and the
+reasoning option (OpenRouter's ``reasoning.effort`` in place of vLLM's chat
+template switch), and measure the demonstration block with the provider's
+prompt-token counts (``provider_usage``), since they have no local tokenizer.
+Credentials are read from ``VLLM_API_KEY`` / ``OPENROUTER_API_KEY`` only.
+``--report-only`` rewrites the combined report from existing batches.
+"""
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+from dataclasses import asdict, replace
+from pathlib import Path
+
+from ..batch import atomic_json, create_batch, execute_batch
+from ..config import GPUConfig
+from ..configs import config_frozen_v3 as frozen
+from ..reports import batch_set_report
+from .revision42_experiment import GPU_UUIDS
+
+OPENROUTER = {
+    "provider": "openrouter",
+    "base_url": "https://openrouter.ai/api/v1",
+    "api_key_env": "OPENROUTER_API_KEY",
+    "extra_body": {"reasoning": {"effort": "medium"}},
+}
+MODELS = {
+    "local-qwen3.8-27b-fp8": None,  # config_frozen_v3.MODEL (local vLLM)
+    "qwen3.8-27b": OPENROUTER | {"model": "qwen/qwen3.8-27b"},
+    "claude-haiku-5.5": OPENROUTER | {"model": "anthropic/claude-haiku-5.5"},
+}
+TASKS = tuple(frozen.TASKS)
+
+
+def configuration(task, label, *, demonstrations=True, seed=0):
+    """(RunConfig, ModelConfig, instruction, overrides) for one batch."""
+    config, model, instruction = frozen.configuration(task, demonstrations, seed=seed)
+    overrides = {}
+    if MODELS[label] is not None:
+        model = frozen.model_config(**MODELS[label])
+        overrides["model_config"] = MODELS[label]
+        if demonstrations:
+            config.demonstrations = replace(
+                config.demonstrations, token_counter="provider_usage"
+            )
+            overrides["demonstrations.token_counter"] = "provider_usage"
+    return config, model, instruction, overrides
+
+
+def serving_record(model):
+    if model.provider == "vllm":
+        return frozen.SERVING | {
+            "endpoint": model.base_url,
+            "instances": "GPU 6 (8126), GPU 7 (8127)",
+            "prefix_cache": "cap-prefix-cache-v1",
+        }
+    return {
+        "endpoint": model.base_url,
+        "note": "hosted model; no think-close guard, no prefix-cache affinity",
+    }
+
+
+def create(directory, task, label, *, trials, seed_start, workers, demonstrations):
+    config, model, instruction, overrides = configuration(
+        task, label, demonstrations=demonstrations, seed=seed_start
+    )
+    request_limit = trials * config.recovery.total_calls
+    create_batch(
+        directory,
+        config,
+        model,
+        instruction=instruction,
+        methods=[config.method],
+        modes=[config.condition_mode],
+        trials=trials,
+        max_workers=workers,
+        schedule_seed=6000 + seed_start,
+        gpu_config=GPUConfig(
+            GPU_UUIDS,
+            "/tmp/roboverify-cap-gpu-reservations",
+            max_workers_per_gpu=48,
+            min_free_memory_mb=2048,
+            worker_memory_mb=128,
+            gpu_poll_interval_seconds=2,
+            gpu_sample_window_seconds=10,
+            admission_timeout_seconds=60,
+        ),
+        transport_control={
+            "state_path": str(directory / "request_gate.json"),
+            "interval_seconds": 0.0,
+            "request_limit": request_limit,
+            "credential_limits": {model.api_key_env: request_limit},
+        },
+        seed_per_trial=True,
+    )
+    atomic_json(
+        directory / "comparison_plan.json",
+        {
+            "experiment": "revision6_frozen_v3_demonstrations",
+            "frozen_config": frozen.VERSION,
+            "frozen_config_source": "synthesis/cap/configs/config_frozen_v3.py",
+            "driver": "synthesis/cap/experiments/revision6_experiment.py",
+            "overrides": overrides,
+            "task": task,
+            "model_label": label,
+            "demonstrations": demonstrations,
+            "trials": trials,
+            "scene_seeds": [seed_start, seed_start + trials - 1],
+            "task_settings": frozen.TASKS[task],
+            "serving": serving_record(model),
+            "worker_gpus": GPU_UUIDS,
+            "request_limit": request_limit,
+            "git_sha": subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], text=True
+            ).strip(),
+            "git_dirty": bool(
+                subprocess.check_output(
+                    ["git", "status", "--porcelain", "synthesis"], text=True
+                ).strip()
+            ),
+            "run_config": asdict(config),
+            "model_config": asdict(model),
+            "no_failed_trial_replacements": True,
+        },
+    )
+
+
+def run_batch(directory, task, label, **settings):
+    """Create (unless present) and execute one batch; resumes a stopped batch."""
+    directory = Path(directory).resolve()
+    if not directory.exists():
+        create(directory, task, label, **settings)
+    return execute_batch(directory, resume=(directory / "summary.json").exists())
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--root", type=Path, required=True)
+    parser.add_argument("--model", action="append", choices=sorted(MODELS))
+    parser.add_argument("--task", action="append", choices=TASKS)
+    parser.add_argument("--trials", type=int, default=5)
+    parser.add_argument("--seed-start", type=int, default=0)
+    parser.add_argument("--workers", type=int, default=5, help="per batch")
+    parser.add_argument("--demonstrations", choices=("on", "off"), default="on")
+    parser.add_argument("--report-only", action="store_true")
+    parser.add_argument("--title", default="Revision 6 demonstrations")
+    parser.add_argument("--note", action="append", default=[])
+    parser.add_argument(
+        "--batch", nargs=2, metavar=("MODEL", "TASK"), help=argparse.SUPPRESS
+    )
+    args = parser.parse_args()
+    root = args.root.resolve()
+    settings = dict(
+        trials=args.trials,
+        seed_start=args.seed_start,
+        workers=args.workers,
+        demonstrations=args.demonstrations == "on",
+    )
+    if args.batch:
+        label, task = args.batch
+        summary = run_batch(root / label / task, task, label, **settings)
+        print(
+            json.dumps(
+                {
+                    "model": label,
+                    "task": task,
+                    "finished": summary["finished"],
+                    "planned": summary["planned"],
+                }
+            ),
+            flush=True,
+        )
+        return
+    if not args.report_only:
+        models, tasks = args.model or ["local-qwen3.8-27b-fp8"], args.task or list(
+            TASKS
+        )
+        for label in models:
+            env = "VLLM_API_KEY" if MODELS[label] is None else OPENROUTER["api_key_env"]
+            if not os.environ.get(env):
+                parser.error(f"{label} needs the {env} environment variable")
+        root.mkdir(parents=True, exist_ok=True)
+        processes = []
+        for label in models:
+            for task in tasks:
+                log = (root / f"launch_{label}_{task}.log").open("a")
+                command = [
+                    sys.executable,
+                    "-m",
+                    __spec__.name,
+                    "--root",
+                    str(root),
+                    "--batch",
+                    label,
+                    task,
+                    "--trials",
+                    str(args.trials),
+                    "--seed-start",
+                    str(args.seed_start),
+                    "--workers",
+                    str(args.workers),
+                    "--demonstrations",
+                    args.demonstrations,
+                ]
+                processes.append(
+                    (
+                        label,
+                        task,
+                        subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT),
+                    )
+                )
+        for label, task, process in processes:
+            code = process.wait()
+            print(
+                json.dumps({"model": label, "task": task, "exit_code": code}),
+                flush=True,
+            )
+    print(batch_set_report.write(root, title=args.title, notes=args.note), flush=True)
+
+
+if __name__ == "__main__":
+    main()
