@@ -1,6 +1,6 @@
 # Revision 7.1: general task specification (`config_frozen_v6`)
 
-- **Status:** implemented 2026-10-26 (Section 5). Smoke and demonstration-ablation results are in Section 6.
+- **Status:** implemented and run 2026-10-26 (Sections 5 and 6).
 - **Goal:** the task given to the model is the task that RoboVerify solves: one program that takes *every* environment satisfying the precondition, with *any* number of blocks, to the postcondition. The prompt must say so, and the task specification must not state a particular number of blocks or goals.
 - **Scope:** the task instructions only. The API description, the primitive contracts, the demonstrations, the feedback, the evaluated block counts and all budgets are `config_frozen_v5`'s.
 
@@ -103,14 +103,53 @@ Model `anthropic/claude-haiku-5.5` on OpenRouter, reasoning effort medium, other
 
 ### 6.1 Smoke (one trial per task)
 
-`runs/cap-revision7-1/20261026-smoke-v6/`, demonstrations on, scene seed 0.
+[`runs/cap-revision7-1/20261026-smoke-v6/report.md`](../../../runs/cap-revision7-1/20261026-smoke-v6/report.md), demonstrations on, scene seed 0, git `a7743cc` (clean).
 
-Results: pending.
+| Task | Result | Rounds | Provider tokens |
+| --- | --- | ---: | ---: |
+| Stack | success, round 0 | 0 | 35,591 |
+| Unstack | success, round 0 | 0 | 86,229 |
+| Reverse | goal not reached after 5 rounds (`max_recovery_rounds`) | 4 | 358,344 |
+| ReStack | success, round 0 | 0 | 92,378 |
+| Grid | success, round 0 | 0 | 83,502 |
+| Pyramid | success, round 0 | 0 | 89,636 |
+
+All six prompts end with the v6 instruction. The Reverse failure is a task outcome: every round executed to the end and failed the settled postcondition. The generated Stack, Grid and Pyramid policies are loops over predicates or goal cursors (`while not forall(...)`; nested `MoveRight`/`MoveDown` loops), not unrolled placements.
 
 ### 6.2 Demonstration ablation (same seeds, with and without demonstrations)
 
 - Two arms: demonstrations on and off. Each arm: 6 tasks × 20 trials, scene seeds 0–19 (one per trial, identical in both arms; disjoint from the demonstration seeds 1000–1014). 240 trials.
 - Roots: `runs/cap-revision7-1/20261026-demo-ablation-v6/{demos-on,demos-off}/claude-haiku-5.5/<task>/`; combined report at `runs/cap-revision7-1/20261026-demo-ablation-v6/report.md`.
 - No failed trial is replaced. Paired comparison per task: trials where only one arm succeeds.
+- Launched at git `a7743cc`; `comparison_plan.json` records `git_dirty: true` only because this document was still untracked.
 
-Results: pending.
+Combined report: [`runs/cap-revision7-1/20261026-demo-ablation-v6/report.md`](../../../runs/cap-revision7-1/20261026-demo-ablation-v6/report.md). Task-spec success (`task-spec-v2`):
+
+| Task | On, round 0 | On, final | Off, round 0 | Off, final | Both | Only on | Only off | Neither | Mean effort tokens, on (+ demo block) | Mean effort tokens, off | Mean recovery rounds on / off |
+| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- | --- |
+| Stack | 16/20 | 20/20 | 17/20 | 20/20 | 20 | 0 | 0 | 0 | 16,039 (+36,002) | 17,031 | 0.35 / 0.15 |
+| Unstack | 15/20 | 20/20 | 2/20 | 15/20 | 15 | 5 | 0 | 0 | 19,104 (+51,298) | 87,680 | 0.35 / 2.40 |
+| Reverse | 0/20 | 10/20 | 1/20 | 15/20 | 5 | 5 | 10 | 0 | 89,484 (+182,131) | 97,962 | 2.85 / 1.90 |
+| ReStack | 2/20 | 14/20 | 0/20 | 3/20 | 2 | 12 | 1 | 5 | 115,822 (+285,399) | 126,061 | 2.85 / 2.30 |
+| Grid | 18/20 | 20/20 | 18/20 | 20/20 | 20 | 0 | 0 | 0 | 10,900 (+91,912) | 12,596 | 0.20 / 0.10 |
+| Pyramid | 20/20 | 20/20 | 20/20 | 20/20 | 20 | 0 | 0 | 0 | 8,167 (+81,503) | 11,988 | 0.00 / 0.00 |
+| **All** | **71/120** | **104/120** | **58/120** | **93/120** | 82 | 22 | 11 | 5 | | | |
+
+Failures by cause:
+
+| Arm | Task | Trials | Last attempt |
+| --- | --- | ---: | --- |
+| on | Reverse | 8 | goal not reached after 5 rounds |
+| on | Reverse | 2 | `get` found no object (1); Move nonconvergence (1) |
+| on | ReStack | 6 | `get` found no object (2); Pick (1), Release (1), Move (2) nonconvergence |
+| off | Unstack | 5 | Move nonconvergence |
+| off | Reverse | 5 | round 0 output truncated at the 32,768-token output limit; no rollout, so recovery could not start |
+| off | ReStack | 17 | output truncated (10 at round 0, no rollout; 3 in a later round); `get` found no object (1); Pick (1) and Move (2) nonconvergence |
+
+Observations:
+
+- Demonstrations raise round-0 success from 58 to 71 of 120 and final success from 93 to 104. The difference comes from Unstack (round 0: 15 vs 2) and ReStack (final: 14 vs 3). Without demonstrations, 13 Reverse/ReStack trials end because the model's first response exceeds the output limit; with demonstrations none does.
+- Reverse is the exception: the off arm succeeds more often (15 vs 10; 10 seeds only off, 5 only on). With demonstrations, Reverse never succeeds at round 0, and 8 of its 10 failures run five complete rounds without reaching the goal.
+- Stack, Grid and Pyramid are at or near ceiling in both arms.
+- These are single runs per seed; a seed that succeeds in only one arm also reflects sampling variation, not only the demonstrations.
+- Cost: the two OpenRouter keys were charged about $3.7 (on) and $2.4 (off) for this experiment.
