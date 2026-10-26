@@ -347,6 +347,10 @@ class RunConfig:
     grid_rows: int | None = None
     grid_cols: int | None = None
     bottom_row_blocks: int | None = None
+    # Unrecorded final settling before the task check: 0 scores the state where
+    # the rollout ended (task-spec-v1); a positive count scores only the settled
+    # state (task-spec-v2, config_frozen_v4).
+    post_settling_steps: int = 0
 
     def __post_init__(self):
         for name, tasks in TASK_OPTIONS.items():
@@ -393,6 +397,8 @@ class RunConfig:
             )
         if not math.isfinite(self.audit_timeout) or self.audit_timeout <= 0:
             raise ValueError("Audit timeout must be positive")
+        if type(self.post_settling_steps) is not int or self.post_settling_steps < 0:
+            raise ValueError("post_settling_steps must be a nonnegative integer")
 
 
 @dataclass

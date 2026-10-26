@@ -72,6 +72,12 @@ class RoboVerifyAdapter:
             self.goals, self.goal_ids, self.null = (), {}, None
             self.inputs = {"b0": self.b0} | ({"tbl": self.tbl} if self.tbl else {})
         self.input_types = task_input_types(task)
+        # Physical names of the inputs given to the policy, for task scoring.
+        self.input_bindings = (
+            {}
+            if self.goal_layout is not None
+            else {"b0": base} | ({"tbl": "tbl"} if self.tbl else {})
+        )
         self.entry_observation = self.observe()
         self.trajectory = [self.entry_observation.copy()]
         self.query_depth = 0

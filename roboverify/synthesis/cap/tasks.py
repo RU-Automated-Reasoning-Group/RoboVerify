@@ -131,7 +131,14 @@ def prepare_environment(config, initial_snapshot=None):
 # Shared task specifications exist for these tasks; the formulas of the last
 # three quantify over the relational table, as in upstream collection.
 TASK_SPEC_TASKS = frozenset({"stack", "unstack", "reverse", "restack"})
-SUCCESS_CRITERION = "task-spec-v1"
+SUCCESS_CRITERION = "task-spec-v1"  # post_settling_steps 0
+
+
+def success_criterion(config):
+    """task-spec-v1 without final settling, task-spec-v2 with it."""
+    from synthesis.cfg.task_success import criterion
+
+    return criterion(config.post_settling_steps)
 
 
 def _task_scene(inner, task, obs, entry_obs):
@@ -277,3 +284,34 @@ def settled_environment_success(env, steps=None):
 
     observation = settle(env, SETTLING_STEPS if steps is None else steps)
     return bool(inner_env(env)._is_success(observation))
+
+
+def settled_task_outcome(env, config, entry_obs, adapter, completed):
+    """task-spec-v2 fields from the shared checker (cfg/task_success.py).
+
+    The checker settles ``env`` for ``config.post_settling_steps`` steps; call
+    it only after recording has stopped. Bindings are the inputs the adapter
+    gave the policy. ``task_spec_success`` is the settled result; the
+    end-of-rollout postcondition and both physical evaluations are diagnostics.
+    """
+    from synthesis.cfg.task_success import check_task_success
+    from synthesis.util.on import using_higher_tolerance
+
+    with using_higher_tolerance(config.higher_tolerance):
+        result = check_task_success(
+            env,
+            config.task,
+            entry_observation=entry_obs,
+            bindings=adapter.input_bindings,
+            completed=completed,
+            unconverged=adapter.unconverged_primitives,
+            post_settling_steps=config.post_settling_steps,
+        )
+    return {
+        "task_spec_success": result.success,
+        "task_spec_precondition": result.pre,
+        "task_spec_postcondition": result.post_at_end,
+        "task_spec_settled_postcondition": result.post_settled,
+        "settled_environment_success": result.environment_success_settled,
+        "task_success": result.as_dict(),
+    }

@@ -230,6 +230,47 @@ class RunnerTests(unittest.TestCase):
         self.assertFalse(scattered["task_spec_postcondition"])
         self.assertFalse(scattered["task_spec_success"])
 
+    def run_settled(self, num_blocks, responses, method="cap_method_1"):
+        config = RunConfig(
+            method=method,
+            num_blocks=num_blocks,
+            save_video=False,
+            output_root=self.tmp.name,
+            post_settling_steps=50,
+        )
+        with contextlib.redirect_stdout(io.StringIO()):
+            return run(
+                config,
+                ModelConfig(),
+                backend=ScriptedModel(responses),
+                environment_factory=self.factory,
+                capture_stdout=False,
+            )
+
+    def test_settled_criterion_uses_the_shared_checker_outside_the_budget(self):
+        result = self.run_settled(1, ["pass"])
+        self.assertEqual(result["success_criterion"], "task-spec-v2")
+        self.assertEqual(result["post_settling_steps"], 50)
+        self.assertTrue(result["task_spec_success"])
+        self.assertTrue(result["task_spec_settled_postcondition"])
+        self.assertTrue(result["settled_environment_success"])
+        self.assertEqual(result["task_success"]["criterion"], "task-spec-v2")
+        # The policy issued no actions; the 50 settling steps are not charged.
+        self.assertEqual(len(self.envs[-1].actions), 50)
+        self.assertEqual(result["simulation_steps"], 0)
+        scattered = self.run_settled(2, ["pass"])
+        self.assertTrue(scattered["success"])
+        self.assertFalse(scattered["task_spec_postcondition"])
+        self.assertFalse(scattered["task_spec_settled_postcondition"])
+        self.assertFalse(scattered["task_spec_success"])
+
+    def test_settled_criterion_requires_normal_completion(self):
+        result = self.run_settled(1, ["pass\nmissing_value"], "cap_google_baseline")
+        self.assertEqual(result["status"], "failed")
+        self.assertTrue(result["task_spec_settled_postcondition"])
+        self.assertFalse(result["task_success"]["completed"])
+        self.assertFalse(result["task_spec_success"])
+
     def test_task_spec_success_requires_normal_completion(self):
         result = self.execute("cap_google_baseline", ["pass\nmissing_value"])
         self.assertEqual(result["status"], "failed")
@@ -267,6 +308,37 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual([f["frame"] for f in frames], list(range(len(frames))))
         self.assertEqual(frames[0]["step"], 0)
         self.assertIn("checkpoint_id", frames[-1])
+
+
+class SettledOutcomeTests(unittest.TestCase):
+    def test_post_at_end_is_a_diagnostic_when_the_tower_does_not_settle(self):
+        from types import SimpleNamespace
+
+        from ..tasks import settled_task_outcome
+
+        class Sliding(RobotFixture):
+            def step(self, action):
+                result = super().step(action)
+                if self.obs[22] < 0.2:  # block 1 slides off b0 to the table
+                    self.obs[22:25] += (0.02, 0, -0.005)
+                return result
+
+        env = Sliding(2)
+        entry = env.obs.copy()
+        env.obs[22:25] = (0.0, 0.0, 0.075)
+        adapter = SimpleNamespace(input_bindings={"b0": 0}, unconverged_primitives=0)
+        config = RunConfig(num_blocks=2, post_settling_steps=50)
+        outcome = settled_task_outcome(env, config, entry, adapter, True)
+        self.assertTrue(outcome["task_spec_precondition"])
+        self.assertTrue(outcome["task_spec_postcondition"])
+        self.assertFalse(outcome["task_spec_settled_postcondition"])
+        self.assertFalse(outcome["task_spec_success"])
+        self.assertEqual(len(env.actions), 50)
+
+    def test_post_settling_steps_must_be_nonnegative(self):
+        with self.assertRaises(ValueError):
+            RunConfig(post_settling_steps=-1)
+        self.assertEqual(RunConfig().post_settling_steps, 0)
 
 
 class TaskSpecEvaluationTests(unittest.TestCase):
