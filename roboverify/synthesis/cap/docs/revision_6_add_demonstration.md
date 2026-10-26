@@ -1,6 +1,6 @@
 # Revision 6: configurable demonstration input for CaP
 
-- **Status:** implemented on branch `feature/cap-demonstrations` (2026-10-26; Section 6), with the user's approval of this design. Offline validation passes; the real-model smoke trial is still pending because the model server was stopped (Section 6.6). The served-window upgrade of Section 3.5 is pending. The loader has not yet been reviewed with Yuning.
+- **Status:** implemented (2026-10-26; Section 6), with the user's approval of this design, and merged into `feature/cap`. The served window is 262,144 tokens (Section 3.5). A real-model smoke trial per task passed for 4 of 6 tasks (Section 6.6). Prefix caching is routed, measured and verified at batch start (Sections 3.6 and 6.8). The loader has not yet been reviewed with Yuning.
 - **Goal:** give CaP access to the same selected demonstration data used by RoboVerify's demonstration-driven synthesis, with an explicit on/off setting for ablation.
 - **Dependencies:** [task support plan](revision_5_add_tasks.md), an agreed demonstration schema, and validated data. Stack is the first integration target.
 
@@ -308,6 +308,28 @@ The served window binds first. A request may carry at most 98,304 − 32,768 = 6
 
 **When to apply.** Restarting the 27B instances with the larger window interrupts any running batch. Apply it only after the Revision 5 runs (tower tasks, then Grid/Pyramid) have finished, using the drain procedure from [Revision 4.3.1](revision_4_3_1_inference_backend_optimization.md). Then confirm `/v1/models` reports `max_model_len` 262,144 and check the KV-cache size in the startup log.
 
+**Applied 2026-10-26.** Both instances were restarted with `--max-model-len 262144` (`~/vllm-serve/serve.sh`, now `MAX_MODEL_LEN`, default 262,144). `/v1/models` reports 262,144 on ports 8126 and 8127. The KV cache shrank to 537,356 and 570,413 tokens, i.e. 2.05× and 2.18× a full-length request. `config_frozen_v3.SERVING["window_upgrade_status"]` still reads "pending": frozen files are not edited, and this section is the record.
+
+### 3.6 Prefix caching
+
+A prefix cache stores the attention keys and values (the KV cache) that the server computed for a prompt. A later request whose token sequence begins with the same tokens reuses them, and only the remaining tokens need prefill. The cache lives in each vLLM instance's GPU memory and is evicted least-recently-used. It does not store or replay model outputs.
+
+**Why it matters here.** The demonstration block is 26k–87k tokens and is sent with every request of a trial. The repair and recovery requests of one trial also repeat the method prompt and earlier content. Without reuse, every request pays the block's full prefill again.
+
+**What it must not change.** Caching and routing change neither the request (prompt, sampling settings), nor the token accounting (provider `total_tokens` still counts cached tokens), nor the information the model sees. Requests do not share outputs, only the prefill of an identical prefix. Run-to-run numerical differences from batching exist with or without the cache.
+
+**Design.**
+
+| Part | Rule | Why |
+| --- | --- | --- |
+| Prompt layout | `[demonstration block][method prompt][recovery feedback]`. The block is rendered deterministically and ends in a blank line; its SHA-256 is recorded with every request (Section 6.3). | Only an identical leading token sequence can be reused, so the block, which never changes within a task, goes first. |
+| Serving flags | `--enable-prefix-caching` and `--enable-prompt-tokens-details` | The second makes the server report `usage.prompt_tokens_details.cached_tokens`, so hits are measured per request instead of inferred from aggregate metrics. |
+| Routing | Each trial sends an affinity key (`X-CaP-Affinity`). The balancer ranks the live instances by rendezvous hashing of the key and uses the top one unless its in-flight count exceeds the least-loaded instance's by more than a slack (default 2), in which case it uses the least-loaded instance. The response names the instance (`X-CaP-Backend`). Requests without a key keep least-in-flight routing. | Least-in-flight routing alone sends consecutive calls of one trial to different instances, which then miss. Per-trial affinity keeps a trial's calls on one instance. Trials of the same task spread over both instances, and each instance caches the block after its first miss. The slack bounds the load imbalance that hashing a few keys can cause. |
+| Startup check | Before dispatching a batch with demonstrations on and a vLLM model, the batch runner probes every instance behind the endpoint: the same 4k-token prompt, starting with a random nonce, is sent twice with a one-token output. The second response must report `cached_tokens` > 0. Otherwise the batch refuses to start. | "Required, verified at startup" in Section 3.5. A server restarted without the flags would otherwise silently lose caching (or its measurement) while the run still succeeds. |
+| Records | Per request: `usage` (with `cached_tokens`) and `served_by`. Per trial: `cached_prompt_tokens` and calls per instance. Per batch: the probe results in `execution_metadata.json`. | Cache effectiveness is reported next to `demonstration_tokens`. |
+
+**Measured in the smoke run (2026-10-26, before routing affinity).** After the first Stack recovery round the two instances had served 76,048 and 77,616 cached prompt tokens (vLLM `prefix_cache_hits_total`), so the block is reused on this hybrid-attention checkpoint (vLLM uses the `align` Mamba cache mode with prefix caching).
+
 ## 4. Experimental design
 
 | Comparison | Controlled inputs | Measurement |
@@ -459,17 +481,20 @@ It then compares them with the kept frames.
 - With demonstrations on, every request began with the same block (one context hash across methods), and `demonstration_tokens` was 25,838 per request.
 - The method prompts after the block were byte-identical to the demonstrations-off requests.
 
-**Real-model smoke trial: pending.** The 27B servers on GPUs 6–7 were stopped to free memory. Starting them from this session was not permitted, so no Qwen3.8 request with demonstrations has been made. Once the server answers `/v1/models`, run it from `roboverify/` with `VLLM_API_KEY` set. Stack fits the current window:
+**Real-model smoke trial (2026-10-26).** One trial per task, scene seed 0, `config_frozen_v3` with demonstrations on, served window 262,144, before routing affinity (Section 6.8). Launcher: `runs/cap-revision6/launch_frozen_v3.py ROOT TASK TRIALS SEED_START MAX_WORKERS [off]`; results in `runs/cap-revision6/20261026-smoke-v3-demos/`.
 
-```python
-from synthesis.cap.configs import config_frozen_v3 as v3
-from synthesis.cap.runner import run
+| Task | `task_spec_success` | Rounds | Calls | Effort tokens | Block tokens per call | Provider total |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Stack | Yes | 1 | 2 | 40,997 | 25,838 | 92,673 |
+| Unstack | Yes | 0 | 1 | 15,552 | 35,636 | 51,188 |
+| Reverse | No (4 rounds used: Move/Pick non-convergence, then goal failures) | 4 | 6 | 155,171 | 46,814 | 436,055 |
+| ReStack | No (every round: Move or Pick non-convergence) | 4 | 7 | 163,022 | 75,974 | 694,840 |
+| Grid | Yes | 0 | 1 | 12,520 | 83,581 | 96,101 |
+| Pyramid | Yes | 0 | 1 | 16,403 | 86,752 | 103,155 |
 
-config, model, instruction = v3.configuration(
-    "stack", seed=0, output_root="runs/cap-revision6/<date>-smoke"
-)
-run(config, model, instruction=instruction)
-```
+- The server's `/tokenize` gave exactly the block counts measured offline above, for all six tasks.
+- Grid and Pyramid requests (about 96k and 103k provider tokens in one call) exceed the old 98,304 window, so they confirm the upgrade.
+- One trial per task is a smoke test of the pipeline, not a success-rate estimate. The Reverse and ReStack failures are the Move/Pick non-convergence that dominates the Revision 5 failures as well.
 
 ### 6.7 Deviations and open points
 
@@ -477,11 +502,24 @@ run(config, model, instruction=instruction)
 - **RDP is applied between consecutive event frames** rather than to the whole path at once. Event frames are always kept, so this only makes the corners around them more stable. Distances use the chord segment.
 - **Empty-handed gripper switches are events:** the Grid/Pyramid programs close the gripper during empty transits, which adds event frames with full block positions.
 - **Not committed:** the archives (`demos/` is generated data). Regenerate the parity golden file only for an intentional prompt change ([tests/prompt_parity.py](../tests/prompt_parity.py)).
-- **Open:**
-  - the real-model smoke trial;
-  - live `/tokenize` counts (expected to equal the table, since the ids matched);
-  - the served-window upgrade and its prefix-caching check;
-  - a loader review with Yuning.
+- **Open:** a loader review with Yuning. The smoke trial, live `/tokenize` counts, the window upgrade and the prefix-caching check are done (Sections 3.5, 3.6, 6.6 and 6.8).
+
+### 6.8 Prefix caching (`cap-prefix-cache-v1`)
+
+Implements Section 3.6 in [serving/prefix_cache.py](../serving/prefix_cache.py) and [serving/balancer.py](../serving/balancer.py).
+
+- **Affinity key.** `HTTPModel(..., affinity_key=...)` sends `X-CaP-Affinity` for `provider: vllm` only; other providers never receive it. Batch workers use `affinity_key(batch_dir, job_id)`, which is stable, so a resumed trial returns to its instance. `runner.run` creates one key per trial otherwise, shared by every recovery round. The key is a 32-hex-digit hash and carries no path or name.
+- **Balancer.** The balancer formerly kept in `~/vllm-serve/balancer.py` is now `python -m synthesis.cap.serving.balancer PORT BACKENDS_JSON [--slack N]`. It runs with the serving venv (`aiohttp`) and `roboverify/` on `PYTHONPATH`. `choose_backend` ranks instances by rendezvous hashing, so removing one instance moves only the keys that ranked it first. Requests without a key keep least-in-flight routing. `/balancer/status` lists the instances, the in-flight counts and the slack.
+- **Serving.** `~/vllm-serve/serve.sh` adds `--enable-prompt-tokens-details`; prefix caching was already on.
+- **Startup check.** `execute_batch` calls `verify_prefix_caching` when a pending job has demonstrations on, a vLLM model and no scripted responses or fixture. The probe sends a 4,373-token prompt twice to every instance listed by `/balancer/status`, without the request gate. The batch refuses to start unless each second response reports `cached_tokens` > 0. Each session's probe is stored in `execution_metadata.json` (`sessions[].prefix_cache`).
+- **Records.** `generation_end` events add `served_by`; `usage` already contains `prompt_tokens_details.cached_tokens`. With demonstrations on, results add `prefix_cache`: `cached_prompt_tokens`, `cache_unreported_calls` and `served_by` (requests per instance), per round and per trial. Budgets do not read them.
+- **Tests.** [tests/test_prefix_cache.py](../tests/test_prefix_cache.py) (12 tests) covers:
+  - routing: least-in-flight without a key, stickiness within the slack, fallback beyond it, spread over instances, and stability when another instance is removed;
+  - the header for vLLM only, and the reported instance and cached tokens;
+  - ledger recording through round budgets;
+  - the probe through a balancer and against a plain endpoint, and refusal when reuse or its report is missing;
+  - which jobs require the probe.
+- **Deployment check (2026-10-26).** After restarting both instances with the new flag, the probe verified both: the second request had 3,920 of 4,373 prompt tokens cached, and its time fell from 1.52 s to 0.19 s.
 
 ## Backlog (not implemented)
 

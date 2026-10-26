@@ -25,7 +25,11 @@ experiment guidance specific to `synthesis/cap/`.
   [Revision 4.3 report, §3.5](docs/revision_4_3_report.md#35-frozen-configuration).
   Build new experiments from [configs/config_frozen_v2.py](configs/config_frozen_v2.py),
   the current version for all six tasks (v1 plus the Grid/Pyramid goal interface,
-  `typed_v4` and `positions-v2`; tower-task prompts unchanged). `configuration(task,
+  `typed_v4` and `positions-v2`; tower-task prompts unchanged). For demonstration
+  input (Revision 6), use [configs/config_frozen_v3.py](configs/config_frozen_v3.py)
+  for both the demonstration-on and -off arms (`configuration(task,
+  demonstrations=False, ...)`); it needs the 262,144-token served window
+  ([Revision 6, §3.5](docs/revision_6_add_demonstration.md#35-context-window-upgrade-config_frozen_v3)). `configuration(task,
   seed=...)` returns the run config, model config and instruction; use it rather
   than restating values; it also records the server-side
   settings (`SERVING`, including the reasoning guard) and the per-task block
