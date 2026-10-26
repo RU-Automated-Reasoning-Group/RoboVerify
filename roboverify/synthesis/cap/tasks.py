@@ -50,9 +50,9 @@ def check_task(task):
         raise ValueError(f"Unknown task: {task}")
 
 
-# Upstream collection settles these tasks after a fresh reset; Unstack and
-# Reverse record from the reset state. Snapshots are never settled again.
-SETTLING_TASKS = frozenset({"stack", "restack", "grid", "pyramid"})
+# Upstream collection settles every task after a fresh reset (50 steps).
+# Snapshots are never settled again.
+SETTLING_TASKS = frozenset(TASK_INSTRUCTIONS)
 
 
 def environment_options(config):
@@ -92,8 +92,8 @@ def prepare_environment(config, initial_snapshot=None):
     try:
         import numpy as np
 
-        from synthesis.api.control import get_move_action
         from synthesis.cfg.reset import restore
+        from synthesis.cfg.task_success import settle
         from synthesis.mcmc.synthesis import make_roboverify_env
     except BudgetExceeded:
         raise
@@ -118,10 +118,7 @@ def prepare_environment(config, initial_snapshot=None):
         if initial_snapshot is not None:
             restore(env, initial_snapshot)
         else:
-            obs = env.reset()[0]
-            target = obs[:3].copy()
-            for _ in range(settling_steps(config)):
-                obs = env.step(get_move_action(obs, target, close_gripper=False))[0]
+            settle(env, settling_steps(config), env.reset()[0])
         return env
     except BaseException:
         if env is not None:
@@ -275,15 +272,8 @@ def settled_environment_success(env, steps=None):
     Call only after recording has stopped: these steps change the simulator
     state and are not part of the policy rollout.
     """
-    from synthesis.api.control import get_move_action
-    from synthesis.cfg.collection import STACK_SETTLING_STEPS
     from synthesis.cfg.reset import inner_env
+    from synthesis.cfg.task_success import SETTLING_STEPS, settle
 
-    inner = inner_env(env)
-    observation = inner.flatten_observation(inner._get_obs())
-    target = observation[:3].copy()
-    for _ in range(STACK_SETTLING_STEPS if steps is None else steps):
-        observation = env.step(
-            get_move_action(observation, target, close_gripper=False)
-        )[0]
-    return bool(inner._is_success(observation))
+    observation = settle(env, SETTLING_STEPS if steps is None else steps)
+    return bool(inner_env(env)._is_success(observation))

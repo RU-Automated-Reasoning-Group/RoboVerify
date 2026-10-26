@@ -6,8 +6,8 @@ import random
 
 import numpy as np
 
-from synthesis.api.control import get_move_action
 from synthesis.cfg.collection import VideoRecorder, execution_deadline
+from synthesis.cfg.task_success import SETTLING_STEPS, settle
 from synthesis.environment.goal_layout import occupancy
 from synthesis.examples.goal_layout import build_program
 from synthesis.experiment.run_logger import RunLogger
@@ -41,12 +41,8 @@ def execute(
     video, result = None, None
     try:
         inner = env.env
-        obs, _ = env.reset()
-        # Match the existing collection convention: start from a settled scene.
-        target = obs[:3].copy()
-        for _ in range(50):
-            env.step(get_move_action(obs, target))
-            obs = inner.flatten_observation(inner._get_obs())
+        # Match the collection convention: start from a settled scene.
+        obs = settle(env, SETTLING_STEPS, env.reset()[0])
         count = inner.num_blocks
         initial = np.array([obs[10 + 12 * i : 13 + 12 * i] for i in range(count)])
         if occupancy(initial, inner.goal_layout.positions).any():

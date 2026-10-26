@@ -9,7 +9,6 @@ from pathlib import Path
 
 import numpy as np
 
-from synthesis.api.control import get_move_action
 from synthesis.cfg.demo_validation import validate_demonstrations
 from synthesis.cfg.demos import DemoSegment, DemoTrace
 from synthesis.cfg.goal_collection import (
@@ -24,10 +23,18 @@ from synthesis.cfg.reset import (
     inner_env,
     restore,
 )
+from synthesis.cfg.task_success import (
+    SETTLING_STEPS,
+    check_steps,
+    check_task_success,
+    settle,
+    unconverged_primitives,
+)
 from synthesis.cfg.tasks import task_spec
 from synthesis.util.on import get_higher_tolerance
 
-STACK_SETTLING_STEPS = 50
+# Initial settling after a fresh reset, for every task.
+STACK_SETTLING_STEPS = SETTLING_STEPS
 
 
 @contextlib.contextmanager
@@ -169,14 +176,20 @@ def record_execution(
     render=False,
     guard_choices=None,
     environment_config=None,
+    post_settling_steps=0,
 ):
     """Record a program from its task reset or an exact saved snapshot.
 
-    Fresh Stack/Restack/Grid/Pyramid collection holds the gripper for 50 steps before
+    A fresh reset of every task holds the gripper for 50 steps before
     recording. A supplied snapshot is already the requested start: never reset
     or settle it again. Settling is outside demo actions, events, and video.
     Optional guard_choices replay an enabled binding prefix for counterexamples;
     after that prefix, execution uses its ordinary guard-selection policy.
+
+    With a positive ``post_settling_steps``, a completed execution is settled
+    for that many unrecorded steps after recording stops, and the result of the
+    shared checker is stored in ``metadata["validation"]["settled"]``;
+    ``validate_trace`` then applies ``task-spec-v2``. With 0 nothing changes.
     """
     from synthesis.api.guard_eval import replay_guard_choices
     from synthesis.api.instructions import LoopBudgetExceeded
@@ -186,6 +199,7 @@ def record_execution(
         set_np_seed,
     )
 
+    check_steps(post_settling_steps)
     recording = Recording()
     metadata = dict(definition.metadata)
     metadata["higher_tolerance"] = get_higher_tolerance()
@@ -236,14 +250,8 @@ def record_execution(
                 )
             )()
             if initial_snapshot is None:
-                first = env.reset()[0]
-                if task in ("stack", "restack", *GOAL_TASKS):
-                    target = first[:3].copy()
-                    inner = inner_env(env)
-                    for _ in range(STACK_SETTLING_STEPS):
-                        env.step(get_move_action(first, target, close_gripper=False))
-                        metadata["initialization"]["settling_steps"] += 1
-                        first = inner.flatten_observation(inner._get_obs())
+                first = settle(env, STACK_SETTLING_STEPS, env.reset()[0])
+                metadata["initialization"]["settling_steps"] = STACK_SETTLING_STEPS
             else:
                 first = restore(env, initial_snapshot)
             if task in GOAL_TASKS:
@@ -266,6 +274,18 @@ def record_execution(
                 max_loop_iterations=max_loop_iterations,
                 on_frame=frame if video is not None or render else None,
             )
+        if post_settling_steps and recording.states:
+            # After recording and outside the execution deadline: unrecorded.
+            settled = check_task_success(
+                env,
+                task,
+                entry_observation=recording.states[0],
+                bindings=definition.initial_bindings,
+                completed=True,
+                unconverged=unconverged_primitives(recording.events),
+                post_settling_steps=post_settling_steps,
+            )
+            metadata["validation"] = dict(settled=settled.as_dict())
     except (TimeoutError, LoopBudgetExceeded) as exc:
         status, reason = "incomplete", str(exc)
     except Exception as exc:
@@ -296,7 +316,15 @@ def record_execution(
 
 
 def validate_trace(trace):
-    """A valid demonstration completes and satisfies the initial/final task predicates."""
+    """A valid demonstration completes and satisfies the initial/final task predicates.
+
+    Without a stored settled result (``post_settling_steps`` 0), the
+    postcondition is checked on the last recorded state (``task-spec-v1``).
+    With ``metadata["validation"]["settled"]``, it is decided only by that
+    settled result (``task-spec-v2``); the end-state postcondition remains a
+    diagnostic. Goal tasks keep their Release-event checks in both cases.
+    """
+    settled = (trace.metadata.get("validation") or {}).get("settled")
     if trace.metadata.get("status") != "completed" or not trace.states:
         return False
     failed_controls = [
@@ -312,15 +340,26 @@ def validate_trace(trace):
             reason=f"Controller step limit at {event['path']}: {event['control']}",
         )
         return False
+    require_final_post = settled is None
     if trace.task in GOAL_TASKS:
-        result = validate_goal_trace(trace)
+        result = validate_goal_trace(trace, require_final_post=require_final_post)
     else:
         pre, post = task_spec(trace.task)
         segment = DemoSegment(
             0, 0, len(trace.states) - 1, trace, trace.metadata["initial_bindings"]
         )
-        result = validate_demonstrations([segment], pre, post)
+        result = validate_demonstrations(
+            [segment], pre, post, require_final_post=require_final_post
+        )
+    if settled is not None and not settled["success"]:
+        result.issues.append(
+            dict(demo=0, reason="Settled task check failed", issues=settled["issues"])
+        )
     trace.metadata["validation"] = result.as_dict()
+    if settled is not None:
+        trace.metadata["validation"].update(
+            criterion=settled["criterion"], settled=settled
+        )
     trace.metadata["status"] = "valid" if result else "invalid"
     if not result:
         trace.metadata["reason"] = str(result.issues)

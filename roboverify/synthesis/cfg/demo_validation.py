@@ -27,7 +27,12 @@ class DemoValidation:
         )
 
 
-def validate_demonstrations(segments, pre, post):
+def validate_demonstrations(segments, pre, post, *, require_final_post=True):
+    """Pre at each segment start and post at its end.
+
+    ``require_final_post=False`` records ``post_at_end`` only as a diagnostic,
+    for callers that decide the postcondition on a settled state instead.
+    """
     result = DemoValidation(len(segments))
     if not segments:
         result.issues.append({"demo": None, "reason": "No demonstrations supplied"})
@@ -49,7 +54,7 @@ def validate_demonstrations(segments, pre, post):
             result.issues.append(
                 {"demo": segment.demo_idx, "reason": "Initial task condition is false"}
             )
-        if not final:
+        if not final and require_final_post:
             result.issues.append(
                 {
                     "demo": segment.demo_idx,

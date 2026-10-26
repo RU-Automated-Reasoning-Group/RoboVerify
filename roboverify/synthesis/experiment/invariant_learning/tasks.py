@@ -17,6 +17,7 @@ from synthesis.cfg.program_adapter import program_to_cfg
 from synthesis.cfg.program_source import load_program
 from synthesis.cfg.recordings import loop_store
 from synthesis.cfg.reset import capture, inner_env
+from synthesis.cfg.task_success import settle
 from synthesis.cfg.tasks import task_identity, task_spec
 from synthesis.cfg.verification import (
     propose_summaries,
@@ -275,7 +276,6 @@ class StackExperiment:
         return WitnessQuery(solver, coverage, decode, iterations, context, paths)
 
     def execute(self, search, *, seed, timeout_seconds, video_path):
-        from synthesis.api.control import get_move_action
         from synthesis.mcmc.synthesis import (
             make_roboverify_stack_env,
             preserved_global_rng,
@@ -299,11 +299,7 @@ class StackExperiment:
                     inner.sim.data.set_joint_qpos(f"{name}:joint", qpos)
                     inner.sim.data.set_joint_qvel(f"{name}:joint", np.zeros(6))
                 inner.sim.forward()
-                first = inner.flatten_observation(inner._get_obs())
-                target = first[:3].copy()
-                for _ in range(STACK_SETTLING_STEPS):
-                    env.step(get_move_action(first, target, close_gripper=False))
-                    first = inner.flatten_observation(inner._get_obs())
+                first = settle(env, STACK_SETTLING_STEPS)
                 inner.symbolic_name_to_box_id = dict(definition.initial_bindings)
                 snapshot = capture(env)
                 positions = observation_positions(first, search.size)

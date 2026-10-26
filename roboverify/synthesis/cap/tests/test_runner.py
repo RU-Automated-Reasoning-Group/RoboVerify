@@ -337,9 +337,9 @@ class EnvironmentOptionTests(unittest.TestCase):
     def test_settling_follows_upstream_collection(self):
         from ..tasks import settling_steps
 
-        for task, steps in (("stack", 50), ("restack", 50), ("unstack", 0)):
-            self.assertEqual(settling_steps(RunConfig(task=task)), steps)
-        self.assertEqual(settling_steps(RunConfig(task="reverse")), 0)
+        # Every task settles a fresh reset for 50 steps; snapshots never settle.
+        for task in ("stack", "unstack", "reverse", "restack", "grid", "pyramid"):
+            self.assertEqual(settling_steps(RunConfig(task=task)), 50)
         self.assertEqual(settling_steps(RunConfig(), initial_snapshot=object()), 0)
 
     def test_layout_options_are_resolved_and_task_specific(self):

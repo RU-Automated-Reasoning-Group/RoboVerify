@@ -56,8 +56,12 @@ def environment_configuration(env):
     return dict(bottom_row_blocks=env.bottom_row_blocks)
 
 
-def validate_goal_trace(trace):
-    """Check real geometry, release effects and final coverage of fixed goals."""
+def validate_goal_trace(trace, *, require_final_post=True):
+    """Check real geometry, release effects and final coverage of fixed goals.
+
+    ``require_final_post=False`` keeps final coverage as a diagnostic only, for
+    the settled criterion; the Release-event checks always apply.
+    """
     from synthesis.cfg.recordings import check_trace
 
     result = DemoValidation(1)
@@ -99,7 +103,7 @@ def validate_goal_trace(trace):
         result.post_reached = int(filled.all(axis=1).any())
         if not initial:
             issue("Initial blocks must be scattered and all goals empty")
-        if not result.post_at_end:
+        if not result.post_at_end and require_final_post:
             issue("Final state does not cover every goal")
 
         previous = np.zeros(count, dtype=bool)
