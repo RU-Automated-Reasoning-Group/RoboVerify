@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass, field
 
 from .contracts import validate_condition_mode
-from .prompt_package import validate_prompt_version
+from .prompt_package import package, validate_prompt_version
 
 
 @dataclass
@@ -227,6 +227,81 @@ class PrimitiveFeedbackConfig:
         return self.target_derivation or self.controller_phases or self.action_context
 
 
+DEMONSTRATION_TOKEN_COUNTERS = ("server_tokenize", "utf8_bytes")
+
+
+@dataclass
+class DemonstrationConfig:
+    """Demonstration input (Revision 6); off keeps every prompt unchanged.
+
+    ``archive`` is a ``demonstrations.npz`` written by synthesis.cfg.recordings.
+    ``trace_ids`` selects and orders its trajectories (``"d0"``, ``"d1"``, ...;
+    null selects all in archive order). ``archive_sha256`` optionally pins the
+    archive bytes. ``waypoint_tolerance`` is the RDP tolerance in metres for
+    gripper-path waypoints. ``max_tokens`` limits the rendered block; exceeding
+    it fails the trial. ``token_counter`` measures the block once per trial:
+    ``server_tokenize`` uses the vLLM ``/tokenize`` endpoint (``tokenizer_url``,
+    default derived from the model base URL); ``utf8_bytes`` is a conservative
+    byte bound for offline diagnostics.
+    """
+
+    enabled: bool = False
+    archive: str | None = None
+    trace_ids: list[str] | None = None
+    archive_sha256: str | None = None
+    waypoint_tolerance: float = 0.01
+    max_tokens: int = 131072
+    token_counter: str = "server_tokenize"
+    tokenizer_url: str | None = None
+
+    def __post_init__(self):
+        if type(self.enabled) is not bool:
+            raise ValueError("demonstrations.enabled must be Boolean")
+        tolerance = self.waypoint_tolerance
+        if (
+            isinstance(tolerance, bool)
+            or not isinstance(tolerance, (int, float))
+            or not math.isfinite(tolerance)
+            or tolerance <= 0
+        ):
+            raise ValueError("demonstrations.waypoint_tolerance must be finite and > 0")
+        self.waypoint_tolerance = float(tolerance)
+        if type(self.max_tokens) is not int or self.max_tokens <= 0:
+            raise ValueError("demonstrations.max_tokens must be a positive integer")
+        if self.token_counter not in DEMONSTRATION_TOKEN_COUNTERS:
+            raise ValueError(
+                "demonstrations.token_counter must be server_tokenize or utf8_bytes"
+            )
+        if self.archive is not None and (
+            not isinstance(self.archive, str) or not self.archive.endswith(".npz")
+        ):
+            raise ValueError("demonstrations.archive must be an .npz path")
+        if self.trace_ids is not None:
+            ids = list(self.trace_ids)
+            if (
+                not ids
+                or len(set(ids)) != len(ids)
+                or not all(
+                    isinstance(i, str) and re.fullmatch(r"d(0|[1-9][0-9]*)", i)
+                    for i in ids
+                )
+            ):
+                raise ValueError(
+                    "demonstrations.trace_ids must be unique ids d0, d1, ... or null"
+                )
+            self.trace_ids = ids
+        if self.archive_sha256 is not None and not re.fullmatch(
+            r"[0-9a-f]{64}", str(self.archive_sha256)
+        ):
+            raise ValueError("demonstrations.archive_sha256 must be a SHA-256 digest")
+        if self.tokenizer_url is not None and not re.match(
+            r"https?://", str(self.tokenizer_url)
+        ):
+            raise ValueError("demonstrations.tokenizer_url must be an HTTP(S) URL")
+        if self.enabled and not self.archive:
+            raise ValueError("Enabled demonstrations require an archive")
+
+
 TASK_OPTIONS = {
     "initial_tower_blocks": {"restack"},
     "grid_rows": {"grid"},
@@ -261,6 +336,7 @@ class RunConfig:
     primitive_feedback: PrimitiveFeedbackConfig = field(
         default_factory=PrimitiveFeedbackConfig
     )
+    demonstrations: DemonstrationConfig = field(default_factory=DemonstrationConfig)
     baseline_audit: bool = True
     audit_timeout: float = 10.0
     # Task layout options, resolved by the upstream resolvers (Revision 5).
@@ -279,6 +355,15 @@ class RunConfig:
             self.primitive_prompt = PrimitivePromptConfig(**self.primitive_prompt)
         if isinstance(self.primitive_feedback, dict):
             self.primitive_feedback = PrimitiveFeedbackConfig(**self.primitive_feedback)
+        if isinstance(self.demonstrations, dict):
+            unknown = set(self.demonstrations) - set(
+                DemonstrationConfig.__dataclass_fields__
+            )
+            if unknown:
+                raise ValueError(f"Unknown demonstration settings: {sorted(unknown)}")
+            self.demonstrations = DemonstrationConfig(**self.demonstrations)
+        if not isinstance(self.demonstrations, DemonstrationConfig):
+            raise ValueError("demonstrations must be an object")
         if self.save_video is not None and type(self.save_video) is not bool:
             raise ValueError("save_video must be Boolean or omitted")
         if self.video_mode is None:
@@ -296,6 +381,13 @@ class RunConfig:
         self.save_video = self.video_mode != "off"
         validate_condition_mode(self.condition_mode)
         validate_prompt_version(self.prompt_version)
+        if self.demonstrations.enabled and "demonstrations" not in package(
+            self.prompt_version
+        ):
+            raise ValueError(
+                f"Prompt package {self.prompt_version} has no demonstration"
+                " templates; use typed_v5"
+            )
         if not math.isfinite(self.audit_timeout) or self.audit_timeout <= 0:
             raise ValueError("Audit timeout must be positive")
 

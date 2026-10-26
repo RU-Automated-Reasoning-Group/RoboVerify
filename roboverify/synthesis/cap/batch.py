@@ -274,7 +274,7 @@ def collect_job(job, state):
             for d in attempt_dirs
             for p in (d / "artifacts/trial_001/lmp").glob("call_*")
         )
-        total, missing = 0, 0
+        total, missing, demonstration = 0, 0, 0
         for call in calls:
             response = call / "response.json"
             usage = (
@@ -282,13 +282,25 @@ def collect_job(job, state):
                 if response.exists()
                 else {}
             )
+            # Revision 6: the demonstration block is charged separately from
+            # the effort tokens that known_tokens reports.
+            metadata = call / "prompt_metadata.json"
+            block = (
+                json.loads(metadata.read_text()).get("demonstration_tokens", 0)
+                if metadata.exists()
+                else 0
+            )
             if usage.get("total_tokens") is None:
                 missing += 1
             else:
-                total += int(usage["total_tokens"])
+                total += max(0, int(usage["total_tokens"]) - block)
+            if response.exists():
+                demonstration += block
         result.update(
             model_calls=len(calls), known_tokens=total, unknown_usage_calls=missing
         )
+        if demonstration:
+            result["demonstration_tokens"] = demonstration
         if (
             result["method"] == "cap_google_baseline"
             and job["run_config"]["baseline_audit"]
@@ -425,6 +437,8 @@ def write_report(directory, manifest, schedule):
         token = str(row.get("known_tokens", 0)) + (
             "*" if row.get("unknown_usage_calls", 0) else ""
         )
+        if row.get("demonstration_tokens"):
+            token += f" (+{row['demonstration_tokens']} demo)"
         reason = (
             str(row.get("stop_reason", row.get("reason", "")))
             .replace("|", "/")

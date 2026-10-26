@@ -34,6 +34,15 @@ experiment guidance specific to `synthesis/cap/`.
   needs (for example, the prompt is silent about `tbl` or goal handles); low
   success alone is a result, not a reason. Record such a change as a new
   `config_frozen_vN.py` and apply it to all six tasks (§3.6).
+- Build demonstration-input experiments (Revision 6) from
+  [configs/config_frozen_v3.py](configs/config_frozen_v3.py), for both the
+  demonstrations-on and demonstrations-off arms, so that the demonstrations are
+  the only difference. Its `SERVING` block records the intended 262,144-token
+  window and prefix caching. That upgrade is pending (Revision 6, §3.5); until it
+  is applied, only Stack, Unstack and Reverse requests with 15 demonstrations fit
+  the served 98,304-token window. Report `demonstration_tokens` next to the
+  effort tokens (`known_tokens`). Never include an evaluation scene among the
+  demonstrations.
 - Use the paper's block counts for each task (Stack/Unstack/Reverse 4, ReStack
   5, Grid/Pyramid 6; ReStack's 3-block tower is only drawn in Fig. 10d), and
   check each task's pre/postconditions, in

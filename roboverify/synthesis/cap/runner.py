@@ -26,6 +26,12 @@ from .contracts import (
     PrimitiveFailure,
     validate_condition_mode,
 )
+from .demonstrations import (
+    DemonstrationBudgetExceeded,
+    DemonstrationError,
+    check_evaluation_scene,
+    check_evaluation_seed,
+)
 from .llm import HTTPModel, LoggedModel, ModelError
 from .logger import CapLogger
 from .prompt_package import package, prompt_provenance
@@ -117,6 +123,7 @@ def make_method(
 
 def failure_status(error):
     for kind, status in (
+        (DemonstrationError, "demonstration_rejected"),
         (AnalysisFailure, "analysis_failed"),
         (AdapterGap, "adapter_gap"),
         (EnvironmentUnavailable, "environment_unavailable"),
@@ -162,6 +169,8 @@ def run_once(
     batch_context=None,
     shared_budget=None,
     recovery_feedback=None,
+    demonstrations=None,
+    demonstration_token_counter=None,
 ):
     from synthesis.experiment.run_logger import RunLogger
 
@@ -173,6 +182,12 @@ def run_once(
         raise ValueError("Unknown CaP method")
     if config.timeout <= 0 or config.max_attempts < 1:
         raise ValueError("Invalid trial budget")
+    if config.demonstrations.enabled and demonstrations is None:
+        demonstrations = prepare_demonstrations(
+            config, model_config, demonstration_token_counter
+        )
+    elif not config.demonstrations.enabled and demonstrations is not None:
+        raise ValueError("Demonstration context supplied with demonstrations off")
     # Every task uses the configured cap; the repository's 60-second Unstack rule
     # governs synthesize_cfg's process alarm, not CaP trials (Revision 5).
     timeout = config.timeout
@@ -221,6 +236,8 @@ def run_once(
         "auxiliary_lmp_modules": [],
         "model_backend": type(backend).__name__ if backend else "HTTPModel",
     }
+    if demonstrations is not None:
+        resolved["demonstration_input"] = demonstrations.manifest
     run_log = RunLogger(
         config.output_root,
         "cap",
@@ -258,12 +275,16 @@ def run_once(
             },
         )
     logger.artifact("prompt_package.json", package(config.prompt_version))
+    if demonstrations is not None:
+        logger.artifact("demonstrations/context.txt", demonstrations.text)
+        logger.artifact("demonstrations/manifest.json", demonstrations.manifest)
     model = LoggedModel(
         backend or HTTPModel(model_config),
         logger,
         budget,
         model_config.transport_retries,
         recovery_feedback=recovery_feedback,
+        demonstrations=demonstrations,
     )
     env, recorder, entry, adapter = None, None, None, None
     outcome = {
@@ -278,6 +299,12 @@ def run_once(
         with deadline(budget):
             check_task(config.task)
             instruction = instruction or TASK_INSTRUCTIONS[config.task]
+            if demonstrations is not None:
+                try:
+                    demonstrations.check_budget(config.demonstrations.max_tokens)
+                except DemonstrationBudgetExceeded:
+                    budget.exhausted_by = "demonstration_tokens"
+                    raise
             if generate_only:
                 adapter = GenerationOnlyAdapter(config.task)
                 method = make_method(
@@ -328,6 +355,14 @@ def run_once(
                     ) != aliases.get(config.task, config.task):
                         raise ValueError("Initial-state task/object count mismatch")
                     snapshot = trace.snapshots[0]
+                    if demonstrations is not None:
+                        check_evaluation_seed(
+                            demonstrations,
+                            config.task,
+                            trace.seed,
+                            initial_state,
+                            trace_index,
+                        )
                     logger.emit(
                         "snapshot_input",
                         path=str(Path(initial_state).resolve()),
@@ -336,6 +371,8 @@ def run_once(
                         ).hexdigest(),
                         trace_index=trace_index,
                     )
+                if demonstrations is not None and snapshot is None:
+                    check_evaluation_seed(demonstrations, config.task, config.seed)
                 with using_higher_tolerance(config.higher_tolerance):
                     with budget.timings.measure("setup"):
                         env = (
@@ -347,6 +384,10 @@ def run_once(
                             env, logger, budget, task=config.task
                         )
                         entry = adapter.entry_observation
+                        if demonstrations is not None:
+                            check_evaluation_scene(
+                                demonstrations, entry, config.num_blocks
+                            )
                         if snapshot is not None:
                             from .recovery import verify_restoration
 
@@ -500,6 +541,15 @@ def run_once(
             active_checkpoint_id=checkpoints.active,
             artifacts_path=logger.relative(logger.root),
         )
+        if demonstrations is not None:
+            # known_tokens is the effort budget's count; the block is separate.
+            outcome.update(
+                demonstration_tokens=budget.demonstration_tokens,
+                demonstration_block_tokens=demonstrations.tokens,
+                demonstration_context_sha256=demonstrations.sha256,
+                demonstration_trace_ids=demonstrations.manifest["trace_ids"],
+                provider_total_tokens=budget.tokens + budget.demonstration_tokens,
+            )
         if config.method != "cap_google_baseline":
             outcome["dsl_compliance"] = (
                 "pass"
@@ -563,7 +613,19 @@ def run_once(
     return result
 
 
+def prepare_demonstrations(config, model_config, token_counter=None):
+    """Load, compact, render and measure the configured demonstrations once."""
+    from .demonstrations import prepare
+
+    return prepare(config, model_config, token_counter=token_counter)
+
+
 def run(config, model_config, **kwargs):
+    if config.demonstrations.enabled and kwargs.get("demonstrations") is None:
+        # Once per trial: every attempt and request reuses the same block.
+        kwargs["demonstrations"] = prepare_demonstrations(
+            config, model_config, kwargs.pop("demonstration_token_counter", None)
+        )
     if config.recovery.enabled and not kwargs.get("generate_only", False):
         from .recovery import run_recovery
 

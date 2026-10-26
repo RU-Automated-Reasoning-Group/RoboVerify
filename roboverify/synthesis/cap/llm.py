@@ -205,10 +205,20 @@ class ScriptedModel:
 
 
 class LoggedModel:
-    def __init__(self, backend, logger, budget, retries=0, recovery_feedback=None):
+    def __init__(
+        self,
+        backend,
+        logger,
+        budget,
+        retries=0,
+        recovery_feedback=None,
+        demonstrations=None,
+    ):
         self.backend, self.logger, self.budget = backend, logger, budget
         self.retries = retries
         self.recovery_feedback = recovery_feedback
+        # Revision 6: a DemonstrationContext rendered first in every request.
+        self.demonstrations = demonstrations
 
     @timed("generation_control")
     def complete(self, prompt, *, purpose, **context):
@@ -219,9 +229,27 @@ class LoggedModel:
             from .recovery import recovery_prompt
 
             prompt = recovery_prompt(prompt, self.recovery_feedback)
+        method_prompt, demonstration_tokens, demonstration = prompt, 0, {}
+        if self.demonstrations is not None:
+            # A stable prefix: identical in every request, method and trial.
+            prompt = self.demonstrations.text + method_prompt
+            demonstration_tokens = self.demonstrations.tokens
+            demonstration = {
+                "demonstration_context_sha256": self.demonstrations.sha256,
+                "demonstration_tokens": demonstration_tokens,
+                "method_prompt_sha256": hashlib.sha256(
+                    method_prompt.encode()
+                ).hexdigest(),
+            }
         for retry in range(self.retries + 1):
             if hasattr(self.budget, "reserve_request"):
-                reservation = self.budget.reserve_request(prompt)
+                reservation = (
+                    self.budget.reserve_request(
+                        method_prompt, demonstration_tokens=demonstration_tokens
+                    )
+                    if demonstration_tokens
+                    else self.budget.reserve_request(prompt)
+                )
                 self.logger.emit("request_reservation", **reservation)
 
             self.budget.model_call()
@@ -248,6 +276,7 @@ class LoggedModel:
                     ).encode()
                 ).hexdigest(),
                 "request_hash_encoding": "json-sort-keys-compact-ascii-utf8",
+                **demonstration,
             }
             self.logger.artifact(f"{path}/prompt.txt", prompt)
             self.logger.artifact(f"{path}/request.json", request)
@@ -310,10 +339,17 @@ class LoggedModel:
                         elapsed=request_elapsed,
                         usage=response.usage,
                         finish_reason=response.finish_reason,
+                        **demonstration,
                     )
                 ),
             )
-            self.budget.account_tokens(response.usage.get("total_tokens"))
+            if demonstration_tokens:
+                self.budget.account_tokens(
+                    response.usage.get("total_tokens"),
+                    demonstration_tokens=demonstration_tokens,
+                )
+            else:
+                self.budget.account_tokens(response.usage.get("total_tokens"))
             if hasattr(self.budget, "reserve_request"):
                 self.logger.emit(
                     "request_reconciliation",
