@@ -5,7 +5,6 @@ import unittest
 from pathlib import Path
 
 import numpy as np
-
 from synthesis.api.instructions import Assign, While
 from synthesis.cfg.collection import record_execution, validate_trace
 from synthesis.cfg.demos import DemoSegment
@@ -23,7 +22,7 @@ class ReverseTests(unittest.TestCase):
         self.addCleanup(np.random.set_state, np.random.get_state())
 
     def test_reset_uses_one_side_for_every_block_count_and_factory(self):
-        for count in (2, 3, 4):
+        for count in (2, 3, 4, 5):
             expected = {}
             for factory in (
                 make_roboverify_reverse_env,
@@ -82,7 +81,7 @@ class ReverseTests(unittest.TestCase):
 
     def test_groundtruth_moves_each_block_top_first_to_the_opposite_side(self):
         context = HighLevelContext(use_tbl=True)
-        for count, base_id in ((2, 0), (3, 0), (4, 0), (4, 2)):
+        for count, base_id in ((2, 0), (3, 0), (4, 0), (4, 2), (5, 0)):
             with self.subTest(count=count, base_id=base_id):
                 definition = load_program(
                     "synthesis.examples.reverse:build_program", context, count

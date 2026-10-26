@@ -5,7 +5,6 @@ XY offsets position the new tower; the original base moves last.
 """
 
 import z3
-
 from synthesis.api.instructions import (
     Assign,
     MoveByName,
@@ -20,8 +19,8 @@ DESTINATION_OFFSET = (0.45, -0.15)
 
 
 def build_program(context, *, num_blocks):
-    if num_blocks not in (2, 3, 4):
-        raise ValueError("The Reverse groundtruth program supports 2--4 blocks")
+    if num_blocks not in (2, 3, 4, 5):
+        raise ValueError("The Reverse groundtruth program supports 2--5 blocks")
     selected, other, base, current, table = z3.Consts(
         "b_prime n b0 b tbl", context.BoxSort
     )
