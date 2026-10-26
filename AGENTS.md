@@ -106,8 +106,11 @@ supplied primitive program starts with `b <- tbl` and uses one loop for all N
 transfers. Table-relative Move offsets position the new tower on the lower-Y side
 and remain trainable.
 `collect_demos --task reverse --program synthesis.examples.reverse:build_program`
-validates frozen-entry order reversal for 2–4 blocks. Archived full states still
-restore exactly.
+validates frozen-entry order reversal for 2–5 blocks. The five-block trial
+completed all 15 seeds, but only 12 passed the independent 50-step final-settling
+audit; seeds 0, 1 and 3 lost task success. The accepted subset and exclusions
+are under `demos/reverse/5-blocks-equal-height-20261026/audited/`; this is not a
+reliable five-block controller result. Archived full states still restore exactly.
 Payload-aware placement remains a documented idea; its diagnostic runner was
 retired. The user deferred adoption because it strengthens primitive capabilities
 and needs a review of motion contracts and verification assumptions. See the
@@ -197,6 +200,15 @@ These use learned invariants with no refinement or repair. Higher remains the
 default. Block-placement EqualHeight WP still introduces exists/forall support
 checks; this does not establish quantifier-free WP or AFR closure. See the
 [alternative and commands](roboverify/synthesis/cfg/VERIFICATION.md#equal-height-alternative).
+Reverse retains the structural learner default `ON_star ON_star_zero equality`,
+which passes all 12 symbolic checks under EqualHeight too. Expanded vocabularies
+add one height relation and Scattered, never Higher and EqualHeight together.
+Expanded EqualHeight learning from four-block data fails unbounded preservation
+on a five-block transfer. Learning from 72 states of 12 audited five-block runs
+passes finite checks at sizes 2–5 but fails on a six-block transfer. This is
+fixed-size invariant overfitting; it does not refute the structural proof or
+establish a motion proof. See the
+[Reverse comparison](roboverify/synthesis/cfg/VERIFICATION.md#reverse-vocabulary-investigation).
 The standalone [Section 6.2 experiment](roboverify/synthesis/experiment/invariant_learning/README.md)
 starts from no demos and False, directly minimizes reachable VC failures with
 bounded unordered execution queries, and learns only from complete validated

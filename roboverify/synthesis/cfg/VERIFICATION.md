@@ -568,8 +568,11 @@ Each process ran the usual ablation command with `--case baseline
 ## Equal-height alternative
 
 Supplied-program verification accepts `--height-predicate EqualHeight` in place
-of the default `Higher`. The default inference vocabulary then becomes
-`ON_star EqualHeight Scattered equality`. Runtime evaluation, both inference
+of the default `Higher`. For Stack and Unstack, the default inference vocabulary
+then becomes `ON_star EqualHeight Scattered equality`. Reverse keeps its
+`ON_star ON_star_zero equality` default; explicitly supply `--invariant-relations
+ON_star ON_star_zero EqualHeight Scattered equality` to include EqualHeight in
+Reverse learning. Runtime evaluation, both inference
 evaluators, invariant serialization, counterexample realization, symbolic WP,
 and motion translation share this choice. Finite proof contexts retain it.
 The EqualHeight domain uses reflexivity, symmetry, transitivity, exclusion of
@@ -688,6 +691,168 @@ test exposed a missing table binding in its fixture. After fixing the fixture,
 the 25-test focused rerun passed, including all seven new EqualHeight tests and
 18 existing Put/summary tests. This covers 414 distinct passing tests across the
 runs. Logs and a bounded summary are in `runs/tests/20261026-equal-height/`.
+
+### Reverse vocabulary investigation
+
+The 2026-10-26 Reverse investigation uses all 15 four-block recordings from
+`demos/pipeline-audit-20261023/reverse/demonstrations.npz`. Every recording passes
+the current precondition and frozen-entry reversal postcondition. Each run
+reexecutes the supplied program, learns from all 75 continuing/exit states,
+starts with False, and uses no supplied invariant or refinement. The symbolic
+body is `Put(b_prime,b); b <- b_prime`, with both b=tbl and b!=tbl branches.
+
+The expanded vocabulary `ON_star ON_star_zero EqualHeight Scattered equality`
+learns 13 clauses. All nine checks at sizes 2–4 pass, but the unbounded
+establishment/preservation/exit results are **valid / invalid / UNKNOWN**.
+Motion is therefore not attempted. The run finishes after 322 seconds, below
+its 600-second wall budget. Its `symbolic_budget_exhausted` aggregate status
+means there are no allowed refinement rounds; the preservation result is an
+actual SAT counterexample, not a timeout.
+
+A concrete five-block witness explains the failure. Start from an initial tower
+c0,c1,c2,c3,c4, bottom to top. After transferring c4, the current source has four
+blocks and the destination has one. The entire learned invariant, the guard,
+the enabled-Put conditions, and all current/frozen domain axioms hold. Transfer
+c3 onto c4 and assign b=c3, producing towers of heights three and two. Clause 11
+then fails:
+
+```text
+forall x,y. Scattered(x,y) =>
+    EqualHeight(b0,x) or EqualHeight(b0,y) or EqualHeight(x,y)
+```
+
+Choose x=c2 at Z=0.525 and y=c3 at Z=0.475; b0 is at Z=0.425. The blocks are
+separated in XY, neither is at base height, and their heights differ. All domain
+axioms still hold after placement. The production WP also evaluates false on
+this same pre-state, agreeing with the geometric update. This is an invariant
+generalization failure beyond the four-block training scenes, not evidence of
+an incorrect EqualHeight placement rewrite. The witness is a symbolic/geometric
+scene, not a five-block MuJoCo execution; the supplied physical factory was
+limited to 2–4 blocks at the time of that diagnostic. The subsequent five-block
+collection is recorded below.
+
+The matched expanded Higher vocabulary also fails unbounded preservation
+(establish/preserve/exit: valid / invalid / valid), after 384 seconds. The same
+five-block transfer violates its learned clauses 22 and 23. Thus the failure
+also occurs with Higher when using the expanded vocabulary, rather than
+Reverse's established structural vocabulary.
+
+Here "expanded" means adding **one** height relation and Scattered to Reverse's
+usual `ON_star ON_star_zero equality` vocabulary. Higher and EqualHeight are
+never enabled together; `equality` is object identity, not height equality.
+
+Removing Scattered alone also fails: `ON_star ON_star_zero EqualHeight equality`
+passes all nine checks at sizes 2–4, then returns valid / invalid / valid for
+unbounded establish/preserve/exit. The same complete five-block transfer refutes
+its clause 11, which requires any object below the current tip in the frozen
+tower to be at the base or tip height whenever the tip is above the base. The
+run is `runs/cfg/20261026-203845-eb9a90e-reverse-equal-height-no-scattered`
+(313 s). This confirms that removing one predicate need not fix generalization
+from demonstrations of only four-block towers.
+
+The structural control uses the EqualHeight domain but learns only from
+`ON_star ON_star_zero equality`. It passes all 12 symbolic checks, including
+the unbounded proof. Its 263-second run is
+`runs/cfg/20261026-203704-eb9a90e-reverse-equal-height-structural`.
+Motion remains `motion_unverified`: 18 checks are valid, seven unsupported,
+five refuted and two UNKNOWN. Table-relative controller coordinates and tower
+root selection are unsupported, and the resulting incomplete motion translation
+does not justify treating the downstream refutations as physical collisions or
+as a counterexample to the EqualHeight rewrite. This control establishes a
+structural proof under the alternative domain; it does not learn height clauses.
+
+Reproduce the expanded EqualHeight trial from `roboverify/` with the simulator
+environment configured:
+
+```bash
+uv run python -m synthesis.entry.synthesize_cfg \
+  --mode verify --task reverse --num-blocks 4 \
+  --program synthesis.examples.reverse:build_program \
+  --demos demos/pipeline-audit-20261023/reverse/demonstrations.npz \
+  --height-predicate EqualHeight \
+  --invariant-relations ON_star ON_star_zero EqualHeight Scattered equality \
+  --invariant-minimizer pyeda --symbolic-iterations 0 --motion-iterations 0 \
+  --supported-towers --table-surface-height 0.4 \
+  --initial-arm 1.3446426 0.74911606 0.5314612 \
+  --verification-timeout-ms 30000 --motion-timeout-ms 30000 \
+  --wall-timeout-seconds 600 --run-name reverse-equal-height
+```
+
+For the structural control, keep `--height-predicate EqualHeight` and set
+`--invariant-relations ON_star ON_star_zero equality`.
+
+The expanded runs are `runs/cfg/20261026-203052-eb9a90e-reverse-equal-height`
+and `runs/cfg/20261026-203052-eb9a90e-reverse-higher-control`. For the Higher
+control, change both height-predicate and vocabulary entries to Higher.
+The saved invariant and symbolic checks are under
+`artifacts/candidates/0/invariant-1.smt2` and `artifacts/verification/`.
+Geometric witness coordinates, domain checks, failing clauses and the WP check
+are saved under `runs/diagnostics/20261026-reverse-equal-height/` in
+`five-block-witness.json` and `vocabulary-witnesses.json`. The one-off diagnostic
+scripts stay outside the repository.
+
+At the user's request, the follow-up collected five-block executions using the
+same program and controllers, extending only the factory's explicit block-count
+limit in commit `42664cf`. Seeds 0–14 all completed and passed immediate task
+validation, but the independent exact-replay/50-step settling audit passed only
+12: seeds 0, 1 and 3 lost task success while settling. The original archive and
+failures are retained in `demos/reverse/5-blocks-equal-height-20261026/`. The
+`audited/` subset selects seeds 2 and 4–14 solely by the audit result, before
+invariant inference, and records the criterion in `selection.json`. See the
+[collection evidence](../inference_lib/README.md#collect-reverse-demonstrations).
+
+The 12 audited executions provide 72 loop states. The old four-block invariant
+fails on **36 of those observed states**, confirming that its generalization
+failure occurs in actual controller executions. An explicit symbolic check at
+five physical blocks also returns valid / invalid / valid for
+establish/preserve/exit, in 3.85 s. That supplementary result is saved with the
+original run as `artifacts/verification/diagnostic-five-block-symbolic.json`;
+the observed-state check is
+`runs/diagnostics/20261026-reverse-equal-height/five-block-observed-counterexamples.json`.
+The standard relational pipeline still checks finite sizes 2–4 before its
+unbounded query, independently of training block count.
+
+The first five-block inference run, `20261026-204701-eb9a90e-reverse-five-block-equal-height`,
+was explicitly interrupted when the settling audit identified the three failed
+recordings; it has no verification result. The audited rerun uses the preceding
+expanded-EqualHeight command with `--num-blocks 5` and
+`--demos demos/reverse/5-blocks-equal-height-20261026/audited/demonstrations.npz`.
+It is recorded as
+`runs/cfg/20261026-204903-42664cf-reverse-five-block-equal-height-audited` and
+finishes in 381 seconds, learning 15 clauses from the 72 states. All nine
+standard finite checks at sizes 2–4 pass. A separate five-block check also
+passes establishment, preservation and exit in 8.55 seconds; its report is
+`artifacts/verification/diagnostic-five-block-symbolic.json` in that run.
+Unbounded establishment and exit pass, but preservation remains **invalid**.
+Motion is not attempted, and the aggregate `symbolic_budget_exhausted` again
+means zero permitted refinement rounds, not expiration of the 600-second limit.
+
+The new invariant admits a complete six-block Reverse prefix with source and
+destination heights 5+1. The next legal transfer produces heights 4+2 and
+violates clause 13:
+
+```text
+forall x,y. not ON_star(y,x) or EqualHeight(b,b0) or EqualHeight(x,y)
+            or EqualHeight(b,x) or not ON_star_zero(b,x)
+            or ON_star_zero(b0,x)
+```
+
+Label the frozen source c0,...,c5 from bottom to top. After the second transfer,
+b=c4, b0=c0, x=c2 and y=c3 falsify every disjunct. The entire invariant, guard,
+enabled-Put conditions and domain axioms hold before; the domain axioms still
+hold afterward. The production body WP evaluates false on the same pre-state,
+agreeing with the explicit geometric update. This is a symbolic/geometric
+witness, not a six-block simulator
+execution. It is saved under `five_block_training` in the vocabulary-witnesses
+diagnostic above. Thus five-block training removes the observed five-block
+failure but does not establish generalization to arbitrary tower sizes. The
+structural proof and the expanded-vocabulary failure concern different learned
+invariants under the same EqualHeight domain; they are not conflicting verdicts
+on the same invariant.
+
+The eight focused Reverse execution/reset and tower-verification tests passed,
+including the new five-block case. No controller budget, tolerance, payload
+feedback or placement primitive was strengthened.
 
 ## Provided Unstack and Reverse verification
 

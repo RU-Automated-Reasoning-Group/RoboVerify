@@ -100,6 +100,15 @@ refinement was needed. The table-placement rule is simpler, but block placement
 still needs quantified support checks. Higher remains the default. See the
 [semantics, reproduction commands and controls](roboverify/synthesis/cfg/VERIFICATION.md#equal-height-alternative).
 
+Reverse's structural vocabulary also passes all 12 symbolic checks under the
+EqualHeight domain. Adding EqualHeight and Scattered changes the learned
+invariant: four-block training fails on a valid five-block transfer. Training
+on 12 audited five-block executions (72 states) repairs the five-block proof,
+but a six-block transfer still refutes unbounded preservation. The five-block
+collection completed all 15 seeds; three lost task success during final settling
+and were excluded from learning. Reverse motion support remains incomplete.
+See the [vocabulary comparison and five-block results](roboverify/synthesis/cfg/VERIFICATION.md#reverse-vocabulary-investigation).
+
 After the extrema encoding changes, revision `4f734bf` passed the full Python
 regression suite: **475 tests across 68 modules**, with no failures, errors or
 skips, including the optional real-solver baseline tests. On the current machine

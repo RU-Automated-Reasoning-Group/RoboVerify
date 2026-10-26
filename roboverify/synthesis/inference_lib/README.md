@@ -224,7 +224,8 @@ The table-reference convention is recorded in table-using program fingerprints.
 
 Transfers and retreats reference tbl at `N*0.05 + 0.10` m above that support
 reference, 10 cm above the highest nominal block center. The physical program
-supports 2–4 blocks. Primitive limits remain 50 steps and tolerances remain 2 mm.
+accepts 2–5 blocks. Five-block execution has a final-settling limitation described
+below. Primitive limits remain 50 steps and tolerances remain 2 mm.
 
 Run from `roboverify/` with the MuJoCo environment configured:
 
@@ -259,9 +260,31 @@ top-first and final XY error relative to the intended column stayed below
 The older `*-lateral` collections and video retain the previous program, which
 handled the first block outside its loop; their fingerprints differ.
 
-These results validate the tested simulator executions. The integrated
-synthesis CLI still exposes Stack and Unstack. The historical standalone Reverse
-verifier encoded a different task and has been removed; see
+**2026-10-26 five-block trial:** the factory's explicit limit was extended to
+five; the existing `N*0.05 + 0.10` clearance formula, primitives and controller
+settings are unchanged. All 15 executions (seeds 0–14) completed, converged and
+passed the immediate task pre/postconditions. The independent replay/50-step
+settling audit passed **12 of 15**: seeds 0, 1 and 3 lost task success during
+settling. This does not establish reliable five-block control. All source traces
+and the audit are retained under `demos/reverse/5-blocks-equal-height-20261026/`.
+The `audited/demonstrations.npz` subset contains seeds 2 and 4–14, with the
+selection criterion and exclusions in `audited/selection.json`. Accepted replays
+had zero observation error and retained physical success after settling. Use
+this subset for the [five-block EqualHeight investigation](../cfg/VERIFICATION.md#reverse-vocabulary-investigation).
+
+```bash
+uv run python -m synthesis.entry.collect_demos --task reverse --num-blocks 5 \
+  --num-trajectories 15 --seed-start 0 --max-loop-iterations 5 \
+  --output-dir demos/reverse/5-blocks-equal-height-20261026
+uv run python -m synthesis.entry.audit_demos \
+  --demos demos/reverse/5-blocks-equal-height-20261026/demonstrations.npz \
+  --settle-steps 50 --output demos/reverse/5-blocks-equal-height-20261026/audit.json
+```
+
+These collection results validate the tested simulator executions. The integrated
+CLI also accepts supplied Reverse programs for inference and symbolic verification;
+its table-relative motion encoding remains unsupported. The historical standalone
+Reverse verifier encoded a different task and has been removed; see
 [discrepancy 39](../../../PAPER-DISCREPANCIES.md#39-the-historical-reverse-verifier-encodes-unstack-rather-than-reversal).
 
 ## Collect Restack demonstrations
