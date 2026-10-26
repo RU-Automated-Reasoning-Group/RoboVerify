@@ -201,8 +201,9 @@ timeout --signal=TERM --kill-after=2s 55s \
   --num-blocks 4 --seeds 0 1 2 3 4 --max-loop-iterations 4
 ```
 
-Add `--save-video` to record the same execution at 20 FPS. Reverse starts directly
-from its reset, without Stack's 50-step settling phase. Saved full states replay
+Add `--save-video` to record the same execution at 20 FPS. Reverse, like every
+task, starts after 50 settling steps from its reset (before 2026-10-26 Unstack
+and Reverse recorded the reset directly). Saved full states replay
 exactly. The task precondition is one tower above b0 with frozen ON* equal to its
 entry geometry. Its final condition is
 `ON_star_final(x,y) iff ON_star_entry(y,x)` for every physical-block pair.

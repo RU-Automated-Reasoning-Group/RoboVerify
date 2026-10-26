@@ -37,9 +37,22 @@ regression suite: **406 tests across 59 modules**, with no failures, errors or
 skips. On the current machine the tests took 171.5 seconds, or 176.1 seconds
 including module loading. The complete command is in [AGENTS.md](AGENTS.md#validation).
 
+**Settled task success (2026-10-26).** One shared checker,
+`roboverify/synthesis/cfg/task_success.py`, scores RoboVerify and CaP executions.
+`post_settling_steps` 0 (the default) keeps the postcondition on the last
+recorded state (`task-spec-v1`). A positive count decides it after that many
+unrecorded settling steps (`task-spec-v2`); comparisons use 50, and CaP
+`config_frozen_v4` selects it. Every fresh reset of all six tasks now settles for
+50 steps, including Unstack and Reverse. The Revision 6 Unstack/Reverse
+demonstration archives were re-collected under v2 and the other four pass it.
+Recomputed under v2, Revision 5 changes only for Stack (19 → 17 of 20), and
+Revision 4.3 loses 159 of 5,998 successful attempts. See
+[discrepancy 43](PAPER-DISCREPANCIES.md#43-final-state-task-success-ignores-settling-unstack-and-reverse-skipped-initial-settling)
+and the [implementation notes](roboverify/synthesis/cfg/docs/settled_postcondition.md#5-implementation-2026-10-26).
+
 The Stack workflow has a standalone multi-seed DSL demonstration collector,
 full-state archives, optional 20 FPS videos, and shared `full` / `verify` pipeline
-modes. Collection holds the initial gripper position for **50 settling steps**,
+modes. Collection of every task holds the initial gripper position for **50 settling steps**,
 then saves that full simulator state as demonstration state zero. Settling is
 excluded from recorded actions and video. Both modes and standalone MCMC restore
 the archived start without resetting from the seed or settling again. Both modes

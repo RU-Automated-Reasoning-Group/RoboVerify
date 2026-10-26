@@ -1102,3 +1102,46 @@ run, is claimed by this audit. The integrated CLI still exposes Stack/Unstack;
 current Unstack runtime references, Reverse/Restack integration and goal-aware
 synthesis/verification remain open. Historical proof evidence retains its
 recorded executable, premises and workspace scope.
+
+## 43. Final-state task success ignores settling; Unstack and Reverse skipped initial settling
+
+**Implementation decision; optional settled criterion added (2026-10-26).**
+Demonstration acceptance and CaP's `task_spec_success` evaluated the task
+postcondition on the last recorded state (`task-spec-v1`). ON* is a column
+relation, so a released block still in flight above the tower, or a tower that
+is about to lean out of the 25 mm column, satisfies it. In Revision 4.3, 547
+CaP attempts satisfied the postcondition but failed the physical evaluator; 78
+of them did not settle into towers.
+
+The shared checker `cfg/task_success.py` now scores RoboVerify and CaP
+executions with one definition. `post_settling_steps` selects the criterion:
+
+- 0, the default, keeps `task-spec-v1`;
+- a positive count settles the scene for that many unrecorded steps (gripper
+  position held, command 0.0) and decides success on the settled state only
+  (`task-spec-v2`).
+
+The end-of-execution postcondition and the physical evaluator are diagnostics.
+Grid and Pyramid use settled goal occupancy; their Release-event checks remain
+a demonstration-quality filter, not part of the shared criterion.
+Comparisons between the two systems use 50 steps; CaP `config_frozen_v4`
+selects it. Settling steps never enter recordings, so archives, segment
+indices and imitation distances are unchanged.
+
+**Initial settling.** Entry 24's 50-step initial settling had been added for
+Stack and later for Restack, Grid and Pyramid. The lateral Unstack/Reverse reset
+did not adopt it, although the transient belongs to the robot, not the scene.
+Every fresh reset of all six tasks now settles for 50 steps, through one helper
+that reproduces the previous loops bit for bit. Unstack and Reverse
+demonstrations recorded before this change start from unsettled scenes. The
+CaP Revision 6 archives for these tasks were re-collected under
+`task-spec-v2`. The four other Revision 6 archives pass it unchanged (sidecar
+reports), and so do the superseded Unstack/Reverse archives.
+
+**Recomputed results.** Revision 5 changes only for Stack (final 19 → 17 of 20:
+two leaning towers whose top block leaves the ON* column while settling).
+Revision 4.3 loses 159 of 5,998 successful attempts and gains none. Recovery
+had stopped at the earlier success criterion, so the v2 results of chains that
+ended on a lost success are lower bounds. See the
+[plan and implementation notes](roboverify/synthesis/cfg/docs/settled_postcondition.md#5-implementation-2026-10-26).
+These are execution results; symbolic and motion verification are unaffected.
