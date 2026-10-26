@@ -188,6 +188,15 @@ alignment), while all 12 symbolic checks and carried-block collision checks pass
 See the [full premise ablation](roboverify/synthesis/cfg/VERIFICATION.md#removing-all-extra-motion-premises).
 The supported-tower motion proof contains quantifiers; this diagnostic removes
 them from premises but retains exact quantified conclusions where required.
+Supplied-program verification also accepts `--height-predicate EqualHeight`,
+replacing Higher in inference, domain axioms, WP and motion effects. EqualHeight
+shares the height tolerance and uses one learner feature per unordered pair.
+The 2026-10-26 rechecks pass 12 symbolic and 40 motion checks for Stack; Unstack
+passes 12 symbolic and 31 motion checks, with initial arm clearance UNKNOWN.
+These use learned invariants with no refinement or repair. Higher remains the
+default. Block-placement EqualHeight WP still introduces exists/forall support
+checks; this does not establish quantifier-free WP or AFR closure. See the
+[alternative and commands](roboverify/synthesis/cfg/VERIFICATION.md#equal-height-alternative).
 The standalone [Section 6.2 experiment](roboverify/synthesis/experiment/invariant_learning/README.md)
 starts from no demos and False, directly minimizes reachable VC failures with
 bounded unordered execution queries, and learns only from complete validated

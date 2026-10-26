@@ -459,6 +459,12 @@ verification.
 
 ## Higher height tolerance
 
+Supplied-program verification also supports `--height-predicate EqualHeight`.
+It uses the same tolerance for symmetric height equality and includes one
+feature per unordered pair, avoiding duplicate symmetric predictors in the
+partition learner. The abstract domain and WP use EqualHeight instead of Higher;
+see the [rules, commands and Stack/Unstack results](../cfg/VERIFICATION.md#equal-height-alternative).
+
 `Higher(x,y)` evaluates `z(x) >= z(y) - tolerance`. The default tolerance is
 **0.001 m (1 mm)**, compared with a **0.05 m** block side. This treats small
 contact-induced height differences as the same level while retaining the order

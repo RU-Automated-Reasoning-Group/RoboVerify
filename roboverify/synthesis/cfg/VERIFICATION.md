@@ -565,6 +565,130 @@ Each process ran the usual ablation command with `--case baseline
 --without-extra-motion-premises --symbolic-timeout-ms 300000
 --no-minimize-unsat-core`, using its own output directory.
 
+## Equal-height alternative
+
+Supplied-program verification accepts `--height-predicate EqualHeight` in place
+of the default `Higher`. The default inference vocabulary then becomes
+`ON_star EqualHeight Scattered equality`. Runtime evaluation, both inference
+evaluators, invariant serialization, counterexample realization, symbolic WP,
+and motion translation share this choice. Finite proof contexts retain it.
+The EqualHeight domain uses reflexivity, symmetry, transitivity, exclusion of
+distinct ON*-related blocks at the same level, and table isolation. It adds no
+Higher ordering or hidden Higher assumptions. Mixing height vocabularies fails
+explicitly.
+
+For physical blocks, `EqualHeight(x,y)` means
+`abs(z(x)-z(y)) <= tolerance`. It shares `--higher-tolerance` (default 0.001 m);
+zero means exact equality. The table marker equals only itself. As with tolerant
+Higher, transitivity requires separated height levels whose within-level spread
+is at most the tolerance; it is not valid for arbitrary continuous heights.
+The Stack entry condition uses `forall x,y. EqualHeight(x,y)`. This is physically
+equivalent to the original all-pairs Higher entry condition, so archive task
+identity stays canonical and existing archives are revalidated under the selected
+predicate. Executable fingerprints and controller behavior are unchanged.
+
+For an enabled `Put(a,b)`, write `E` for EqualHeight. Self-pairs stay true and
+pairs not involving `a` are framed. For another physical block `x`:
+
+```text
+Put(a,tbl): E'(a,x) = Root(x)
+Put(a,b):   E'(a,x) = exists s. DirectON(x,s) and E(s,b)
+
+Root(x)       = forall s. ON*(x,s) => x=s
+DirectON(x,s) = x!=s and ON*(x,s) and
+                forall t. (ON*(x,t) and ON*(t,s)) => (t=x or t=s)
+```
+
+The reverse pair uses the same rule. Table aliases dispatch by value. These
+rules describe complete, uniformly supported towers on a common table; the
+weak abstract domain axioms alone do not establish that geometry. Motion
+verification separately proves their effects under its explicit premises.
+The block rule still introduces existential/universal quantifiers, and the
+table rule introduces a universal. Thus EqualHeight is a useful alternative,
+not a quantifier-free WP construction or a restoration of AFR closure. This
+implementation does not add a Lean correspondence theorem.
+
+The partition learner includes **one feature per unordered EqualHeight pair**.
+Including both orientations lets each feature be predicted by its symmetric
+duplicate, yielding symmetry tautologies instead of useful state facts. With
+both orientations, the first Stack trial retained only three structural clauses
+and returned UNKNOWN on the unbounded exit check. Canonical pairs recovered a
+six-clause invariant and the full proof, using the same learner and traces.
+
+Reproduce from `roboverify/` with the environment in AGENTS.md:
+
+```bash
+uv run python -m synthesis.entry.synthesize_cfg \
+  --mode verify --task stack --num-blocks 4 \
+  --program synthesis.examples.stack:build_program \
+  --demos demos/stack/4-blocks-5-trajectories-pyeda-verification/demonstrations.npz \
+  --height-predicate EqualHeight --invariant-minimizer pyeda \
+  --max-loop-iterations 3 --symbolic-iterations 0 --motion-iterations 0 \
+  --supported-towers --table-surface-height 0.4 \
+  --initial-arm 1.3446426 0.74911606 0.5314612 \
+  --verification-timeout-ms 30000 --motion-timeout-ms 30000 \
+  --wall-timeout-seconds 600 --run-name stack-equal-height
+uv run python -m synthesis.entry.synthesize_cfg \
+  --mode verify --task unstack --num-blocks 4 \
+  --program synthesis.examples.unstack:build_program \
+  --demos demos/unstack-base-guard-20261023/4-blocks/demonstrations.npz \
+  --height-predicate EqualHeight --invariant-minimizer pyeda \
+  --symbolic-iterations 0 --motion-iterations 0 \
+  --supported-towers --table-surface-height 0.4 \
+  --initial-arm 1.3446426 0.74911606 0.5314612 \
+  --verification-timeout-ms 30000 --motion-timeout-ms 30000 \
+  --wall-timeout-seconds 600 --run-name unstack-equal-height
+```
+
+The 2026-10-26 trials replayed all five Stack starts (20 loop states) and all
+15 Unstack starts (60 states). Both learned from False with no supplied invariant
+and no refinement/repair. Symbolic success includes sizes 2–4 and an unbounded
+proof, with premise-consistency checks retained. Motion uses the existing
+noiseless supported-tower model; it does not prove controller refinement or
+termination. Unstack retains the documented suspension of the 60-second limit.
+
+| Configuration | Symbolic checks | Motion checks | Overall result |
+| --- | --- | --- | --- |
+| Stack, EqualHeight | 12 valid | 40 valid | `verified_model` |
+| Unstack, EqualHeight | 12 valid | 31 valid, 1 UNKNOWN | `motion_unverified` |
+| Stack, Higher control | 12 valid | 40 valid | `verified_model` |
+| Unstack, Higher control | 12 valid | 29 valid, 3 UNKNOWN | `motion_unverified` |
+
+Final rechecks under `runs/cfg/`:
+`20261026-202416-f4f812c-stack-equal-height-final` (22 s) and
+`20261026-202414-f4f812c-unstack-equal-height-final` (92 s).
+Controls used the same archives, premises and budgets:
+`20261026-201959-f4f812c-stack-higher-control` (26 s) and
+`20261026-202003-f4f812c-unstack-higher-control` (162 s).
+These are individual, partly concurrent runs, not a speed benchmark. In the
+EqualHeight rechecks the height-effect checks took 0.226 s (Stack) and 0.169 s
+(Unstack); the Higher control took 0.037 s (Stack) and timed out (Unstack).
+Unstack's remaining EqualHeight UNKNOWN is initial arm clearance, an existing
+entry-premise issue; all seven collision checks, predicate effects, and geometric
+preservation checks passed. A timeout is not a proof, and changing the height
+predicate does not repair the documented initial-arm counterexample.
+
+Each run saves the inferred formula under
+`artifacts/candidates/0/invariant-1.smt2` (Stack) or `invariant-0.smt2`
+(Unstack), and the per-obligation formulas/verdicts under
+`artifacts/verification/`. For example, Stack learns
+`forall x. EqualHeight(b0,x) or ON_star(x,b0)`: every block is at the base level
+or belongs to the growing tower. This supplies useful information without a
+directional height ordering. The run IDs record the parent HEAD and dirty tree;
+implementation commit `3ed26e3` contains the finalized code.
+
+Regression coverage includes all 73 arrangements of four physical blocks into
+complete towers, every enabled block/table relocation and table alias, all
+ordered EqualHeight pairs, tolerance boundaries, table isolation, both learner
+evaluators, serialization, geometric realization, quantifier hygiene and summary
+havoc. These finite regression cases supplement the recorded unbounded VCs;
+they are not themselves an unbounded correctness theorem for the translator.
+The broader 413-test run passed all 407 existing tests; one new table-evaluation
+test exposed a missing table binding in its fixture. After fixing the fixture,
+the 25-test focused rerun passed, including all seven new EqualHeight tests and
+18 existing Put/summary tests. This covers 414 distinct passing tests across the
+runs. Logs and a bounded summary are in `runs/tests/20261026-equal-height/`.
+
 ## Provided Unstack and Reverse verification
 
 Both current programs use the shared supplied-program pipeline: restore all

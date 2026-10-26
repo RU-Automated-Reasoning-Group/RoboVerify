@@ -91,6 +91,15 @@ preservation, both proved in earlier runs). There is still no complete motion
 proof. Stack retains all 12 symbolic and 40 motion checks.
 See the [descent argument and solver comparison](roboverify/synthesis/cfg/VERIFICATION.md#unstack-descent-proof-from-universal-instances).
 
+An optional **EqualHeight algebra** now replaces Higher throughout supplied-program
+inference and verification (`--height-predicate EqualHeight`). The 2026-10-26
+rechecks learned from the existing archived starts: Stack passed all 12 symbolic
+and 40 motion checks (22 s); Unstack passed all 12 symbolic and 31 of 32 motion
+checks (92 s), with initial arm clearance UNKNOWN. No supplied invariant or
+refinement was needed. The table-placement rule is simpler, but block placement
+still needs quantified support checks. Higher remains the default. See the
+[semantics, reproduction commands and controls](roboverify/synthesis/cfg/VERIFICATION.md#equal-height-alternative).
+
 After the extrema encoding changes, revision `4f734bf` passed the full Python
 regression suite: **475 tests across 68 modules**, with no failures, errors or
 skips, including the optional real-solver baseline tests. On the current machine

@@ -1,7 +1,7 @@
-# Higher and Scattered action summaries
+# Height and Scattered action summaries
 
 `RelationalSummary` supports an action whose inferred endpoint is
-`Higher(x,y)` or `Scattered(x,y)`. It is a verification contract for a completed
+`Higher(x,y)`, `EqualHeight(x,y)` or `Scattered(x,y)`. It is a verification contract for a completed
 Pick/Move/Release transfer. Its WP is deliberately conservative: an endpoint
 atom leaves most of the moved block's relationships unspecified. The existing
 `Put` operation and its predicate rewrites are unchanged.
@@ -16,7 +16,11 @@ endpoint atom alone.
 
 Let `m` be the manipulated physical object, `E` the selected endpoint atom, and
 `A` the explicitly chosen successor-domain predicate. The mutable relation
-state is `(ON_star, Higher, Scattered)`. Equality and frozen `ON_star_zero`
+state is `(ON_star, Higher, Scattered)` by default. With the
+[EqualHeight algebra](../cfg/VERIFICATION.md#equal-height-alternative), replace
+Higher by EqualHeight throughout this contract; successor axioms and havoc use
+that selected relation. An endpoint from the inactive height vocabulary is
+rejected. Equality and frozen `ON_star_zero`
 retain their interpretations. Define an admissible transition independently:
 
 ```text
@@ -67,7 +71,7 @@ patch representation. Neither representation bounds the number of blocks
 in the semantic rule.
 
 The integrated default `A` is exactly the current-state axioms collected from
-`HighLevelContext.add_axiom`, `add_axiom_higher` and `add_axiom_scattered`.
+`HighLevelContext.add_axiom`, `add_axiom_height` and `add_axiom_scattered`.
 Frozen-entry axioms need no new copy. If `use_tbl` is enabled, the source
 cannot be `tbl`, and the successor axioms retain table isolation. The direct
 `summary_wp(..., admissibility=...)` API can select a different domain; that
@@ -85,7 +89,7 @@ action = RelationalSummary("Higher", "support", "payload", moved="payload")
 precondition = wp(action, goal, context)
 ```
 
-`propose_summaries` recognizes a single `Higher` or `Scattered` edge atom with
+`propose_summaries` recognizes a single `Higher`, `EqualHeight` or `Scattered` edge atom with
 named operands, one of which is the held object, at Release. Split transfers
 across adjacent CFG blocks remain supported. The moved object is recorded
 separately from operand order. Unsupported atom shapes or atoms unrelated to
