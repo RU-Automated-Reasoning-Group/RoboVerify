@@ -16,6 +16,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from .config import GPUConfig, ModelConfig, RunConfig
+from .prompt_package import package
 
 METHODS = ("cap_google_baseline", "cap_method_1", "cap_method_2")
 MODES = ("dsl_only", "coordinate_predicates")
@@ -88,8 +89,10 @@ def create_batch(
         or len(set(modes)) != len(modes)
     ):
         raise ValueError("Methods and modes must be nonempty and unique")
-    if "cap_method_2" in methods and config.prompt_version != "typed_v3":
-        raise ValueError("Method 2 requires typed_v3")
+    if "cap_method_2" in methods and not package(config.prompt_version).get(
+        "method2_templates"
+    ):
+        raise ValueError("Method 2 requires a prompt package with method2_templates")
     if recovery_variants is not None and (
         not recovery_variants
         or len(set(recovery_variants)) != len(recovery_variants)

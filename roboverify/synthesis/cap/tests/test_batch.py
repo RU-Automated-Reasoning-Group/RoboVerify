@@ -124,6 +124,31 @@ class BatchTests(unittest.TestCase):
             )
             self.assertEqual({j["run_config"]["seed"] for j in fixed["jobs"]}, {5})
 
+    def test_method_2_accepts_every_package_with_its_templates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for version in ("typed_v3", "typed_v4"):
+                manifest = create_batch(
+                    Path(tmp) / version,
+                    RunConfig(num_blocks=1, save_video=False, prompt_version=version),
+                    ModelConfig(),
+                    methods=("cap_method_2",),
+                    modes=("dsl_only",),
+                    trials=1,
+                    responses=["Pick(b0)"],
+                    fixture=True,
+                )
+                self.assertEqual(len(manifest["jobs"]), 1)
+            with self.assertRaisesRegex(ValueError, "method2_templates"):
+                create_batch(
+                    Path(tmp) / "legacy",
+                    RunConfig(num_blocks=1, save_video=False),
+                    ModelConfig(),
+                    methods=("cap_method_2",),
+                    modes=("dsl_only",),
+                    trials=1,
+                    fixture=True,
+                )
+
     def test_resume_skips_interrupted_and_runs_only_pending(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "batch"
