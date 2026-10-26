@@ -351,6 +351,9 @@ class RunConfig:
     # the rollout ended (task-spec-v1); a positive count scores only the settled
     # state (task-spec-v2, config_frozen_v4).
     post_settling_steps: int = 0
+    # Primitive-contract prompt package (Revision 7): v2 drops v1's
+    # motion-strategy sentence; v1 is the default for config_frozen_v1-v4.
+    primitive_prompt_version: str = "primitive-prompt-v1"
     # Settling after a fresh reset, before the policy starts (all six tasks;
     # 0 disables it). Restored snapshots are never settled again.
     initial_settling_steps: int = 50
@@ -402,6 +405,9 @@ class RunConfig:
             raise ValueError("Audit timeout must be positive")
         if type(self.post_settling_steps) is not int or self.post_settling_steps < 0:
             raise ValueError("post_settling_steps must be a nonnegative integer")
+        from .primitive_prompts import check_version
+
+        check_version(self.primitive_prompt_version)
         if (
             type(self.initial_settling_steps) is not int
             or self.initial_settling_steps < 0

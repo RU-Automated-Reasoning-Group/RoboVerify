@@ -179,7 +179,12 @@ def run_once(
     if not math.isfinite(queue_wait_seconds) or queue_wait_seconds < 0:
         raise ValueError("Queue wait must be finite and nonnegative")
     validate_condition_mode(config.condition_mode)
-    provenance = prompt_provenance(config.prompt_version, config.primitive_prompt)
+    from .primitive_prompts import PrimitivePrompt
+
+    primitive_prompt = PrimitivePrompt(
+        config.primitive_prompt, config.primitive_prompt_version
+    )
+    provenance = prompt_provenance(config.prompt_version, primitive_prompt)
     if config.method not in {"cap_method_1", "cap_method_2", "cap_google_baseline"}:
         raise ValueError("Unknown CaP method")
     if config.timeout <= 0 or config.max_attempts < 1:
@@ -259,10 +264,9 @@ def run_once(
         method=config.method,
         condition_mode=config.condition_mode,
         prompt_version=config.prompt_version,
-        primitive_prompt=config.primitive_prompt,
+        primitive_prompt=primitive_prompt,
     )
-    from .primitive_prompts import BLOCKS
-    from .primitive_prompts import VERSION as PRIMITIVE_PROMPT_VERSION
+    from .primitive_prompts import PACKAGES
 
     if (
         any(asdict(config.primitive_prompt).values())
@@ -271,8 +275,8 @@ def run_once(
         logger.artifact(
             "primitive_prompt_package.json",
             {
-                "version": PRIMITIVE_PROMPT_VERSION,
-                "blocks": BLOCKS,
+                "version": config.primitive_prompt_version,
+                "blocks": PACKAGES[config.primitive_prompt_version]["blocks"],
                 "flags": asdict(config.primitive_prompt),
             },
         )
