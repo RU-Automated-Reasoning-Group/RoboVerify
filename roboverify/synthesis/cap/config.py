@@ -227,7 +227,7 @@ class PrimitiveFeedbackConfig:
         return self.target_derivation or self.controller_phases or self.action_context
 
 
-DEMONSTRATION_TOKEN_COUNTERS = ("server_tokenize", "utf8_bytes")
+DEMONSTRATION_TOKEN_COUNTERS = ("server_tokenize", "provider_usage", "utf8_bytes")
 
 
 @dataclass
@@ -241,8 +241,10 @@ class DemonstrationConfig:
     gripper-path waypoints. ``max_tokens`` limits the rendered block; exceeding
     it fails the trial. ``token_counter`` measures the block once per trial:
     ``server_tokenize`` uses the vLLM ``/tokenize`` endpoint (``tokenizer_url``,
-    default derived from the model base URL); ``utf8_bytes`` is a conservative
-    byte bound for offline diagnostics.
+    default derived from the model base URL); ``provider_usage`` asks the model's
+    provider for prompt-token counts with and without the block, for hosted
+    models without a local tokenizer; ``utf8_bytes`` is a conservative byte
+    bound for offline diagnostics.
     """
 
     enabled: bool = False
@@ -270,7 +272,8 @@ class DemonstrationConfig:
             raise ValueError("demonstrations.max_tokens must be a positive integer")
         if self.token_counter not in DEMONSTRATION_TOKEN_COUNTERS:
             raise ValueError(
-                "demonstrations.token_counter must be server_tokenize or utf8_bytes"
+                "demonstrations.token_counter must be one of "
+                + ", ".join(DEMONSTRATION_TOKEN_COUNTERS)
             )
         if self.archive is not None and (
             not isinstance(self.archive, str) or not self.archive.endswith(".npz")

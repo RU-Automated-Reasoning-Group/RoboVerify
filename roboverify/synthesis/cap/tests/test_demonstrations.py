@@ -392,6 +392,55 @@ class ContextTests(Fixture):
         )
         self.assertEqual(measurement["method"], "server_tokenize")
 
+    def test_provider_usage_counts_the_block_as_a_prompt_difference(self):
+        sent = []
+
+        def opener(request, timeout):
+            body = json.loads(request.data)
+            sent.append((request.full_url, body))
+            prompt = body["messages"][0]["content"]
+            usage = {"prompt_tokens": 20 + (900 if "BLOCK" in prompt else 0)}
+            return io.BytesIO(json.dumps({"usage": usage, "provider": "P"}).encode())
+
+        settings = DemonstrationConfig(
+            enabled=True, archive="x.npz", token_counter="provider_usage"
+        )
+        model = ModelConfig(
+            model="anthropic/m",
+            base_url="https://example.invalid/api/v1",
+            api_key_env="",
+            extra_body={"reasoning": {"effort": "medium"}},
+        )
+        count, measurement = count_tokens("BLOCK\n\n", settings, model, opener=opener)
+        self.assertEqual(count, 900)
+        self.assertEqual(measurement["method"], "provider_usage")
+        self.assertEqual(
+            (
+                measurement["prompt_tokens_with_block"],
+                measurement["prompt_tokens_without_block"],
+            ),
+            (920, 20),
+        )
+        self.assertEqual(
+            [url for url, _ in sent],
+            ["https://example.invalid/api/v1/chat/completions"] * 2,
+        )
+        # Measurement requests carry no reasoning options and a tiny output cap.
+        for _, body in sent:
+            self.assertNotIn("reasoning", body)
+            self.assertEqual(body["max_tokens"], 16)
+
+    def test_provider_usage_rejects_counts_that_omit_the_block(self):
+        def opener(request, timeout):
+            return io.BytesIO(json.dumps({"usage": {"prompt_tokens": 20}}).encode())
+
+        settings = DemonstrationConfig(
+            enabled=True, archive="x.npz", token_counter="provider_usage"
+        )
+        model = ModelConfig(base_url="https://example.invalid/v1", api_key_env="")
+        with self.assertRaises(DemonstrationError):
+            count_tokens("BLOCK", settings, model, opener=opener)
+
 
 class RunnerTests(Fixture):
     def factory(self, config, snapshot):

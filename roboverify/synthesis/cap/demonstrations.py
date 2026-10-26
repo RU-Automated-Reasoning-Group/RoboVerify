@@ -612,6 +612,8 @@ def count_tokens(text, settings, model_config, opener=None, timeout=60):
     """Token count of the rendered block and the method used to measure it."""
     if settings.token_counter == "utf8_bytes":
         return len(text.encode("utf-8")), {"method": "utf8_bytes_upper_bound"}
+    if settings.token_counter == "provider_usage":
+        return provider_usage_tokens(text, model_config, opener, max(timeout, 300))
     import os
 
     url = settings.tokenizer_url
@@ -648,6 +650,48 @@ def count_tokens(text, settings, model_config, opener=None, timeout=60):
         "model": model_config.model,
         "add_special_tokens": False,
         "server_max_model_len": reply.get("max_model_len"),
+    }
+
+
+PROVIDER_USAGE_SUFFIX = "Reply with OK."
+
+
+def provider_usage_tokens(text, model_config, opener=None, timeout=300):
+    """Block tokens as the provider counts them, for models without a local
+    tokenizer: prompt tokens of ``block + suffix`` minus those of ``suffix``
+    alone, each from a one-token request. The chat template's overhead cancels.
+    """
+    from .llm import HTTPModel, ModelError
+
+    model = HTTPModel(model_config, opener)
+    counts = []
+    for prompt in (text + PROVIDER_USAGE_SUFFIX, PROVIDER_USAGE_SUFFIX):
+        body = {
+            "model": model_config.model,
+            "stream": False,
+            "messages": [{"role": "user", "content": prompt}],
+            model_config.token_field: 16,
+        }
+        try:
+            reply = model.post("chat/completions", body, timeout)
+        except ModelError as exc:
+            raise DemonstrationError(
+                f"Demonstration token count unavailable: {exc}"
+            ) from exc
+        count = (reply.get("usage") or {}).get("prompt_tokens")
+        if type(count) is not int or count <= 0:
+            raise DemonstrationError("Provider reported no prompt token count")
+        counts.append(count)
+    if counts[0] <= counts[1]:
+        raise DemonstrationError("Provider prompt counts do not include the block")
+    return counts[0] - counts[1], {
+        "method": "provider_usage",
+        "model": model_config.model,
+        "base_url": model_config.base_url,
+        "prompt_tokens_with_block": counts[0],
+        "prompt_tokens_without_block": counts[1],
+        "suffix": PROVIDER_USAGE_SUFFIX,
+        "provider": reply.get("provider"),
     }
 
 

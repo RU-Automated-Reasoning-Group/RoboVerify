@@ -41,6 +41,7 @@ class HTTPModel:
         self.opener = opener or urllib.request.urlopen
         # Keeps a trial's requests on one vLLM instance for prefix-cache reuse.
         self.affinity_key = affinity_key
+        self.last_headers = {}
 
     def payload(self, prompt):
         c = self.config
@@ -65,22 +66,23 @@ class HTTPModel:
             raise ModelError("This client supports text code generation only")
         return body | c.extra_body
 
-    def generate(self, prompt, timeout):
+    def post(self, route, body, timeout, headers=None):
+        """POST ``body`` to ``base_url/route`` and return the JSON reply.
+
+        The reply's HTTP headers are kept in ``last_headers``.
+        """
         c = self.config
         key = os.environ.get(c.api_key_env, "") if c.api_key_env else ""
         if c.api_key_env and not key:
             raise ModelError(
                 f"Missing credential environment variable: {c.api_key_env}"
             )
-        headers = {"Content-Type": "application/json"}
+        headers = {"Content-Type": "application/json"} | (headers or {})
         if key:
             headers["Authorization"] = f"Bearer {key}"
-        if self.affinity_key and c.provider == "vllm":
-            headers[AFFINITY_HEADER] = self.affinity_key
-        route = "responses" if c.api_style == "responses" else "chat/completions"
         request = urllib.request.Request(
             c.base_url.rstrip("/") + "/" + route,
-            data=json.dumps(self.payload(prompt)).encode(),
+            data=json.dumps(body).encode(),
             headers=headers,
             method="POST",
         )
@@ -89,7 +91,7 @@ class HTTPModel:
                 request, timeout=min(timeout, c.request_timeout)
             ) as handle:
                 raw = json.load(handle)
-                served_by = (getattr(handle, "headers", None) or {}).get(BACKEND_HEADER)
+                self.last_headers = getattr(handle, "headers", None) or {}
         except urllib.error.HTTPError as exc:
             detail = exc.read(8192).decode("utf-8", errors="replace")
             if key:
@@ -106,6 +108,16 @@ class HTTPModel:
             raise TransportError(
                 f"Model transport failed: {type(exc).__name__}", True
             ) from exc
+        return raw
+
+    def generate(self, prompt, timeout):
+        c = self.config
+        headers = {}
+        if self.affinity_key and c.provider == "vllm":
+            headers[AFFINITY_HEADER] = self.affinity_key
+        route = "responses" if c.api_style == "responses" else "chat/completions"
+        raw = self.post(route, self.payload(prompt), timeout, headers)
+        served_by = self.last_headers.get(BACKEND_HEADER)
         if c.api_style == "responses":
             text = "".join(
                 part.get("text", "")
