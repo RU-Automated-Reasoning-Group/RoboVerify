@@ -1,7 +1,10 @@
 # Plan: one settled task-success checker for RoboVerify and CaP
 
-- **Status:** plan for review (2026-10-26). Nothing in this document is implemented yet.
-- **Agreement (user and Yuning, 2026-10-26):** a task's postcondition is checked after 50 settling steps at the end of an execution. RoboVerify and the CaP baseline call the same checker in `synthesis/cfg/`, so both are scored by one definition.
+- **Status:** plan approved with the decisions in Section 3 (2026-10-26); not yet implemented.
+- **Agreement (user and Yuning, 2026-10-26):**
+  - every execution of all six tasks starts from a scene settled for 50 steps after the environment is initialized;
+  - a task's postcondition is checked only after 50 settling steps at the end of an execution, and that check is the only success criterion;
+  - RoboVerify and the CaP baseline call the same checker in `synthesis/cfg/`, so both are scored by one definition.
 - **Why:** the shared definition today (`task-spec-v1`, [`collection.py:validate_trace`](../collection.py)) evaluates the postcondition on the last recorded state. ON* is a column relation, so a block that is still falling, or that rests on a tower it will slide off, can satisfy it. In the CaP Revision 4.3 results, 547 attempts satisfied the postcondition symbolically but failed the physical evaluator; 78 of them did not settle into towers ([Revision 4.3 report, §4](../../cap/docs/revision_4_3_report.md)).
 
 ## 1. Current behavior
@@ -32,6 +35,14 @@ target = obs[:3].copy()
 for _ in range(STACK_SETTLING_STEPS):          # 50, cfg/collection.py:30
     obs = env.step(get_move_action(obs, target, close_gripper=False))[0]
 ```
+
+**Initial settling skips Unstack and Reverse.** `collection.py:239` settles a fresh reset only for `("stack", "restack", *GOAL_TASKS)`, and CaP's `SETTLING_TASKS` copies that list. Unstack and Reverse record the reset state directly; the `collect_demos` docstring states this without a reason, and no review entry records one. History:
+
+- settling was added for Stack only, to remove the robot's initial transient (c3e0b43, [discrepancy 24](../../../../PAPER-DISCREPANCIES.md#24-the-first-stack-placement-inherits-a-transient-robot-state-and-a-grasp-offset));
+- ReStack, Grid and Pyramid added themselves when they were introduced (33131b4, b286d62);
+- the lateral Unstack/Reverse reset (a0d825b) did not.
+
+The transient in discrepancy 24 belongs to the robot, not to the scene, so it applies to Unstack and Reverse as well.
 
 Copies:
 
@@ -138,18 +149,20 @@ The checker settles after recording has stopped, or on a restored copy of the la
 - `cap/tests/test_recovery.py:87,172`
 - `cap/configs/test_config_frozen_v1.py:25`
 
-## 3. Decisions for review
+## 3. Decisions (2026-10-26)
 
-| # | Decision | Recommendation |
+| # | Decision | Outcome |
 | --- | --- | --- |
-| 1 | Does success need the post **after settling only**, or **at the end and after settling**? | After settling only. Keep `post_at_end` as a diagnostic. A transient violation at the last recorded step (for example, a block still sliding into place) should not fail an execution that ends correctly. |
-| 2 | Grid/Pyramid Release-event checks (`validate_goal_trace`: displacement, payload on a goal at each Release) | Keep them in RoboVerify's demonstration acceptance as a demonstration-quality filter, outside the shared success criterion. The shared criterion is settled occupancy for both systems. This matches the Revision 5 decision that CaP has no event-level goal checks. Alternatively, apply them to both; CaP rollouts would then need Release events in the same form. |
-| 3 | Physical evaluator `_is_success` | Diagnostic only, before and after settling, for both systems. |
-| 4 | Settling action | One `settle()` helper: hold the gripper's position with gripper command 0.0 for 50 steps (today's behavior). Replace all six inlined copies, initial and final. Before relying on it, confirm in the environment source that 0.0 holds the finger opening. |
-| 5 | Recompute earlier results under v2? | Recompute Revision 5 (120 trials), and Revision 4.3 if it is still cited, from the saved final states. CaP saves full rollout trajectories; whether every run saved a restorable final snapshot must be checked first. Report v1 and v2 side by side. |
-| 6 | CaP recovery feedback | Report "post held at the end but not after settling" as a distinct failure location, since it is a different repair target. This changes recovery prompts, so it would be a new frozen configuration version, `config_frozen_v4`. |
-| 7 | Existing demonstration archives | Revalidate into sidecar reports and keep the NPZ files unchanged (Section 2.4). Collect replacements only if some fail. |
-| 8 | Scope of the first change | 1. `cfg/task_success.py` with `settle` and the checkers. 2. Collection and audit. 3. CaP runner. 4. Revalidation and recomputation. One commit each. |
+| 1 | Success needs the post after settling only, or at the end and after settling? | **After settling only.** `post_at_end` is kept as a diagnostic. |
+| 2 | Grid/Pyramid Release-event checks | **Not part of the shared criterion.** They stay in RoboVerify's demonstration acceptance as a demonstration-quality filter. The shared criterion is settled occupancy for both systems. |
+| 3 | Physical evaluator `_is_success` | **Diagnostic only**, before and after settling, for both systems. |
+| 4 | CaP recovery feedback | **Unchanged.** The settled postcondition is the only success criterion; recovery feedback gets no separate "post held at the end but not after settling" location, so recovery prompts do not change. |
+| 5 | Settling action | **One `settle()` helper:** hold the gripper's position with gripper command 0.0 for 50 steps. It replaces all six inlined copies, initial and final. Confirm in the environment source that 0.0 holds the finger opening before relying on it. |
+| 6 | Recompute earlier results under v2 | **Yes:** Revision 5 and Revision 4.3, from the saved final snapshots. CaP's `rollout_*/trajectory.npz` stores the full simulator snapshot of every state, so every attempt's final state can be restored and settled. Report v1 and v2 side by side. |
+| 7 | Initial settling | **All six tasks.** Unstack and Reverse gain the 50-step initial settling, in collection, CaP, CFG execution and invariant learning (fresh resets only; supplied snapshots are restored without settling, as today). |
+| 8 | Existing demonstration archives | Stack, ReStack, Grid and Pyramid archives are revalidated into sidecar reports and kept unchanged. Unstack and Reverse archives were recorded from unsettled starts and are **re-collected**, including the CaP Revision 6 archives (`demos/cap-revision6/{unstack,reverse}`). |
+| 9 | CaP configuration | A new `config_frozen_v4`: v3 plus the v2 criterion and the re-collected Unstack/Reverse archives, pinned by SHA-256. Unstack/Reverse evaluation scenes change because their starts are now settled. v1–v3 are not edited. |
+| 10 | Order of changes | 1. `cfg/task_success.py` (`settle`, the checkers) and initial settling for all tasks. 2. Collection, audit, CFG and invariant-learning callers. 3. CaP runner and `config_frozen_v4`. 4. Archive revalidation and Unstack/Reverse re-collection. 5. Recomputation of Revision 5 and 4.3. One commit each; a `PAPER-DISCREPANCIES.md` entry and README status update record the criterion and initial-settling changes. |
 
 ## 4. Not changed
 
