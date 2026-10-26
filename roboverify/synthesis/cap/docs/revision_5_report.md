@@ -101,6 +101,25 @@ Totals include every recovery round. ReStack includes the infrastructure rerun o
   - Links: [attempt](../../../runs/cap-revision5/20261025-frozen-v1-tower-tasks/unstack/trials/cap_method_2-dsl_only-009/cap/20261025-191305-8094f79-cap_method_2-recovery-d0ccc549/attempts/round_000/cap/20261025-191308-8094f79-cap_method_2-unstack-2944a9c0), [policy](../../../runs/cap-revision5/20261025-frozen-v1-tower-tasks/unstack/trials/cap_method_2-dsl_only-009/cap/20261025-191305-8094f79-cap_method_2-recovery-d0ccc549/attempts/round_000/cap/20261025-191308-8094f79-cap_method_2-unstack-2944a9c0/artifacts/trial_001/checkpoints/cp_0002/policy.py).
 - **No attempt passes the physical evaluator while failing the shared postcondition.**
 
+### 2.4 Settled criterion `task-spec-v2` (recomputed 2026-10-26)
+
+The tables above use `task-spec-v1`: the postcondition on the state where the rollout ended. Under `task-spec-v2` ([settled postcondition plan](../../cfg/docs/settled_postcondition.md)) the postcondition is evaluated only after 50 settling steps (gripper held, command 0.0). Each attempt's last rollout snapshot was restored and scored by the shared checker (`cfg/task_success.py`), without new model calls. The earlier numbers above are unchanged.
+
+| | Stack | Unstack | Reverse | ReStack | Grid | Pyramid |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Round 0, v1 | 14/20 | 3/20 | 1/20 | 0/20 | 12/20 | 16/20 |
+| Round 0, v2 | 13/20 | 3/20 | 1/20 | 0/20 | 12/20 | 16/20 |
+| Final, v1 | 19/20 | 14/20 | 2/20 | 0/20 | 19/20 | 20/20 |
+| Final, v2 | 17/20 | 14/20 | 2/20 | 0/20 | 19/20 | 20/20 |
+| Chains censored under v2 | 2 | 0 | 0 | 0 | 0 | 0 |
+
+- **Only Stack changes.** Two Stack attempts that ended recovery as v1 successes fail after settling: trial 011 round 0 and trial 015 round 2. Both are leaning four-block towers: while settling, the top block's X offset from b0 grows from 22 mm to 28 mm and from 24 mm to 28 mm, past the 25 mm ON* column tolerance. The physical evaluator accepts both before and after settling.
+- **Censoring.** Recovery stopped at the first v1 success, so these two chains never ran the rounds that v2 would have triggered. Their v2 final result (failure) is a lower bound; the Stack v2 final count is 17 to 19.
+- **No attempt gains success under v2**, and every v2 success also passes the physical evaluator after settling.
+- **Unstack and Reverse started from unsettled scenes** in this batch; the recomputation settles only the final state. Runs under [`config_frozen_v4`](../configs/config_frozen_v4.py) settle every start.
+- **Consistency checks (354 attempts):** every attempt has a rollout; every last snapshot restores its recorded state exactly; the recomputed v1 result equals the recorded `task_spec_success`, and the recomputed postcondition the recorded `task_spec_postcondition`, in all 354; the settled physical evaluator equals the recorded `settled_environment_success` in all 354.
+- **Artifacts:** `runs/cap-revision5/analysis/settled-v2/` (`attempts.csv`, `chains.csv`, `summary.json`, scripts `recompute_revision5.py` and `settled_attempt.py`).
+
 ## 3. Failure analysis
 
 ### 3.1 Move non-convergence dominates the tower tasks
