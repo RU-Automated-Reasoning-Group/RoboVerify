@@ -32,12 +32,13 @@ def run_program_rollouts(
     on_loop_head=None,
     task: str | None = None,
     post_settling_steps: int = 0,
+    initial_settling_steps: int = SETTLING_STEPS,
 ) -> dict:
     """Run `program` for multiple seeds and optionally save frames/video.
 
     `env_factory(seed)` should construct and return an environment instance.
-    Each fresh reset settles for 50 steps before the program starts, as in
-    collection. If `timesteps` is not None, we best-effort set `max_step` on
+    Each fresh reset settles for ``initial_settling_steps`` (default 50; 0
+    disables it) before the program starts, as in collection. If `timesteps` is not None, we best-effort set `max_step` on
     the env. Pass ``on_loop_head=store.add`` to collect into a DemoStore across
     seeds; each loop invocation records its own entry geometry.
 
@@ -46,6 +47,7 @@ def run_program_rollouts(
     rollout with the shared checker, settled for that many unrecorded steps
     (``task_spec_success``, ``task-spec-v2``), as CaP is scored.
     """
+    check_steps(initial_settling_steps)
     if check_steps(post_settling_steps) and task is None:
         raise ValueError("post_settling_steps requires the task name")
 
@@ -71,7 +73,7 @@ def run_program_rollouts(
 
         frame_idx = 0
         timed_out = False
-        entry = settle(env, SETTLING_STEPS, env.reset()[0])
+        entry = settle(env, initial_settling_steps, env.reset()[0])
         bindings = dict(getattr(inner_env(env), "symbolic_name_to_box_id", {}))
         unconverged = []
 

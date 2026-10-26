@@ -414,6 +414,17 @@ class EnvironmentOptionTests(unittest.TestCase):
             self.assertEqual(settling_steps(RunConfig(task=task)), 50)
         self.assertEqual(settling_steps(RunConfig(), initial_snapshot=object()), 0)
 
+    def test_initial_settling_is_configurable_and_on_by_default(self):
+        from ..tasks import settling_steps
+
+        self.assertEqual(RunConfig().initial_settling_steps, 50)
+        for steps in (0, 20):
+            config = RunConfig(task="unstack", initial_settling_steps=steps)
+            self.assertEqual(settling_steps(config), steps)
+        for value in (-1, 1.5, True):
+            with self.assertRaises(ValueError):
+                RunConfig(initial_settling_steps=value)
+
     def test_layout_options_are_resolved_and_task_specific(self):
         from ..tasks import environment_options
 

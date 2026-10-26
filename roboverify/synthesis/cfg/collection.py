@@ -177,10 +177,12 @@ def record_execution(
     guard_choices=None,
     environment_config=None,
     post_settling_steps=0,
+    initial_settling_steps=SETTLING_STEPS,
 ):
     """Record a program from its task reset or an exact saved snapshot.
 
-    A fresh reset of every task holds the gripper for 50 steps before
+    A fresh reset of every task holds the gripper for
+    ``initial_settling_steps`` (default 50; 0 disables it) before
     recording. A supplied snapshot is already the requested start: never reset
     or settle it again. Settling is outside demo actions, events, and video.
     Optional guard_choices replay an enabled binding prefix for counterexamples;
@@ -200,6 +202,7 @@ def record_execution(
     )
 
     check_steps(post_settling_steps)
+    check_steps(initial_settling_steps)
     recording = Recording()
     metadata = dict(definition.metadata)
     metadata["higher_tolerance"] = get_higher_tolerance()
@@ -250,8 +253,8 @@ def record_execution(
                 )
             )()
             if initial_snapshot is None:
-                first = settle(env, STACK_SETTLING_STEPS, env.reset()[0])
-                metadata["initialization"]["settling_steps"] = STACK_SETTLING_STEPS
+                first = settle(env, initial_settling_steps, env.reset()[0])
+                metadata["initialization"]["settling_steps"] = initial_settling_steps
             else:
                 first = restore(env, initial_snapshot)
             if task in GOAL_TASKS:

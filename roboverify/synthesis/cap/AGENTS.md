@@ -36,7 +36,12 @@ experiment guidance specific to `synthesis/cap/`.
   Use it for both the demonstration-on and -off arms (`configuration(task,
   demonstrations=False, ...)`). Earlier results used v1–v3 (v3: Revision 6
   demonstrations); every fresh reset now settles for 50 steps, so Unstack and
-  Reverse scenes differ from runs made before 2026-10-26. v3 and v4 need the 262,144-token served window
+  Reverse scenes differ from runs made before 2026-10-26.
+  Initial settling is `RunConfig.initial_settling_steps`, **on by default**
+  (50 steps after every fresh reset, all six tasks, all frozen versions). Keep
+  the default; set 0 only to reproduce an earlier unsettled Unstack/Reverse run,
+  and record that override with the results. Restored snapshots are never
+  settled again. See the [cfg agent guide](../cfg/AGENTS.md#settling). v3 and v4 need the 262,144-token served window
   ([Revision 6, §3.5](docs/revision_6_add_demonstration.md#35-context-window-upgrade-config_frozen_v3)). `configuration(task,
   seed=...)` returns the run config, model config and instruction; use it rather
   than restating values; it also records the server-side

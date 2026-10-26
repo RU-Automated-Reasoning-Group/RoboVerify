@@ -80,11 +80,9 @@ def environment_options(config):
 
 
 def settling_steps(config, initial_snapshot=None):
-    from synthesis.cfg.collection import STACK_SETTLING_STEPS
-
     if initial_snapshot is not None or config.task not in SETTLING_TASKS:
         return 0
-    return STACK_SETTLING_STEPS
+    return config.initial_settling_steps
 
 
 def prepare_environment(config, initial_snapshot=None):

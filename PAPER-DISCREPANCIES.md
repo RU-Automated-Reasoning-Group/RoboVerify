@@ -1131,8 +1131,10 @@ indices and imitation distances are unchanged.
 **Initial settling.** Entry 24's 50-step initial settling had been added for
 Stack and later for Restack, Grid and Pyramid. The lateral Unstack/Reverse reset
 did not adopt it, although the transient belongs to the robot, not the scene.
-Every fresh reset of all six tasks now settles for 50 steps, through one helper
-that reproduces the previous loops bit for bit. Unstack and Reverse
+Every fresh reset of all six tasks now settles for 50 steps by default, through
+one helper that reproduces the previous loops bit for bit. The count is an
+option (`initial_settling_steps`, `--initial-settling-steps`; 0 disables it)
+only for reproducing earlier unsettled Unstack/Reverse runs. Unstack and Reverse
 demonstrations recorded before this change start from unsettled scenes. The
 CaP Revision 6 archives for these tasks were re-collected under
 `task-spec-v2`. The four other Revision 6 archives pass it unchanged (sidecar

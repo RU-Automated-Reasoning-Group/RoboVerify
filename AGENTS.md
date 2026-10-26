@@ -122,7 +122,8 @@ have not been added. Legacy PartialStack environment/factory/verifier and its
 inference option have been removed; use Restack.
 
 Collection of every task holds the initial gripper position for 50 steps after
-a fresh reset before recording (Unstack and Reverse since 2026-10-26, entry 43);
+a fresh reset before recording (Unstack and Reverse since 2026-10-26, entry 43;
+`initial_settling_steps`, on by default, 0 only to reproduce earlier runs);
 the settled full snapshot becomes state zero. Task success defaults to the
 postcondition on the last recorded state (`task-spec-v1`); `--post-settling-steps
 N` (collection, audit, `synthesize_cfg`, `learn_invariant`; CaP

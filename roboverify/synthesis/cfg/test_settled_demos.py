@@ -70,6 +70,38 @@ class SettledDemoTests(unittest.TestCase):
             [1, 2, 3],
         )
 
+    def test_initial_settling_can_be_disabled(self):
+        steps = {"count": 0}
+
+        def factory():
+            env = synthesis.make_roboverify_stack_env(num_blocks=4)
+            original_step = env.step
+
+            def step(action):
+                steps["count"] += 1
+                return original_step(action)
+
+            env.step = step
+            return env
+
+        definition = load_program(SOURCE, HighLevelContext(), 4)
+        trace = record_execution(
+            definition,
+            seed=38,
+            num_blocks=4,
+            env_factory=factory,
+            max_loop_iterations=3,
+            initial_settling_steps=0,
+        )
+        self.assertEqual(
+            trace.metadata["initialization"], {"source": "reset", "settling_steps": 0}
+        )
+        self.assertEqual(steps["count"], len(trace.actions[0]))
+        with self.assertRaises(ValueError):
+            record_execution(
+                definition, seed=38, num_blocks=4, initial_settling_steps=-1
+            )
+
     def assert_snapshot_equal(self, actual, expected):
         np.testing.assert_array_equal(actual.gt_state, expected.gt_state)
         self.assertEqual(actual.bindings, expected.bindings)
