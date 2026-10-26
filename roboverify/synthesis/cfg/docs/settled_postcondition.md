@@ -168,7 +168,8 @@ Every caller takes `post_settling_steps` (default 0). With 0, its behavior is un
 | 8 | Existing demonstration archives | Stack, ReStack, Grid and Pyramid archives are kept unchanged and revalidated under `task-spec-v2` (50 steps) into sidecar reports. Unstack and Reverse archives were recorded from unsettled starts and are **re-collected** with `post_settling_steps` 50, including the CaP Revision 6 archives (into new directories; `demos/cap-revision6/{unstack,reverse}` stay as they are). |
 | 9 | CaP configuration | `RunConfig.post_settling_steps` (default 0, the original logic; v1–v3 are not edited and keep it). A new `config_frozen_v4`: v3 plus `post_settling_steps` 50 and the re-collected Unstack/Reverse archives, pinned by SHA-256. Unstack/Reverse evaluation scenes change because their starts are now settled. |
 | 10 | Order of changes | 1. `cfg/task_success.py` (`settle`, the checkers) and initial settling for all tasks. 2. The `post_settling_steps` option (default 0) for collection, audit, CFG, invariant-learning and rollout callers. 3. CaP runner and `config_frozen_v4`. 4. Archive revalidation and Unstack/Reverse re-collection. 5. Recomputation of Revision 5 and 4.3. One commit each; a `PAPER-DISCREPANCIES.md` entry and README status update record the criterion and initial-settling changes. |
-| 11 | Final settling is optional (2026-10-26) | **`post_settling_steps`, default 0.** 0 keeps the original last-state logic everywhere; comparisons between RoboVerify and CaP use 50. Initial settling is not optional: it applies to all six tasks. |
+| 11 | Final settling is optional (2026-10-26) | **`post_settling_steps`, default 0.** 0 keeps the original last-state logic everywhere; comparisons between RoboVerify and CaP use 50. Initial settling applies to all six tasks. |
+| 12 | Initial settling is an option, on by default (2026-10-26) | **`initial_settling_steps`, default 50** (`record_execution`, `collect_demos --initial-settling-steps`, CaP `RunConfig`, `run_program_rollouts`). 0 disables it, only to reproduce earlier unsettled Unstack/Reverse runs. Frozen CaP versions keep the default. The smaller Revision 4.3 margins are not re-evaluated: those experiments are complete. |
 
 ## 4. Not changed
 
@@ -193,13 +194,15 @@ Every caller takes `post_settling_steps` (default 0). With 0, its behavior is un
 
 ### 5.2 Results
 
+The full results, with policy and video links for every changed attempt, are in [settled_post_report.md](settled_post_report.md); configuration rules are in [`cfg/AGENTS.md`](../AGENTS.md).
+
 - **Archives** ([Revision 6, §6.9](../../cap/docs/revision_6_add_demonstration.md#69-settled-criterion-and-config_frozen_v4-2026-10-26)): the re-collected Unstack and Reverse archives are 15/15 valid under `task-spec-v2` and audited. The Stack, ReStack, Grid and Pyramid archives pass `task-spec-v2` 15/15 each in sidecars. The superseded v3 Unstack and Reverse archives would also pass (15/15 each). No archive fails under v2.
 - **Revision 5** ([report §2.4](../../cap/docs/revision_5_report.md#24-settled-criterion-task-spec-v2-recomputed-2026-10-26)): only Stack changes, final 19 → 17 of 20 (two leaning towers, both censored).
 - **Revision 4.3** ([report §3.7](../../cap/docs/revision_4_3_report.md#37-settled-criterion-task-spec-v2-recomputed-2026-10-26)): 5,998 → 5,839 successful attempts (159 lost, none gained). The selections hold on point estimates.
 
 ### 5.3 Deviations from Sections 2–3
 
-1. **v1–v3 CaP Unstack/Reverse scenes change too.** Initial settling is not optional, so it applies to every CaP configuration, not only v4. Fresh-seed Unstack and Reverse trials on this branch start from settled scenes, unlike the recorded Revision 5 and Revision 6 runs. v1–v3 prompts and the `post_settling_steps: 0` scoring are unchanged.
+1. **v1–v3 CaP Unstack/Reverse scenes change too.** Initial settling is on by default for every CaP configuration, not only v4, so fresh-seed Unstack and Reverse trials start from settled scenes, unlike the recorded Revision 5 and Revision 6 runs. Decision 12 adds `initial_settling_steps` (0 reproduces those runs). v1–v3 prompts and the `post_settling_steps: 0` scoring are unchanged.
 2. **`run_rollouts` has no CLI.** The option is a function parameter: `run_program_rollouts(..., task=..., post_settling_steps=N)`. The historical verifier entry points that call it were not given new flags.
 3. **Search paths are unchanged.** `Program.eval` without an initial observation and the MCMC `_is_success` reward still reset without settling (Section 2.3: search heuristics are out of scope). CFG and standalone MCMC restore archived settled starts.
 4. **Revalidation path.** Instead of a `--revalidate-settled` flag, `synthesize_cfg` reads a sidecar written by the new `revalidate_settled` entry point (or stored per-trace results). `audit_demos --post-settling-steps N` recomputes and compares a stored result.
