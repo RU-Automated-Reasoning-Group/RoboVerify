@@ -347,6 +347,13 @@ class RunConfig:
     grid_rows: int | None = None
     grid_cols: int | None = None
     bottom_row_blocks: int | None = None
+    # Unrecorded final settling before the task check: 0 scores the state where
+    # the rollout ended (task-spec-v1); a positive count scores only the settled
+    # state (task-spec-v2, config_frozen_v4).
+    post_settling_steps: int = 0
+    # Settling after a fresh reset, before the policy starts (all six tasks;
+    # 0 disables it). Restored snapshots are never settled again.
+    initial_settling_steps: int = 50
 
     def __post_init__(self):
         for name, tasks in TASK_OPTIONS.items():
@@ -393,6 +400,13 @@ class RunConfig:
             )
         if not math.isfinite(self.audit_timeout) or self.audit_timeout <= 0:
             raise ValueError("Audit timeout must be positive")
+        if type(self.post_settling_steps) is not int or self.post_settling_steps < 0:
+            raise ValueError("post_settling_steps must be a nonnegative integer")
+        if (
+            type(self.initial_settling_steps) is not int
+            or self.initial_settling_steps < 0
+        ):
+            raise ValueError("initial_settling_steps must be a nonnegative integer")
 
 
 @dataclass

@@ -1,6 +1,6 @@
 # Plan: one settled task-success checker for RoboVerify and CaP
 
-- **Status:** plan approved with the decisions in Section 3, revised 2026-10-26 so that final settling is an option (`post_settling_steps`, default 0); being implemented on `feature/settled-success`.
+- **Status:** implemented on `feature/settled-success` (2026-10-26) with the decisions in Section 3, revised the same day so that final settling is an option (`post_settling_steps`, default 0). Implementation notes, results and deviations are in Section 5.
 - **Agreement (user and Yuning, 2026-10-26):**
   - every execution of all six tasks starts from a scene settled for 50 steps after the environment is initialized;
   - a task's postcondition is checked only after 50 settling steps at the end of an execution, and that check is the only success criterion;
@@ -168,10 +168,44 @@ Every caller takes `post_settling_steps` (default 0). With 0, its behavior is un
 | 8 | Existing demonstration archives | Stack, ReStack, Grid and Pyramid archives are kept unchanged and revalidated under `task-spec-v2` (50 steps) into sidecar reports. Unstack and Reverse archives were recorded from unsettled starts and are **re-collected** with `post_settling_steps` 50, including the CaP Revision 6 archives (into new directories; `demos/cap-revision6/{unstack,reverse}` stay as they are). |
 | 9 | CaP configuration | `RunConfig.post_settling_steps` (default 0, the original logic; v1–v3 are not edited and keep it). A new `config_frozen_v4`: v3 plus `post_settling_steps` 50 and the re-collected Unstack/Reverse archives, pinned by SHA-256. Unstack/Reverse evaluation scenes change because their starts are now settled. |
 | 10 | Order of changes | 1. `cfg/task_success.py` (`settle`, the checkers) and initial settling for all tasks. 2. The `post_settling_steps` option (default 0) for collection, audit, CFG, invariant-learning and rollout callers. 3. CaP runner and `config_frozen_v4`. 4. Archive revalidation and Unstack/Reverse re-collection. 5. Recomputation of Revision 5 and 4.3. One commit each; a `PAPER-DISCREPANCIES.md` entry and README status update record the criterion and initial-settling changes. |
-| 11 | Final settling is optional (2026-10-26) | **`post_settling_steps`, default 0.** 0 keeps the original last-state logic everywhere; comparisons between RoboVerify and CaP use 50. Initial settling is not optional: it applies to all six tasks. |
+| 11 | Final settling is optional (2026-10-26) | **`post_settling_steps`, default 0.** 0 keeps the original last-state logic everywhere; comparisons between RoboVerify and CaP use 50. Initial settling applies to all six tasks. |
+| 12 | Initial settling is an option, on by default (2026-10-26) | **`initial_settling_steps`, default 50** (`record_execution`, `collect_demos --initial-settling-steps`, CaP `RunConfig`, `run_program_rollouts`). 0 disables it, only to reproduce earlier unsettled Unstack/Reverse runs. Frozen CaP versions keep the default. The smaller Revision 4.3 margins are not re-evaluated: those experiments are complete. |
 
 ## 4. Not changed
 
 - The task specifications themselves (`cfg/tasks.py`) and the predicate semantics (`util/on.py`, Higher tolerance).
 - Symbolic and motion verification: they reason about programs, not about a simulated final state.
 - Initial settling before recording, apart from moving it into `settle()`.
+
+## 5. Implementation (2026-10-26)
+
+### 5.1 What was built
+
+- **`cfg/task_success.py`.** `settle()`, `TaskSuccess`, `check_task_success` (live environment), `check_recorded_task_success` (restores a trace's last snapshot), `criterion()` (`task-spec-v1` for 0, `task-spec-v2` otherwise), and the archive helpers `revalidate_archive`, `write_sidecar` and `stored_settled_results`.
+- **Gripper command 0.0.** The finger actuators are MuJoCo position actuators, and gym's `ctrl_set_action` sets their target to the current finger position plus the command. With 0.0, each step targets the finger opening at the start of that step, held by the actuator over the step's 20 substeps. The target is re-anchored every step, so slow drift is not corrected: in a Revision 5 final state with the open gripper above a tower, the openings went from 42.9/43.9 mm to 40.6/41.9 mm over 50 steps. The arm holds the XYZ position it had when settling began. The command neither opens nor closes the gripper.
+- **One settling loop.** `settle()` replaces the inlined loops in collection, CaP setup, CaP's settled diagnostic, `audit_demos`, `execute_goal_program` and invariant learning. A MuJoCo test confirms that it reproduces both earlier loop forms bit for bit (observation and full simulator state), so existing Stack, ReStack, Grid and Pyramid starts are unchanged.
+- **Initial settling for all six tasks.** `record_execution`, CaP's `prepare_environment` and `run_program_rollouts` settle every fresh reset for 50 steps; snapshots are restored without settling.
+- **`post_settling_steps`** (default 0, the original logic):
+  - `record_execution` stores the settled result in `metadata.validation.settled`; `validate_trace` applies `task-spec-v2` when it is present. For goal tasks the Release-event checks stay; only the final-coverage check moves to the settled state.
+  - `collect_demos`, `audit_demos`, `synthesize_cfg` and `learn_invariant` take `--post-settling-steps N`. `synthesize_cfg` reads stored results without the simulator: from trace metadata, or from a `settled_validation.json` sidecar that names the archive's SHA-256. It fails with an explicit error naming the revalidation command when neither exists.
+  - `synthesis.entry.revalidate_settled` writes the sidecars; NPZ files are never modified.
+  - CaP: `RunConfig.post_settling_steps`. With 0, results are as before. With a positive count, the shared checker runs after recording, outside the trial deadline and uncharged to the budget, with the adapter's input bindings. `task_spec_success` is the settled result; results add `post_settling_steps`, `task_spec_settled_postcondition` and the checker's record (`task_success`).
+- **`config_frozen_v4`:** v3 plus `post_settling_steps: 50` and the re-collected Unstack/Reverse archives.
+
+### 5.2 Results
+
+The full results, with policy and video links for every changed attempt, are in [settled_post_report.md](settled_post_report.md); configuration rules are in [`cfg/AGENTS.md`](../AGENTS.md).
+
+- **Archives** ([Revision 6, §6.9](../../cap/docs/revision_6_add_demonstration.md#69-settled-criterion-and-config_frozen_v4-2026-10-26)): the re-collected Unstack and Reverse archives are 15/15 valid under `task-spec-v2` and audited. The Stack, ReStack, Grid and Pyramid archives pass `task-spec-v2` 15/15 each in sidecars. The superseded v3 Unstack and Reverse archives would also pass (15/15 each). No archive fails under v2.
+- **Revision 5** ([report §2.4](../../cap/docs/revision_5_report.md#24-settled-criterion-task-spec-v2-recomputed-2026-10-26)): only Stack changes, final 19 → 17 of 20 (two leaning towers, both censored).
+- **Revision 4.3** ([report §3.7](../../cap/docs/revision_4_3_report.md#37-settled-criterion-task-spec-v2-recomputed-2026-10-26)): 5,998 → 5,839 successful attempts (159 lost, none gained). The selections hold on point estimates.
+
+### 5.3 Deviations from Sections 2–3
+
+1. **v1–v3 CaP Unstack/Reverse scenes change too.** Initial settling is on by default for every CaP configuration, not only v4, so fresh-seed Unstack and Reverse trials start from settled scenes, unlike the recorded Revision 5 and Revision 6 runs. Decision 12 adds `initial_settling_steps` (0 reproduces those runs). v1–v3 prompts and the `post_settling_steps: 0` scoring are unchanged.
+2. **`run_rollouts` has no CLI.** The option is a function parameter: `run_program_rollouts(..., task=..., post_settling_steps=N)`. The historical verifier entry points that call it were not given new flags.
+3. **Search paths are unchanged.** `Program.eval` without an initial observation and the MCMC `_is_success` reward still reset without settling (Section 2.3: search heuristics are out of scope). CFG and standalone MCMC restore archived settled starts.
+4. **Revalidation path.** Instead of a `--revalidate-settled` flag, `synthesize_cfg` reads a sidecar written by the new `revalidate_settled` entry point (or stored per-trace results). `audit_demos --post-settling-steps N` recomputes and compares a stored result.
+5. **CaP diagnostics with a positive count.** `evaluate_terminal` still supplies the end-of-rollout physical evaluator and `dsl_postcondition`. The checker supplies `task_spec_precondition`, `task_spec_postcondition` (end), the settled postcondition and `settled_environment_success`, so the environment is settled once.
+6. **Invariant learning has no archive input.** `learn_invariant --post-settling-steps N` settles its generated counterexample executions before `validate_trace`.
+7. **`demos/pipeline-audit-20261023/` is absent** from this checkout and was not revalidated.

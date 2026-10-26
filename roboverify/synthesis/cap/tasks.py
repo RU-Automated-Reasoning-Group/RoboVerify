@@ -50,9 +50,9 @@ def check_task(task):
         raise ValueError(f"Unknown task: {task}")
 
 
-# Upstream collection settles these tasks after a fresh reset; Unstack and
-# Reverse record from the reset state. Snapshots are never settled again.
-SETTLING_TASKS = frozenset({"stack", "restack", "grid", "pyramid"})
+# Upstream collection settles every task after a fresh reset (50 steps).
+# Snapshots are never settled again.
+SETTLING_TASKS = frozenset(TASK_INSTRUCTIONS)
 
 
 def environment_options(config):
@@ -80,11 +80,9 @@ def environment_options(config):
 
 
 def settling_steps(config, initial_snapshot=None):
-    from synthesis.cfg.collection import STACK_SETTLING_STEPS
-
     if initial_snapshot is not None or config.task not in SETTLING_TASKS:
         return 0
-    return STACK_SETTLING_STEPS
+    return config.initial_settling_steps
 
 
 def prepare_environment(config, initial_snapshot=None):
@@ -92,8 +90,8 @@ def prepare_environment(config, initial_snapshot=None):
     try:
         import numpy as np
 
-        from synthesis.api.control import get_move_action
         from synthesis.cfg.reset import restore
+        from synthesis.cfg.task_success import settle
         from synthesis.mcmc.synthesis import make_roboverify_env
     except BudgetExceeded:
         raise
@@ -118,10 +116,7 @@ def prepare_environment(config, initial_snapshot=None):
         if initial_snapshot is not None:
             restore(env, initial_snapshot)
         else:
-            obs = env.reset()[0]
-            target = obs[:3].copy()
-            for _ in range(settling_steps(config)):
-                obs = env.step(get_move_action(obs, target, close_gripper=False))[0]
+            settle(env, settling_steps(config), env.reset()[0])
         return env
     except BaseException:
         if env is not None:
@@ -134,7 +129,14 @@ def prepare_environment(config, initial_snapshot=None):
 # Shared task specifications exist for these tasks; the formulas of the last
 # three quantify over the relational table, as in upstream collection.
 TASK_SPEC_TASKS = frozenset({"stack", "unstack", "reverse", "restack"})
-SUCCESS_CRITERION = "task-spec-v1"
+SUCCESS_CRITERION = "task-spec-v1"  # post_settling_steps 0
+
+
+def success_criterion(config):
+    """task-spec-v1 without final settling, task-spec-v2 with it."""
+    from synthesis.cfg.task_success import criterion
+
+    return criterion(config.post_settling_steps)
 
 
 def _task_scene(inner, task, obs, entry_obs):
@@ -275,15 +277,39 @@ def settled_environment_success(env, steps=None):
     Call only after recording has stopped: these steps change the simulator
     state and are not part of the policy rollout.
     """
-    from synthesis.api.control import get_move_action
-    from synthesis.cfg.collection import STACK_SETTLING_STEPS
     from synthesis.cfg.reset import inner_env
+    from synthesis.cfg.task_success import SETTLING_STEPS, settle
 
-    inner = inner_env(env)
-    observation = inner.flatten_observation(inner._get_obs())
-    target = observation[:3].copy()
-    for _ in range(STACK_SETTLING_STEPS if steps is None else steps):
-        observation = env.step(
-            get_move_action(observation, target, close_gripper=False)
-        )[0]
-    return bool(inner._is_success(observation))
+    observation = settle(env, SETTLING_STEPS if steps is None else steps)
+    return bool(inner_env(env)._is_success(observation))
+
+
+def settled_task_outcome(env, config, entry_obs, adapter, completed):
+    """task-spec-v2 fields from the shared checker (cfg/task_success.py).
+
+    The checker settles ``env`` for ``config.post_settling_steps`` steps; call
+    it only after recording has stopped. Bindings are the inputs the adapter
+    gave the policy. ``task_spec_success`` is the settled result; the
+    end-of-rollout postcondition and both physical evaluations are diagnostics.
+    """
+    from synthesis.cfg.task_success import check_task_success
+    from synthesis.util.on import using_higher_tolerance
+
+    with using_higher_tolerance(config.higher_tolerance):
+        result = check_task_success(
+            env,
+            config.task,
+            entry_observation=entry_obs,
+            bindings=adapter.input_bindings,
+            completed=completed,
+            unconverged=adapter.unconverged_primitives,
+            post_settling_steps=config.post_settling_steps,
+        )
+    return {
+        "task_spec_success": result.success,
+        "task_spec_precondition": result.pre,
+        "task_spec_postcondition": result.post_at_end,
+        "task_spec_settled_postcondition": result.post_settled,
+        "settled_environment_success": result.environment_success_settled,
+        "task_success": result.as_dict(),
+    }

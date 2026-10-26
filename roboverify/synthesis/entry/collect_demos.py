@@ -1,7 +1,9 @@
 """Collect tower, Grid or Pyramid DSL demonstrations, with optional videos.
 
-Stack/Restack/Grid/Pyramid hold the gripper for 50 settling steps; Unstack/Reverse record
-the lateral tower reset directly.
+Every task holds the gripper for 50 settling steps after a fresh reset before
+recording (``--initial-settling-steps``; 0 disables it). ``--post-settling-steps N`` (default 0) settles each completed
+execution for N unrecorded steps and accepts it only if the settled
+postcondition holds (``task-spec-v2``); 0 checks the last recorded state.
 """
 
 import argparse
@@ -16,6 +18,7 @@ from synthesis.cfg.goal_collection import (
 )
 from synthesis.cfg.program_source import load_program
 from synthesis.cfg.recordings import save_traces
+from synthesis.cfg.task_success import SETTLING_STEPS, criterion
 from synthesis.cfg.tasks import task_identity
 from synthesis.entry.predicate_options import add_predicate_options
 from synthesis.util.on import using_higher_tolerance
@@ -123,6 +126,18 @@ def build_parser():
     )
     parser.add_argument("--max-loop-iterations", type=int, default=100)
     parser.add_argument("--trajectory-timeout-seconds", type=float, default=60)
+    parser.add_argument(
+        "--post-settling-steps",
+        type=int,
+        default=0,
+        help="Unrecorded final settling steps before the postcondition check (0: last recorded state)",
+    )
+    parser.add_argument(
+        "--initial-settling-steps",
+        type=int,
+        default=SETTLING_STEPS,
+        help="Settling steps after a fresh reset, before recording (0 disables it)",
+    )
     add_predicate_options(parser)
     return parser
 
@@ -179,6 +194,8 @@ def collect(args, parser):
             args.num_blocks < (1 if goal_task else 2)
             or args.max_loop_iterations < 1
             or not 0 < args.trajectory_timeout_seconds < float("inf")
+            or args.post_settling_steps < 0
+            or args.initial_settling_steps < 0
         ):
             raise ValueError(
                 "Invalid block count; execution budgets must be positive and finite"
@@ -204,6 +221,19 @@ def collect(args, parser):
         seeds=seeds,
         num_blocks=args.num_blocks,
         higher_tolerance=args.higher_tolerance,
+        **(
+            dict(
+                post_settling_steps=args.post_settling_steps,
+                success_criterion=criterion(args.post_settling_steps),
+            )
+            if args.post_settling_steps
+            else {}
+        ),
+        **(
+            dict(initial_settling_steps=args.initial_settling_steps)
+            if args.initial_settling_steps != SETTLING_STEPS
+            else {}
+        ),
         trajectories=[],
         status="collecting",
     )
@@ -236,6 +266,8 @@ def collect(args, parser):
                 ),
                 render=args.render,
                 environment_config=environment_config,
+                post_settling_steps=args.post_settling_steps,
+                initial_settling_steps=args.initial_settling_steps,
             )
         except Exception as exc:
             from synthesis.cfg.demos import DemoTrace

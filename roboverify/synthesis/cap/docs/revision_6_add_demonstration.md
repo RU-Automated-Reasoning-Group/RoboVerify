@@ -537,6 +537,21 @@ Implements Section 3.6 in [serving/prefix_cache.py](../serving/prefix_cache.py) 
   - **The round-3 repair request missed even though it shares the 46,814-token block.** Our likely explanation (not yet confirmed in vLLM's source): this checkpoint mixes attention with Mamba-style layers, and in vLLM's `align` cache mode a recurrent state is kept only at the block-aligned end of each cached prompt. A request can then resume only from such a point. Each policy request extends round 0's cached prompt (hit at 48,608 tokens). The repair prompt diverges after the block, before that point, so no saved state applies. Round 4 extends the repair prompt and hits at 49,392.
   - Consequence: for this checkpoint, reuse is guaranteed only for requests that extend an earlier request's whole prompt, not for every request that shares the block. Generation time dominates these requests (minutes) in any case.
 
+### 6.9 Settled criterion and `config_frozen_v4` (2026-10-26)
+
+[`config_frozen_v4`](../configs/config_frozen_v4.py) is v3 plus `post_settling_steps: 50`, which selects `task-spec-v2` ([settled postcondition plan](../../cfg/docs/settled_postcondition.md)), and two re-collected archives. Every fresh reset now settles for 50 steps, including Unstack and Reverse, which v3's archives recorded from unsettled starts.
+
+**Re-collected archives.** Same settings as v3 (4 blocks, seeds 1000–1014, provided groundtruth programs), with `--post-settling-steps 50`; all 15 seeds valid for both tasks. Each trace stores its settled check in `metadata.validation.settled`. `audit_demos --post-settling-steps 50` replays every trace exactly and reproduces the stored settled result (15/15 each, `settled_audit.json`).
+
+| Task | Archive | SHA-256 | States (v3 → v4) | Demonstration block, UTF-8 bytes (v3 → v4) |
+| --- | --- | --- | ---: | ---: |
+| Unstack | `demos/cap-revision6-v4/unstack/demonstrations.npz` | `81a19a15…37a50b` | 2,383 → 2,359 | 56,767 → 56,346 |
+| Reverse | `demos/cap-revision6-v4/reverse/demonstrations.npz` | `78a389ed…fad5` | 3,333 → 3,297 | 74,944 → 75,358 |
+
+Server token counts of the new blocks were not measured (no model-server requests were made); the byte sizes change by less than 1%.
+
+**Revalidation of the other archives.** `synthesis.entry.revalidate_settled --post-settling-steps 50` restored each trace's last snapshot, settled it and scored it with the shared checker. Stack, ReStack, Grid and Pyramid: 15/15 each; reports in `settled_validation.json` next to each archive, whose NPZ files and v3 SHA-256 pins are unchanged. The superseded v3 Unstack and Reverse archives also pass (15/15 each, not written to their directories). `demos/pipeline-audit-20261023/` is not present in this checkout and was not revalidated.
+
 ## Backlog (not implemented)
 
 - **LLM recursive summarization of demonstrations** (Demo2Code-style [1]): summarize each compacted demonstration with the LLM, summarize the set into one task specification, and give the specification to the synthesis request instead of the raw compaction.

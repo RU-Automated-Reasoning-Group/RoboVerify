@@ -530,6 +530,54 @@ Stage B on the 183 seeds that fail `task_spec_success` at round 0, recovery in r
 - **Before the main run, a small smoke run per task** checks only the adapter: start checks, terminal scoring and the `tbl` and goal interfaces. Its results are not used to change the configuration.
 - **Exception.** Revisit the configuration only if a task fails for an interface reason, for example a prompt that is silent about `tbl` or goal handles. Record any such change as a new configuration version and apply it to all six tasks.
 
+### 3.7 Settled criterion `task-spec-v2` (recomputed 2026-10-26)
+
+Section 4.3's open decision was settled on 2026-10-26: success is the shared postcondition evaluated after 50 settling steps (`task-spec-v2`, [settled postcondition plan](../../cfg/docs/settled_postcondition.md)), with `task-spec-v1` kept as the `post_settling_steps: 0` default. Every Revision 4.3 attempt was rescored from its saved last snapshot with the shared checker (`cfg/task_success.py`), without new model calls. Sections 3.1–3.6 keep their `task-spec-v1` numbers.
+
+- **Coverage and consistency.** The same 10,939 attempts in 6,300 chains as Section 3.1. Every last snapshot restores its recorded state exactly; the v1 result recomputed on the restored state equals the 2026-10-25 recompute, and the postcondition equals the saved `dsl_postcondition`, in all 10,939.
+- **Attempts.** 5,998 v1 successes, 5,839 v2 successes: 159 lose success after settling, none gain it.
+  - Of the 547 symbolic-only attempts of Section 4, 466 remain successes (the block lands on the tower); 81 fail: the 78 whose block falls off and 3 that the physical evaluator accepts after settling but whose top block leaves the 25 mm ON* column.
+  - The other 78 losses passed the physical evaluator at the final frame. 71 of them fail it after settling as well (the tower or its top block falls while settling); 7 remain physical successes whose top block leans out of the 25 mm ON* column.
+  - Two v2 successes fail the physical evaluator after settling.
+- **Censoring.** Recovery stopped at the first earlier success, so 80 chains (19 factorial, 61 Stage B) end with an attempt that is not a v2 success and never ran the rounds that v2 would have triggered; their v2 final results are lower bounds.
+
+**Method (Section 3.2), v1 → v2:**
+
+| Method | Round 0, factorial | Final, factorial | Round 0, Stage A | Recovered, `full` | Recovered, all 15 profiles |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Baseline | 294 → 292 / 400 | 374 → 369 / 400 | 177 → 175 / 250 | 58 / 63 → 57 / 63 | 872 / 945 → 853 / 945 |
+| Method 1 | 305 → 304 / 400 | 373 → 372 / 400 | 199 → 195 / 250 | 56 / 58 → 56 / 59 | 838 / 870 → 840 / 885 |
+| **Method 2** | **310 → 307** / 400 | **379 → 375** / 400 | 180 → 179 / 250 | **62 / 62 → 61 / 62** | 880 / 930 → 858 / 930 |
+
+**Prompt set (Section 3.3), Method 2 cells with the motion-planning block on, v1 → v2 (of 50):**
+
+| Cell | Round 0 | Final |
+| --- | ---: | ---: |
+| **`p0101`** | **42 → 41** | **50 → 49** |
+| `p0001` | 40 → 40 | 48 → 48 |
+| `p0111` | 40 → 39 | 49 → 48 |
+| `p1001` | 39 → 39 | 47 → 47 |
+| `p1111` | 39 → 39 | 46 → 45 |
+| `p0011` | 38 → 37 | 44 → 43 |
+| `p1011` | 37 → 37 | 46 → 46 |
+| `p1101` | 35 → 35 | 49 → 49 |
+
+**Recovery feedback (Section 3.4), Stage B, recovered of the seeds failing at round 0 under each criterion, v1 → v2:**
+
+| Profile | Method 2 | Pooled |
+| --- | ---: | ---: |
+| **`full`** | **62 / 62 → 61 / 62** | 176 / 183 → 174 / 184 |
+| `history_none` | 61 / 62 → 61 / 62 | 179 / 183 → 176 / 184 |
+| `no_target` | 61 / 62 → 60 / 62 | 178 / 183 → 177 / 184 |
+| `no_goal_clauses` | 61 / 62 → 60 / 62 | 176 / 183 → 175 / 184 |
+| `no_failure_events` | 61 / 62 → 59 / 62 | 176 / 183 → 174 / 184 |
+| `no_phases` | 59 / 62 → 56 / 62 | 179 / 183 → 174 / 184 |
+| `minimal` | 53 / 62 → 50 / 62 | 162 / 183 → 159 / 184 |
+| `no_current_source` | 56 / 62 → 55 / 62 | 161 / 183 → 158 / 184 |
+
+- **The selections hold on point estimates, with smaller margins.** Method 2 remains first on factorial round-0 and final success. `p0101` remains first on Method 2 round-0 success and ties `p1101` on final success. `full` now ties `history_none` on Method 2 recovery (61 of 62), and `no_target` recovers one more seed pooled. These differences are within the noise and partly censored; the frozen configuration is not re-tuned ([`config_frozen_v4`](../configs/config_frozen_v4.py) changes only the criterion and two archives).
+- **Artifacts:** `runs/cap-revision43/20261026-settled-v2/` (`attempts.csv`, `chains.csv`, `checks.json`, `tables.txt` with all cells and profiles, scripts `recompute_revision43.py` and `settled_attempt.py`).
+
 ## 4. Case study: symbolic success without physical success
 
 The shared Stack postcondition `∀x. ON*(x, b0)` is a column relation: x lies within 25 mm of b0 in X and Y and is not lower than b0. It does not model contact or support. The physical evaluator instead requires a contact chain from b0 on the table, each level within 1.5 block lengths of the one below ([Revision 5, §3.4](revision_5_add_tasks.md#34-where-the-symbolic-and-physical-criteria-differ)). Section 3.1 found 547 attempts where the first holds and the second does not.

@@ -17,6 +17,7 @@ from synthesis.cfg.program_adapter import program_to_cfg
 from synthesis.cfg.program_source import load_program
 from synthesis.cfg.recordings import loop_store
 from synthesis.cfg.reset import capture, inner_env
+from synthesis.cfg.task_success import check_steps, settle
 from synthesis.cfg.tasks import task_identity, task_spec
 from synthesis.cfg.verification import (
     propose_summaries,
@@ -83,9 +84,18 @@ class StackExperiment:
     """Stack scenes within the existing reset domain; no training demos required."""
 
     def __init__(
-        self, source, *, relations=None, variables=2, max_loop_iterations=None
+        self,
+        source,
+        *,
+        relations=None,
+        variables=2,
+        max_loop_iterations=None,
+        post_settling_steps=0,
     ):
         self.source = source
+        # 0 validates executions on their last recorded state (task-spec-v1);
+        # a positive count settles them, unrecorded, first (task-spec-v2).
+        self.post_settling_steps = check_steps(post_settling_steps)
         self.context = HighLevelContext()
         self.definition = load_program(source, self.context, 1)
         if self.definition.initial_bindings != {"b0": 0}:
@@ -135,6 +145,11 @@ class StackExperiment:
             ),
             initial_domain="Stack reset workspace; equal tabletop heights",
             settling_steps=STACK_SETTLING_STEPS,
+            **(
+                dict(post_settling_steps=self.post_settling_steps)
+                if self.post_settling_steps
+                else {}
+            ),
             search_target="reachable failure of a selected unbounded VC",
             witness_selection="any enabled binding; replayed with physical guard checks",
             execution_bound=(
@@ -275,7 +290,6 @@ class StackExperiment:
         return WitnessQuery(solver, coverage, decode, iterations, context, paths)
 
     def execute(self, search, *, seed, timeout_seconds, video_path):
-        from synthesis.api.control import get_move_action
         from synthesis.mcmc.synthesis import (
             make_roboverify_stack_env,
             preserved_global_rng,
@@ -299,11 +313,7 @@ class StackExperiment:
                     inner.sim.data.set_joint_qpos(f"{name}:joint", qpos)
                     inner.sim.data.set_joint_qvel(f"{name}:joint", np.zeros(6))
                 inner.sim.forward()
-                first = inner.flatten_observation(inner._get_obs())
-                target = first[:3].copy()
-                for _ in range(STACK_SETTLING_STEPS):
-                    env.step(get_move_action(first, target, close_gripper=False))
-                    first = inner.flatten_observation(inner._get_obs())
+                first = settle(env, STACK_SETTLING_STEPS)
                 inner.symbolic_name_to_box_id = dict(definition.initial_bindings)
                 snapshot = capture(env)
                 positions = observation_positions(first, search.size)
@@ -356,6 +366,7 @@ class StackExperiment:
                 timeout_seconds=timeout_seconds,
                 video_path=video_path,
                 guard_choices=search.plan.guard_choices,
+                post_settling_steps=self.post_settling_steps,
             )
         trace.metadata["task_spec"] = task_identity("stack")
         trace.metadata["counterexample_replay"] = search.plan.metadata()

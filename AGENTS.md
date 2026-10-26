@@ -121,8 +121,16 @@ Execution/collection is supported; Restack synthesis and formal verification
 have not been added. Legacy PartialStack environment/factory/verifier and its
 inference option have been removed; use Restack.
 
-Stack collection holds the initial gripper position for 50 steps before
-recording; the settled full snapshot becomes state zero. Synthesis, candidate
+Collection of every task holds the initial gripper position for 50 steps after
+a fresh reset before recording (Unstack and Reverse since 2026-10-26, entry 43;
+`initial_settling_steps`, on by default, 0 only to reproduce earlier runs);
+the settled full snapshot becomes state zero. Task success defaults to the
+postcondition on the last recorded state (`task-spec-v1`); `--post-settling-steps
+N` (collection, audit, `synthesize_cfg`, `learn_invariant`; CaP
+`post_settling_steps`) decides it after N unrecorded settling steps instead
+(`task-spec-v2`, shared checker `cfg/task_success.py`, see the
+[settled-success notes](roboverify/synthesis/cfg/docs/settled_postcondition.md)).
+Comparisons between RoboVerify and CaP use 50. Synthesis, candidate
 verification, and standalone MCMC restore archived states without repeating
 settling or recreating a layout from its seed. The shared Stack precondition
 includes `forall x,y. Higher(x,y)`, requiring one height level at entry only.
@@ -423,7 +431,10 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   its validation compares current ON* with transposed frozen entry ON*.
   All six tasks default to their provided example when --program is omitted.
   `audit_demos` independently checks current fingerprints, task validation,
-  snapshot/action replay and physical success after extra final settling.
+  snapshot/action replay and physical success after extra final settling, or
+  with `--post-settling-steps N` the shared settled task check.
+  `revalidate_settled` writes `settled_validation.json` sidecars for archives
+  without stored settled results; it never modifies the archive.
   It requires primitive DSL programs; PickPlace is rejected. The collection loader
   opts into nested goal programs; synthesis/verification loading keeps that mode
   disabled. `cfg.goal_collection` validates real goal occupancy without proof VCs.
@@ -553,8 +564,10 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   cursor bindings; tower archives remain compatible. Snapshot and action replay
   restore goal cursors; event cursor bindings describe logical changes between
   actions. Goal traces are explicitly rejected by the block-only inference adapter.
-  Fresh Stack collection holds the initial gripper position for 50 steps before
-  recording. Supplied snapshots bypass reset and settling; all recorded indices,
+  Fresh collection of every task holds the initial gripper position for 50 steps
+  (`task_success.settle`) before recording. A positive `post_settling_steps`
+  stores the settled task check in `metadata.validation.settled`; settling is
+  never recorded. Supplied snapshots bypass reset and settling; all recorded indices,
   frozen entry geometry, and video start at the saved settled state. Standalone
   MCMC threads each seed's archived snapshot through scoring, CEM, and video.
   `program_adapter.py` adapts supplied primitive programs to the CFG;

@@ -49,6 +49,12 @@ def build_parser():
     parser.add_argument("--verification-timeout-ms", type=int, default=10000)
     add_verification_options(parser)
     parser.add_argument("--trajectory-timeout-seconds", type=float, default=60)
+    parser.add_argument(
+        "--post-settling-steps",
+        type=int,
+        default=0,
+        help="Unrecorded final settling before the task check (0: last recorded state)",
+    )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
         "--invariant-relations",
@@ -102,6 +108,7 @@ def main(argv=None):
                 relations=args.invariant_relations,
                 variables=args.invariant_variables,
                 max_loop_iterations=args.max_loop_iterations,
+                post_settling_steps=args.post_settling_steps,
             )
         from synthesis.verification_lib.motion_verification import NoiseSpec
 

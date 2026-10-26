@@ -37,14 +37,15 @@ from .logger import CapLogger
 from .prompt_package import package, prompt_provenance
 from .serving.prefix_cache import affinity_key
 from .tasks import (
-    SUCCESS_CRITERION,
     TASK_INSTRUCTIONS,
     check_task,
     environment_options,
     evaluate_terminal,
     prepare_environment,
     settled_environment_success,
+    settled_task_outcome,
     settling_steps,
+    success_criterion,
     task_context,
     validate_start,
 )
@@ -288,13 +289,16 @@ def run_once(
         demonstrations=demonstrations,
     )
     env, recorder, entry, adapter = None, None, None, None
+    policy_completed = False
     outcome = {
         "success": False,
         "environment_success": None,
         "dsl_postcondition": None,
         "task_spec_success": False,
-        "success_criterion": SUCCESS_CRITERION,
+        "success_criterion": success_criterion(config),
     }
+    if config.post_settling_steps:
+        outcome["post_settling_steps"] = config.post_settling_steps
     status, reason = "failed", ""
     try:
         with deadline(budget):
@@ -465,6 +469,7 @@ def run_once(
                             instruction,
                             task_context(config.task),
                         )
+                    policy_completed = True
                     outcome.update(
                         budget.timings.call(
                             "evaluation", evaluate_terminal, env, config.task, entry
@@ -506,7 +511,32 @@ def run_once(
             else False
         )
     finally:
-        if env is not None and entry is not None:
+        if env is not None and entry is not None and config.post_settling_steps:
+            # task-spec-v2: the shared checker settles the environment outside
+            # the trial deadline, after recording, uncharged to the policy budget.
+            try:
+                outcome.update(
+                    budget.timings.call(
+                        "evaluation",
+                        settled_task_outcome,
+                        env,
+                        config,
+                        entry,
+                        adapter,
+                        policy_completed,
+                    )
+                    | (
+                        {}
+                        if outcome["task_spec_success"] is not None
+                        else {"task_spec_success": None}
+                    )
+                )
+            except Exception as exc:
+                outcome["task_spec_success"] = (
+                    None if outcome["task_spec_success"] is None else False
+                )
+                logger.emit("settled_evaluation_failure", error=str(exc))
+        elif env is not None and entry is not None:
             # Diagnostic only, outside the trial deadline and after recording.
             try:
                 outcome["settled_environment_success"] = budget.timings.call(

@@ -161,11 +161,14 @@ def verified_synthesis(
     logger=None,
     initial_candidate=False,
     prepare=None,
+    require_final_post=True,
 ):
     """Both modes share symbolic feedback and motion repair on the same CFG.
 
     prepare(cfg, revision) executes this revision and returns invariant datasets.
     initial_candidate skips only the first synthesis, never subsequent feedback.
+    require_final_post=False leaves the last-state postcondition of additional
+    demonstrations to the provider's settled check (task-spec-v2).
     """
     from synthesis.cfg.candidate_traces import CandidateTraceError
     from synthesis.cfg.lower import lower_with_locations
@@ -310,7 +313,10 @@ def verified_synthesis(
                     result.status = "needs_demonstrations"
                     return result
                 validation = validate_demonstrations(
-                    more, cfg.precondition, cfg.postcondition
+                    more,
+                    cfg.precondition,
+                    cfg.postcondition,
+                    require_final_post=require_final_post,
                 )
                 if not validation:
                     result.status, result.reason = "invalid_demonstrations", str(

@@ -89,7 +89,7 @@ because exec'd Python cannot rebind a caller's variable.
 ReStack uses the upstream Restack reset (one source tower containing b0 plus
 loose blocks; `initial_tower_blocks` sets its height, default `max(2, n-1)`)
 and the Stack terminal criterion. Fresh scenes settle as in upstream collection:
-50 held-gripper steps for Stack and ReStack, none for Unstack and Reverse;
+50 held-gripper steps for every task (Unstack and Reverse since 2026-10-26);
 snapshots are never settled again. Every tower-task start must satisfy the
 shared precondition, with the table in the domain for Unstack, Reverse and
 ReStack; Reverse must also be the evaluator's canonical tower, and ReStack's b0
@@ -106,7 +106,12 @@ shared pre/postcondition (`task_spec_precondition`, `task_spec_postcondition`)
 for Stack, Unstack, Reverse and ReStack. It is the primary metric for new runs;
 the existing fields keep their definitions. `settled_environment_success`
 re-checks the physical evaluator after 50 host steps with the gripper held,
-outside the trial budget and recording. Batch summaries report first-attempt and
+outside the trial budget and recording. `RunConfig.post_settling_steps` (default
+0) switches `task_spec_success` to `task-spec-v2`: the shared checker
+(`cfg/task_success.py`) settles that many steps after recording, outside the
+deadline and budget, and only the settled postcondition decides success
+(`task_spec_settled_postcondition`; the end-of-rollout postcondition stays in
+`task_spec_postcondition`). `config_frozen_v4` uses 50. Batch summaries report first-attempt and
 final task-spec success; recovery reports the first attempt satisfying it, and
 `recovery.success_field` (default `task_success`) selects which field ends
 recovery. The remaining Revision 5 work (task instructions, goal tasks) is

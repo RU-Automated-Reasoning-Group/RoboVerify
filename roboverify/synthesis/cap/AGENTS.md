@@ -7,13 +7,19 @@ experiment guidance specific to `synthesis/cap/`.
 - Before starting any task under `synthesis/cap/`, read the [README](README.md)
   overview and the sections relevant to the task. Read historical experiment
   reports only when needed.
-- Use `task_spec_success` (`task-spec-v1`) as the default success criterion for
-  new experiments, analyses and reports, so that CaP is scored like RoboVerify
-  (`cfg/collection.py:validate_trace`). Set `recovery.success_field:
-  task_spec_success` explicitly in new recovery configurations. Report the
-  physical evaluator (`success`, `settled_environment_success`) only as a
-  diagnostic, and score RoboVerify executions in a comparison with the same
-  criterion. See [Revision 5, §3.5](docs/revision_5_add_tasks.md#35-result-fields)
+- Use `task_spec_success` under `task-spec-v2` (`post_settling_steps: 50`,
+  [configs/config_frozen_v4.py](configs/config_frozen_v4.py)) as the success
+  criterion for new experiments, analyses and reports: the shared checker
+  `cfg/task_success.py` decides success on the state 50 unrecorded settling
+  steps after the rollout, so that CaP is scored like RoboVerify
+  (`collect_demos --post-settling-steps 50`). `post_settling_steps: 0`
+  (`task-spec-v1`, the last recorded state) remains the default only to
+  reproduce earlier results; see the
+  [settled-success notes](../cfg/docs/settled_postcondition.md). Set
+  `recovery.success_field: task_spec_success` explicitly in new recovery
+  configurations. Report the end-of-rollout postcondition and the physical
+  evaluator (`success`, `settled_environment_success`) only as diagnostics, and
+  score RoboVerify executions in a comparison with the same criterion. See [Revision 5, §3.5](docs/revision_5_add_tasks.md#35-result-fields)
   and [Revision 4.3 report, §3.1 and §4](docs/revision_4_3_report.md#31-success-criterion-task_spec_success).
 - Use the frozen CaP baseline configuration for RoboVerify comparisons, without
   per-task re-tuning: Qwen3.8 27B FP8 (`reasoning_effort=medium`, reasoning
@@ -23,12 +29,19 @@ experiment guidance specific to `synthesis/cap/`.
   (`profile_settings("full")`), and `task_spec_success` as the success field.
   The full table (budgets, history, enrichments) is in the
   [Revision 4.3 report, §3.5](docs/revision_4_3_report.md#35-frozen-configuration).
-  Build new experiments from [configs/config_frozen_v2.py](configs/config_frozen_v2.py),
-  the current version for all six tasks (v1 plus the Grid/Pyramid goal interface,
-  `typed_v4` and `positions-v2`; tower-task prompts unchanged). For demonstration
-  input (Revision 6), use [configs/config_frozen_v3.py](configs/config_frozen_v3.py)
-  for both the demonstration-on and -off arms (`configuration(task,
-  demonstrations=False, ...)`); it needs the 262,144-token served window
+  Build new experiments from [configs/config_frozen_v4.py](configs/config_frozen_v4.py),
+  the current version for all six tasks: v3 (v2's goal interface, `typed_v4`/`typed_v5`
+  prompts and `positions-v2`, plus demonstration input) with `post_settling_steps: 50`
+  and the Unstack/Reverse demonstration archives re-collected from settled starts.
+  Use it for both the demonstration-on and -off arms (`configuration(task,
+  demonstrations=False, ...)`). Earlier results used v1–v3 (v3: Revision 6
+  demonstrations); every fresh reset now settles for 50 steps, so Unstack and
+  Reverse scenes differ from runs made before 2026-10-26.
+  Initial settling is `RunConfig.initial_settling_steps`, **on by default**
+  (50 steps after every fresh reset, all six tasks, all frozen versions). Keep
+  the default; set 0 only to reproduce an earlier unsettled Unstack/Reverse run,
+  and record that override with the results. Restored snapshots are never
+  settled again. See the [cfg agent guide](../cfg/AGENTS.md#settling). v3 and v4 need the 262,144-token served window
   ([Revision 6, §3.5](docs/revision_6_add_demonstration.md#35-context-window-upgrade-config_frozen_v3)). `configuration(task,
   seed=...)` returns the run config, model config and instruction; use it rather
   than restating values; it also records the server-side
@@ -39,9 +52,9 @@ experiment guidance specific to `synthesis/cap/`.
   success alone is a result, not a reason. Record such a change as a new
   `config_frozen_vN.py` and apply it to all six tasks (§3.6).
 - Build demonstration-input experiments (Revision 6) from
-  [configs/config_frozen_v3.py](configs/config_frozen_v3.py), for both the
-  demonstrations-on and demonstrations-off arms, so that the demonstrations are
-  the only difference. Its `SERVING` block records the intended 262,144-token
+  [configs/config_frozen_v4.py](configs/config_frozen_v4.py) (earlier runs:
+  v3), for both the demonstrations-on and demonstrations-off arms, so that the
+  demonstrations are the only difference. Its `SERVING` block records the intended 262,144-token
   window and prefix caching. That upgrade is pending (Revision 6, §3.5); until it
   is applied, only Stack, Unstack and Reverse requests with 15 demonstrations fit
   the served 98,304-token window. Report `demonstration_tokens` next to the
