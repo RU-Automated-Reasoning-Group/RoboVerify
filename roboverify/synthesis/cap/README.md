@@ -15,6 +15,8 @@ immutable code checkpoints, recording, and independent trial evaluation:
 See [CAP-INTEGRATION.md](docs/CAP-INTEGRATION.md) for the design and
 [vendor provenance](vendor/google_cap/README.md) for the baseline's exact source
 and compatibility differences. Method 2 and the final-output baseline audit are implemented.
+[Module docs](docs/module_docs/README.md) describe each current module briefly, with
+links to the code.
 
 Observation boundaries and flowcharts with labeled data edges:
 
