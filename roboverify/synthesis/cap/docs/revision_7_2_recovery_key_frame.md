@@ -36,6 +36,7 @@ New fields of `RecoveryFeedbackConfig` (`recovery.feedback`):
 
 - `rdp` requires the `fixed_items` evidence layout (all frozen configurations since v1 use it). In that layout the evidence cap (`evidence_bytes`) is a guard: no other item is sized by leftover bytes, so the keyframes cannot crowd out other evidence.
 - The RDP item contains `method`, `version` (`recovery-keyframes-v1`), the tolerance, a short format description (self-contained, because the demonstration arm may be off), a summary line, the inputs/goals lines and the rendered frames. Blocks are named `o<i>` (physical block i, the same index as `block_<i>` and `object_handle_to_physical_id`), goals `g<j>`.
+- **Layout, superseded:** in v1 (this experiment, git `3a7dba1`) the item was part of the evidence JSON object, so each frame was a quoted string with escaped line breaks. [Revision 7.3, §2](revision_7_3_frozen_v7.md#2-recovery-keyframe-layout-recovery-keyframes-v2) replaced it with `recovery-keyframes-v2`, a plain-text section laid out exactly like a demonstration; the frame content is unchanged.
 - **Budget:** the item gets `min(keyframe_bytes, room under the evidence cap)`. If the frames do not fit, it keeps the first frame and the most recent frames (nearest the failure), declares the omitted span (`omitted_frames`), and lists every true atom at the first event after the gap. `item_delivery.keyframes` is then `{"partial": kept, "available": total}`.
 - Defaults leave `default_profile` and every earlier prompt unchanged.
 

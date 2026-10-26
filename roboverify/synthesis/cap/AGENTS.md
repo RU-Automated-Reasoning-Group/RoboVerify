@@ -8,7 +8,7 @@ experiment guidance specific to `synthesis/cap/`.
   overview and the sections relevant to the task. Read historical experiment
   reports only when needed.
 - Use `task_spec_success` under `task-spec-v2` (`post_settling_steps: 50`,
-  [configs/config_frozen_v6.py](configs/config_frozen_v6.py)) as the success
+  [configs/config_frozen_v7.py](configs/config_frozen_v7.py)) as the success
   criterion for new experiments, analyses and reports: the shared checker
   `cfg/task_success.py` decides success on the state 50 unrecorded settling
   steps after the rollout, so that CaP is scored like RoboVerify
@@ -22,15 +22,18 @@ experiment guidance specific to `synthesis/cap/`.
   score RoboVerify executions in a comparison with the same criterion. See [Revision 5, §3.5](docs/revision_5_add_tasks.md#35-result-fields)
   and [Revision 4.3 report, §3.1 and §4](docs/revision_4_3_report.md#31-success-criterion-task_spec_success).
 - Use the frozen CaP baseline configuration for RoboVerify comparisons, without
-  per-task re-tuning: Qwen3.8 27B FP8 (`reasoning_effort=medium`, reasoning
-  guard on), `cap_method_2` with `dsl_only` and `typed_v3` (`typed_v4` in v2), primitive prompt
+  per-task re-tuning: the version's model (v1–v6: Qwen3.8 27B FP8 with
+  `reasoning_effort=medium` and the reasoning guard; v7: Claude Haiku 5.5 or
+  Opus 5.5, reasoning effort medium), `cap_method_2` with `dsl_only` and `typed_v3` (`typed_v4` in v2), primitive prompt
   `p0101` (convergence criteria and motion-planning limits on), recovery on with
   `max_rounds: 4` and feedback profile `full`
   (`profile_settings("full")`), and `task_spec_success` as the success field.
   The full table (budgets, history, enrichments) is in the
   [Revision 4.3 report, §3.5](docs/revision_4_3_report.md#35-frozen-configuration).
-  Build new experiments from [configs/config_frozen_v6.py](configs/config_frozen_v6.py),
-  the current version for all six tasks: v4 (v3's goal interface, `typed_v4`/`typed_v5`
+  Build new experiments from [configs/config_frozen_v7.py](configs/config_frozen_v7.py),
+  the current version for all six tasks. It runs Claude Haiku 5.5 (default) or
+  Opus 5.5 on OpenRouter with 64k output, larger token budgets and RDP recovery
+  keyframes ([Revision 7.3](docs/revision_7_3_frozen_v7.md)) on top of v6: v4 (v3's goal interface, `typed_v4`/`typed_v5`
   prompts, `positions-v2` and demonstration input, plus `post_settling_steps: 50`
   and the Unstack/Reverse archives re-collected from settled starts) with the
   primitive prompt package `primitive-prompt-v2`, which drops v1's sentence
@@ -56,16 +59,17 @@ experiment guidance specific to `synthesis/cap/`.
   layout size) is not given, and never state a particular count; the evaluated
   counts are run settings (`TASKS`) only
   ([Revision 7.1](docs/revision_7_1_general_task_spec.md)).
-  Recovery keyframes are `recovery.feedback.keyframe_method`: `legacy` (default
-  and every frozen version: entry, start of the last primitive, end) or `rdp`
-  (the failed rollout compacted like a demonstration; needs `fixed_items`).
+  Recovery keyframes are `recovery.feedback.keyframe_method`: `legacy` (dataclass
+  default and v1–v6: entry, start of the last primitive, end) or `rdp` (v7: the
+  failed rollout compacted and laid out like a demonstration, as a plain-text
+  section after the evidence object; needs `fixed_items`).
   Size `keyframe_bytes` and `evidence_bytes` so that the frames fit, and report
   partial delivery ([Revision 7.2](docs/revision_7_2_recovery_key_frame.md)).
   Initial settling is `RunConfig.initial_settling_steps`, **on by default**
   (50 steps after every fresh reset, all six tasks, all frozen versions). Keep
   the default; set 0 only to reproduce an earlier unsettled Unstack/Reverse run,
   and record that override with the results. Restored snapshots are never
-  settled again. See the [cfg agent guide](../cfg/AGENTS.md#settling). v3–v6 need the 262,144-token served window
+  settled again. See the [cfg agent guide](../cfg/AGENTS.md#settling). v3–v6 need the 262,144-token served window (v7 targets hosted models)
   ([Revision 6, §3.5](docs/revision_6_add_demonstration.md#35-context-window-upgrade-config_frozen_v3)). `configuration(task,
   seed=...)` returns the run config, model config and instruction; use it rather
   than restating values; it also records the server-side
@@ -76,8 +80,8 @@ experiment guidance specific to `synthesis/cap/`.
   success alone is a result, not a reason. Record such a change as a new
   `config_frozen_vN.py` and apply it to all six tasks (§3.6).
 - Build demonstration-input experiments (Revision 6) from
-  [configs/config_frozen_v6.py](configs/config_frozen_v6.py) (earlier runs:
-  v3), for both the demonstrations-on and demonstrations-off arms, so that the
+  [configs/config_frozen_v7.py](configs/config_frozen_v7.py) (earlier runs:
+  v3, v6), for both the demonstrations-on and demonstrations-off arms, so that the
   demonstrations are the only difference. Its `SERVING` block records the
   262,144-token window and prefix caching (applied 2026-10-26, Revision 6,
   §3.5). Report `demonstration_tokens` next to the
