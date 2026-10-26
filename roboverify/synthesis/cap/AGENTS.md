@@ -8,7 +8,7 @@ experiment guidance specific to `synthesis/cap/`.
   overview and the sections relevant to the task. Read historical experiment
   reports only when needed.
 - Use `task_spec_success` under `task-spec-v2` (`post_settling_steps: 50`,
-  [configs/config_frozen_v5.py](configs/config_frozen_v5.py)) as the success
+  [configs/config_frozen_v6.py](configs/config_frozen_v6.py)) as the success
   criterion for new experiments, analyses and reports: the shared checker
   `cfg/task_success.py` decides success on the state 50 unrecorded settling
   steps after the rollout, so that CaP is scored like RoboVerify
@@ -29,16 +29,19 @@ experiment guidance specific to `synthesis/cap/`.
   (`profile_settings("full")`), and `task_spec_success` as the success field.
   The full table (budgets, history, enrichments) is in the
   [Revision 4.3 report, §3.5](docs/revision_4_3_report.md#35-frozen-configuration).
-  Build new experiments from [configs/config_frozen_v5.py](configs/config_frozen_v5.py),
+  Build new experiments from [configs/config_frozen_v6.py](configs/config_frozen_v6.py),
   the current version for all six tasks: v4 (v3's goal interface, `typed_v4`/`typed_v5`
   prompts, `positions-v2` and demonstration input, plus `post_settling_steps: 50`
   and the Unstack/Reverse archives re-collected from settled starts) with the
   primitive prompt package `primitive-prompt-v2`, which drops v1's sentence
   telling the model to express lift, transfer and descent stages
-  ([Revision 7](docs/revision_7_update_prompt_and_config.md)).
+  ([Revision 7](docs/revision_7_update_prompt_and_config.md), v5), and the
+  general task instructions `task-instructions-v2`
+  ([Revision 7.1](docs/revision_7_1_general_task_spec.md), v6).
   Use it for both the demonstration-on and -off arms (`configuration(task,
   demonstrations=False, ...)`). Earlier results used v1–v4 (v3: Revision 6
-  demonstrations; v1–v4 prompts contain the motion-strategy sentence); every
+  demonstrations; v1–v4 prompts contain the motion-strategy sentence; v1–v5
+  Grid/Pyramid instructions state the goal counts); every
   fresh reset now settles for 50 steps, so Unstack and Reverse scenes differ
   from runs made before 2026-10-26.
 - Keep every prompt an API description: what each primitive does and does not
@@ -47,11 +50,17 @@ experiment guidance specific to `synthesis/cap/`.
   descend, approach heights, waypoint order) in the initial, repair or recovery
   prompts. Strategy may reach the model only through demonstrations (when
   enabled) and measured feedback ([Revision 7, §3](docs/revision_7_update_prompt_and_config.md#3-rules-for-later-changes)).
+  State every task as RoboVerify's specification: one policy that takes every
+  initial state satisfying the precondition, for any number of blocks, to the
+  postcondition. Instructions say that the number of blocks (and the goal
+  layout size) is not given, and never state a particular count; the evaluated
+  counts are run settings (`TASKS`) only
+  ([Revision 7.1](docs/revision_7_1_general_task_spec.md)).
   Initial settling is `RunConfig.initial_settling_steps`, **on by default**
   (50 steps after every fresh reset, all six tasks, all frozen versions). Keep
   the default; set 0 only to reproduce an earlier unsettled Unstack/Reverse run,
   and record that override with the results. Restored snapshots are never
-  settled again. See the [cfg agent guide](../cfg/AGENTS.md#settling). v3–v5 need the 262,144-token served window
+  settled again. See the [cfg agent guide](../cfg/AGENTS.md#settling). v3–v6 need the 262,144-token served window
   ([Revision 6, §3.5](docs/revision_6_add_demonstration.md#35-context-window-upgrade-config_frozen_v3)). `configuration(task,
   seed=...)` returns the run config, model config and instruction; use it rather
   than restating values; it also records the server-side
@@ -62,7 +71,7 @@ experiment guidance specific to `synthesis/cap/`.
   success alone is a result, not a reason. Record such a change as a new
   `config_frozen_vN.py` and apply it to all six tasks (§3.6).
 - Build demonstration-input experiments (Revision 6) from
-  [configs/config_frozen_v5.py](configs/config_frozen_v5.py) (earlier runs:
+  [configs/config_frozen_v6.py](configs/config_frozen_v6.py) (earlier runs:
   v3), for both the demonstrations-on and demonstrations-off arms, so that the
   demonstrations are the only difference. Its `SERVING` block records the
   262,144-token window and prefix caching (applied 2026-10-26, Revision 6,
