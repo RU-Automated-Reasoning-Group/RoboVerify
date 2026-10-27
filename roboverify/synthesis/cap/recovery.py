@@ -230,6 +230,35 @@ def summarize(record, round_index):
         "dsl_compliance": result.get("dsl_compliance"),
         "duplicate_of": record.get("duplicate_of"),
         "changed_from_parent": record.get("changed_from_parent"),
+    } | (
+        # Revision 7.4: only runs with the release check carry these fields.
+        {
+            "task_spec_success": result.get("task_spec_success"),
+            "released": result["final_release"].get("released"),
+        }
+        if "final_release" in result
+        else {}
+    )
+
+
+SUCCESS_CHECK_NOTE = (
+    "Success is decided after the robot stops; every block must be released and"
+    " untouched by the gripper at the end of the policy."
+)
+
+
+def success_check(result):
+    """Revision 7.4 evidence: the measured success check, without a strategy."""
+    release = result["final_release"]
+    return {
+        "criterion": result.get("success_criterion"),
+        "postcondition_at_end": result.get("task_spec_postcondition"),
+        "postcondition_after_settling": result.get("task_spec_settled_postcondition"),
+        "released": release.get("released"),
+        "unreleased_blocks": [
+            f"block_{block}" for block in release.get("unreleased_blocks", [])
+        ],
+        "note": SUCCESS_CHECK_NOTE,
     }
 
 
@@ -394,6 +423,8 @@ def select_relevant_evidence(
         "selected_event_ids": [],
         "token_counting": "utf8-byte-upper-bound",
     }
+    if "final_release" in record["result"]:
+        required["success_check"] = success_check(record["result"])
     locations = [
         e
         for e in events
@@ -586,6 +617,8 @@ def select_relevant_evidence(
             delivery[item] = "complete"
     if keyframe_delivery is not None:
         delivery["keyframes"] = keyframe_delivery
+    if "success_check" in required:
+        delivery["success_check"] = "complete"
     if items.supporting_events and len(supporting) < len(window):
         delivery["supporting_events"] = {
             "partial": len(supporting),

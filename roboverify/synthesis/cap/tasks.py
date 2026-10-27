@@ -132,11 +132,24 @@ TASK_SPEC_TASKS = frozenset({"stack", "unstack", "reverse", "restack"})
 SUCCESS_CRITERION = "task-spec-v1"  # post_settling_steps 0
 
 
+FINAL_RELEASE_VERSION = "final-release-v1"
+GRIPPER_GEOMS = (
+    "robot0:gripper_link",
+    "robot0:l_gripper_finger_link",
+    "robot0:r_gripper_finger_link",
+)
+HOLD_DISTANCE = 0.03  # demonstrations.HOLD_DISTANCE
+
+
 def success_criterion(config):
-    """task-spec-v1 without final settling, task-spec-v2 with it."""
+    """task-spec-v1 without final settling, task-spec-v2 with it, plus the
+    CaP-only release check of Revision 7.4 when enabled."""
     from synthesis.cfg.task_success import criterion
 
-    return criterion(config.post_settling_steps)
+    name = criterion(config.post_settling_steps)
+    if getattr(config, "final_release_check", False):
+        name += "+" + FINAL_RELEASE_VERSION
+    return name
 
 
 def _task_scene(inner, task, obs, entry_obs):
@@ -312,4 +325,63 @@ def settled_task_outcome(env, config, entry_obs, adapter, completed):
         "task_spec_settled_postcondition": result.post_settled,
         "settled_environment_success": result.environment_success_settled,
         "task_success": result.as_dict(),
+    }
+
+
+def gripper_block_contacts(inner):
+    """{physical block id: sorted gripper geom names} over active contacts."""
+    import re
+
+    model, data = inner.sim.model, inner.sim.data
+    touching = {}
+    for contact in data.contact[: data.ncon]:
+        names = (model.geom_id2name(contact.geom1), model.geom_id2name(contact.geom2))
+        for gripper, other in (names, names[::-1]):
+            block = re.fullmatch(r"object(\d+)", other or "")
+            if gripper in GRIPPER_GEOMS and block:
+                touching.setdefault(int(block.group(1)), set()).add(gripper)
+    return {block: sorted(geoms) for block, geoms in sorted(touching.items())}
+
+
+def final_release_outcome(env, adapter):
+    """final-release-v1: no block may touch the gripper when the rollout ends.
+
+    Evaluate after recording has stopped and before final settling; no
+    simulation step is taken. A block in contact with the gripper link or a
+    finger is unreleased. Closed fingers, blocks near a closed gripper and the
+    adapter's Pick/Release ledger are diagnostics only.
+    """
+    import numpy as np
+
+    from synthesis.api.control import DEFAULT_CONTROL
+    from synthesis.cfg.reset import inner_env
+
+    inner = inner_env(env)
+    observation = inner.flatten_observation(inner._get_obs())
+    contacts = gripper_block_contacts(inner)
+    closed = float(np.sum(observation[3:5])) <= (
+        DEFAULT_CONTROL.gripper_threshold + DEFAULT_CONTROL.gripper_tolerance
+    )
+    near = []
+    if closed:
+        for i in range(inner.num_blocks):
+            block = observation[10 + 12 * i : 13 + 12 * i]
+            if np.linalg.norm(block - observation[:3]) <= HOLD_DISTANCE:
+                near.append(i)
+    ledger = getattr(adapter, "ledger_held", None)
+    return {
+        "version": FINAL_RELEASE_VERSION,
+        "released": not contacts,
+        "unreleased_blocks": list(contacts),
+        "contacts": [
+            {"block": block, "geoms": geoms} for block, geoms in contacts.items()
+        ],
+        "fingers_closed": closed,
+        "near_closed_gripper": near,
+        "ledger_held": None if ledger is None else str(ledger),
+        "issues": [
+            f"block_{block} is still in contact with the gripper at the end of"
+            " the rollout"
+            for block in contacts
+        ],
     }

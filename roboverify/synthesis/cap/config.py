@@ -380,6 +380,9 @@ class RunConfig:
     # Settling after a fresh reset, before the policy starts (all six tasks;
     # 0 disables it). Restored snapshots are never settled again.
     initial_settling_steps: int = 50
+    # Revision 7.4: fail a rollout that ends with a block touching the gripper
+    # (final-release-v1, config_frozen_v8). Off keeps earlier results unchanged.
+    final_release_check: bool = False
 
     def __post_init__(self):
         for name, tasks in TASK_OPTIONS.items():
@@ -436,6 +439,10 @@ class RunConfig:
             or self.initial_settling_steps < 0
         ):
             raise ValueError("initial_settling_steps must be a nonnegative integer")
+        if type(self.final_release_check) is not bool:
+            raise ValueError("final_release_check must be Boolean")
+        if self.final_release_check and not self.post_settling_steps:
+            raise ValueError("final_release_check requires post_settling_steps > 0")
 
 
 @dataclass

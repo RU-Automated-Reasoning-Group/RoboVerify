@@ -84,6 +84,9 @@ class RoboVerifyAdapter:
         self.api_names = task_api_names(task)
         # Counted independently: a generated policy may catch PrimitiveFailure.
         self.unconverged_primitives = 0
+        # Physical id of the block of the last converged Pick that no converged
+        # Release followed (Revision 7.4 diagnostic; not a success criterion).
+        self.ledger_held = None
 
     def observe(self):
         return self.inner.flatten_observation(self.inner._get_obs()).copy()
@@ -335,6 +338,10 @@ class RoboVerifyAdapter:
             raise PrimitiveFailure(
                 f"{name} did not converge within its shared primitive budget"
             )
+        if name == "Pick":
+            self.ledger_held = self.reference(args[0])
+        elif name == "Release":
+            self.ledger_held = None
         return None
 
 

@@ -37,10 +37,12 @@ from .logger import CapLogger
 from .prompt_package import package, prompt_provenance
 from .serving.prefix_cache import affinity_key
 from .tasks import (
+    FINAL_RELEASE_VERSION,
     TASK_INSTRUCTIONS,
     check_task,
     environment_options,
     evaluate_terminal,
+    final_release_outcome,
     prepare_environment,
     settled_environment_success,
     settled_task_outcome,
@@ -515,6 +517,20 @@ def run_once(
             else False
         )
     finally:
+        if env is not None and entry is not None and config.final_release_check:
+            # final-release-v1 (Revision 7.4): the rollout-end state, before
+            # settling moves the simulator.
+            try:
+                outcome["final_release"] = budget.timings.call(
+                    "evaluation", final_release_outcome, env, adapter
+                )
+            except Exception as exc:
+                outcome["final_release"] = {
+                    "version": FINAL_RELEASE_VERSION,
+                    "released": None,
+                    "issues": [f"{type(exc).__name__}: {exc}"],
+                }
+                logger.emit("final_release_failure", error=str(exc))
         if env is not None and entry is not None and config.post_settling_steps:
             # task-spec-v2: the shared checker settles the environment outside
             # the trial deadline, after recording, uncharged to the policy budget.
@@ -548,6 +564,13 @@ def run_once(
                 )
             except Exception as exc:
                 logger.emit("settled_evaluation_failure", error=str(exc))
+        # A block left touching the gripper fails the attempt (Revision 7.4).
+        if "final_release" in outcome:
+            release = outcome["final_release"]
+            if release["released"] is not True and outcome["task_spec_success"]:
+                outcome["task_spec_success"] = False
+            if release["released"] is False and status in {"completed", "goal_failed"}:
+                status, reason = "unreleased_block", "; ".join(release["issues"])
         if env is not None:
             try:
                 budget.timings.call("cleanup", env.close)
