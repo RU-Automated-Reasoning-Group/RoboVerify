@@ -8,8 +8,12 @@ experiment guidance specific to `synthesis/cap/`.
   overview and the sections relevant to the task. Read historical experiment
   reports only when needed.
 - Use `task_spec_success` under `task-spec-v2` (`post_settling_steps: 50`,
-  [configs/config_frozen_v7.py](configs/config_frozen_v7.py)) as the success
-  criterion for new experiments, analyses and reports: the shared checker
+  [configs/config_frozen_v8.py](configs/config_frozen_v8.py)) as the success
+  criterion for new experiments, analyses and reports. v8 adds a CaP-only
+  check (`final_release_check`, `task-spec-v2+final-release-v1`): a rollout
+  that ends with a block touching the gripper fails with status
+  `unreleased_block` ([Revision 7.4](docs/revision_7_4_check_final_release.md)).
+  The shared checker
   `cfg/task_success.py` decides success on the state 50 unrecorded settling
   steps after the rollout, so that CaP is scored like RoboVerify
   (`collect_demos --post-settling-steps 50`). `post_settling_steps: 0`
@@ -23,15 +27,17 @@ experiment guidance specific to `synthesis/cap/`.
   and [Revision 4.3 report, §3.1 and §4](docs/revision_4_3_report.md#31-success-criterion-task_spec_success).
 - Use the frozen CaP baseline configuration for RoboVerify comparisons, without
   per-task re-tuning: the version's model (v1–v6: Qwen3.8 27B FP8 with
-  `reasoning_effort=medium` and the reasoning guard; v7: Claude Haiku 5.5 or
+  `reasoning_effort=medium` and the reasoning guard; v7–v8: Claude Haiku 5.5 or
   Opus 5.5, reasoning effort medium), `cap_method_2` with `dsl_only` and `typed_v3` (`typed_v4` in v2), primitive prompt
   `p0101` (convergence criteria and motion-planning limits on), recovery on with
   `max_rounds: 4` and feedback profile `full`
   (`profile_settings("full")`), and `task_spec_success` as the success field.
   The full table (budgets, history, enrichments) is in the
   [Revision 4.3 report, §3.5](docs/revision_4_3_report.md#35-frozen-configuration).
-  Build new experiments from [configs/config_frozen_v7.py](configs/config_frozen_v7.py),
-  the current version for all six tasks. It runs Claude Haiku 5.5 (default) or
+  Build new experiments from [configs/config_frozen_v8.py](configs/config_frozen_v8.py),
+  the current version for all six tasks: v7 plus the final release check and
+  one instruction sentence stating it (`task-instructions-v3`,
+  [Revision 7.4](docs/revision_7_4_check_final_release.md)). v7 runs Claude Haiku 5.5 (default) or
   Opus 5.5 on OpenRouter with 64k output, larger token budgets and RDP recovery
   keyframes ([Revision 7.3](docs/revision_7_3_frozen_v7.md)) on top of v6: v4 (v3's goal interface, `typed_v4`/`typed_v5`
   prompts, `positions-v2` and demonstration input, plus `post_settling_steps: 50`
@@ -69,7 +75,7 @@ experiment guidance specific to `synthesis/cap/`.
   (50 steps after every fresh reset, all six tasks, all frozen versions). Keep
   the default; set 0 only to reproduce an earlier unsettled Unstack/Reverse run,
   and record that override with the results. Restored snapshots are never
-  settled again. See the [cfg agent guide](../cfg/AGENTS.md#settling). v3–v6 need the 262,144-token served window (v7 targets hosted models)
+  settled again. See the [cfg agent guide](../cfg/AGENTS.md#settling). v3–v6 need the 262,144-token served window (v7–v8 target hosted models)
   ([Revision 6, §3.5](docs/revision_6_add_demonstration.md#35-context-window-upgrade-config_frozen_v3)). `configuration(task,
   seed=...)` returns the run config, model config and instruction; use it rather
   than restating values; it also records the server-side
@@ -80,8 +86,8 @@ experiment guidance specific to `synthesis/cap/`.
   success alone is a result, not a reason. Record such a change as a new
   `config_frozen_vN.py` and apply it to all six tasks (§3.6).
 - Build demonstration-input experiments (Revision 6) from
-  [configs/config_frozen_v7.py](configs/config_frozen_v7.py) (earlier runs:
-  v3, v6), for both the demonstrations-on and demonstrations-off arms, so that the
+  [configs/config_frozen_v8.py](configs/config_frozen_v8.py) (earlier runs:
+  v3, v6, v7), for both the demonstrations-on and demonstrations-off arms, so that the
   demonstrations are the only difference. Its `SERVING` block records the
   262,144-token window and prefix caching (applied 2026-10-26, Revision 6,
   §3.5). Report `demonstration_tokens` next to the
