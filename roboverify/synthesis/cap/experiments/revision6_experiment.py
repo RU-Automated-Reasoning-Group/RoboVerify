@@ -11,8 +11,9 @@ parallel, then one combined report at ``ROOT/report.md``
 Run configs come from ``config_frozen_v3`` (demonstrations on unless
 ``--demonstrations off``); ``--frozen v6`` selects ``config_frozen_v6``
 (Revision 7.1), whose demonstration ablation runs both arms on the same scene
-seeds under separate roots, and ``--frozen v7`` the hosted-model
-``config_frozen_v7`` (Revision 7.3). The local model uses v3's model config unchanged.
+seeds under separate roots, ``--frozen v7`` the hosted-model
+``config_frozen_v7`` (Revision 7.3), and ``--frozen v8`` v7 with the final
+release check (Revision 7.4). The local model uses v3's model config unchanged.
 Hosted OpenRouter models replace only the endpoint, the model name and the
 reasoning option (OpenRouter's ``reasoning.effort`` in place of vLLM's chat
 template switch), and measure the demonstration block with the provider's
@@ -31,7 +32,12 @@ from pathlib import Path
 
 from ..batch import atomic_json, create_batch, execute_batch
 from ..config import GPUConfig
-from ..configs import config_frozen_v3, config_frozen_v6, config_frozen_v7
+from ..configs import (
+    config_frozen_v3,
+    config_frozen_v6,
+    config_frozen_v7,
+    config_frozen_v8,
+)
 from ..reports import batch_set_report
 from .revision42_experiment import GPU_UUIDS
 
@@ -47,11 +53,17 @@ MODELS = {
     "claude-haiku-5.5": OPENROUTER | {"model": "anthropic/claude-haiku-5.5"},
     "claude-opus-5.5": OPENROUTER | {"model": "anthropic/claude-opus-5.5"},
 }
-FROZEN = {"v3": config_frozen_v3, "v6": config_frozen_v6, "v7": config_frozen_v7}
+FROZEN = {
+    "v3": config_frozen_v3,
+    "v6": config_frozen_v6,
+    "v7": config_frozen_v7,
+    "v8": config_frozen_v8,
+}
 EXPERIMENTS = {
     "v3": "revision6_frozen_v3_demonstrations",
     "v6": "revision7_1_frozen_v6_demonstrations",
     "v7": "revision7_3_frozen_v7",
+    "v8": "revision7_4_frozen_v8",
 }
 TASKS = tuple(config_frozen_v3.TASKS)
 
