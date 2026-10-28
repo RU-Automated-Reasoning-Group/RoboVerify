@@ -943,7 +943,11 @@ Ordinary Move parameters choose the destination relative to the physical table
 frame; the groundtruth supplies (+0.45, -0.15) m XY offsets, exposed for later
 optimization. The physical table reference uses Z = surface minus half a block,
 so one +0.05 m placement offset works for both table and block supports.
-This controller reference does not change the isolated relational tbl marker.
+Since 2026-10-28, approach, lift and retreat use observed `Z_m + 0.10`;
+lateral transport retains the gripper height. The resulting executable has a
+new fingerprint, and the historical symbolic/motion results below have not
+been rerun for it. This controller reference does not change the isolated
+relational tbl marker.
 Missing table geometry fails explicitly, and the motion verifier reports these
 new table-coordinate operands as unsupported. The existing 50-step budgets and
 2 mm tolerances remain.
@@ -1173,9 +1177,10 @@ For the requested geometry, first-phase placement uses
 previous placement Y advances a separated temporary row, and table Z supplies
 the resting height. The first p is tbl. The last temporary placement is b0 and
 becomes the new tower base. Stack placement uses b0 for XY and b for support Z.
-The paper's dynamic Xm/Zm references are replaced with these ordinary reference
-operands and fixed table-relative clearance `N*0.05 + 0.10` m above its support
-reference. The table-placement +0.05 m follows the existing support convention;
+The current program uses observed `Z_m + 0.10` for approach, lift and retreat,
+and holds the gripper height during lateral transport. Earlier collection and
+verification evidence used fixed table-relative clearance and a different
+fingerprint. The table-placement +0.05 m follows the existing support convention;
 the paper's zero offset would put the target below the surface under that
 convention. These are explicit waypoint adaptations, not a literal transcription.
 All parameters remain trainable. Controllers, tolerances and instruction budgets

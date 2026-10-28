@@ -15,7 +15,7 @@ optionally replaces that default. Collection support is broader than proof suppo
 | --- | --- | --- |
 | Stack | Supported | Supported in the documented model below |
 | Unstack | Supported, including current lateral groundtruth | Inference and unbounded symbolic proof pass; extrema/gripper motion operands are encoded, but the full motion proof remains unsuccessful |
-| Reverse | Supported | Supplied-program invariant learning and unbounded symbolic proof pass; table-coordinate motion encoding and synthesis remain unsupported |
+| Reverse | Supported | An earlier supplied program passed unbounded symbolic verification; the observed-height revision is not yet reverified, and table-coordinate motion and synthesis remain unsupported |
 | Restack | Supported | Not integrated |
 | Grid | Supported, nested goal loops | Not supported |
 | Pyramid | Supported, nested goal loops | Not supported |
@@ -30,7 +30,7 @@ unsupported verification pipelines listed above.
 
 The **2026-10-23 collection audit passed all 105 demonstrations**: seeds 0–14
 for four-block Stack/Unstack/Reverse, both five-block Restack source layouts,
-3×3 Grid, and a 4+3+2+1 Pyramid. Every archive passed current program/task
+3×3 Grid, and a 4+3+2+1 Pyramid. Every archive passed the then-current program/task
 identity checks, task pre/postconditions, primitive convergence, full action
 replay, physical task success and 50 extra settling steps at the end. All final
 replay errors were zero. One original Pyramid seed failed at a far source corner;
@@ -40,7 +40,15 @@ The original failure and its replay video are retained. See the
 and [experiment inventory](roboverify/synthesis/experiment/README.md).
 This audit did not run synthesis or establish new formal verification results.
 
-The subsequent **2026-10-23 shared-pipeline tower investigation learned invariants
+On 2026-10-28, Reverse and Restack switched from block-count-based clearance to
+instruction-entry `Z_m` (the highest physical block) plus 10 cm. Lateral moves
+retain the current gripper height. Fifteen seeds each for four- and five-block
+Reverse and both five-block Restack layouts passed collection, exact replay and
+50-step final settling. The changed fingerprints require fresh demonstrations;
+the earlier Reverse symbolic/motion results below have not been rerun on these
+executables. See the [collection guide](roboverify/synthesis/inference_lib/README.md#collect-reverse-demonstrations).
+
+The historical **2026-10-23 shared-pipeline tower investigation learned invariants
 for both Unstack and Reverse and passed all 12 symbolic checks for each**, including
 the unbounded proof. It reexecuted all 15 archived starts per task and used all
 60/75 continuing and exit states. The 68-second Unstack symbolic run comprised

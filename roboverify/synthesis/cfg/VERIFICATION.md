@@ -18,6 +18,11 @@ encoding. Reverse search and goal-program proofs are unsupported. Do not interpr
 the cross-environment demo audit as end-to-end synthesis/verification results;
 see the [support matrix](../../../README.md#project-status).
 
+The 2026-10-28 Reverse/Restack observed-height update changes executable
+fingerprints. The Reverse proof runs and archive paths below refer to the prior
+fixed-clearance executable; recollect demonstrations before checking the current
+program. Its symbolic and motion results have not been rerun.
+
 First collect a supplied primitive DSL program using
 `synthesis.entry.collect_demos`. The [collection guide](../inference_lib/README.md)
 describes seeds, full-state archives, and optional 20 FPS videos. Demonstrations

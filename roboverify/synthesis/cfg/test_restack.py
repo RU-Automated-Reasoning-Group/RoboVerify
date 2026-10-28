@@ -37,7 +37,12 @@ class RestackTests(unittest.TestCase):
     def setUpClass(cls):
         cls.traces = {}
         for count, height, seed in ((2, 2, 0), (4, 3, 0), (5, 3, 1), (5, 4, 2)):
-            definition = load_program(SOURCE, HighLevelContext(use_tbl=True), count)
+            definition = load_program(
+                SOURCE,
+                HighLevelContext(use_tbl=True),
+                count,
+                allow_observation_references=True,
+            )
             trace = record_execution(
                 definition,
                 task="restack",
@@ -109,6 +114,26 @@ class RestackTests(unittest.TestCase):
                 self.assertEqual([e["path"] for e in exits], ["1", "3"])
                 self.assertEqual(exits[0]["bindings"]["p"], 0)
                 self.assertEqual(trace.metadata["initialization"]["settling_steps"], 50)
+                for path in ("1.0", "1.2", "3.0", "3.2"):
+                    starts = [
+                        e
+                        for e in trace.events
+                        if e["kind"] == "instruction_start" and e["path"] == path
+                    ]
+                    ends = [
+                        e
+                        for e in trace.events
+                        if e["kind"] == "instruction_end" and e["path"] == path
+                    ]
+                    self.assertEqual(len(starts), len(ends))
+                    for start, end in zip(starts, ends):
+                        start_state = trace.states[start["index"]]
+                        max_z = max(
+                            get_block_pos(start_state, i)[2] for i in range(count)
+                        )
+                        self.assertAlmostEqual(
+                            trace.states[end["index"]][2], max_z + 0.10, delta=0.0021
+                        )
                 controls = [e["control"] for e in trace.events if "control" in e]
                 self.assertEqual(len(controls), 6 * (len(expected) + count - 1))
                 self.assertTrue(all(c["converged"] for c in controls))
@@ -178,7 +203,12 @@ class RestackTests(unittest.TestCase):
                             ]
                         )
                     np.testing.assert_allclose(*next_states, atol=1e-8, rtol=0)
-                definition = load_program(SOURCE, HighLevelContext(use_tbl=True), 4)
+                definition = load_program(
+                    SOURCE,
+                    HighLevelContext(use_tbl=True),
+                    4,
+                    allow_observation_references=True,
+                )
                 replay = record_execution(
                     definition,
                     task="restack",

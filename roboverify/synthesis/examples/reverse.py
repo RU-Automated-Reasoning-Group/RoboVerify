@@ -5,6 +5,7 @@ XY offsets position the new tower; the original base moves last.
 """
 
 import z3
+
 from synthesis.api.instructions import (
     Assign,
     MoveByName,
@@ -30,17 +31,16 @@ def build_program(context, *, num_blocks):
     guard = z3.And(
         selected != table, selected != current, context.ON_star(selected, base), top
     )
-    # tbl's support reference is half a block below the table surface.
-    # This clearance is 10 cm above the highest nominal block center.
-    clearance = num_blocks * BLOCK_LENGTH + 0.10
     dx, dy = DESTINATION_OFFSET
+    # Keep the lifted gripper height during lateral transport; re-evaluating
+    # Z_m while carrying the block would command an unnecessary extra rise.
     body = [
-        MoveByName("b_prime", "b_prime", "tbl", target_offset=[0, 0, clearance]),
+        MoveByName("b_prime", "b_prime", "Z_m", target_offset=[0, 0, 0.10]),
         PickByName("b_prime"),
-        MoveByName("b_prime", "b_prime", "tbl", target_offset=[0, 0, clearance]),
-        MoveByName("tbl", "tbl", "tbl", target_offset=[dx, dy, clearance]),
+        MoveByName("b_prime", "b_prime", "Z_m", target_offset=[0, 0, 0.10]),
+        MoveByName("tbl", "tbl", "gripper", target_offset=[dx, dy, 0]),
         MoveByName("tbl", "tbl", "b", target_offset=[dx, dy, BLOCK_LENGTH]),
-        ReleaseByName("tbl", target_z=clearance),
+        ReleaseByName("Z_m", target_z=0.10),
         Assign("b", "b_prime"),
     ]
     instructions = [

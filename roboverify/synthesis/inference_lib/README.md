@@ -222,10 +222,20 @@ relational tbl remains an isolated geometry-free marker in predicates. Pick
 still requires a physical block. Missing table geometry fails explicitly.
 The table-reference convention is recorded in table-using program fingerprints.
 
-Transfers and retreats reference tbl at `N*0.05 + 0.10` m above that support
-reference, 10 cm above the highest nominal block center. The physical program
-accepts 2–5 blocks. Five-block execution has a final-settling limitation described
-below. Primitive limits remain 50 steps and tolerances remain 2 mm.
+Approach and lift moves use `Z_m + 0.10` m, where `Z_m` is the current
+maximum physical block center at instruction entry; Release uses the same
+reference and retreat offset. The lateral transfer retains the gripper's current
+height, avoiding an extra rise when the carried block is the highest object.
+No clearance parameter depends on block count. The physical factory accepts 2–5
+blocks. Primitive limits remain 50 steps and tolerances remain 2 mm.
+
+**2026-10-28 observed-height revision:** 15 seeds (0–14) each for four- and
+five-block Reverse completed and passed exact action replay and 50 extra final
+settling steps (30/30). The same audit passed 15/15 for each five-block Restack
+layout with initial tower heights 3 and 4. The collections and audit reports are under
+`demos/observed-height-20261028/`. These are empirical results,
+not a new proof. The changed executable fingerprints require fresh archives;
+the verification results and archived runs below used the earlier controller.
 
 Run from `roboverify/` with the MuJoCo environment configured:
 
@@ -261,9 +271,9 @@ The older `*-lateral` collections and video retain the previous program, which
 handled the first block outside its loop; their fingerprints differ.
 
 **2026-10-26 five-block trial:** the factory's explicit limit was extended to
-five; the existing `N*0.05 + 0.10` clearance formula, primitives and controller
-settings are unchanged. All 15 executions (seeds 0–14) completed, converged and
-passed the immediate task pre/postconditions. The independent replay/50-step
+five; at that time the `N*0.05 + 0.10` clearance formula, primitives and
+controller settings were unchanged. All 15 executions (seeds 0–14) completed,
+converged and passed the immediate task pre/postconditions. The independent replay/50-step
 settling audit passed **12 of 15**: seeds 0, 1 and 3 lost task success during
 settling. This does not establish reliable five-block control. All source traces
 and the audit are retained under `demos/reverse/5-blocks-equal-height-20261026/`.
@@ -271,6 +281,9 @@ The `audited/demonstrations.npz` subset contains seeds 2 and 4–14, with the
 selection criterion and exclusions in `audited/selection.json`. Accepted replays
 had zero observation error and retained physical success after settling. Use
 this subset for the [five-block EqualHeight investigation](../cfg/VERIFICATION.md#reverse-vocabulary-investigation).
+
+The following commands now collect the revised executable, not the historical
+controller used in that 2026-10-26 result:
 
 ```bash
 uv run python -m synthesis.entry.collect_demos --task reverse --num-blocks 5 \
@@ -323,14 +336,17 @@ The supplied program corrects the paper's first-loop guard, which would continue
 selecting b0 after placing it on the table. `p <- tbl` tracks the last parked
 block, the first guard excludes p, and `p <- b_prime` ends each iteration.
 Once p is b0 that loop exits. The second loop starts `b <- b0` and handles every
-remaining clear block. Table-relative XY offsets and clearance adapt the paper's
-waypoints to the lateral setup, using unchanged primitive controllers. These
-changes and the Table 8 precondition correction are documented in
+remaining clear block. Table-relative XY offsets adapt the waypoints to the
+lateral setup. Approach, lift and retreat use observed `Z_m + 0.10`; horizontal
+transport retains the gripper height. The primitive controllers are unchanged.
+These changes and the Table 8 precondition correction are documented in
 [discrepancy 41](../../../PAPER-DISCREPANCIES.md#41-restack-needs-a-terminating-first-loop-and-an-executable-lateral-layout).
 This is supplied-program execution/collection; Restack synthesis and formal
 verification have not been added.
 
-Five-seed collections passed for four blocks and both five-block layouts above.
+The following historical five-seed collections used the preceding fixed-clearance
+program; their executable fingerprints differ from the current program. They
+passed for four blocks and both five-block layouts above.
 All 15 filmed trajectories formed a complete physical tower, with converged
 primitives. Data and videos are in `demos/restack/4-blocks-5-trajectories/`,
 `demos/restack/5-blocks-3-tower-5-trajectories/` and
