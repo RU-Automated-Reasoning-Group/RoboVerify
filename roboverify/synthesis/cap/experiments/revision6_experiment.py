@@ -14,7 +14,9 @@ Run configs come from ``config_frozen_v3`` (demonstrations on unless
 seeds under separate roots, ``--frozen v7`` the hosted-model
 ``config_frozen_v7`` (Revision 7.3), and ``--frozen final_v1`` the final
 configuration ``config_final_v1``: v7 with the final release check (Revision 7.4);
-``--frozen final_v2`` adds provider prompt caching (Revision 7.5). The local model uses v3's model config unchanged.
+``--frozen final_v2`` adds provider prompt caching (Revision 7.5), and
+``--frozen final_v2_wo_demo`` is final v2 without demonstrations (its default;
+``--demonstrations on`` is rejected). The local model uses v3's model config unchanged.
 Hosted OpenRouter models replace only the endpoint, the model name and the
 reasoning option (OpenRouter's ``reasoning.effort`` in place of vLLM's chat
 template switch), and measure the demonstration block with the provider's
@@ -36,6 +38,7 @@ from ..config import GPUConfig
 from ..configs import (
     config_final_v1,
     config_final_v2,
+    config_final_v2_wo_demo,
     config_frozen_v3,
     config_frozen_v6,
     config_frozen_v7,
@@ -62,6 +65,7 @@ FROZEN = {
     "v7": config_frozen_v7,
     "final_v1": config_final_v1,
     "final_v2": config_final_v2,
+    "final_v2_wo_demo": config_final_v2_wo_demo,
 }
 EXPERIMENTS = {
     "v3": "revision6_frozen_v3_demonstrations",
@@ -69,6 +73,7 @@ EXPERIMENTS = {
     "v7": "revision7_3_frozen_v7",
     "final_v1": "final_v1",
     "final_v2": "final_v2",
+    "final_v2_wo_demo": "final_v2_wo_demo",
 }
 TASKS = tuple(config_frozen_v3.TASKS)
 
@@ -211,7 +216,11 @@ def main():
     parser.add_argument("--trials", type=int, default=5)
     parser.add_argument("--seed-start", type=int, default=0)
     parser.add_argument("--workers", type=int, default=5, help="per batch")
-    parser.add_argument("--demonstrations", choices=("on", "off"), default="on")
+    parser.add_argument(
+        "--demonstrations",
+        choices=("on", "off"),
+        help="default: the frozen version's setting (on unless it disables them)",
+    )
     parser.add_argument("--frozen", choices=sorted(FROZEN), default="v3")
     parser.add_argument("--report-only", action="store_true")
     parser.add_argument("--title", default="Revision 6 demonstrations")
@@ -221,6 +230,9 @@ def main():
     )
     args = parser.parse_args()
     root = args.root.resolve()
+    if args.demonstrations is None:
+        enabled = getattr(FROZEN[args.frozen], "DEMONSTRATIONS_ENABLED", True)
+        args.demonstrations = "on" if enabled else "off"
     settings = dict(
         trials=args.trials,
         seed_start=args.seed_start,
