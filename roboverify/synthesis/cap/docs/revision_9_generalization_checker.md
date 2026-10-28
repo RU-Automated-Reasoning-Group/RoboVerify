@@ -26,33 +26,30 @@
    `task-spec-v2+final-release-v1`, and partial reward
    ([TASK_PARTIAL_REWARD.md](TASK_PARTIAL_REWARD.md)) is a graded secondary
    metric.
-2. **The environment stops growing early.** The measured limits (feasible on
-   all 10 seeds; Section 3.3) are:
-   - Stack: 6 blocks; 7 on 3 of 10 seeds.
-   - Unstack: 7; up to 10 on some seeds.
-   - Reverse: 7; 8 on 7 of 10 seeds.
-   - ReStack: 6 (4-block tower + 2 loose); 7 on 9 of 10 seeds.
-   - Grid: 9 (3 × 3).
+2. **Physical limits, independent of any policy** (all 10 seeds;
+   Section 3.3):
+   - Stack: 6 blocks (7 on 4 of 10 seeds);
+   - Unstack and Reverse: 9 (up to 14 on some seeds);
+   - ReStack: 9 = 7-block tower + 2 loose (up to 13);
+   - Grid: 9 (3 × 3), also 4 × 2, 2 × 4 and 5 × 1;
    - Pyramid: 10 (4-3-2-1).
 
-   Different mechanisms stop each task: sampler capacity, explicit workspace
-   rejection, arm reach in Z, controller non-convergence and MuJoCo's contact
-   buffer. Section 3 gives the details.
-3. **A failure counts against the policy only on a scene shown to be
-   feasible.** RoboVerify's supplied programs are a poor oracle beyond the
-   trained counts:
-   - the Reverse program refuses more than 4 blocks;
-   - the Stack program's 7-block tower fails the settled check;
-   - the ReStack program exhausts its own loop budget from 7 blocks;
-   - the tower programs raise their approach height with N.
+   The tower tasks are limited by the arm's reach above the tower column.
+   Stack is limited by the reset sampler, Grid by goal cells out of reach,
+   and Pyramid by source capacity.
+3. **A failure counts against the policy only on a physically feasible
+   scene.** Feasibility is decided per (task, count, seed) without running
+   any program:
+   - the reset scene and one teleported goal scene are built, stable and
+     satisfy the pre- and postcondition;
+   - every top block centre is within the arm's measured reach.
 
-   The checker therefore treats a scene as feasible when any execution on it
-   succeeds: the supplied program, an adjusted feasibility oracle, or any CaP
-   program in the pool. A policy failure on a scene that nothing solves is
-   reported as unresolved and kept out of the policy's failure rate.
+   Controller budgets, transport heights and program design are therefore
+   part of what the checker measures, not part of feasibility. Section 4
+   gives the details.
 4. **Recommended order:**
-   - **G0:** feasibility tables per task: reset probes on 10 seeds per count,
-     plus the oracle.
+   - **G0:** physical feasibility tables per task (done for seeds 0–9,
+     Section 3.3).
    - **G1:** scripted replay of all distinct programs over the schedule
      (5 seeds per count).
    - **G2:** the report.
@@ -100,12 +97,13 @@
 | Goal-layout reach | `_install_goal_layout`: every goal within `manipulability_r = 0.8531` m (XY) of the base | `ValueError: Goal layout exceeds the robot's nominal XY workspace` |
 | Goal-task source capacity | `_roboverify_random_scattered_layout` plus the deterministic fallback inside the source rectangle | `ValueError: Cannot fit N scattered blocks in the goal-task workspace` |
 | Contact buffer | generated XML, `nconmax` 100 | `MujocoException: Pre-allocated contact buffer is full` at about 20 blocks |
-| Arm reach in Z | Fetch kinematics; the controller's 2 mm tolerance within a 50-step primitive | Primitive non-convergence (`primitive_failed`) |
+| Arm reach in Z | Fetch kinematics | Physical limit for towers (Section 3.3). Within one 50-step primitive the reachable height is lower still, so that shortfall is `primitive_failed`, a policy/controller failure |
 | Supplied-program design | `examples/reverse.py` accepts 2–4 blocks; the tower examples set their clearance to `N·L + 0.10` above the table reference; `While` defaults to `max_iters=10` | Oracle failures that say nothing about task feasibility |
 
-### 3.2 Arm reach (measured)
+### 3.2 Arm reach within one primitive budget (measured)
 
-The empty gripper was servoed with the shared controller (`get_move_action`)
+This table is about the controller, not about physics; Section 3.3 has the
+physical reach. The empty gripper was servoed with the shared controller (`get_move_action`)
 to one block above an N-level tower: target Z = resting height + N·L, with
 L = 0.05 m and a resting centre height of 0.425 m. The table gives the error
 after 50 steps (one primitive budget); converged means at most 2 mm.
@@ -123,28 +121,40 @@ The limit therefore depends on the sampled tower position.
   side. The Reverse and ReStack destinations, and the CaP policies'
   temporary rows, lie elsewhere.
 
-### 3.3 Feasible counts (measured)
+### 3.3 Physically feasible counts (measured)
 
-Probe: `runs/cap-generalization/20261028-max-blocks/` (its README has the
-details and the commands). Seeds 0–9 per layout. A scene is feasible when any
-witness succeeds on it under `task-spec-v2`:
-- the supplied program;
-- the low-clearance oracles of Section 4 (transport at the highest block plus
-  6 cm or 4 cm);
-- five sampled final_v2 CaP programs (seeds 0–2 only).
+Probe: `runs/cap-generalization/20261028-max-blocks/physical/`; its README
+has the method, the commands and images of the initial and goal state for
+every count. Seeds 0–9 per layout. A seed is feasible when all three hold:
+- **initial:** the reset scene (CaP's `prepare_environment` and
+  `validate_start`) stays within 5 mm for 100 extra steps;
+- **goal:** a teleported goal configuration stays within 5 mm for 100 steps
+  and satisfies the postcondition;
+- **reach:** every top block centre of both scenes is below the highest
+  gripper Z the arm reaches at that column. Reach is measured by servoing the
+  empty gripper for 1,000 steps, bisecting on Z, with 2 mm tolerance.
 
-Reset alone builds every Unstack, Reverse and ReStack tower up to 16 blocks.
-Those scenes are stable for 100 extra steps and satisfy their preconditions,
-so for these tasks the limit comes from the arm, not from scene construction.
-
-| Task | Feasible on all 10 seeds | Feasible on some seeds | Limit |
+| Task | Feasible on all 10 seeds | Largest N on some seeds | Binding limit |
 | --- | --- | --- | --- |
-| Stack | 2–6 | 7 (3/10) | Sampler: 7 blocks on 4/10 seeds, 8+ on none. A robot-built 7-tower can fall during settling |
-| Unstack | 2–7 | 8 (8/10), 9 (7/10), 10 (3/10) | Arm reach in Z: Move/approach to the tower top does not converge. The supplied program already fails at 6 because of its `Z_m + 0.15` retreat |
-| Reverse | 2–7 | 8 (7/10) | Arm reach in Z; the rebuilt 8–9 block tower falls during settling. The supplied program refuses N > 4 |
-| ReStack (tower + 2 loose) | 4–6 | 7 (9/10) | At most 2 loose blocks fit. The rebuilt N-block tower falls at 8, after which the stacking loop never ends |
-| Grid (rows × cols) | up to 3 × 3 and 4 × 2 | — | 2 × 4, 4 × 3 and 5 × 1 build but no witness converges. 4 × 4, 5 × 2 and 3 × 5 are outside the goal workspace. 20+ blocks overflow the contact buffer |
-| Pyramid (k) | k = 2–4 | — | k = 5 cannot be sampled; k ≥ 6 overflows the contact buffer |
+| Stack | 2–6 | 7 (4/10) | Reset sampler: 7 scattered blocks on 4/10 seeds, 8+ on none |
+| Unstack | 2–9 | 10 (8/10), 11 (7), 12 (5), 13 (2), 14 (1) | Reach above the tower column. The top centre is at 0.82 m for N = 9; columns farther from the base reach less high |
+| Reverse | 2–9 | 10 (8/10) … 14 (1/10) | As Unstack, for both the source and the reversed tower |
+| ReStack (tower + 2 loose) | 4–9 (tower 2–7) | 10 (9/10) … 13 (3/10) | Reach above the rebuilt N-block tower. Reset allows at most 2 loose blocks |
+| Grid (rows × cols) | ≤ 3 × 3; 4 × 2, 2 × 4, 5 × 1 | — | 4 × 3: the far cell (0.85 m from the base) is out of reach even at table height. Larger layouts fail the environment's 0.8531 m goal-workspace check |
+| Pyramid (k) | 2–4 | — | k = 5 sources cannot be placed; k ≥ 6 overflows the contact buffer |
+
+Towers of up to 19 blocks are built and stable. At 20 blocks MuJoCo's
+contact buffer (`nconmax` 100) overflows, so above about 14 blocks reach
+binds before the simulator does.
+
+The earlier policy-witness probe (supplied programs, low-clearance oracles,
+sampled CaP programs; `oracles/`, `cap_replay/`) found lower limits:
+Unstack 7, Reverse 7, ReStack 6, Grid 2 × 4 unsolved. The difference between
+those numbers and this table is controller and program behaviour, which is
+what this revision measures. For example:
+- Unstack N = 10: reachable on 8/10 seeds, but the shared Move did not
+  converge within its 50-step budget;
+- ReStack N = 8: the 8-block tower built by the robot fell during stacking.
 
 Pyramid can therefore be tested at only one count above the trained one,
 unless the source workspace is enlarged (decision D5).
@@ -152,10 +162,12 @@ unless the source workspace is enlarged (decision D5).
 ### 3.4 Probes
 
 `runs/cap-generalization/20261028-max-blocks/` contains everything:
+- `physical/`: the physical-limit probe of Section 3.3, with images
+  (`images/`, `sheet_<task>.png`);
 - `reset/`: reset and precondition probes;
 - `oracles/`: `collect_demos` runs of the supplied and low-clearance programs,
   and a video of the falling ReStack tower;
-- `cap_replay/`: the CaP preview;
+- `cap_replay/`: a preview of five CaP programs per task at larger counts;
 - `witness_table.json`.
 
 The earlier three-seed probes (`scratchpad/r9/`) are superseded.
@@ -167,49 +179,42 @@ Every (program, task, count, seed) execution gets one outcome:
 | Outcome | Meaning |
 | --- | --- |
 | `success` | `task_spec_success` under `task-spec-v2+final-release-v1` |
-| `policy_failure` | The policy fails and the scene is **feasible by witness**: some execution on the same scene and count succeeded |
-| `unresolved` | The policy fails and no execution on this scene has succeeded yet. This is neither a success nor a policy failure |
-| `scene_infeasible` | The reset raised (sampler, workspace, source capacity, contact buffer). No policy runs |
+| `policy_failure` | The policy fails on a **physically feasible** scene (Section 3.3) |
+| `scene_infeasible` | The scene at this (task, count, seed) is not physically feasible: the reset raises, the initial or goal scene is unstable or violates its condition, or a top block is out of reach. The policy may still run, but the outcome is not scored |
 | `budget_exhausted` | A scaled budget ran out (Section 5.4). Reported separately and, by default, counted as a policy failure on feasible scenes (decision D3) |
 
-**Feasibility witnesses**, for each (task, count, seed). The same seed gives
-the same initial state for every program, because the reset depends only on
-the seed and the layout options. A scene is feasible when any of these
-succeeds on it:
-1. RoboVerify's supplied program, where it accepts N;
-2. an **adjusted oracle** (decision D2): the supplied program with
-   - transport at the highest block plus a 6 cm hover (`Z_m` reference)
-     instead of `N·L + 0.10`, with vertical rises before horizontal moves;
-   - the Reverse range check lifted;
-   - `max_iters` raised to 2N.
+**Physical feasibility, not witnesses.** The same seed gives the same initial
+state for every program, because the reset depends only on the seed and the
+layout options. Feasibility is therefore computed once per (task, count, seed)
+by the Section 3.3 probe, before any program runs. A successful execution is
+not needed as proof.
 
-   The probe's versions are in
-   `runs/cap-generalization/20261028-max-blocks/oracles/programs/`; they
-   would become factories under `synthesis/cap/generalization/oracles.py`.
-   `synthesis/examples/` stays unchanged;
-3. any CaP program of the pool on that scene.
+Controller and program limits remain policy failures. Examples:
+- a Move that does not converge within the shared 50-step primitive budget;
+- a tower built by the robot that falls;
+- a transport height above the reachable Z.
 
-A success is a proof of feasibility. A failure of every candidate is evidence
-of infeasibility, but not a proof. Arm-reach tables (Section 3.2) annotate
-unresolved scenes, for example "tower top beyond the reachable Z at this XY",
-but never turn them into failures.
+The low-clearance oracles and the supplied programs stay as diagnostics only.
+They show that a feasible scene can also be solved through the DSL.
 
 ## 5. The checker
 
 ### 5.1 Count schedule per task
 
-The schedule starts at the trained count and extends to one count past the
-first scene-infeasible count, so that each curve shows where the environment
-stops:
+The schedule starts at the trained count and extends to the largest count
+that is physically feasible on at least one seed (Section 3.3):
 
 | Task | Schedule |
 | --- | --- |
 | Stack | 4, 5, 6, 7 |
-| Unstack | 4, 5, 6, 7, 8, 9, 10 |
-| Reverse | 4, 5, 6, 7, 8, 9 |
-| ReStack (tower, loose) | (3, 2) = 5, (4, 2) = 6, (5, 2) = 7, (6, 2) = 8 |
-| Grid (rows × cols) | 3 × 2, 4 × 2, 3 × 3, 2 × 4, 4 × 3 |
-| Pyramid (k) | 3, 4, 5 |
+| Unstack | 4–14 |
+| Reverse | 4–14 |
+| ReStack (tower, loose) | (3, 2) = 5 … (11, 2) = 13 |
+| Grid (rows × cols) | 3 × 2, 4 × 2, 2 × 4, 3 × 3, 5 × 1 |
+| Pyramid (k) | 3, 4 |
+
+Seeds that are physically infeasible at a count are excluded from that
+count's denominator and reported separately.
 
 Smaller counts (2, 3) are optional (decision D6). They test the same
 generality claim downward, and the environments support them.
@@ -223,9 +228,9 @@ generality claim downward, and the environments support them.
   because a failure at N does not imply failure at N + 1 (a scene-dependent
   failure can recur). The cost is small (Section 5.5).
 - **Largest generalizing count of a program:** the largest N such that, at
-  every scheduled count up to N, all feasible-by-witness scenes succeed. A
-  count where every scene is `scene_infeasible` or `unresolved` does not
-  break the chain, but it is marked.
+  every scheduled count up to N, all physically feasible scenes succeed. A
+  count where every scene is `scene_infeasible` does not break the chain, but
+  it is marked.
 
 ### 5.3 Execution
 
@@ -244,8 +249,8 @@ generality claim downward, and the environments support them.
   (`config_final_v2.run_config(task, demonstrations=False, ...)`) with only
   the counts and budgets overridden. The condition mode, prompt package,
   controller, settling and release check stay as they are.
-- **Oracles:** the supplied and adjusted oracles run once per (task, count,
-  seed) through the collection entry point, into the same results table.
+- **Feasibility:** the physical probe runs once per (task, count, seed)
+  before any program, into `scenes.json`.
 
 ### 5.4 Budgets
 
@@ -261,12 +266,14 @@ A policy that loops without progress is then still caught, as
 
 ### 5.5 Cost
 
-- **Jobs:** 246 distinct programs × about 5 counts × 5 seeds ≈ 6,200 scripted
-  executions, plus about 30 counts × 5 seeds of oracle runs.
+- **Jobs:** 246 distinct programs × about 7 counts on average (Section 5.1) × 5 seeds
+  ≈ 8,600 scripted
+  executions, plus the physical probe (about 1–6 s per scene and 18 s per
+  reach column).
 - **Time per execution:** scripted CaP trials include process start-up,
   checking, recording and settling. The pool's average is about 20–60 s. The
   collection probes took 3–14 s per trajectory.
-- **Wall time:** about 35–100 CPU-hours, or roughly 1–3 hours on 32–48
+- **Wall time:** about 50–140 CPU-hours, or roughly 1.5–4 hours on 32–48
   workers on GPUs 6 and 7 with the existing scheduler. There is no API cost.
 
 ### 5.6 Outputs
@@ -274,14 +281,15 @@ A policy that loops without progress is then still caught, as
 Artifacts go under `runs/cap-generalization/<run>/`:
 - `programs.json`: hash, task, trials sharing the source, source path;
 - one batch per program;
-- `oracles/`;
-- `scenes.json`: the feasibility witnesses per (task, count, seed);
+- `scenes.json`: physical feasibility per (task, count, seed), with the
+  failing condition and the reach margin;
 - `results.jsonl`: one row per execution, with outcome, partial reward, env
   steps, budget usage, failure status and reason.
 
 The report is `docs/revision_9_report.md`, written by
 `reports/generalization_report.py`. Per task it contains:
-- a feasibility table (scene_infeasible / unresolved / feasible by count);
+- a feasibility table (scene_infeasible / feasible by count, with the
+  binding limit);
 - success rate against count, over distinct programs and also weighted by
   trial, with Wilson intervals;
 - mean partial reward against count;
@@ -303,10 +311,9 @@ Figures:
     This is shared with Revision 8 M0.
   - `schedule.py`: per-task count schedules → run-config overrides, and
     scaled budgets.
-  - `feasibility.py`: reset probes per (task, count, seed), oracle runs and
-    the witness table.
-  - `oracles.py`: adjusted oracle factories (Section 4).
-  - `outcomes.py`: classification from batch rows and witnesses.
+  - `feasibility.py`: the physical probe of Section 3.3 (reset, goal
+    teleport, stability, reach map) and images of the initial and goal state.
+  - `outcomes.py`: classification from batch rows and the feasibility table.
 - `synthesis/cap/experiments/revision9_generalization.py`: driver. It runs
   without model access, is resumable, and has GPUs 6 and 7 only in its
   allowlist.
@@ -315,8 +322,8 @@ Figures:
 **Tests** (`synthesis/cap/tests/test_generalization.py`):
 - schedule overrides produce valid `RunConfig`s for every task and count;
 - scripted replay of a small fixed Stack program at 3 and 4 blocks in MuJoCo;
-- witness logic: one success makes a scene feasible; all failures make it
-  unresolved; a reset error makes it infeasible;
+- feasibility logic: a reset error, an unstable or false goal, or a top block
+  above reach each make a scene infeasible;
 - the largest generalizing count over synthetic outcome tables, including
   gaps;
 - budget scaling.
@@ -327,14 +334,16 @@ Figures:
   that the bounded sampler can still place. At Stack 7 the sampler fails on
   some seeds, so the feasible scenes are the easy ones. Report the
   sampler-failure rate next to every curve.
-- **The oracle is a witness, not a judge.** Unresolved scenes can hide real
-  infeasibility or merely an oracle limitation. The reach tables annotate them;
-  they are never scored.
+- **Feasibility is a necessary condition, not a constructive proof.** The
+  probe checks the start, a goal state and reach, not every intermediate
+  state of some solution. For example, carrying a block over a tall tower may
+  need a little more height than its top centre. Report the reach margin next
+  to each policy failure near the limit.
 - **Programs hard-code layout constants**, for example temporary rows at fixed
   offsets from `b0`, and fixed heights. Failing at large N for that reason is a
   genuine generalization failure, not an artefact.
 - **Settling at height.** Tall towers can topple during the 50 settling steps;
-  the Stack oracle already does at 7. This is part of the criterion, but report
+  robot-built 7–8 block towers did in the witness probe. This is part of the criterion, but report
   the settled versus end-of-rollout postcondition separately.
 - **ReStack semantics at larger N.** `b0` is at a random level of a taller
   tower, and the unstack phase grows with it. Partial reward's unstack subtask
@@ -352,11 +361,11 @@ Figures:
 1. **D1. Seeds per count.** Recommendation: 5, the same for all programs. The
    alternative is 10, which doubles the cost but tightens the per-program
    estimates.
-2. **D2. Adjusted oracles.** Recommendation: add them under
-   `cap/generalization/oracles.py`, with `Z_m` + hover transport, no Reverse
-   range check and `max_iters` = 2N, as feasibility witnesses only. The
-   alternative is to use only the supplied programs plus the CaP pool as
-   witnesses.
+2. **D2. Feasibility criterion.** Recommendation: use the physical
+   feasibility of Section 3.3 (build, stability, goal teleport, measured
+   reach) and treat the oracles as diagnostics only. The alternative is
+   execution witnesses (supplied programs, oracles, the CaP pool). These
+   conflate controller limits with physics and give lower ceilings.
 3. **D3. Budgets.** Recommendation: scale `max_steps` and `max_sim_steps` with
    N (Section 5.4), and count `budget_exhausted` on a feasible scene as a
    policy failure. The alternative is final_v2's fixed budgets, which make
