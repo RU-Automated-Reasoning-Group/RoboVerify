@@ -40,6 +40,9 @@ class Budget:
     cached_prompt_tokens: int = 0
     cache_unreported_calls: int = 0
     served_by: dict = field(default_factory=dict)
+    # Revision 7.5: provider prompt-cache writes and reported cost, when reported.
+    cache_write_tokens: int | None = None
+    provider_cost: float | None = None
     unknown_usage_calls: int = 0
     started: float = field(default_factory=time.monotonic)
 
@@ -88,20 +91,29 @@ class Budget:
             if self.tokens > self.max_tokens:
                 self.exhaust("tokens", "Token budget exhausted")
 
-    def record_prefix_cache(self, cached, backend=None):
+    def record_prefix_cache(self, cached, backend=None, written=None, cost=None):
         if cached is None:
             self.cache_unreported_calls += 1
         else:
             self.cached_prompt_tokens += cached
         if backend:
             self.served_by[backend] = self.served_by.get(backend, 0) + 1
+        if written is not None:
+            self.cache_write_tokens = (self.cache_write_tokens or 0) + written
+        if cost is not None:
+            self.provider_cost = (self.provider_cost or 0.0) + float(cost)
 
     def prefix_cache_summary(self):
-        return {
+        summary = {
             "cached_prompt_tokens": self.cached_prompt_tokens,
             "cache_unreported_calls": self.cache_unreported_calls,
             "served_by": dict(self.served_by),
         }
+        if self.cache_write_tokens is not None:
+            summary["cache_write_tokens"] = self.cache_write_tokens
+        if self.provider_cost is not None:
+            summary["provider_cost_usd"] = round(self.provider_cost, 6)
+        return summary
 
     def simulation_step(self):
         self.remaining()

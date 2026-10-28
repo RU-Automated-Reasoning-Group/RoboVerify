@@ -43,7 +43,13 @@ class HTTPModel:
         self.affinity_key = affinity_key
         self.last_headers = {}
 
-    def payload(self, prompt):
+    @property
+    def prompt_cache(self):
+        return self.config.prompt_cache
+
+    def payload(self, prompt, breakpoints=()):
+        """Request body; ``breakpoints`` are prompt offsets that end cacheable
+        prefixes (Revision 7.5), used only when prompt caching is configured."""
         c = self.config
         body = {"model": c.model, "stream": False}
         if c.api_style == "responses":
@@ -52,7 +58,10 @@ class HTTPModel:
                 max_output_tokens=c.max_output_tokens,
             )
         else:
-            body.update(messages=[{"role": "user", "content": prompt}])
+            content = prompt
+            if c.prompt_cache and breakpoints:
+                content = cache_parts(prompt, breakpoints, c.prompt_cache)
+            body.update(messages=[{"role": "user", "content": content}])
             body[c.token_field] = c.max_output_tokens
         if c.temperature is not None:
             body["temperature"] = c.temperature
@@ -110,13 +119,13 @@ class HTTPModel:
             ) from exc
         return raw
 
-    def generate(self, prompt, timeout):
+    def generate(self, prompt, timeout, breakpoints=()):
         c = self.config
         headers = {}
         if self.affinity_key and c.provider == "vllm":
             headers[AFFINITY_HEADER] = self.affinity_key
         route = "responses" if c.api_style == "responses" else "chat/completions"
-        raw = self.post(route, self.payload(prompt), timeout, headers)
+        raw = self.post(route, self.payload(prompt, breakpoints), timeout, headers)
         served_by = self.last_headers.get(BACKEND_HEADER)
         if c.api_style == "responses":
             text = "".join(
@@ -132,6 +141,24 @@ class HTTPModel:
             text = choice.get("message", {}).get("content") or ""
             reason = choice.get("finish_reason")
         return Response(text, raw.get("usage") or {}, reason, raw, served_by)
+
+
+def cache_parts(prompt, breakpoints, ttl):
+    """``prompt`` as text parts split at ``breakpoints``; every part that ends
+    at a breakpoint carries cache_control. Their concatenation is ``prompt``."""
+    marker = {"type": "ephemeral"} | ({"ttl": "1h"} if ttl == "1h" else {})
+    cuts = sorted({b for b in breakpoints if 0 < b <= len(prompt)})
+    if len(cuts) > 4:
+        raise ModelError("At most four cache breakpoints are allowed")
+    parts, start = [], 0
+    for cut in cuts:
+        parts.append(
+            {"type": "text", "text": prompt[start:cut], "cache_control": marker}
+        )
+        start = cut
+    if start < len(prompt):
+        parts.append({"type": "text", "text": prompt[start:]})
+    return parts
 
 
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
@@ -245,6 +272,9 @@ class LoggedModel:
         is_policy = purpose == "policy" or (
             purpose == "google_generation" and not self.logger.context.get("helper")
         )
+        # Revision 7.5: prefixes shared across requests end at a breakpoint: the
+        # demonstration block, and the policy request before recovery feedback.
+        shared = len(prompt) if is_policy else 0
         if self.recovery_feedback is not None and is_policy:
             from .recovery import recovery_prompt
 
@@ -261,6 +291,13 @@ class LoggedModel:
                     method_prompt.encode()
                 ).hexdigest(),
             }
+        breakpoints = ()
+        if getattr(self.backend, "prompt_cache", None):
+            offset = len(self.demonstrations.text) if self.demonstrations else 0
+            breakpoints = tuple(
+                b for b in (offset, offset + shared) if 0 < b <= len(prompt)
+            )
+            breakpoints = tuple(sorted(set(breakpoints)))
         for retry in range(self.retries + 1):
             if hasattr(self.budget, "reserve_request"):
                 reservation = (
@@ -275,7 +312,11 @@ class LoggedModel:
             self.budget.model_call()
             call = f"call_{self.budget.calls:04d}"
             path = f"lmp/{call}"
-            request = self.backend.payload(prompt)
+            request = (
+                self.backend.payload(prompt, breakpoints)
+                if breakpoints
+                else self.backend.payload(prompt)
+            )
             role = purpose
             if purpose == "google_generation":
                 role = "helper" if self.logger.context.get("helper") else "policy"
@@ -297,6 +338,7 @@ class LoggedModel:
                 ).hexdigest(),
                 "request_hash_encoding": "json-sort-keys-compact-ascii-utf8",
                 **demonstration,
+                **({"cache_breakpoints": list(breakpoints)} if breakpoints else {}),
             }
             self.logger.artifact(f"{path}/prompt.txt", prompt)
             self.logger.artifact(f"{path}/request.json", request)
@@ -317,6 +359,7 @@ class LoggedModel:
                     self.backend.generate,
                     prompt,
                     self.budget.remaining(),
+                    *((breakpoints,) if breakpoints else ()),
                 )
                 request_elapsed = time.monotonic() - start
             except TransportError as exc:
@@ -351,7 +394,12 @@ class LoggedModel:
             cached = cached_prompt_tokens(response.usage)
             serving = {"served_by": response.backend} if response.backend else {}
             if hasattr(self.budget, "record_prefix_cache"):
-                self.budget.record_prefix_cache(cached, response.backend)
+                self.budget.record_prefix_cache(
+                    cached,
+                    response.backend or response.raw.get("provider"),
+                    written=cache_write_tokens(response.usage),
+                    cost=response.usage.get("cost"),
+                )
             self.logger.emit(
                 "generation_end",
                 **(
@@ -405,6 +453,12 @@ class LoggedModel:
                 }
             )
             return source
+
+
+def cache_write_tokens(usage):
+    """Provider-reported prompt-cache write tokens, or None when not reported."""
+    value = ((usage or {}).get("prompt_tokens_details") or {}).get("cache_write_tokens")
+    return int(value) if value is not None else None
 
 
 def extract_source(text):

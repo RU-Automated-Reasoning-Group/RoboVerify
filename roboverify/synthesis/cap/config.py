@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from .contracts import validate_condition_mode
 from .prompt_package import package, validate_prompt_version
 
+PROMPT_CACHE_TTLS = (None, "5m", "1h")
+
 
 @dataclass
 class ModelConfig:
@@ -22,8 +24,16 @@ class ModelConfig:
     request_timeout: float = 45.0
     transport_retries: int = 2
     extra_body: dict = field(default_factory=dict)
+    # Revision 7.5: provider prompt caching. "5m" or "1h" sends the request as
+    # text parts with cache_control at stable prefix boundaries; the
+    # concatenated text is unchanged. None sends one string.
+    prompt_cache: str | None = None
 
     def __post_init__(self):
+        if self.prompt_cache not in PROMPT_CACHE_TTLS:
+            raise ValueError("prompt_cache must be None, '5m' or '1h'")
+        if self.prompt_cache and self.api_style != "chat_completions":
+            raise ValueError("prompt_cache requires the chat_completions API style")
         if self.api_key_env and not re.fullmatch(
             r"[A-Za-z_][A-Za-z0-9_]*", self.api_key_env
         ):
@@ -278,6 +288,9 @@ class DemonstrationConfig:
     max_tokens: int = 131072
     token_counter: str = "server_tokenize"
     tokenizer_url: str | None = None
+    # Revision 7.5: a count measured once for the batch, {"sha256", "tokens",
+    # "measurement"}; used instead of measuring when the rendered block matches.
+    measured_tokens: dict | None = None
 
     def __post_init__(self):
         if type(self.enabled) is not bool:
@@ -293,6 +306,15 @@ class DemonstrationConfig:
         self.waypoint_tolerance = float(tolerance)
         if type(self.max_tokens) is not int or self.max_tokens <= 0:
             raise ValueError("demonstrations.max_tokens must be a positive integer")
+        if self.measured_tokens is not None and (
+            not isinstance(self.measured_tokens, dict)
+            or not isinstance(self.measured_tokens.get("sha256"), str)
+            or type(self.measured_tokens.get("tokens")) is not int
+            or self.measured_tokens["tokens"] <= 0
+        ):
+            raise ValueError(
+                "demonstrations.measured_tokens needs a sha256 and positive tokens"
+            )
         if self.token_counter not in DEMONSTRATION_TOKEN_COUNTERS:
             raise ValueError(
                 "demonstrations.token_counter must be one of "

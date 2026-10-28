@@ -624,6 +624,16 @@ def render_context(demonstrations, config, archive):
 
 def count_tokens(text, settings, model_config, opener=None, timeout=60):
     """Token count of the rendered block and the method used to measure it."""
+    measured = settings.measured_tokens
+    if measured is not None:
+        # Revision 7.5: measured once for the batch; valid only for this block.
+        if measured["sha256"] != sha256_text(text):
+            raise DemonstrationError(
+                "demonstrations.measured_tokens was measured for a different block"
+            )
+        return measured["tokens"], dict(measured.get("measurement") or {}) | {
+            "measured_once": True
+        }
     if settings.token_counter == "utf8_bytes":
         return len(text.encode("utf-8")), {"method": "utf8_bytes_upper_bound"}
     if settings.token_counter == "provider_usage":
@@ -707,6 +717,18 @@ def provider_usage_tokens(text, model_config, opener=None, timeout=300):
         "suffix": PROVIDER_USAGE_SUFFIX,
         "provider": reply.get("provider"),
     }
+
+
+def measure_once(config, model_config):
+    """``demonstrations.measured_tokens`` for ``config``: one measurement of its
+    rendered block, reused by every trial of a batch (Revision 7.5)."""
+    from dataclasses import replace
+
+    settings = replace(config.demonstrations, measured_tokens=None)
+    demonstrations, archive = load_demonstrations(config)
+    text, _ = render_context(demonstrations, config, archive)
+    tokens, measurement = count_tokens(text, settings, model_config)
+    return {"sha256": sha256_text(text), "tokens": tokens, "measurement": measurement}
 
 
 def prepare(config, model_config, *, token_counter=None):

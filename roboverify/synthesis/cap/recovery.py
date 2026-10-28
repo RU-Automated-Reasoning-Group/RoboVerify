@@ -87,9 +87,9 @@ class RoundBudget(Budget):
             reservation["demonstration_tokens"] = demonstration_tokens
         return reservation
 
-    def record_prefix_cache(self, cached, backend=None):
-        super().record_prefix_cache(cached, backend)
-        self.parent.record_prefix_cache(cached, backend)
+    def record_prefix_cache(self, cached, backend=None, written=None, cost=None):
+        super().record_prefix_cache(cached, backend, written, cost)
+        self.parent.record_prefix_cache(cached, backend, written, cost)
 
     def abandon_request(self):
         self.unknown_usage_calls += 1

@@ -61,9 +61,13 @@ def create_batch(
     render_workers=2,
     render_timeout=600.0,
     seed_per_trial=False,
+    cache_warmup=False,
 ):
     """Plan a batch. ``seed_per_trial`` gives trial k the scene seed
     ``config.seed + k - 1`` (fresh resets); otherwise every trial uses ``config.seed``.
+    ``cache_warmup`` (Revision 7.5) holds the other workers of each session until
+    the first dispatched trial has its first model response, so that response
+    writes the provider prompt cache once and later trials read it.
     """
     directory = Path(directory).resolve()
     if (
@@ -211,6 +215,7 @@ def create_batch(
         "experiment_variants": experiment_variants,
         "schedule_seed": schedule_seed,
         "seed_per_trial": seed_per_trial,
+        "cache_warmup": cache_warmup,
         "snapshot_sha256": snapshot_hash,
         "fixture": fixture,
         "scripted": responses is not None,
@@ -553,8 +558,25 @@ def _execute_batch(directory, *, resume=False, dispatch_gate=None, max_workers=N
     atomic_json(metadata_path, metadata)
     blocked_since = None
     saved_gpu_sample = None
+    # Revision 7.5: None until this session's first dispatch, then that job's id
+    # until its first model response exists (or its worker exits).
+    warm = not manifest.get("cache_warmup")
+    warm_job = None
     try:
         while pending or active or renders.pending() or renders.active:
+            if not warm and warm_job is not None:
+                entry = active.get(warm_job)
+                if (
+                    entry is None
+                    or entry[0].poll() is not None
+                    or first_response(directory / "trials" / warm_job)
+                ):
+                    warm = True
+                    metadata["sessions"][-1]["cache_warmup"] = {
+                        "job": warm_job,
+                        "released_epoch": time.time(),
+                    }
+                    atomic_json(metadata_path, metadata)
             monitoring_error = None
             if gpu:
                 from .gpu_scheduler import GPUUnavailable
@@ -582,7 +604,7 @@ def _execute_batch(directory, *, resume=False, dispatch_gate=None, max_workers=N
             )
             admission_blocked = False
             while pending and len(active) + len(renders.active) < workers:
-                if monitoring_error:
+                if monitoring_error or (not warm and warm_job is not None):
                     break
                 if dispatch_gate is not None and not dispatch_gate(
                     pending[0], [entry[2] for entry in active.values()]
@@ -649,6 +671,8 @@ def _execute_batch(directory, *, resume=False, dispatch_gate=None, max_workers=N
                     status="running", pid=process.pid, dispatched_epoch=time.time()
                 )
                 active[job["id"]] = (process, handle, job, time.monotonic())
+                if not warm and warm_job is None:
+                    warm_job = job["id"]
                 if assignment:
                     gpu.bind(assignment["token"], process.pid)
                 metadata["peak_combined_workers"] = max(
@@ -769,6 +793,11 @@ def _execute_batch(directory, *, resume=False, dispatch_gate=None, max_workers=N
         atomic_json(directory / "schedule.json", schedule)
         write_report(directory, manifest, schedule)
     return json.loads((directory / "summary.json").read_text())
+
+
+def first_response(trial_directory):
+    """Whether a trial has written any model response (Revision 7.5 warm-up)."""
+    return next(Path(trial_directory).rglob("response.json"), None) is not None
 
 
 def prefix_cache_model(jobs):
