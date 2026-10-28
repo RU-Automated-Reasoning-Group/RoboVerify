@@ -34,6 +34,8 @@ class RobotFixture:
                 mocap_pos=np.zeros((1, 3)),
                 mocap_quat=np.zeros((1, 4)),
                 qacc_warmstart=np.zeros(2),
+                contact=[],
+                ncon=0,
             ),
             forward=lambda: None,
         )

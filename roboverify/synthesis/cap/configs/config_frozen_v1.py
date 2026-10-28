@@ -62,6 +62,8 @@ RUN = {
     "max_tokens": 100000,
     "higher_tolerance": 0.001,
     "video_mode": "deferred",
+    # Revision 7.4's release check came later and is on by default; pin it off.
+    "final_release_check": False,
     # p0101: convergence criteria and motion-planning limits on.
     "primitive_prompt": {
         "explain_target_offsets": False,

@@ -91,7 +91,8 @@ def run_scenario(name, root, recovery=None, responses=None, **kwargs):
         prompt_version="typed_v3",
         recovery=RecoveryConfig(**({"enabled": True} | (recovery or {}))),
         primitive_feedback=PrimitiveFeedbackConfig(**primitive),
-        **options,
+        # The golden records predate Revision 7.4's release check.
+        **({"final_release_check": False} | options),
     )
     backend = ScriptedModel(responses)
     with contextlib.redirect_stdout(io.StringIO()):

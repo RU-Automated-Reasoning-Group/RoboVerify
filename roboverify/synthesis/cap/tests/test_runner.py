@@ -210,7 +210,7 @@ class RunnerTests(unittest.TestCase):
     def test_task_spec_success_follows_shared_pre_and_postcondition(self):
         result = self.execute("cap_method_1", ["pass"])
         self.assertTrue(result["task_spec_success"])
-        self.assertEqual(result["success_criterion"], "task-spec-v1")
+        self.assertEqual(result["success_criterion"], "task-spec-v1+final-release-v1")
         self.assertTrue(result["task_spec_precondition"])
         self.assertTrue(result["task_spec_postcondition"])
         self.assertTrue(result["settled_environment_success"])
@@ -249,7 +249,7 @@ class RunnerTests(unittest.TestCase):
 
     def test_settled_criterion_uses_the_shared_checker_outside_the_budget(self):
         result = self.run_settled(1, ["pass"])
-        self.assertEqual(result["success_criterion"], "task-spec-v2")
+        self.assertEqual(result["success_criterion"], "task-spec-v2+final-release-v1")
         self.assertEqual(result["post_settling_steps"], 50)
         self.assertTrue(result["task_spec_success"])
         self.assertTrue(result["task_spec_settled_postcondition"])

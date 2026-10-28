@@ -381,8 +381,9 @@ class RunConfig:
     # 0 disables it). Restored snapshots are never settled again.
     initial_settling_steps: int = 50
     # Revision 7.4: fail a rollout that ends with a block touching the gripper
-    # (final-release-v1, config_frozen_v8). Off keeps earlier results unchanged.
-    final_release_check: bool = False
+    # (final-release-v1, config_final_v1). On by default; config_frozen_v1-v7
+    # and run configs recorded before the option existed keep it off.
+    final_release_check: bool = True
 
     def __post_init__(self):
         for name, tasks in TASK_OPTIONS.items():
@@ -441,8 +442,12 @@ class RunConfig:
             raise ValueError("initial_settling_steps must be a nonnegative integer")
         if type(self.final_release_check) is not bool:
             raise ValueError("final_release_check must be Boolean")
-        if self.final_release_check and not self.post_settling_steps:
-            raise ValueError("final_release_check requires post_settling_steps > 0")
+
+
+def stored_run_config(settings):
+    """RunConfig from a recorded run config; records written before Revision 7.4
+    have no ``final_release_check`` and ran without the check."""
+    return RunConfig(**({"final_release_check": False} | settings))
 
 
 @dataclass

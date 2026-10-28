@@ -332,10 +332,11 @@ def gripper_block_contacts(inner):
     """{physical block id: sorted gripper geom names} over active contacts."""
     import re
 
-    model, data = inner.sim.model, inner.sim.data
+    data = inner.sim.data
     touching = {}
     for contact in data.contact[: data.ncon]:
-        names = (model.geom_id2name(contact.geom1), model.geom_id2name(contact.geom2))
+        name = inner.sim.model.geom_id2name
+        names = (name(contact.geom1), name(contact.geom2))
         for gripper, other in (names, names[::-1]):
             block = re.fullmatch(r"object(\d+)", other or "")
             if gripper in GRIPPER_GEOMS and block:

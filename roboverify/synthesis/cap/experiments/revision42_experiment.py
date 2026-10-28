@@ -19,7 +19,7 @@ from ..config import (
     ModelConfig,
     PrimitiveFeedbackConfig,
     PrimitivePromptConfig,
-    RunConfig,
+    stored_run_config,
 )
 from ..request_control import dispatch_reservation
 
@@ -195,7 +195,7 @@ def base_configuration(model_name=None, video_mode=None):
     run_config = dict(job["run_config"])
     if video_mode is not None:
         run_config.update(save_video=None, video_mode=video_mode)
-    config = RunConfig(**run_config)
+    config = stored_run_config(run_config)
     config.recovery.enabled = True
     model = ModelConfig(
         **(job["model_config"] | {"model": model_name or DEFAULT_MODEL})

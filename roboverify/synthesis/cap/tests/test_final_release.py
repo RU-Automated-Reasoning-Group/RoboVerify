@@ -10,7 +10,9 @@ from types import SimpleNamespace
 
 from synthesis.cfg.reset import restore
 
-from ..config import ModelConfig, RecoveryConfig, RunConfig
+from ..config import ModelConfig, RecoveryConfig, RunConfig, stored_run_config
+from ..configs import config_frozen_v1 as v1
+from ..configs import config_frozen_v7 as v7
 from ..llm import ScriptedModel
 from ..recovery import SUCCESS_CHECK_NOTE, success_check, summarize
 from ..runner import run
@@ -31,17 +33,26 @@ def install_contacts(env, pairs):
 
 
 class ConfigTests(unittest.TestCase):
-    def test_option_is_off_by_default_and_needs_settling(self):
-        self.assertFalse(RunConfig().final_release_check)
-        self.assertEqual(success_criterion(RunConfig()), "task-spec-v1")
+    def test_option_is_on_by_default(self):
+        self.assertTrue(RunConfig().final_release_check)
+        self.assertEqual(
+            success_criterion(RunConfig()), "task-spec-v1+" + FINAL_RELEASE_VERSION
+        )
         with self.assertRaises(ValueError):
-            RunConfig(final_release_check=True)
-        with self.assertRaises(ValueError):
-            RunConfig(final_release_check=1, post_settling_steps=50)
-        config = RunConfig(final_release_check=True, post_settling_steps=50)
+            RunConfig(final_release_check=1)
+        config = RunConfig(post_settling_steps=50)
         self.assertEqual(
             success_criterion(config), "task-spec-v2+" + FINAL_RELEASE_VERSION
         )
+        off = RunConfig(final_release_check=False, post_settling_steps=50)
+        self.assertEqual(success_criterion(off), "task-spec-v2")
+
+    def test_recorded_configs_without_the_option_keep_it_off(self):
+        self.assertFalse(stored_run_config({"task": "stack"}).final_release_check)
+        recorded = stored_run_config({"final_release_check": True})
+        self.assertTrue(recorded.final_release_check)
+        self.assertFalse(v1.run_config("stack").final_release_check)
+        self.assertFalse(v7.run_config("stack").final_release_check)
 
 
 class OutcomeTests(unittest.TestCase):

@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 
 from .batch import atomic_json
-from .config import ModelConfig, RunConfig
+from .config import ModelConfig, stored_run_config
 from .llm import HTTPModel, ScriptedModel
 from .serving.prefix_cache import affinity_key
 
@@ -21,7 +21,7 @@ def main(path):
             evidence = initialize_worker(assignment, path)
             if (
                 not spec.get("fixture")
-                and RunConfig(**spec["run_config"]).video_mode == "inline"
+                and stored_run_config(spec["run_config"]).video_mode == "inline"
             ):
                 evidence["render_probe"] = rendering_probe()
             else:
@@ -43,7 +43,7 @@ def main(path):
     # Device assignment and mapping checks precede imports of trial machinery.
     from .runner import run
 
-    config = RunConfig(**spec["run_config"])
+    config = stored_run_config(spec["run_config"])
     model = ModelConfig(**spec["model_config"])
     backend = (
         ScriptedModel(spec["responses"]) if spec.get("responses") is not None else None

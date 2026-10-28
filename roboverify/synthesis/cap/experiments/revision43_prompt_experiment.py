@@ -19,7 +19,12 @@ from dataclasses import asdict
 from pathlib import Path
 
 from ..batch import METHODS, atomic_json, create_batch
-from ..config import GPUConfig, ModelConfig, PrimitiveFeedbackConfig, RunConfig
+from ..config import (
+    GPUConfig,
+    ModelConfig,
+    PrimitiveFeedbackConfig,
+    stored_run_config,
+)
 from .revision42_experiment import GPU_UUIDS, PRIOR, Admission, execute
 
 SWITCHES = (
@@ -183,7 +188,7 @@ def configuration(model_name):
         max_tokens=INITIAL_TOKENS,
         timeout=ROUND_TIMEOUT,
     )
-    config = RunConfig(**run_config)
+    config = stored_run_config(run_config)
     config.recovery.enabled = True
     config.recovery.round_tokens = ROUND_TOKENS
     config.recovery.total_tokens = TRIAL_TOKENS
