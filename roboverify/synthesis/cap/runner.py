@@ -607,8 +607,10 @@ def run_once(
                 demonstration_context_sha256=demonstrations.sha256,
                 demonstration_trace_ids=demonstrations.manifest["trace_ids"],
                 provider_total_tokens=budget.tokens + budget.demonstration_tokens,
-                prefix_cache=budget.prefix_cache_summary(),
             )
+        if budget.calls:
+            # Provider cache reads/writes and cost, with or without demonstrations.
+            outcome["prefix_cache"] = budget.prefix_cache_summary()
         if config.method != "cap_google_baseline":
             outcome["dsl_compliance"] = (
                 "pass"

@@ -1233,8 +1233,9 @@ def run_recovery(config, model_config, **kwargs):
                 demonstration_context_sha256=context.sha256,
                 demonstration_trace_ids=context.manifest["trace_ids"],
                 provider_total_tokens=ledger.tokens + ledger.demonstration_tokens,
-                prefix_cache=ledger.prefix_cache_summary(),
             )
+        if ledger.calls:
+            final["prefix_cache"] = ledger.prefix_cache_summary()
         phases = Counter()
         for attempt in attempts:
             phases.update(attempt.get("phase_seconds", {}))

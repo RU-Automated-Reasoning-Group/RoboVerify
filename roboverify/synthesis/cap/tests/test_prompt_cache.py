@@ -169,10 +169,10 @@ class RequestTests(Fixture):
         install_contacts(env, held)
         return env
 
-    def execute(self, prompt_cache):
+    def execute(self, prompt_cache, **demonstrations):
         self.first = True
         config = replace(
-            self.config(),
+            self.config(**demonstrations),
             method="cap_method_2",
             post_settling_steps=50,
             recovery=RecoveryConfig(
@@ -226,6 +226,18 @@ class RequestTests(Fixture):
         metadata = json.loads((root / "call_0001/prompt_metadata.json").read_text())
         self.assertEqual(metadata["cache_breakpoints"], [len(demo), len(text(policy))])
         self.assertEqual((root / "call_0001/prompt.txt").read_text(), text(policy))
+
+    def test_the_cache_summary_is_reported_without_demonstrations(self):
+        result, bodies = self.execute("5m", enabled=False)
+        self.assertNotIn("demonstration_tokens", result)
+        # No demonstration breakpoint: round 0 is one cached part.
+        self.assertEqual(
+            [p.get("cache_control") for p in bodies[0]["messages"][0]["content"]],
+            [MARK],
+        )
+        self.assertEqual(result["prefix_cache"]["provider_cost_usd"], 1.5)
+        attempt = result["attempts"][0]
+        self.assertEqual(attempt["prefix_cache"]["cached_prompt_tokens"], 80)
 
 
 class WarmupTests(unittest.TestCase):
