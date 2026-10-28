@@ -20,7 +20,8 @@
    program worked once. `verified_model` would show partial correctness for
    every precondition state and any block count, in RoboVerify's geometric
    primitive model ([scope](../../cfg/VERIFICATION.md#scope-and-model)).
-2. **The primitives already match.** The CaP runtime executes `Pick`, `Move`
+2. **The primitives already match.** Section 10 compares the two languages
+   construct by construct. The CaP runtime executes `Pick`, `Move`
    and `Release` as RoboVerify's `PickByName`, `MoveByName` and
    `ReleaseByName`, with the same controllers
    ([adapter.py](../adapter.py), around line 280). `get`, `exists` and
@@ -216,8 +217,8 @@ New module: `synthesis/cap/verification/translate.py`.
    - **Literals** are copied.
    - **Numeric locals** assigned only from literals and literal arithmetic are
      constant-folded.
-   - **Counters** (`i += 1` used in offsets) and **measured values** are
-     `translation_unsupported` until M4a.
+   - **Counters** (`i = i + 1` used in offsets; the checker rejects
+     `+=`) and **measured values** are `translation_unsupported` until M4a.
 6. **Unsupported until their milestone:**
    - `if`, `break`, `continue` and early `return` (until M4c);
    - goal loops (until M6);
@@ -396,3 +397,186 @@ packages for E1–E8):
    goal-verification item from discrepancy 40 and also applies to RoboVerify's
    own programs. Report these 100 programs as `verifier_unsupported_task` after
    M0's replay results.
+
+## 10. The two languages: CaP's checked DSL and RoboVerify's verifiable DSL
+
+This section states what each side accepts today, from the code rather than the
+paper, and what lies in their intersection. "RoboVerify" here means verify mode
+(`synthesize_cfg --mode verify`): what a supplied program may contain and still
+reach a `verified_model` result. RoboVerify's executable language is larger
+(Section 10.2.3), but its extra constructs are execution- or collection-only.
+
+### 10.1 CaP: what the DSL checker accepts
+
+Sources:
+- syntax: [validation.py](../validation.py) (`ALLOWED`, `FORBIDDEN`, `parse`);
+- API and types: [contracts.py](../contracts.py) (`API_DESCRIPTION`, `task_api_names`, `task_inputs`);
+- condition rules: `CONDITION_RULES` in the same file;
+- goal API wording: the `typed_v5` prompt package (`prompts/typed_v5.json`).
+
+The final configurations run condition mode `dsl_only`.
+
+#### 10.1.1 Syntax (a Python subset)
+
+| Allowed | Rule |
+| --- | --- |
+| Top-level `def f(a, b):` | Plain top-level functions only: no decorators, return annotations, defaults, `*args`, `**kwargs`, keyword-only or positional-only parameters, or parameter annotations. A helper unit contains exactly one `def` of its own name |
+| Statements | `x = e` (one local name per assignment), expression statements, `if`/`elif`/`else`, `while`, `break`, `continue`, `return`, `pass` |
+| Expressions | Names, constants, direct calls `f(a, ...)` (no keyword arguments, no calls through attributes or values), `lambda` (only as the argument of `exists`/`forall`/`get`), list and tuple displays, `and`/`or`/`not`, unary `-`/`+`, binary `+ - * /`, comparisons `< <= > >= == !=`, subscripts with a literal `0`, `1` or `2` only |
+| Rejected syntax (everything else) | For example `for`, comprehensions, `import`, attribute access, `+=` (`AugAssign`), `try`, `with`, `global`, nested functions, slices, `%`, `//`, `**`, conditional expressions, strings used as values |
+| Rejected names | Any name starting with `_`, plus `env`, `sim`, `observation`, `get_obs`, `eval`, `exec`, `getattr`, `type` and the other entries of `FORBIDDEN`. API names and the inputs `h0`/`null` cannot be rebound |
+| Size | At most 10,000 AST nodes |
+
+The program must call its own policy at top level. Helpers may call each other.
+Type, value-provenance and effect analysis is part of the check: object and
+goal handles, numbers, Booleans, positions and vectors are tracked, and
+conditions and query lambdas must not perform actions.
+
+#### 10.1.2 API
+
+| Group | Names and signatures | Tasks |
+| --- | --- | --- |
+| Actions | `Pick(b)`; `Move(x_ref, y_ref, z_ref, [dx, dy, dz])`, target = current X(x_ref)+dx, Y(y_ref)+dy, Z(z_ref)+dz; `Release(r, h)`, opens and retreats to current Z(r)+h | all |
+| Action operands | Pick: a block handle. Move and Release references: a block handle, `tbl` (table tasks) or a goal handle (goal tasks). Offsets: any finite numbers, which may be computed | |
+| Predicates | `ON`, `ON_star`, `Higher`, `Scattered`, `eq` over block handles | all |
+| | `ON_star_zero` (task-entry geometry) | Reverse only |
+| Queries | `exists(lambda x, y, ...: c)`, `forall(lambda x, y, ...: c)` (one or more binders); `get(lambda x: c)` (exactly one binder; first witness in ascending ID order; failure if none). Binders range over physical blocks | all |
+| Position reads | `get_block_position(b)`, `get_gripper_position()` → an immutable XYZ; read with `[0]`, `[1]`, `[2]` | all |
+| Goal API | `AtGoal(block)`, `HasBlock(goal)`; statements `MoveRight(g)`, `MoveDown(g)` (rebind the goal variable in place); `get_goal_position(g)` | Grid, Pyramid |
+| Inputs | `b0` (Stack, Unstack, Reverse, ReStack); `tbl` (Unstack, Reverse, ReStack; usable only as a Move/Release reference); `h0`, `null` (Grid, Pyramid; protected) | |
+
+#### 10.1.3 Conditions (`dsl_only`)
+
+The conditions of `if`, `while` and `get`/`exists`/`forall` may use:
+- DSL predicates;
+- object and goal identity (`==`, `!=`, `eq`);
+- Boolean logic and quantifiers;
+- pure helpers built from these.
+
+Numeric comparisons are rejected, including coordinate, counter and constant
+comparisons. This applies transitively through assignments, helper arguments
+and returns. Numbers may parameterize actions only.
+
+### 10.2 RoboVerify: what verify mode accepts
+
+Sources:
+- instruction set: [api/instructions.py](../../api/instructions.py);
+- loader: `prepare_program` in [cfg/program_source.py](../../cfg/program_source.py);
+- CFG adapter: [cfg/program_adapter.py](../../cfg/program_adapter.py);
+- summary proposal: `propose_summaries` in [cfg/verification.py](../../cfg/verification.py);
+- motion encoding: [verification_lib/primitive_motion.py](../../verification_lib/primitive_motion.py);
+- WP rules: `wp` in [api/program.py](../../api/program.py);
+- formulas: [predicates/term.py](../../predicates/term.py) and [api/guard_eval.py](../../api/guard_eval.py).
+
+#### 10.2.1 Syntax
+
+A program is a Python factory that returns a `Program`: a flat list of
+instruction objects. There are no functions, branches or expressions at run
+time. Python in the factory runs only once, at construction, so factory-level
+loops or helpers act as macros and leave no trace in the program.
+
+| Construct | Form |
+| --- | --- |
+| Pick | `PickByName(b)`, or `Pick(id)` with a numeric ID, which the loader renames to a fixed alias |
+| Move | `MoveByName(x, y, z, target_offset=[dx, dy, dz])` (or the ID form); the offsets are three constants |
+| Release | `ReleaseByName(r, target_z=h)` (or the ID form); `h` is a constant |
+| Assign | `Assign(v, w)`, object alias |
+| Get | `Get(v, φ, exists_vars=[...])`: binds one or more names to the first witness; failure if none |
+| While | `While(φ, binders, body, invariant, max_iters)`: guard φ with optional existential binders that are bound before each iteration; optional supplied invariant; iteration budget (default 10) |
+| Skip | `Skip` |
+
+#### 10.2.2 Formulas
+
+Formulas are first-order formulas over the block sort:
+- **Atoms:** `ON_star`, `ON_star_zero`, `Higher`, `Scattered`, equality. `ON`
+  exists as a term-language macro (`ON*` plus "no block in between").
+- **Connectives:** `and`, `or`, `not`, `implies`.
+- **Quantifiers:** `exists` and `forall` with any number of binders.
+- **Domain:** physical blocks, plus `tbl` in table tasks (`use_tbl`).
+
+There are no numbers. `ON_star_zero` reads the geometry frozen when each loop
+invocation starts.
+
+#### 10.2.3 What verify mode rejects or cannot prove
+
+These are legal in RoboVerify execution or collection, but verify mode refuses
+them or reports `unsupported`:
+
+| Construct | Where it stops |
+| --- | --- |
+| Tasks other than Stack and Unstack | CLI `--task` choices |
+| Goal instructions (`GoalAssign`, `MoveRight`, `MoveDown`), goal operands, nested goal loops | `prepare_program` without `allow_goal_program` |
+| Observation-relative operands (`Y_min`, `Z_m`, `gripper`) | `prepare_program` without `allow_observation_references` |
+| Nested `While` | `prepare_program` ("Nested loops are not supported") |
+| `PickPlace` macros, `Put` and `MarkGoal` in a supplied program | `propose_summaries` / motion: no primitive encoding |
+| `Get` or `Assign` between `Pick` and `Release`; a loop inside a placement; a loop or program ending while holding; Pick while holding; an empty body | `program_to_cfg`, `propose_summaries` |
+| `Release(r, h)` with `r` ≠ the held block | `propose_summaries`; motion obligation `release_object` |
+| A placement without an ON edge in the postcondition and without a transport Move | `propose_summaries` |
+| `tbl` as a Move/Release operand | motion check `table_reference_*` = `unsupported` |
+| Non-constant offsets | motion uses `concrete_float`; untrained `Parameter`s are synthesis-only |
+| A `Get` that rebinds a name already used in the checked body | motion check `get_*` = `unsupported` |
+
+### 10.3 Intersection
+
+A CaP program lies in the intersection when, after its helpers are inlined, it
+uses only the following, with the meaning of each construct in the right-hand
+column preserved:
+
+| CaP | RoboVerify | Conditions for the same meaning |
+| --- | --- | --- |
+| `Pick(b)` | `PickByName(b)` | `b` is a block handle |
+| `Move(x, y, z, [dx, dy, dz])` | `MoveByName(x, y, z, target_offset=[dx, dy, dz])` | All three references are block handles (not `tbl`, not goals). The offsets are literals or literal arithmetic (constant-folded) |
+| `Release(r, h)` | `ReleaseByName(r, target_z=h)` | `r` is the held block; `h` is a literal |
+| `x = y` (object) | `Assign(x, y)` | outside a placement |
+| `x = get(lambda v: φ)` | `Get(x, φ)` | outside a placement; φ in the shared formula language |
+| `while exists(lambda v: φ):` with `v = get(lambda v: φ)` first in the body | `While(φ(v), [v], body)` | one loop level; the body does not end holding a block |
+| `while φ:` (no binder) | `While(φ, [], body)` | same |
+| `ON`, `ON_star`, `Higher`, `Scattered`, `eq`, `==`/`!=` on handles, `not`/`and`/`or`, `exists`/`forall` | the same atoms and connectives | CaP binders range over physical blocks only; in table tasks the translation must add `x ≠ tbl` to each binder |
+| Statement helpers, Boolean helpers | inlined at translation | no recursion (none occurs) |
+| Task | Stack, Unstack | the CLI task scope |
+
+Three semantic points sit inside the intersection and need care when
+translating:
+- **Witness choice:** both sides take the first witness in ascending
+  physical-ID order.
+- **Loop budget:** `max_iters` must not be smaller than CaP's execution budget.
+- **`ON_star_zero` scope:** CaP freezes geometry at program entry, RoboVerify at
+  each loop invocation. They agree only when the formula sits in the first and
+  only loop, entered with no prior actions. Otherwise the construct is outside
+  the intersection until E7.
+
+### 10.4 CaP constructs outside the intersection
+
+| Construct | Programs (of 300) | What verification would need |
+| --- | ---: | --- |
+| `if`/`elif`/`else` | 224 | E6 (`If` instruction, WP rule, branch region) |
+| `break`, `continue`, early `return` | `break`/`continue` 34; `return` mostly in helpers | E6, or normalization to guards |
+| Position reads and arithmetic on them (offsets from measurements) | 183 | E4 (linear observation operands) |
+| Counters and other runtime numeric locals (`i = i + 1`) | — | E4-like numeric state; not planned |
+| `Release(r, h)` with `r` ≠ the held block | 186 (syntactic) | E1 (model the controller's retreat reference) |
+| `tbl` as a Move/Release reference | 90 | E2 |
+| `get`, assignment or measurement while holding | `get` 63 | E5 |
+| Nested `while`; goal handles, `AtGoal`, `HasBlock`, `MoveRight`, `MoveDown`, `get_goal_position` | 100 (Grid, Pyramid) | E8 |
+| `ON_star_zero` with task-entry scope; Reverse and ReStack tasks | 100 tasks; `ON_star_zero` in 3 programs | E7 |
+| Numeric comparisons (`coordinate_predicates` mode only) | 0 (final runs use `dsl_only`) | none planned |
+
+### 10.5 RoboVerify constructs outside the intersection
+
+These are verify-mode constructs a CaP program cannot express. None blocks the
+translation, because translation only goes from CaP to RoboVerify.
+
+| Construct | Why CaP cannot write it |
+| --- | --- |
+| Numeric block IDs as operands (`Pick(0)`) | CaP sees opaque handles only |
+| `While` with several existential binders bound at once; `Get` with several binders | CaP's `get` takes exactly one binder. Sequential `get`s choose witnesses one at a time, which can differ from a joint first witness, so the translator emits one `Get` per CaP `get`, in order |
+| Supplied loop invariants (`While(..., invariant=...)`) and `max_iters` | Not part of a policy |
+| `implies` | Expressible in CaP as `not a or b` |
+| Formulas quantifying over `tbl` (table tasks) | CaP binders range over blocks only |
+| `ON_star_zero` frozen per loop invocation | CaP freezes it at program entry |
+| Untrained `Parameter` offsets (CEM targets) | Synthesis mode only; verify mode needs constants too |
+
+Execution-only RoboVerify constructs belong to neither column, because verify
+mode rejects them: `PickPlace`, observation references, `Put`, `MarkGoal`.
+CaP's goal API corresponds to RoboVerify's executable goal instructions
+(`GoalAssign`, `MoveRight`, `MoveDown`, goal guards). Those are outside the
+intersection only because verify mode does not accept them (Section 10.2.3).
