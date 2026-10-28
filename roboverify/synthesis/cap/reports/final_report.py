@@ -13,6 +13,13 @@ release check). A trial rejected before any request because its scene
 matches a demonstration (``demonstration_rejected``) is excluded from the
 denominator. Provider usage (cache reads/writes, cost) is read from the logged
 ``response.json`` of every model call.
+
+Env steps are the policy's ``simulation_steps`` summed over a trial's rounds
+(settling excluded). Each round's partial reward is ``partial-reward-v1``
+(``docs/TASK_PARTIAL_REWARD.md``); ``<prefix>_partial_reward.png`` plots it
+against cumulative env steps as in the paper's Fig. 11. ``--compare LABEL ROOT``
+(repeatable; roots with one label are merged) adds another arm to that figure,
+for example the with-demonstration run.
 """
 
 import argparse
@@ -23,6 +30,8 @@ from collections import Counter
 from pathlib import Path
 
 from .batch_set_report import TASK_ORDER, find_batches, load_batch
+from .partial_reward import VERSION as PARTIAL_REWARD_VERSION
+from .partial_reward import attempt_reward
 
 ROUNDS = 5  # round 0 plus four recovery rounds
 STATUS_ORDER = (
@@ -131,6 +140,7 @@ def summarize(batches):
     costs = [
         (r.get("prefix_cache") or {}).get("provider_cost_usd") or 0.0 for r in rows
     ]
+    progress = [trial_progress(task, r) for r in rows]
     return {
         "task": task,
         "blocks": batch["run"].get("num_blocks"),
@@ -164,7 +174,41 @@ def summarize(batches):
         "replaced_usage": dict(replaced_usage),
         "requeued": Counter(e["reason"] for e in requeued),
         "seeds": sorted(r.get("seed") for r in rows if r.get("seed") is not None),
+        "env_steps": sum(p["steps"] for p in progress),
+        "progress": progress,
     }
+
+
+def trial_progress(task, row):
+    """Env steps and the partial reward after each round of one trial.
+
+    ``rounds`` lists [cumulative env steps, partial reward] per round with a
+    rollout; a round without one (no checked program) adds no point.
+    """
+    total, rounds = 0, []
+    for attempt in row.get("attempts", []):
+        total += attempt.get("simulation_steps") or 0
+        reward = attempt_reward(task, attempt)
+        if reward is not None:
+            rounds.append([total, reward])
+    return {
+        "seed": row.get("seed"),
+        "success": bool(row.get("task_spec_success")),
+        "steps": row.get("simulation_steps") or total,
+        "rounds": rounds,
+    }
+
+
+def step_stats(values):
+    if not values:
+        return "0 | – | – | – | –"
+    values = sorted(values)
+    mid = len(values) // 2
+    median = values[mid] if len(values) % 2 else (values[mid - 1] + values[mid]) / 2
+    return (
+        f"{len(values)} | {sum(values) / len(values):,.0f} | {median:,.0f} |"
+        f" {values[0]:,} | {values[-1]:,}"
+    )
 
 
 def pct(k, n):
@@ -180,17 +224,51 @@ def tables(results):
     out = []
     out.append(
         "| Task | Blocks | Trials | Excluded | Round-0 success | 95% CI | Final success"
-        " | 95% CI | Mean rounds | Mean calls |"
+        " | 95% CI | Mean rounds | Mean calls | Total env steps |"
     )
-    out.append("| --- | ---: | ---: | ---: | ---: | --- | ---: | --- | ---: | ---: |")
+    out.append(
+        "| --- | ---: | ---: | ---: | ---: | --- | ---: | --- | ---: | ---: | ---: |"
+    )
     for r in results:
         out.append(
             f"| {LABELS[r['task']]} | {r['blocks']} | {r['trials']} |"
             f" {len(r['excluded'])} |"
             f" {pct(r['round0_success'], r['trials'])} | {ci(r['round0_ci'])} |"
             f" {pct(r['final_success'], r['trials'])} | {ci(r['final_ci'])} |"
-            f" {r['mean_rounds']:.2f} | {r['mean_calls']:.2f} |"
+            f" {r['mean_rounds']:.2f} | {r['mean_calls']:.2f} | {r['env_steps']:,} |"
         )
+    out.append("")
+    out.append(
+        "Env steps until the final program succeeded, or until the trial finally"
+        " failed (all rounds, settling excluded):"
+    )
+    out.append("")
+    out.append(
+        "| Task | Succeeded | Mean | Median | Min | Max | Failed | Mean | Median"
+        " | Min | Max |"
+    )
+    out.append("| --- |" + " ---: |" * 10)
+    for r in results:
+        ok = [p["steps"] for p in r["progress"] if p["success"]]
+        bad = [p["steps"] for p in r["progress"] if not p["success"]]
+        out.append(f"| {LABELS[r['task']]} | {step_stats(ok)} | {step_stats(bad)} |")
+    out.append("")
+    out.append(
+        f"Mean partial reward by round ({PARTIAL_REWARD_VERSION}; trials that"
+        " already stopped keep their last value):"
+    )
+    out.append("")
+    out.append("| Task | " + " | ".join(f"Round {k}" for k in range(ROUNDS)) + " |")
+    out.append("| --- |" + " ---: |" * ROUNDS)
+    for r in results:
+        cells = []
+        for k in range(ROUNDS):
+            values = [
+                (p["rounds"][min(k, len(p["rounds"]) - 1)][1] if p["rounds"] else 0.0)
+                for p in r["progress"]
+            ]
+            cells.append(f"{sum(values) / max(len(values), 1):.2f}")
+        out.append(f"| {LABELS[r['task']]} | " + " | ".join(cells) + " |")
     out.append("")
     out.append("Successes by round (cumulative):")
     out.append("")
@@ -385,20 +463,99 @@ def plots(results, directory, prefix):
     return written
 
 
+def progress_curve(trials, grid):
+    """Mean and standard deviation over trials of the latest partial reward at
+    each env-step value of ``grid`` (0 before a trial's first rollout)."""
+    import numpy as np
+
+    values = np.zeros((len(trials), len(grid)))
+    for i, trial in enumerate(trials):
+        if not trial["rounds"]:
+            continue
+        steps = np.array([s for s, _ in trial["rounds"]])
+        rewards = np.array([0.0] + [r for _, r in trial["rounds"]])
+        values[i] = rewards[np.searchsorted(steps, grid, side="right")]
+    return values.mean(axis=0), values.std(axis=0)
+
+
+def partial_reward_figure(arms, directory, prefix):
+    """Fig. 11-style panels: mean partial reward (± one standard deviation over
+    trials) against cumulative env steps, one panel per task and one curve
+    per arm."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    tasks = [t for t in TASK_ORDER if any(t in results for _, results in arms)]
+    fig, axes = plt.subplots(2, 3, figsize=(13, 7), squeeze=False)
+    colours = ("#1f77b4", "#ff7f0e", "#2ca02c", "#d62728")
+    for ax, task in zip(axes.flat, tasks):
+        end = max(
+            p["steps"]
+            for _, results in arms
+            if task in results
+            for p in results[task]["progress"]
+        )
+        grid = np.linspace(0, max(end, 1), 600)
+        for (label, results), colour in zip(arms, colours):
+            if task not in results:
+                continue
+            trials = results[task]["progress"]
+            mean, std = progress_curve(trials, grid)
+            ax.plot(grid, mean, color=colour, label=f"{label} (n={len(trials)})")
+            ax.fill_between(
+                grid,
+                np.clip(mean - std, 0, 1),
+                np.clip(mean + std, 0, 1),
+                color=colour,
+                alpha=0.2,
+                linewidth=0,
+            )
+        ax.set_title(LABELS[task])
+        ax.set_xlabel("Env steps")
+        ax.set_ylabel("Partial reward")
+        ax.set_ylim(-0.02, 1.05)
+        ax.set_xlim(0, grid[-1])
+        ax.legend(fontsize=8, loc="lower right")
+    for ax in list(axes.flat)[len(tasks) :]:
+        ax.axis("off")
+    fig.suptitle("Partial reward against cumulative env steps (mean ± std over trials)")
+    fig.tight_layout()
+    path = Path(directory) / f"{prefix}_partial_reward.png"
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    return path
+
+
+def load_results(roots):
+    by_task = {}
+    for root in roots:
+        for directory in find_batches(root):
+            batch = load_batch(root, directory)
+            if batch["rows"]:
+                by_task.setdefault(batch["run"]["task"], []).append(batch)
+    return [summarize(by_task[t]) for t in TASK_ORDER if t in by_task]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("roots", type=Path, nargs="+")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--plots", type=Path, required=True)
     parser.add_argument("--prefix", default="final_v1")
+    parser.add_argument("--label", default="CaP", help="this run's curve label")
+    parser.add_argument(
+        "--compare",
+        nargs=2,
+        action="append",
+        default=[],
+        metavar=("LABEL", "ROOT"),
+        help="another arm for the partial-reward figure (repeatable)",
+    )
     args = parser.parse_args()
-    by_task = {}
-    for root in args.roots:
-        for directory in find_batches(root):
-            batch = load_batch(root, directory)
-            if batch["rows"]:
-                by_task.setdefault(batch["run"]["task"], []).append(batch)
-    results = [summarize(by_task[t]) for t in TASK_ORDER if t in by_task]
+    results = load_results(args.roots)
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / f"{args.prefix}_data.json").write_text(
         json.dumps(results, indent=2) + "\n"
@@ -406,6 +563,25 @@ def main():
     (args.output / f"{args.prefix}_tables.md").write_text(tables(results))
     for path in plots(results, args.plots, args.prefix):
         print(path)
+    arms = [(args.label, {r["task"]: r for r in results})]
+    compared = {}
+    for label, root in args.compare:
+        compared.setdefault(label, []).append(Path(root))
+    for label, roots in compared.items():
+        other = load_results(roots)
+        arms.append((label, {r["task"]: r for r in other}))
+        (args.output / f"{args.prefix}_compare_{label_slug(label)}.json").write_text(
+            json.dumps(
+                [{k: r[k] for k in ("task", "trials", "progress")} for r in other],
+                indent=2,
+            )
+            + "\n"
+        )
+    print(partial_reward_figure(arms, args.plots, args.prefix))
+
+
+def label_slug(label):
+    return "".join(c if c.isalnum() else "_" for c in label.lower()).strip("_")
 
 
 if __name__ == "__main__":
