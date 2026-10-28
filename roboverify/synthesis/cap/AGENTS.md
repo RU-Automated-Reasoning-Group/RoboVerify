@@ -35,8 +35,13 @@ experiment guidance specific to `synthesis/cap/`.
   (`profile_settings("full")`), and `task_spec_success` as the success field.
   The full table (budgets, history, enrichments) is in the
   [Revision 4.3 report, §3.5](docs/revision_4_3_report.md#35-frozen-configuration).
-  Build new experiments from [configs/config_final_v1.py](configs/config_final_v1.py)
-  (`--frozen final_v1`), the final configuration for all six tasks: v7 plus the final release check and
+  Build new hosted-model experiments from
+  [configs/config_final_v2.py](configs/config_final_v2.py) (`--frozen final_v2`):
+  final_v1's prompts byte for byte, sent with provider prompt caching, pinned
+  OpenRouter routing, demonstration tokens measured once per batch and a
+  first-response warm-up ([Revision 7.5](docs/revision_7_5_prompt_cache.md)).
+  [configs/config_final_v1.py](configs/config_final_v1.py) (`--frozen final_v1`)
+  is the final configuration for all six tasks: v7 plus the final release check and
   one instruction sentence stating it (`task-instructions-v3`,
   [Revision 7.4](docs/revision_7_4_check_final_release.md)). v7 runs Claude Haiku 5.5 (default) or
   Opus 5.5 on OpenRouter with 64k output, larger token budgets and RDP recovery

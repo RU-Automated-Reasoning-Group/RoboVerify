@@ -1,6 +1,6 @@
 # Revision 7.5: provider prompt caching for `config_final_v1`
 
-- **Status:** analysis and plan, 2026-10-27. Nothing is implemented.
+- **Status:** implemented 2026-10-27 as [`config_final_v2`](../configs/config_final_v2.py) (Sections 9–10). Sections 1–8 are the analysis that led to it.
 - **Scope:** Method 2 with recovery and demonstrations under [`config_final_v1`](../configs/config_final_v1.py), on hosted Anthropic models through OpenRouter (Opus 5.5, Haiku 5.5).
 - **Constraint:** the prompt text the model sees must not change. Reordering without additions or deletions is allowed only if needed.
 - **Evidence:** the `final_v1` smoke run `runs/cap-final-v1/20261027-smoke/` (Opus 5.5, one trial per task, seed 0), plus generate-only renders of every task for seeds 0, 1 and 37.
@@ -105,7 +105,7 @@ The demonstration block differs between tasks, and the API section `A` follows i
 - `serving/prefix_cache.py` is vLLM prefix caching for the local server. It does not apply to OpenRouter.
 - Every smoke call was served by "Claude Platform on AWS". The cache lives at the upstream provider, so a request routed to another provider would miss.
 
-**Pricing used below.** Fitted from the smoke calls' logged `cost`: $4 per million input tokens and $20 per million output tokens for Opus 5.5 on OpenRouter. Anthropic's documented cache rules apply: a write costs 1.25× input with a 5-minute TTL that every hit refreshes (a 1-hour TTL costs 2×), and a hit costs 0.1× input. Confirm on the OpenRouter bill. Each breakpoint's prefix must exceed a model-specific minimum (1–4k tokens); every breakpoint proposed here is past 26k tokens.
+**Pricing used below.** Fitted from the smoke calls' logged `cost`: $4 per million input tokens and $20 per million output tokens for Opus 5.5 on OpenRouter. A cache write costs 1.25× input ($5/M) with a 5-minute TTL that every hit refreshes (a 1-hour TTL costs 2×). OpenRouter lists cache reads at $0.20/M, which is **0.05×** input; Sections 1 and 7 were computed with Anthropic's general 0.1×, so their "hit" figures are slightly high. Confirm on the OpenRouter bill. Each breakpoint's prefix must exceed a model-specific minimum (1–4k tokens); every breakpoint proposed here is past 26k tokens.
 
 ## 6. Design: maximize cache hits without changing the prompt text
 
@@ -188,7 +188,7 @@ With caching, output tokens dominate the remaining cost (reasoning tokens count 
 
 Smoke check: only within-trial reuse applies (one trial per task). It would have cost about $2.5 instead of $2.83 (plus $1.35 for the count requests). Cross-trial reuse is what matters in the 50-trial run.
 
-## 8. Implementation plan (not started)
+## 8. Implementation plan (carried out; see Section 10)
 
 1. **`demonstrations.py` / `batch.py` (6.1):** a measured-once count. `revision6_experiment.create` (or `create_batch`) renders the block for the task, counts it once with `provider_usage`, and writes the count into the batch manifest with its SHA-256. `prepare()` uses the stored count when the hashes match and falls back to measuring otherwise.
 2. **`llm.py` (6.2):** `HTTPModel.payload(prompt, segments=None)`. With `ModelConfig.prompt_cache` on (proposed field: `{"enabled": bool, "ttl": "5m"|"1h"}`), it sends `content` as a list of text parts and marks the parts that end at the given offsets.
@@ -206,9 +206,51 @@ Smoke check: only within-trial reuse applies (one trial per task). It would have
    - Trials 2–3 should show `cached_tokens` ≈ `P₀` and cost about $0.04–0.07 each.
    - Then one ReStack trial with recovery, to check that the recovery and repair calls read their prefixes.
 
-## 9. Decisions needed
+## 9. Decisions (2026-10-27)
 
-1. Adopt 6.1 (count measured once)? It changes no request the model sees.
-2. Adopt 6.2 (content parts with `cache_control`) as `config_final_v2`, with the prompt text unchanged?
-3. TTL 5 minutes (recommended) or 1 hour, and whether to stagger the first wave or pin a provider (6.4).
-4. Reordering (6.3): recommended not to do it.
+1. Count the demonstration tokens once per batch (6.1): adopted.
+2. Content parts with `cache_control` (6.2): adopted as `config_final_v2`; the prompt text is unchanged.
+3. TTL: 5 minutes. Every hit refreshes it, and same-task requests of a running batch arrive every few tens of seconds. A 5-minute write costs 1.25× input, a 1-hour write 2×, and OpenRouter lists only the 5-minute price. First wave: the other workers of each batch session wait for the first trial's first response (`cache_warmup`).
+4. No reordering (6.3).
+5. Provider: fixed in the configuration, not chosen by a health probe at batch start. All five Opus 5.5 providers on OpenRouter have the same prices and the same reported uptime. A probe at start does not predict the next hours, and it could put tasks on different providers. Routing is `provider: {"order": ["anthropic", "claude-on-aws"], "allow_fallbacks": false}`: Anthropic first, Claude Platform on AWS (which served the `final_v1` smoke) if Anthropic fails, and no other provider.
+
+## 10. Implementation and validation (2026-10-27)
+
+- `ModelConfig.prompt_cache` (`None`, `"5m"`, `"1h"`). With it set, `HTTPModel.payload(prompt, breakpoints)` sends the user message as text parts split at the breakpoints (`llm.cache_parts`). Every part that ends at a breakpoint carries `cache_control`.
+- `LoggedModel.complete` sets the breakpoints:
+  - every request: the end of the demonstration block;
+  - policy requests (round 0 and recovery): also the end of the policy prompt before any recovery feedback.
+
+  `prompt.txt` and `prompt_sha256` remain the concatenated text. `prompt_metadata.json` records `cache_breakpoints`.
+- Budgets record `cache_write_tokens` and `provider_cost_usd` (OpenRouter `usage.cost`) next to `cached_prompt_tokens`. For hosted models, `served_by` now counts the provider named in each response.
+- `DemonstrationConfig.measured_tokens`: `revision6_experiment` measures the block once per batch (`demonstrations.measure_once`). It stores the count and the block's SHA-256 in the batch manifest and in the `comparison_plan.json` overrides. A worker whose rendered block has a different hash fails instead of using the count.
+- `create_batch(cache_warmup=True)`: after a session's first dispatch, the other workers wait until that trial has a `response.json` or its worker has exited. `execution_metadata.json` records the release time.
+- `config_final_v2`: `final_v1` plus `prompt_cache: "5m"`, the provider routing above, `DEMONSTRATION_TOKENS_ONCE` and `BATCH = {"cache_warmup": true}`. Run configurations and instructions equal `final_v1`'s. `revision6_experiment --frozen final_v2` uses the version's own model settings for hosted models.
+- Tests: `tests/test_prompt_cache.py`.
+  - The parts concatenate to the same text as an uncached run, for round 0, repair and the recovery prefix.
+  - Breakpoint positions are checked, and the usage and cost fields are parsed.
+  - A measured count is reused only for its block.
+  - Warm-up dispatch order is checked.
+  - `final_v2` differs from `final_v1` only in `prompt_cache` and `extra_body`.
+
+  Full suite: 773 tests, OK (4 skipped).
+
+**Smokes (Opus 5.5).** Two runs under `runs/cap-final-v2/`. `20261027-cache-smoke`: Stack with 3 trials one after another, plus 1 ReStack trial. `20261027-smoke-6tasks`: 2 trials per task, 2 workers.
+
+| Request | Prompt tokens | Read from cache | Written | Cost |
+| --- | ---: | ---: | ---: | ---: |
+| Stack round 0, first trial | 30,349 | 0 | 30,345 | $0.177 |
+| Stack round 0, later trials (4) | 30,349 | 30,345 | 0 | $0.027–0.030 |
+| ReStack round 0, first trial | 76,142 | 0 | 76,138 | $0.522 |
+| ReStack round 0, later trials (2) | 76,142 | 76,138 | 0 | $0.143–0.167 |
+| ReStack recovery request | 91,249 | 76,138 | 0 | $0.124 |
+| Reverse recovery requests (2) | 61,546 / 63,503 | 50,113 | 0 | $0.089 / $0.095 |
+| Grid / Pyramid round 0, second trial | 81,085 / 86,035 | 81,081 / 86,031 | 0 | $0.035 / $0.039 |
+| Stack demonstration block + new suffix (probe of the repair breakpoint) | 26,698 | 26,672 | 0 | $0.006 |
+
+- **Correctness:** all 16 smoke trials succeeded under `task-spec-v2+final-release-v1`. Every call was served by Anthropic.
+- **Cache hits:** every request after a task's first write read its whole shared prefix; recovery requests read the round-0 prompt. Stack and ReStack trial 1 of the second smoke also read caches written by the first smoke minutes earlier.
+- **No repair request occurred**, so the demonstration-block breakpoint was checked with the probe in the last row.
+- **Warm-up:** the second worker of each batch started within 0.2 s of the first trial's first response.
+- **The one-time demo counts** equal the earlier per-trial counts (Stack 26,668, ReStack 72,253).
+- **Cost:** the six-task smoke cost $3.67 for 12 trials, including six one-time counts ($1.35). The equivalent `final_v1` smoke cost $4.18 for 6 trials.

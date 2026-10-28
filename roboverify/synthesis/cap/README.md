@@ -43,7 +43,7 @@ methods. Baseline modes are prompt-only; method-1 modes are checked:
 - [Revision 7.2: RDP recovery keyframes (`recovery.feedback.keyframe_method`) — implemented](docs/revision_7_2_recovery_key_frame.md); [report](docs/revision_7_2_report.md).
 - [Revision 7.3: `config_frozen_v7` (Haiku/Opus 5.5 on OpenRouter, 64k output, larger budgets, RDP recovery keyframes) — implemented](docs/revision_7_3_frozen_v7.md).
 - [Revision 7.4: final release check, status `unreleased_block` (`config_final_v1`) — implemented](docs/revision_7_4_check_final_release.md).
-- [Revision 7.5: provider prompt caching for `config_final_v1` — analysis and plan](docs/revision_7_5_prompt_cache.md).
+- [Revision 7.5: provider prompt caching (`config_final_v2`) — implemented](docs/revision_7_5_prompt_cache.md).
 
 Revision 3 fixes loop-carried effect propagation and generic helper type merging
 in the shared checker (`shared-contract-v3`). All 106 CaP tests pass, including
@@ -57,8 +57,8 @@ Configurable shared failure recovery is implemented as `cap-recovery-v1`. Demons
 | --- | --- |
 | `*.py` (package root) | Shared runtime: task adapter and scoring (`adapter`, `tasks`, `runner`, `runtime`, `recovery`), DSL contract and checker (`contracts`, `checker`, `validation`, `audit`), model access and prompts (`llm`, `prompt_package`, `primitive_prompts`, `primitive_feedback`), batch execution (`batch`, `batch_worker`, `gpu_scheduler`, `request_control`, `deferred_video`), logging and budgets |
 | `cap_google_baseline/`, `cap_method_1/`, `cap_method_2/` | The three methods |
-| `configs/` | Versioned experiment configurations (`config_frozen_v1` to `config_frozen_v7`, then `config_final_v1`; use final_v1 for new experiments) |
-| `experiments/` | Batch launchers for the Revision 4.2, 4.3 and 6 experiments (`python -m synthesis.cap.experiments.<module>`). `revision6_experiment` runs one batch per (model, task) under `config_frozen_v3` (`--frozen v6` for Revision 7.1, `--frozen v7` for Revision 7.3, `--frozen final_v1` for Revision 7.4 and final experiments), local or OpenRouter models, and writes the combined report. |
+| `configs/` | Versioned experiment configurations (`config_frozen_v1` to `config_frozen_v7`, then `config_final_v1` and `config_final_v2`; use final_v2 for new hosted-model experiments) |
+| `experiments/` | Batch launchers for the Revision 4.2, 4.3 and 6 experiments (`python -m synthesis.cap.experiments.<module>`). `revision6_experiment` runs one batch per (model, task) under `config_frozen_v3` (`--frozen v6` for Revision 7.1, `--frozen v7` for Revision 7.3, `--frozen final_v1` for Revision 7.4, `--frozen final_v2` for final experiments with prompt caching), local or OpenRouter models, and writes the combined report. |
 | `reports/` | Tables, figures and analyses of finished batches (`python -m synthesis.cap.reports.<module>`). Each batch writes its own `report.md`; `batch_set_report ROOT` combines every batch below `ROOT` into `ROOT/report.md`. |
 | `serving/` | vLLM-side code (reasoning-termination guard) |
 | `tests/` | Unit and integration tests, with fixtures in `tests/testdata/` |
