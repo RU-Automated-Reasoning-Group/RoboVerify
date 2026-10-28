@@ -80,11 +80,11 @@ of the 2026-10-26 change are in
   keeps v4's settling and changes only the primitive prompt (Revision 7);
   `config_frozen_v6` also keeps it and changes only the task instructions
   (Revision 7.1); `config_frozen_v7` keeps it too (hosted models,
-  budgets and recovery keyframes, Revision 7.3); `config_frozen_v8` (current)
+  budgets and recovery keyframes, Revision 7.3); `config_final_v1` (current, the final configuration)
   keeps it and adds a CaP-only check that no block touches the gripper at the
   end of the rollout (Revision 7.4); `task_success.py` is unchanged. Never edit a frozen version; record a change as a new
   `config_frozen_vN.py`.
 - Unstack and Reverse runs made before 2026-10-26 started from unsettled scenes.
   Recomputing them under v2 settles only the final state; say so when reporting
   them. To rerun one of them exactly, set `initial_settling_steps: 0`; all
-  frozen CaP versions, v1–v8, otherwise use the default 50.
+  frozen CaP versions, v1–v7 and final_v1, otherwise use the default 50.

@@ -1,10 +1,11 @@
-"""Frozen CaP baseline configuration, version 8: v7 with the final release check.
+"""Final CaP baseline configuration, version 1: v7 with the final release check.
 
-Version 8 implements Revision 7.4
-(``synthesis/cap/docs/revision_7_4_check_final_release.md``). Relative to v7 it
-changes
+Final v1 implements Revision 7.4
+(``synthesis/cap/docs/revision_7_4_check_final_release.md``) and is the
+configuration for final experiments. Relative to ``config_frozen_v7`` it changes
 
-- the success criterion: ``final_release_check`` on, so an attempt also fails
+- the success criterion: ``final_release_check`` on (also the ``RunConfig``
+  default since final v1), so an attempt also fails
   when a block touches the gripper at the end of the rollout
   (``task-spec-v2+final-release-v1``; status ``unreleased_block``). The shared
   settled check (``task-spec-v2``, 50 settling steps) is unchanged;
@@ -16,7 +17,7 @@ Recovery requests of such runs carry a ``success_check`` evidence item. Model,
 budgets, prompt packages, demonstrations, recovery keyframes, method, limits and
 block counts are v7's::
 
-    from synthesis.cap.configs import config_frozen_v8 as frozen
+    from synthesis.cap.configs import config_final_v1 as frozen
     config, model, instruction = frozen.configuration("stack", seed=0)
     opus = frozen.model_config(**frozen.MODELS["claude-opus-5.5"])
 
@@ -31,7 +32,7 @@ import copy
 from ..config import ModelConfig, RunConfig
 from . import config_frozen_v7 as v7
 
-VERSION = "cap-frozen-v8"
+VERSION = "cap-final-v1"
 BASE_VERSION = v7.VERSION
 REPORT = v7.REPORT
 DESIGN = "../docs/revision_7_4_check_final_release.md"

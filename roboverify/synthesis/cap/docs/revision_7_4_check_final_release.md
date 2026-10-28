@@ -1,6 +1,6 @@
 # Revision 7.4: check for unreleased blocks at the end of a CaP rollout
 
-- **Status:** implemented 2026-10-27 (Section 8). No model run under `config_frozen_v8` yet.
+- **Status:** implemented 2026-10-27 (Section 8). The frozen configuration, planned as `config_frozen_v8`, was renamed `config_final_v1` the same day (Section 8.1).
 - **Decision (2026-10-27):** the fix is CaP-only. RoboVerify's verified programs cannot end with a grasped block (Section 3), so the shared checker [`cfg/task_success.py`](../../cfg/task_success.py) and the relational DSL stay unchanged.
 - **Goal:** when a CaP rollout ends, detect any block that is still grasped or touched by the gripper, and count such an attempt as a failure.
 
@@ -180,17 +180,17 @@ Full test suite and `git diff --check` before committing. One commit per step gr
 
 Implemented as planned in Section 5, steps 1–9. Deviations and details:
 
-- `success_check` is added whenever the attempt's result has `final_release`, in any evidence layout (v8 uses `fixed_items`). It reads `task_spec_postcondition` and `task_spec_settled_postcondition` from the result, because recovery replaces each attempt's `task_success` dictionary with its legacy Boolean. It also carries `released`.
+- `success_check` is added whenever the attempt's result has `final_release`, in any evidence layout (final_v1 uses `fixed_items`). It reads `task_spec_postcondition` and `task_spec_settled_postcondition` from the result, because recovery replaces each attempt's `task_success` dictionary with its legacy Boolean. It also carries `released`.
 - `summarize` adds `task_spec_success` and `released` only when the result has `final_release`, so recovery prompts of v1–v7 are unchanged.
 - The ledger is cleared by a converged Release (step 3).
 
-**Tests** ([`tests/test_final_release.py`](../tests/test_final_release.py), [`configs/test_config_frozen_v8.py`](../configs/test_config_frozen_v8.py)):
+**Tests** ([`tests/test_final_release.py`](../tests/test_final_release.py), [`configs/test_config_final_v1.py`](../configs/test_config_final_v1.py)):
 
 - option default and validation;
 - contact classification on stub contacts (none, one finger, a two-finger grasp with closed fingers, near-gripper and ledger diagnostics);
 - runner: `unreleased_block` with `task_success.success` still true; the option off writes no release fields; the ledger after `Pick` and after `Pick` + `Release`;
 - recovery: round 1's prompt contains `"unreleased_blocks":["block_0"]` and `"status":"unreleased_block"`; `item_delivery.success_check` is `complete`;
-- v8 differs from v7 only in `final_release_check`; instructions differ only by the sentence; rendered prompts differ only in the instruction.
+- final_v1 differs from v7 only in `final_release_check`; instructions differ only by the sentence; rendered prompts differ only in the instruction.
 
 **MuJoCo** (two-block Stack, scripted policy, no model):
 
@@ -206,4 +206,9 @@ The first row is the gap of Section 1. Before this change, it counted as a succe
 - All 288 successes are released, so no verdict changes.
 - 176 failed attempts end with a block between closed fingers. All of them stopped with an exception (`primitive_failed` 139, `failed` 33, `budget_exhausted` 4), so their status is kept; none would become `unreleased_block`.
 
-The v8 smoke (Section 6.4) has not been run yet.
+### 8.1 Final configuration and default (2026-10-27)
+
+- `configs/config_frozen_v8.py` was renamed `configs/config_final_v1.py` (`VERSION = "cap-final-v1"`, `--frozen final_v1`) before any model run, as the configuration for final experiments. Its content is the planned v8.
+- `RunConfig.final_release_check` is now on by default. The check no longer requires `post_settling_steps > 0`; without settling the criterion is `task-spec-v1+final-release-v1`.
+- `config_frozen_v1` pins the option off, so v1–v7 are unchanged. Run configs recorded before the option existed (batch manifests, the Revision 4.2/4.3 drivers) load through `config.stored_run_config`, which also keeps it off.
+- The test fixture `RobotFixture` has an empty contact list, so fixture rollouts are released.

@@ -12,8 +12,8 @@ Run configs come from ``config_frozen_v3`` (demonstrations on unless
 ``--demonstrations off``); ``--frozen v6`` selects ``config_frozen_v6``
 (Revision 7.1), whose demonstration ablation runs both arms on the same scene
 seeds under separate roots, ``--frozen v7`` the hosted-model
-``config_frozen_v7`` (Revision 7.3), and ``--frozen v8`` v7 with the final
-release check (Revision 7.4). The local model uses v3's model config unchanged.
+``config_frozen_v7`` (Revision 7.3), and ``--frozen final_v1`` the final
+configuration ``config_final_v1``: v7 with the final release check (Revision 7.4). The local model uses v3's model config unchanged.
 Hosted OpenRouter models replace only the endpoint, the model name and the
 reasoning option (OpenRouter's ``reasoning.effort`` in place of vLLM's chat
 template switch), and measure the demonstration block with the provider's
@@ -33,10 +33,10 @@ from pathlib import Path
 from ..batch import atomic_json, create_batch, execute_batch
 from ..config import GPUConfig
 from ..configs import (
+    config_final_v1,
     config_frozen_v3,
     config_frozen_v6,
     config_frozen_v7,
-    config_frozen_v8,
 )
 from ..reports import batch_set_report
 from .revision42_experiment import GPU_UUIDS
@@ -57,13 +57,13 @@ FROZEN = {
     "v3": config_frozen_v3,
     "v6": config_frozen_v6,
     "v7": config_frozen_v7,
-    "v8": config_frozen_v8,
+    "final_v1": config_final_v1,
 }
 EXPERIMENTS = {
     "v3": "revision6_frozen_v3_demonstrations",
     "v6": "revision7_1_frozen_v6_demonstrations",
     "v7": "revision7_3_frozen_v7",
-    "v8": "revision7_4_frozen_v8",
+    "final_v1": "final_v1",
 }
 TASKS = tuple(config_frozen_v3.TASKS)
 
@@ -142,7 +142,7 @@ def create(
         {
             "experiment": EXPERIMENTS[version],
             "frozen_config": frozen.VERSION,
-            "frozen_config_source": f"synthesis/cap/configs/config_frozen_{version}.py",
+            "frozen_config_source": f"synthesis/cap/configs/{Path(frozen.__file__).name}",
             "instruction_version": getattr(
                 frozen, "INSTRUCTION_VERSION", "task-instructions-v1"
             ),
