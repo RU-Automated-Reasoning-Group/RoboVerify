@@ -13,7 +13,8 @@ Run configs come from ``config_frozen_v3`` (demonstrations on unless
 (Revision 7.1), whose demonstration ablation runs both arms on the same scene
 seeds under separate roots, ``--frozen v7`` the hosted-model
 ``config_frozen_v7`` (Revision 7.3), and ``--frozen final_v1`` the final
-configuration ``config_final_v1``: v7 with the final release check (Revision 7.4). The local model uses v3's model config unchanged.
+configuration ``config_final_v1``: v7 with the final release check (Revision 7.4);
+``--frozen final_v2`` adds provider prompt caching (Revision 7.5). The local model uses v3's model config unchanged.
 Hosted OpenRouter models replace only the endpoint, the model name and the
 reasoning option (OpenRouter's ``reasoning.effort`` in place of vLLM's chat
 template switch), and measure the demonstration block with the provider's
@@ -34,10 +35,12 @@ from ..batch import atomic_json, create_batch, execute_batch
 from ..config import GPUConfig
 from ..configs import (
     config_final_v1,
+    config_final_v2,
     config_frozen_v3,
     config_frozen_v6,
     config_frozen_v7,
 )
+from ..demonstrations import measure_once
 from ..reports import batch_set_report
 from .revision42_experiment import GPU_UUIDS
 
@@ -58,12 +61,14 @@ FROZEN = {
     "v6": config_frozen_v6,
     "v7": config_frozen_v7,
     "final_v1": config_final_v1,
+    "final_v2": config_final_v2,
 }
 EXPERIMENTS = {
     "v3": "revision6_frozen_v3_demonstrations",
     "v6": "revision7_1_frozen_v6_demonstrations",
     "v7": "revision7_3_frozen_v7",
     "final_v1": "final_v1",
+    "final_v2": "final_v2",
 }
 TASKS = tuple(config_frozen_v3.TASKS)
 
@@ -74,11 +79,13 @@ def configuration(task, label, *, demonstrations=True, seed=0, frozen="v3"):
     config, model, instruction = frozen.configuration(task, demonstrations, seed=seed)
     overrides = {}
     if MODELS[label] is not None:
-        # Record only what differs from the frozen version (v7 is hosted).
-        hosted = frozen.model_config(**MODELS[label])
+        # Record only what differs from the frozen version (v7 is hosted). A
+        # version that lists the model keeps its own routing and cache settings.
+        settings = getattr(frozen, "MODELS", {}).get(label, MODELS[label])
+        hosted = frozen.model_config(**settings)
         if hosted != model:
             model = hosted
-            overrides["model_config"] = MODELS[label]
+            overrides["model_config"] = settings
         if demonstrations and config.demonstrations.token_counter != "provider_usage":
             config.demonstrations = replace(
                 config.demonstrations, token_counter="provider_usage"
@@ -97,7 +104,14 @@ def serving_record(model, frozen):
     return {
         "endpoint": model.base_url,
         "note": "hosted model; no think-close guard, no prefix-cache affinity",
-    }
+    } | (
+        {
+            "prompt_cache": model.prompt_cache,
+            "provider_routing": model.extra_body.get("provider"),
+        }
+        if model.prompt_cache
+        else {}
+    )
 
 
 def create(
@@ -108,6 +122,14 @@ def create(
     )
     version = frozen
     frozen = FROZEN[version]
+    if (
+        getattr(frozen, "DEMONSTRATION_TOKENS_ONCE", False)
+        and config.demonstrations.enabled
+    ):
+        # Revision 7.5: one measurement of the block for every trial of the batch.
+        measured = measure_once(config, model)
+        config.demonstrations = replace(config.demonstrations, measured_tokens=measured)
+        overrides["demonstrations.measured_tokens"] = measured
     request_limit = trials * config.recovery.total_calls
     create_batch(
         directory,
@@ -136,6 +158,7 @@ def create(
             "credential_limits": {model.api_key_env: request_limit},
         },
         seed_per_trial=True,
+        cache_warmup=getattr(frozen, "BATCH", {}).get("cache_warmup", False),
     )
     atomic_json(
         directory / "comparison_plan.json",
