@@ -17,9 +17,16 @@ class ModelError(CapError):
     pass
 
 
+# A rate-limited (HTTP 429) request was not executed; wait this long before the
+# retry unless the provider sends Retry-After (Revision 7.5 smoke runs).
+RATE_LIMIT_BACKOFF_SECONDS = 20.0
+
+
 class TransportError(ModelError):
-    def __init__(self, message, retryable=False):
+    def __init__(self, message, retryable=False, retry_after=None):
         self.retryable = retryable
+        # Seconds to wait before a retry, when the error prescribes it.
+        self.retry_after = retry_after
         super().__init__(message)
 
 
@@ -109,9 +116,16 @@ class HTTPModel:
                 credential = os.environ.get(name)
                 if credential:
                     detail = detail.replace(credential, "[REDACTED]")
+            retry_after = None
+            if exc.code == 429:
+                try:
+                    retry_after = float(exc.headers.get("Retry-After"))
+                except (AttributeError, TypeError, ValueError):
+                    retry_after = RATE_LIMIT_BACKOFF_SECONDS
             raise TransportError(
                 f"Model HTTP status {exc.code}: {detail[:1000]}",
                 exc.code == 429 or exc.code >= 500,
+                retry_after,
             ) from exc
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             raise TransportError(
@@ -377,7 +391,7 @@ class LoggedModel:
                 self.budget.timings.call(
                     "transport_backoff",
                     time.sleep,
-                    min(2**retry, self.budget.remaining()),
+                    min(exc.retry_after or 2**retry, self.budget.remaining()),
                 )
                 continue
             except Exception as exc:

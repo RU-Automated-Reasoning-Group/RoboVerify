@@ -5,6 +5,7 @@ import io
 import json
 import tempfile
 import unittest
+import urllib.error
 from dataclasses import asdict, replace
 from pathlib import Path
 
@@ -15,7 +16,13 @@ from ..config import ModelConfig, RecoveryConfig, RunConfig
 from ..configs import config_final_v1 as v1
 from ..configs import config_final_v2 as v2
 from ..demonstrations import DemonstrationError, count_tokens, measure_once, prepare
-from ..llm import HTTPModel, ModelError, cache_parts
+from ..llm import (
+    RATE_LIMIT_BACKOFF_SECONDS,
+    HTTPModel,
+    ModelError,
+    TransportError,
+    cache_parts,
+)
 from ..runner import run
 from .test_adapter import RobotFixture
 from .test_demonstrations import Fixture
@@ -81,6 +88,26 @@ class PartsTests(unittest.TestCase):
             ModelConfig(prompt_cache="10m")
         with self.assertRaises(ValueError):
             ModelConfig(prompt_cache="5m", api_style="responses")
+
+
+class RateLimitTests(unittest.TestCase):
+    def raise_429(self, headers):
+        def opener(request, timeout):
+            raise urllib.error.HTTPError(
+                request.full_url, 429, "busy", headers, io.BytesIO(b"{}")
+            )
+
+        return HTTPModel(ModelConfig(api_key_env=""), opener)
+
+    def test_429_waits_for_retry_after_or_the_default(self):
+        for headers, expected in (
+            ({}, RATE_LIMIT_BACKOFF_SECONDS),
+            ({"Retry-After": "7"}, 7.0),
+        ):
+            with self.assertRaises(TransportError) as caught:
+                self.raise_429(headers).generate("x", 10)
+            self.assertTrue(caught.exception.retryable)
+            self.assertEqual(caught.exception.retry_after, expected)
 
 
 class FinalV2Tests(unittest.TestCase):
