@@ -1,7 +1,8 @@
 # Revision 9: a block-count generalization checker for CaP policies
 
 - **Status:** plan, 2026-10-28. Nothing in this document is implemented. The
-  feasibility limits in Section 3 come from small local probes (Section 3.4).
+  feasibility limits in Section 3 come from the max-block probe in
+  `runs/cap-generalization/20261028-max-blocks/` (Section 3.4).
 - **Input:** the final programs of a CaP experiment. First the 300 `final_v2`
   programs (246 distinct after alpha-renamed AST deduplication, see
   [Revision 8, Section 3.1](revision_8_verification.md#31-size-and-duplicates)),
@@ -25,10 +26,12 @@
    `task-spec-v2+final-release-v1`, and partial reward
    ([TASK_PARTIAL_REWARD.md](TASK_PARTIAL_REWARD.md)) is a graded secondary
    metric.
-2. **The environment stops growing early.** The measured limits are:
-   - Stack: 6 blocks; 7 is marginal.
-   - Unstack and Reverse: about 6–10, depending on where the tower is sampled.
-   - ReStack: the source tower can grow, but the number of loose blocks cannot.
+2. **The environment stops growing early.** The measured limits (feasible on
+   all 10 seeds; Section 3.3) are:
+   - Stack: 6 blocks; 7 on 3 of 10 seeds.
+   - Unstack: 7; up to 10 on some seeds.
+   - Reverse: 7; 8 on 7 of 10 seeds.
+   - ReStack: 6 (4-block tower + 2 loose); 7 on 9 of 10 seeds.
    - Grid: 9 (3 × 3).
    - Pyramid: 10 (4-3-2-1).
 
@@ -120,35 +123,42 @@ The limit therefore depends on the sampled tower position.
   side. The Reverse and ReStack destinations, and the CaP policies'
   temporary rows, lie elsewhere.
 
-### 3.3 Feasibility of RoboVerify's supplied programs (measured)
+### 3.3 Feasible counts (measured)
 
-Command: `collect_demos --task T ... --seeds 0 1 2 --post-settling-steps 50`.
-Each cell is the result on seeds 0–2.
+Probe: `runs/cap-generalization/20261028-max-blocks/` (its README has the
+details and the commands). Seeds 0–9 per layout. A scene is feasible when any
+witness succeeds on it under `task-spec-v2`:
+- the supplied program;
+- the low-clearance oracles of Section 4 (transport at the highest block plus
+  6 cm or 4 cm);
+- five sampled final_v2 CaP programs (seeds 0–2 only).
 
-| Task | Valid | First failing count and cause |
-| --- | --- | --- |
-| Stack | 4, 6 | 7: sampler fails on seed 1; the supplied program's tower fails the settled check on seeds 0 and 2. 8–12: sampler capacity on every seed |
-| Unstack | 4, 5 | 6: Move non-convergence at the program's raised clearance (5–35 mm). 8–14: non-convergence of the first Move, with the error growing from 10 to 210 mm |
-| Reverse | 4 | 6+: the supplied program refuses N > 4 (`examples/reverse.py`) |
-| ReStack (tower = N − 2) | 5/3, 6/4 | 7/5, 8/6, 10/8: "Loop 3 still has a guard witness after 10 iterations"; the cause is not diagnosed. 6/3: loose-block capacity |
-| Grid | 3 × 2, 4 × 2, 3 × 3 | 4 × 3 and 2 × 4: Move non-convergence in the goal loop. 3 × 4, 4 × 4, 5 × 2: goal layout outside 0.8531 m. 5 × 4: contact buffer |
-| Pyramid | 3 (6 blocks), 4 (10 blocks) | 5 (15 blocks): source capacity. 6 (21 blocks): contact buffer |
+Reset alone builds every Unstack, Reverse and ReStack tower up to 16 blocks.
+Those scenes are stable for 100 extra steps and satisfy their preconditions,
+so for these tasks the limit comes from the arm, not from scene construction.
 
-**Environment ceilings without any change to the environment:**
-- Stack: 6 (7 is marginal).
-- Unstack and Reverse: arm reach, about 6–10.
-- ReStack: tower height only.
-- Grid: 3 × 3 (9 blocks); 4 × 3 may be reachable by other placement orders.
-- Pyramid: k = 4 (10 blocks).
+| Task | Feasible on all 10 seeds | Feasible on some seeds | Limit |
+| --- | --- | --- | --- |
+| Stack | 2–6 | 7 (3/10) | Sampler: 7 blocks on 4/10 seeds, 8+ on none. A robot-built 7-tower can fall during settling |
+| Unstack | 2–7 | 8 (8/10), 9 (7/10), 10 (3/10) | Arm reach in Z: Move/approach to the tower top does not converge. The supplied program already fails at 6 because of its `Z_m + 0.15` retreat |
+| Reverse | 2–7 | 8 (7/10) | Arm reach in Z; the rebuilt 8–9 block tower falls during settling. The supplied program refuses N > 4 |
+| ReStack (tower + 2 loose) | 4–6 | 7 (9/10) | At most 2 loose blocks fit. The rebuilt N-block tower falls at 8, after which the stacking loop never ends |
+| Grid (rows × cols) | up to 3 × 3 and 4 × 2 | — | 2 × 4, 4 × 3 and 5 × 1 build but no witness converges. 4 × 4, 5 × 2 and 3 × 5 are outside the goal workspace. 20+ blocks overflow the contact buffer |
+| Pyramid (k) | k = 2–4 | — | k = 5 cannot be sampled; k ≥ 6 overflows the contact buffer |
 
 Pyramid can therefore be tested at only one count above the trained one,
 unless the source workspace is enlarged (decision D5).
 
 ### 3.4 Probes
 
-Scripts and logs: `scratchpad/r9/` (`sweep.sh`, `sweep2.sh`, `reach.py`,
-`logs/`, `sweep_*.txt`). Collections went to the scratchpad, not `demos/`.
-Each probe ran on GPU 6, and each collection took 7–42 s.
+`runs/cap-generalization/20261028-max-blocks/` contains everything:
+- `reset/`: reset and precondition probes;
+- `oracles/`: `collect_demos` runs of the supplied and low-clearance programs,
+  and a video of the falling ReStack tower;
+- `cap_replay/`: the CaP preview;
+- `witness_table.json`.
+
+The earlier three-seed probes (`scratchpad/r9/`) are superseded.
 
 ## 4. Separating "policy failed" from "scene infeasible"
 
@@ -168,11 +178,14 @@ the seed and the layout options. A scene is feasible when any of these
 succeeds on it:
 1. RoboVerify's supplied program, where it accepts N;
 2. an **adjusted oracle** (decision D2): the supplied program with
-   - a constant clearance (the trained count's value) instead of `N·L + 0.10`;
+   - transport at the highest block plus a 6 cm hover (`Z_m` reference)
+     instead of `N·L + 0.10`, with vertical rises before horizontal moves;
    - the Reverse range check lifted;
-   - `max_iters` raised to N + 2.
+   - `max_iters` raised to 2N.
 
-   These would be new factories under `synthesis/cap/generalization/oracles.py`.
+   The probe's versions are in
+   `runs/cap-generalization/20261028-max-blocks/oracles/programs/`; they
+   would become factories under `synthesis/cap/generalization/oracles.py`.
    `synthesis/examples/` stays unchanged;
 3. any CaP program of the pool on that scene.
 
@@ -191,11 +204,11 @@ stops:
 
 | Task | Schedule |
 | --- | --- |
-| Stack | 4, 5, 6, 7, 8 |
-| Unstack | 4, 5, 6, 7, 8, 10 |
-| Reverse | 4, 5, 6, 7, 8 |
-| ReStack (tower, loose) | (3, 2) = 5, (4, 2) = 6, (5, 2) = 7, (6, 2) = 8, (7, 2) = 9 |
-| Grid (rows × cols) | 3 × 2, 4 × 2, 3 × 3, 4 × 3 |
+| Stack | 4, 5, 6, 7 |
+| Unstack | 4, 5, 6, 7, 8, 9, 10 |
+| Reverse | 4, 5, 6, 7, 8, 9 |
+| ReStack (tower, loose) | (3, 2) = 5, (4, 2) = 6, (5, 2) = 7, (6, 2) = 8 |
+| Grid (rows × cols) | 3 × 2, 4 × 2, 3 × 3, 2 × 4, 4 × 3 |
 | Pyramid (k) | 3, 4, 5 |
 
 Smaller counts (2, 3) are optional (decision D6). They test the same
@@ -340,8 +353,8 @@ Figures:
    alternative is 10, which doubles the cost but tightens the per-program
    estimates.
 2. **D2. Adjusted oracles.** Recommendation: add them under
-   `cap/generalization/oracles.py`, with constant clearance, no Reverse range
-   check and `max_iters` = N + 2, as feasibility witnesses only. The
+   `cap/generalization/oracles.py`, with `Z_m` + hover transport, no Reverse
+   range check and `max_iters` = 2N, as feasibility witnesses only. The
    alternative is to use only the supplied programs plus the CaP pool as
    witnesses.
 3. **D3. Budgets.** Recommendation: scale `max_steps` and `max_sim_steps` with
