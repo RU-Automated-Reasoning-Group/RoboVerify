@@ -44,6 +44,7 @@ methods. Baseline modes are prompt-only; method-1 modes are checked:
 - [Revision 7.3: `config_frozen_v7` (Haiku/Opus 5.5 on OpenRouter, 64k output, larger budgets, RDP recovery keyframes) — implemented](docs/revision_7_3_frozen_v7.md).
 - [Revision 7.4: final release check, status `unreleased_block` (`config_final_v1`) — implemented](docs/revision_7_4_check_final_release.md).
 - [Revision 7.5: provider prompt caching (`config_final_v2`) — implemented](docs/revision_7_5_prompt_cache.md).
+- [Final results: `final_v1` prompts, Opus 5.5, 50 trials per task (run under `config_final_v2`)](docs/final_v1_report.md).
 
 Revision 3 fixes loop-carried effect propagation and generic helper type merging
 in the shared checker (`shared-contract-v3`). All 106 CaP tests pass, including
