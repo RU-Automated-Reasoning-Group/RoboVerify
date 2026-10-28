@@ -12,4 +12,6 @@ Revision 4.3 feedback-ablation figures (`revision43_feedback_effects`, `_rounds`
 
 Final-experiment figures (`final_v1_success`, `_recovery`, `_round0_outcomes`, `_cost` and `_cache`) are produced by `synthesis.cap.reports.final_report` from `runs/cap-final-v2/20261027-final-50` and its supplement ([report](../final_v1_report.md)).
 
+Demonstrations-off figures (`final_v2_wo_demo_success`, `_recovery`, `_round0_outcomes`, `_cost`, `_cache` and `_partial_reward`, the last with the demonstrations-on run as a comparison arm) are produced by the same module from `runs/cap-final-v2-wo-demo/20261028-final-50` ([report](../final_v2_wo_demo_report.md)).
+
 Do not hand-edit figure values or count pending trials as observed failures.
