@@ -418,18 +418,18 @@ def write_report(directory, manifest, schedule):
         "Recovery-enabled trials allow four additional rounds (100k tokens, 16 calls, 600 s each), with whole-trial caps from recovery configuration. Per-request output remains capped; all attempts count toward tokens and calls.",
         "All trials use the manifest snapshot; queue waiting is separate from active trial time. Task-spec success is RoboVerify's criterion (normal completion, converged primitives, shared pre/postcondition); physical success and DSL compliance are separate metrics. Failed/incomplete trials remain in the denominator.",
         "",
-        "| Method | Variant | Condition mode | Recovery | First-attempt task-spec success | Final task-spec success | First-attempt success | Final success | DSL pass | Finished / planned |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| Method | Variant | Condition mode | Recovery | First-attempt task-spec success | Final task-spec success | First-attempt success | Final success | DSL pass | Total env steps | Finished / planned |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | --- |",
     ]
     for key, count in sorted(planned.items()):
         data = groups[key]
         lines.append(
-            f"| {key[0]} | {key[3]} | {key[1]} | {'on' if key[2] else 'off'} | {sum(r.get('first_attempt_task_spec_success') is True for r in data)}/{count} | {sum(r.get('task_spec_success') is True for r in data)}/{count} | {sum(r.get('first_attempt_success', r.get('success')) is True for r in data)}/{count} | {sum(r.get('success') is True for r in data)}/{count} | {sum(r.get('dsl_compliance') == 'pass' for r in data)}/{count} | {len(data)}/{count} |"
+            f"| {key[0]} | {key[3]} | {key[1]} | {'on' if key[2] else 'off'} | {sum(r.get('first_attempt_task_spec_success') is True for r in data)}/{count} | {sum(r.get('task_spec_success') is True for r in data)}/{count} | {sum(r.get('first_attempt_success', r.get('success')) is True for r in data)}/{count} | {sum(r.get('success') is True for r in data)}/{count} | {sum(r.get('dsl_compliance') == 'pass' for r in data)}/{count} | {sum(r.get('simulation_steps') or 0 for r in data):,} | {len(data)}/{count} |"
         )
     lines += [
         "",
-        "| Method | Variant | Mode | Recovery | Trial | Status | Task-spec success | Success | DSL compliance | # of tokens used | Calls | Recovery rounds | Active s | Queue s | Failure / stop reason |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| Method | Variant | Mode | Recovery | Trial | Status | Task-spec success | Success | DSL compliance | # of tokens used | Calls | Recovery rounds | Env steps | Active s | Queue s | Failure / stop reason |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | --- | --- | --- |",
     ]
     for row in sorted(
         rows,
@@ -456,11 +456,11 @@ def write_report(directory, manifest, schedule):
             else str(row["trial"])
         )
         lines.append(
-            f"| {row['method']} | {row.get('variant', 'default')} | {row['condition_mode']} | {'on' if row.get('recovery_enabled') else 'off'} | {link} | {row['status']} | {row.get('task_spec_success')} | {row.get('success')} | {row.get('dsl_compliance','not_available')} | {token} | {row.get('model_calls',0)} | {row.get('recovery_rounds',0)} | {row.get('active_wall_seconds',0):.2f} | {row.get('queue_wait_seconds',0):.2f} | {reason} |"
+            f"| {row['method']} | {row.get('variant', 'default')} | {row['condition_mode']} | {'on' if row.get('recovery_enabled') else 'off'} | {link} | {row['status']} | {row.get('task_spec_success')} | {row.get('success')} | {row.get('dsl_compliance','not_available')} | {token} | {row.get('model_calls',0)} | {row.get('recovery_rounds',0)} | {row.get('simulation_steps') or 0:,} | {row.get('active_wall_seconds',0):.2f} | {row.get('queue_wait_seconds',0):.2f} | {reason} |"
         )
     lines += [
         "",
-        "Tokens sum returned input/output usage across policy/helper/repair/transport attempts; reasoning tokens are not added twice. `*` marks incomplete provider usage. Baseline compliance checks final output only. Method 1 uses local repair; Method 2 repairs whole candidates. Static compliance does not guarantee task success.",
+        "Tokens sum returned input/output usage across policy/helper/repair/transport attempts; reasoning tokens are not added twice. `*` marks incomplete provider usage. Baseline compliance checks final output only. Method 1 uses local repair; Method 2 repairs whole candidates. Static compliance does not guarantee task success. Env steps count the policy's `env.step` calls over all rounds, without settling.",
         "",
     ]
     temporary = directory / "report.md.tmp"

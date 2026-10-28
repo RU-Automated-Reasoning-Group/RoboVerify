@@ -59,10 +59,12 @@ def make_batch(directory, task, model, outcomes):
             "demonstration_block_tokens": 900,
             "provider_total_tokens": 1000,
             "model_calls": 1,
+            "simulation_steps": 1200 + 50 * i,
             "attempts": [
                 {
                     "status": "completed" if ok else "goal_failed",
                     "task_spec_success": ok,
+                    "simulation_steps": 1200 + 50 * i,
                 }
             ],
             "run_dir": "x",
@@ -101,6 +103,10 @@ class BatchSetReportTests(unittest.TestCase):
         self.assertIn("100 (+900 demo)", text)
         self.assertIn("[trial 2](m/unstack/trials/job-001/report.txt)", text)
         self.assertIn("- n1", text)
+        # Env steps: batch total and mean, per trial, per round.
+        self.assertIn("| 2/2 | 2,450 | 1,225.0 | 2/2 |", text)
+        self.assertIn("| 1 | 0 | 1,250 | 0.00 | 0.00 |", text)
+        self.assertIn("| 2 | 0 | goal_failed | False | None | 1,250 |", text)
 
     def test_a_single_batch_keeps_its_own_report(self):
         with tempfile.TemporaryDirectory() as tmp:

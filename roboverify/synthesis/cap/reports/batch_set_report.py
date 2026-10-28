@@ -68,6 +68,11 @@ def _count(rows, field, value=True):
     return sum(r.get(field) == value for r in rows)
 
 
+def _steps(rows):
+    """Policy env steps summed over trials (each trial over all its rounds)."""
+    return sum(r.get("simulation_steps") or 0 for r in rows)
+
+
 def _cell(text):
     return str(text).replace("|", "/").replace("\n", " ")
 
@@ -150,8 +155,8 @@ def render(root, batches, *, title=None, notes=()):
     lines += [
         f"Task-spec success ({', '.join(criteria) or 'task-spec-v1'}) is RoboVerify's criterion; physical success, settled physical success and DSL compliance are separate metrics. Failed/incomplete trials remain in the denominator.",
         "",
-        "| Batch | Task | Model | Blocks | Scene seeds | Recovery | First-attempt task-spec success | Final task-spec success | First-attempt success | Final success | Settled physical success | DSL pass | Finished / planned |",
-        "| --- | --- | --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| Batch | Task | Model | Blocks | Scene seeds | Recovery | First-attempt task-spec success | Final task-spec success | First-attempt success | Final success | Settled physical success | DSL pass | Total env steps | Mean env steps / trial | Finished / planned |",
+        "| --- | --- | --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | --- |",
     ]
     for b in batches:
         rows, n = b["rows"], b["planned"]
@@ -162,12 +167,13 @@ def render(root, batches, *, title=None, notes=()):
             f"{'on' if b['run'].get('recovery', {}).get('enabled') else 'off'} | "
             f"{_count(rows, 'first_attempt_task_spec_success')}/{n} | {_count(rows, 'task_spec_success')}/{n} | "
             f"{sum(r.get('first_attempt_success', r.get('success')) is True for r in rows)}/{n} | {_count(rows, 'success')}/{n} | "
-            f"{_count(rows, 'settled_environment_success')}/{n} | {_count(rows, 'dsl_compliance', 'pass')}/{n} | {len(rows)}/{n} |"
+            f"{_count(rows, 'settled_environment_success')}/{n} | {_count(rows, 'dsl_compliance', 'pass')}/{n} | "
+            f"{_steps(rows):,} | {_steps(rows) / max(len(rows), 1):,.1f} | {len(rows)}/{n} |"
         )
     lines += [
         "",
-        "| Batch | Trial | Seed | Status | Task-spec success | Success | DSL compliance | # of tokens used | Demo block tokens | Provider total tokens | Calls | Recovery rounds | Active s | Queue s | Failure / stop reason |",
-        "| --- | --- | ---: | --- | --- | --- | --- | --- | ---: | ---: | --- | --- | --- | --- | --- |",
+        "| Batch | Trial | Seed | Status | Task-spec success | Success | DSL compliance | # of tokens used | Demo block tokens | Provider total tokens | Calls | Recovery rounds | Env steps | Active s | Queue s | Failure / stop reason |",
+        "| --- | --- | ---: | --- | --- | --- | --- | --- | ---: | ---: | --- | --- | ---: | --- | --- | --- |",
     ]
     for b in batches:
         for r in sorted(b["rows"], key=lambda r: r["trial"]):
@@ -185,24 +191,26 @@ def render(root, batches, *, title=None, notes=()):
                 f"| {b['label']} | {link} | {b['seeds'].get(r.get('job_id'), '-')} | {r['status']} | {r.get('task_spec_success')} | {r.get('success')} | "
                 f"{r.get('dsl_compliance', 'not_available')} | {token} | {r.get('demonstration_block_tokens', 0):,} | "
                 f"{r.get('provider_total_tokens', r.get('known_tokens', 0)):,} | {r.get('model_calls', 0)} | {r.get('recovery_rounds', 0)} | "
-                f"{r.get('active_wall_seconds', 0):.2f} | {r.get('queue_wait_seconds', 0):.2f} | {_cell(r.get('stop_reason', r.get('reason', '')))} |"
+                f"{r.get('simulation_steps') or 0:,} | {r.get('active_wall_seconds', 0):.2f} | {r.get('queue_wait_seconds', 0):.2f} | {_cell(r.get('stop_reason', r.get('reason', '')))} |"
             )
     lines += [
         "",
         "## Attempts",
         "",
-        "| Batch | Trial | Round | Status | Task-spec success | Success | Reason |",
-        "| --- | --- | ---: | --- | --- | --- | --- |",
+        "| Batch | Trial | Round | Status | Task-spec success | Success | Env steps | Reason |",
+        "| --- | --- | ---: | --- | --- | --- | ---: | --- |",
     ]
     for b in batches:
         for r in sorted(b["rows"], key=lambda r: r["trial"]):
             for i, a in enumerate(r.get("attempts", [])):
                 lines.append(
-                    f"| {b['label']} | {r['trial']} | {i} | {a.get('status')} | {a.get('task_spec_success')} | {a.get('success')} | {_cell(a.get('reason', ''))[:160]} |"
+                    f"| {b['label']} | {r['trial']} | {i} | {a.get('status')} | {a.get('task_spec_success')} | {a.get('success')} | {a.get('simulation_steps') or 0:,} | {_cell(a.get('reason', ''))[:160]} |"
                 )
     lines += [
         "",
         "Tokens sum returned input/output usage across policy/helper/repair/transport attempts; reasoning tokens are not added twice. `*` marks incomplete provider usage. `# of tokens used` is the effort count charged to the budgets; `(+N demo)` is the demonstration block summed over requests, and the provider total is their sum. Static compliance does not guarantee task success.",
+        "",
+        "Env steps count the policy's `env.step` calls (`simulation_steps`), summed over every round of a trial; the 50 initial and 50 post-rollout settling steps of each round, model calls, DSL checks and repairs are not counted.",
         "",
     ]
     if notes:
