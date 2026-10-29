@@ -29,14 +29,14 @@
 2. **Physical limits, independent of any policy** (all 10 seeds;
    Section 3.3):
    - Stack: 6 blocks (7 on 4 of 10 seeds);
-   - Unstack and Reverse: 9 (up to 14 on some seeds);
-   - ReStack: 9 = 7-block tower + 2 loose (up to 13);
+   - Unstack and Reverse: 18 (19 on some seeds);
+   - ReStack: 18 = 16-block tower + 2 loose (19 on some seeds);
    - Grid: 9 (3 × 3), also 4 × 2, 2 × 4 and 5 × 1;
    - Pyramid: 10 (4-3-2-1).
 
-   The tower tasks are limited by the arm's reach above the tower column.
-   Stack is limited by the reset sampler, Grid by goal cells out of reach,
-   and Pyramid by source capacity.
+   The tower tasks reach the arm's height limit at 18–19 blocks, and from 20
+   blocks MuJoCo's contact buffer overflows. Stack is limited by the reset
+   sampler, Grid by goal cells out of reach, and Pyramid by source capacity.
 3. **A failure counts against the policy only on a physically feasible
    scene.** Feasibility is decided per (task, count, seed) without running
    any program:
@@ -132,28 +132,43 @@ every count. Seeds 0–9 per layout. A seed is feasible when all three hold:
   and satisfies the postcondition;
 - **reach:** every top block centre of both scenes is below the highest
   gripper Z the arm reaches at that column. Reach is measured by servoing the
-  empty gripper for 1,000 steps, bisecting on Z, with 2 mm tolerance.
+  empty gripper (1,000 steps per move), bisecting on Z, with 2 mm tolerance.
+  The target is reached if either path gets there: straight, or rise, move
+  horizontally and descend 6 cm. A straight path alone gets stuck and
+  underestimates reach; an earlier version of this table used it and reported
+  9 blocks for the towers.
 
 | Task | Feasible on all 10 seeds | Largest N on some seeds | Binding limit |
 | --- | --- | --- | --- |
 | Stack | 2–6 | 7 (4/10) | Reset sampler: 7 scattered blocks on 4/10 seeds, 8+ on none |
-| Unstack | 2–9 | 10 (8/10), 11 (7), 12 (5), 13 (2), 14 (1) | Reach above the tower column. The top centre is at 0.82 m for N = 9; columns farther from the base reach less high |
-| Reverse | 2–9 | 10 (8/10) … 14 (1/10) | As Unstack, for both the source and the reversed tower |
-| ReStack (tower + 2 loose) | 4–9 (tower 2–7) | 10 (9/10) … 13 (3/10) | Reach above the rebuilt N-block tower. Reset allows at most 2 loose blocks |
+| Unstack | 2–18 | 19 (8/10) | Reach above the tower column: 1.22–1.53 m in the tower region, against a top centre of 1.24 m at N = 18. 20 blocks overflow the contact buffer |
+| Reverse | 2–18 | 19 (7/10) | As Unstack, for both the source and the reversed tower |
+| ReStack (tower + 2 loose) | 4–18 (tower 2–16) | 19 (8/10) | As Unstack, for the rebuilt N-block tower. Reset allows at most 2 loose blocks |
 | Grid (rows × cols) | ≤ 3 × 3; 4 × 2, 2 × 4, 5 × 1 | — | 4 × 3: the far cell (0.85 m from the base) is out of reach even at table height. Larger layouts fail the environment's 0.8531 m goal-workspace check |
 | Pyramid (k) | 2–4 | — | k = 5 sources cannot be placed; k ≥ 6 overflows the contact buffer |
 
 Towers of up to 19 blocks are built and stable. At 20 blocks MuJoCo's
-contact buffer (`nconmax` 100) overflows, so above about 14 blocks reach
-binds before the simulator does.
+contact buffer (`nconmax` 100) overflows.
+
+A separate best-site test (`best_site/` of the probe) asked how tall a tower
+can be where the arm reaches highest. Within 0.2–0.4 m of the base, reach
+exceeds 1.59 m. Towers were built and their top centre reached by the open
+gripper on the staged path, without disturbing the tower:
+- 18 blocks at every tested site, including the tower region's near corner;
+- 17 blocks at its far corner (0.70, 0.25);
+- 19 fails: the arm knocks the tower over while approaching, or the tower
+  falls by itself.
+
+Moving b0 to the best site therefore does not raise the ceiling above 18
+without changing the simulator.
 
 The earlier policy-witness probe (supplied programs, low-clearance oracles,
 sampled CaP programs; `oracles/`, `cap_replay/`) found lower limits:
 Unstack 7, Reverse 7, ReStack 6, Grid 2 × 4 unsolved. The difference between
 those numbers and this table is controller and program behaviour, which is
 what this revision measures. For example:
-- Unstack N = 10: reachable on 8/10 seeds, but the shared Move did not
-  converge within its 50-step budget;
+- Unstack N = 10: within the arm's reach on every seed, but the shared Move
+  did not converge within its 50-step budget;
 - ReStack N = 8: the 8-block tower built by the robot fell during stacking.
 
 Pyramid can therefore be tested at only one count above the trained one,
@@ -163,7 +178,9 @@ unless the source workspace is enlarged (decision D5).
 
 `runs/cap-generalization/20261028-max-blocks/` contains everything:
 - `physical/`: the physical-limit probe of Section 3.3, with images
-  (`images/`, `sheet_<task>.png`);
+  (`images/`, `sheet_<task>.png`) and the path-aware reach map
+  (`reach_v2.jsonl`);
+- `best_site/`: the tallest tower at the best XY, with images;
 - `reset/`: reset and precondition probes;
 - `oracles/`: `collect_demos` runs of the supplied and low-clearance programs,
   and a video of the falling ReStack tower;
@@ -207,9 +224,9 @@ that is physically feasible on at least one seed (Section 3.3):
 | Task | Schedule |
 | --- | --- |
 | Stack | 4, 5, 6, 7 |
-| Unstack | 4–14 |
-| Reverse | 4–14 |
-| ReStack (tower, loose) | (3, 2) = 5 … (11, 2) = 13 |
+| Unstack | 4–19 |
+| Reverse | 4–19 |
+| ReStack (tower, loose) | (3, 2) = 5 … (17, 2) = 19 |
 | Grid (rows × cols) | 3 × 2, 4 × 2, 2 × 4, 3 × 3, 5 × 1 |
 | Pyramid (k) | 3, 4 |
 
@@ -266,14 +283,14 @@ A policy that loops without progress is then still caught, as
 
 ### 5.5 Cost
 
-- **Jobs:** 246 distinct programs × about 7 counts on average (Section 5.1) × 5 seeds
-  ≈ 8,600 scripted
+- **Jobs:** 246 distinct programs × about 10 counts on average (Section 5.1) × 5 seeds
+  ≈ 12,000 scripted
   executions, plus the physical probe (about 1–6 s per scene and 18 s per
   reach column).
 - **Time per execution:** scripted CaP trials include process start-up,
   checking, recording and settling. The pool's average is about 20–60 s. The
   collection probes took 3–14 s per trajectory.
-- **Wall time:** about 50–140 CPU-hours, or roughly 1.5–4 hours on 32–48
+- **Wall time:** about 70–200 CPU-hours, or roughly 2–6 hours on 32–48
   workers on GPUs 6 and 7 with the existing scheduler. There is no API cost.
 
 ### 5.6 Outputs
