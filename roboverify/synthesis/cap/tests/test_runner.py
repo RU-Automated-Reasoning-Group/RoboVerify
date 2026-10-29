@@ -455,6 +455,26 @@ class EnvironmentOptionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "applies only to pyramid"):
             RunConfig(task="grid", bottom_row_blocks=3)
 
+    def test_relaxed_bounds_option_is_recorded_only_when_on(self):
+        from ..tasks import environment_options
+
+        relaxed = dict(relax_boundaries_for_generalization_test=True)
+        self.assertEqual(environment_options(RunConfig(**relaxed)), relaxed)
+        self.assertEqual(
+            environment_options(RunConfig(task="restack", num_blocks=4, **relaxed)),
+            {"initial_tower_blocks": 3, **relaxed},
+        )
+        self.assertEqual(
+            environment_options(RunConfig(task="pyramid", num_blocks=6, **relaxed)),
+            {"bottom_row_blocks": 3, **relaxed},
+        )
+        self.assertNotIn(
+            "relax_boundaries_for_generalization_test",
+            environment_options(RunConfig(task="grid", num_blocks=6)),
+        )
+        with self.assertRaisesRegex(ValueError, "must be Boolean"):
+            RunConfig(relax_boundaries_for_generalization_test=1)
+
 
 if __name__ == "__main__":
     unittest.main()

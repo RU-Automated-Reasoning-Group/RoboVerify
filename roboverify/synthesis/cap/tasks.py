@@ -56,7 +56,18 @@ SETTLING_TASKS = frozenset(TASK_INSTRUCTIONS)
 
 
 def environment_options(config):
-    """Resolved layout options for the task, as upstream collection records them."""
+    """Resolved layout options for the task, as upstream collection records them.
+
+    The relaxed-bounds switch is included only when it is on, so default
+    options (and the manifests that record them) are unchanged.
+    """
+    options = _layout_options(config)
+    if config.relax_boundaries_for_generalization_test:
+        options = dict(options, relax_boundaries_for_generalization_test=True)
+    return options
+
+
+def _layout_options(config):
     if config.task == "restack":
         from synthesis.environment.restack_reset import resolve_tower_blocks
 

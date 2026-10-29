@@ -410,6 +410,10 @@ class RunConfig:
     # (validation.MAX_ANALYSIS_STEPS, 100,000). An unfinished analysis is
     # neither a violation nor an approval, so the trial ends without a rollout.
     max_analysis_steps: int | None = None
+    # Opt-in reachable-workspace reset and goal bounds for block-count
+    # generalization tests (environment/relaxed_workspace.py); off reproduces
+    # every recorded layout.
+    relax_boundaries_for_generalization_test: bool = False
 
     def __post_init__(self):
         for name, tasks in TASK_OPTIONS.items():
@@ -472,6 +476,8 @@ class RunConfig:
             type(self.max_analysis_steps) is not int or self.max_analysis_steps < 1
         ):
             raise ValueError("max_analysis_steps must be a positive integer or None")
+        if type(self.relax_boundaries_for_generalization_test) is not bool:
+            raise ValueError("relax_boundaries_for_generalization_test must be Boolean")
 
 
 def stored_run_config(settings):
