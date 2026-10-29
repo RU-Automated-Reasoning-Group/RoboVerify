@@ -397,6 +397,12 @@ generality claim downward, and the environments support them.
     the layout options;
   - `recovery.enabled: false`, demonstrations off, `video_mode: "off"`
     (render only failures, on request).
+  - Videos must be `deferred`, never `inline`: inline rendering changes the
+    simulation (`stack-n22-s0` fails after 1,000 steps with it and 1,556
+    without, reproducibly), while deferred recording gave the same execution
+    as no video in all 18 timing cases
+    (`runs/cap-generalization/20261029-policy-timing/report.md`). Deferred
+    recording makes execution 1.2–2× slower, so keep it off for the full set.
 - **Model:** `ScriptedModel` returns the source for the single round-0 call.
   The shared DSL checker re-checks it. With demonstrations off, the
   information-boundary check does not apply.
