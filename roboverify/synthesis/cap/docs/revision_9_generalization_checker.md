@@ -14,9 +14,26 @@
   Pyramid 3-2-1). The task instructions say that the number of blocks is not
   given ([Revision 7.1](revision_7_1_general_task_spec.md)), so a correct
   policy must also work at other counts. For every program and task, the
-  checker increases the block count until the policy fails or the scene can no
-  longer be built or reached by the arm, and reports the largest count at which
-  the policy still succeeds.
+  checker runs the policy at every count up to the largest one the environment
+  can physically hold, and reports where the policy succeeds and fails.
+- **Design principles** (confirmed by the user, 2026-10-29):
+  1. **A post-hoc evaluator of block-count generalization.** It evaluates
+     finished policies; nothing is trained or regenerated.
+  2. **As many blocks as possible.** The test range is limited only by
+     physics, not by what any policy (or the supplied program) can do.
+     More counts give more test cases on which a policy can fail. The
+     checker's environment is therefore the opt-in relaxed one
+     (`relax_boundaries_for_generalization_test`, Section 3.5): the
+     reachable workspace and enlarged MuJoCo contact buffers.
+  3. **Feasibility only asks whether the initial and target states are
+     physically realizable and reachable.** Both must be buildable and
+     stable, and every block centre must be within the arm's measured reach.
+     It is decided without running a policy (Sections 3.3 and 4).
+  4. **Every failure is attributed** either to the environment or to the
+     policy (Section 4):
+     - environment: an infeasible scene, or a simulator failure during the
+       rollout;
+     - policy: anything else on a feasible scene.
 - **Cost:** no model calls. Programs are replayed through the CaP runtime with
   scripted responses, so the only cost is simulation time.
 
@@ -39,15 +56,17 @@
    The tower tasks reach the arm's height limit at 18–19 blocks, and from 20
    blocks MuJoCo's contact buffer overflows. Stack is limited by the reset
    sampler, Grid by goal cells out of reach, and Pyramid by source capacity.
-   With the opt-in relaxed bounds
-   (`relax_boundaries_for_generalization_test`, Section 3.5), the limits on
-   all 10 seeds become:
-   - Stack, Unstack and Reverse: 19;
-   - ReStack: 19 in total, with 2, 4 or 8 loose blocks;
+   With the opt-in relaxed environment
+   (`relax_boundaries_for_generalization_test`, Section 3.5), which adds the
+   reachable workspace and enlarged contact buffers, the limits on all 10 seeds
+   become:
+   - Stack, Unstack and Reverse: 22 (up to 24–25 on some seeds);
+   - ReStack: 22 in total, with 2, 4 or 8 loose blocks;
    - Grid: 16 (4 × 4);
-   - Pyramid: unchanged at k = 4.
+   - Pyramid: k = 5 (15 blocks).
 
-   MuJoCo's contact buffer is then the binding limit for every task.
+   The binding limits are then physical: the arm's maximum height (about
+   1.59 m) for towers, and the reachable table area for Grid and Pyramid.
 3. **A failure counts against the policy only on a physically feasible
    scene.** Feasibility is decided per (task, count, seed) without running
    any program:
@@ -204,7 +223,8 @@ The earlier three-seed probes (`scratchpad/r9/`) are superseded.
 ### 3.5 Relaxed reset bounds (implemented)
 
 - **Status:** implemented 2026-10-29 at the user's request, for all six
-  tasks. Commits `7d9ec08` (environment) and `3f82cdb` (CaP `RunConfig`).
+  tasks. Commits `7d9ec08` (environment) and `3f82cdb` (CaP `RunConfig`),
+  plus the enlarged contact buffers.
   Details are in
   [synthesis/docs/relaxed_reset_bounds.md](../../docs/relaxed_reset_bounds.md).
 - **Option:** `relax_boundaries_for_generalization_test`, default off; one
@@ -219,23 +239,36 @@ The earlier three-seed probes (`scratchpad/r9/`) are superseded.
   - **Loose blocks:** ReStack's loose blocks may use the whole higher-Y side.
   - **Goal tasks:** Grid and Pyramid goals are centred at X 0.50 m, and their
     sources may use the whole lower-Y side.
+- **Contact buffers:** `nconmax` 1000 and `njmax` 4000, instead of MuJoCo's
+  defaults of 100 and 500.
+  - At 100 contacts, about 15 are always taken by the robot base against the
+    table plane. A 20-block tower or a settling 15-block pyramid then
+    overflowed.
+  - The worst case measured, a toppling 40-block tower, used 306 contacts
+    and 1,230 constraint rows. The chosen sizes leave a 3× margin.
+  - Step time is unchanged. MuJoCo's automatic stack grows to about 640 MB
+    per environment, against 2.5 GB for njmax 8000.
 - **Unchanged:** Scattered separation, the gripper clearance and explicit
   failure on exhausted retries. With the switch off, every reset is
-  identical, draw for draw.
+  identical, draw for draw, and the model XML is unchanged.
 - **Measured limits:** the Section 3.3 probe was run with the switch on,
-  10 seeds per layout. Data is in `runs/cap-generalization/20261028-max-blocks/physical_relaxed/`.
+  10 seeds per layout; towers were tested up to 26 blocks and Pyramid up to
+  k = 7.
+  - Data: `runs/cap-generalization/20261028-max-blocks/physical_relaxed_v2/`.
+  - Reach above 1.55 m was measured again with a 2.2 m ceiling. No column
+    reached above 1.594 m.
 
-  | Task | Default (Section 3.3) | Relaxed, feasible on all 10 seeds | Relaxed binding limit |
-  | --- | --- | --- | --- |
-  | Stack | 2–6 | 2–19 | Contact buffer at 20 |
-  | Unstack, Reverse | 2–18 | 2–19 | Contact buffer at 20 |
-  | ReStack | total 4–18, 2 loose | total 4–19 with 2, 4 or 8 loose (two layouts lose seed 0 to an unreachable edge point) | Contact buffer at 20 |
-  | Grid | ≤ 3 × 3, 4 × 2, 2 × 4, 5 × 1 | up to 4 × 4; also 3 × 4, 4 × 3, 5 × 3, 5 × 2, 2 × 5, 6 × 1 | Workspace (3 × 5, 6 × 2 and others have a goal outside it); 20 goals overflow the contact buffer |
-  | Pyramid | k = 2–4 | k = 2–4 | k = 5: the 15-block goal overflows the contact buffer while settling |
+  | Task | Default (Section 3.3) | Relaxed: all 10 seeds | Relaxed: some seeds | Binding limit |
+  | --- | --- | --- | --- | --- |
+  | Stack | 2–6 | 2–22 | 23 (8/10), 24 (4/10) | Arm height: a 23-block top centre is at 1.52 m |
+  | Unstack | 2–18 | 2–22 | 23 (8/10), 24 (7/10), 25 (4/10) | Arm height |
+  | Reverse | 2–18 | 2–22 | 23 (7/10), 24 (5/10) | Arm height |
+  | ReStack | total 4–18, 2 loose | total 4–22 with 2, 4 or 8 loose | 23 (6–7/10), 24 (2/10) | Arm height (rebuilt tower) |
+  | Grid | ≤ 3 × 3, 4 × 2, 2 × 4, 5 × 1 | up to 4 × 4; also 3 × 4, 4 × 3, 5 × 3, 5 × 2, 2 × 5, 6 × 1 | — | Reachable area: 3 × 5, 4 × 5 and others have a goal outside it |
+  | Pyramid | k = 2–4 | k = 2–5 | — | Source area: the lower-Y side holds 19 scattered sources, and k = 6 needs 21 |
 
-- **Contact buffer:** `nconmax` is 100, and about 15 contacts are always
-  taken by the robot base against the table plane. Raising it is a separate
-  environment change (decision D5).
+  There were no simulator failures, and no robot contacts after a goal
+  teleport.
 - **Probe adaptations:**
   - the arm is parked away from every goal block before the goal teleport;
     the old park point stood inside the relaxed tower sites;
@@ -246,16 +279,19 @@ The earlier three-seed probes (`scratchpad/r9/`) are superseded.
   trained count, so that layout failures can be separated from count
   failures (Section 7).
 
-## 4. Separating "policy failed" from "scene infeasible"
+## 4. Separating policy failures from environment limits
 
-Every (program, task, count, seed) execution gets one outcome:
+Every (program, task, count, seed) execution gets one outcome. The first two
+failure outcomes are **environment** failures and are not scored against the
+policy; the others are **policy** outcomes.
 
-| Outcome | Meaning |
-| --- | --- |
-| `success` | `task_spec_success` under `task-spec-v2+final-release-v1` |
-| `policy_failure` | The policy fails on a **physically feasible** scene (Section 3.3) |
-| `scene_infeasible` | The scene at this (task, count, seed) is not physically feasible: the reset raises, the initial or goal scene is unstable or violates its condition, or a top block is out of reach. The policy may still run, but the outcome is not scored |
-| `budget_exhausted` | A scaled budget ran out (Section 5.4). Reported separately and, by default, counted as a policy failure on feasible scenes (decision D3) |
+| Outcome | Attributed to | Meaning |
+| --- | --- | --- |
+| `success` | policy | `task_spec_success` under `task-spec-v2+final-release-v1` |
+| `scene_infeasible` | environment | The scene at this (task, count, seed) is not physically feasible: the reset raises, the initial or goal scene is unstable or violates its condition, or a block centre is out of reach. Decided before any policy runs; the policy may still run, but the outcome is not scored |
+| `simulator_failure` | environment | The rollout raised a simulator error rather than a policy-level one: MuJoCo's contact or constraint buffer overflowed, the state became non-finite, or the step raised `MujocoException`. Recorded with the error and the step. A count with any such outcome is reported, and the buffers are checked |
+| `policy_failure` | policy | The policy fails on a **physically feasible** scene without a simulator failure |
+| `budget_exhausted` | policy (by default) | A scaled budget ran out (Section 5.4). Reported separately and counted as a policy failure on feasible scenes (decision D3) |
 
 **Physical feasibility, not witnesses.** The same seed gives the same initial
 state for every program, because the reset depends only on the seed and the
@@ -263,9 +299,11 @@ layout options. Feasibility is therefore computed once per (task, count, seed)
 by the Section 3.3 probe, before any program runs. A successful execution is
 not needed as proof.
 
-Controller and program limits remain policy failures. Examples:
+Controller and program limits remain policy failures, because the
+feasibility check has shown that the environment can hold the start and goal
+states and that the arm reaches every block. Examples:
 - a Move that does not converge within the shared 50-step primitive budget;
-- a tower built by the robot that falls;
+- a tower built by the robot that falls (the teleported goal tower stood);
 - a transport height above the reachable Z.
 
 The low-clearance oracles and the supplied programs stay as diagnostics only.
@@ -280,12 +318,12 @@ that is physically feasible on at least one seed (Sections 3.3 and 3.5):
 
 | Task | Default reset | Relaxed reset (Section 3.5) |
 | --- | --- | --- |
-| Stack | 4, 5, 6, 7 | 4–19 |
-| Unstack | 4–19 | 4–19 |
-| Reverse | 4–19 | 4–19 |
-| ReStack (tower, loose) | (3, 2) = 5 … (17, 2) = 19 | as default, plus more loose blocks, e.g. (11, 8) = 19 |
+| Stack | 4, 5, 6, 7 | 4–24 |
+| Unstack | 4–19 | 4–25 |
+| Reverse | 4–19 | 4–24 |
+| ReStack (tower, loose) | (3, 2) = 5 … (17, 2) = 19 | totals 5–24, with 2, 4 and 8 loose blocks (for example (16, 8) = 24) |
 | Grid (rows × cols) | 3 × 2, 4 × 2, 2 × 4, 3 × 3, 5 × 1 | 3 × 2 … 4 × 4 (12 layouts) |
-| Pyramid (k) | 3, 4 | 3, 4 |
+| Pyramid (k) | 3, 4 | 3, 4, 5 |
 
 Seeds that are physically infeasible at a count are excluded from that
 count's denominator and reported separately.
@@ -340,15 +378,22 @@ A policy that loops without progress is then still caught, as
 
 ### 5.5 Cost
 
-- **Jobs:** 246 distinct programs × about 10 counts on average (Section 5.1) × 5 seeds
-  ≈ 12,000 scripted
-  executions, plus the physical probe (about 1–6 s per scene and 18 s per
-  reach column).
+- **Jobs:** with the relaxed schedule (Section 5.1), there are about 22
+  counts per task on average:
+  - Stack 21, Unstack 22, Reverse 21;
+  - ReStack 54 over its three loose-block variants;
+  - Grid 12, Pyramid 3.
+
+  246 distinct programs × 22 counts × 5 seeds ≈ 27,000 scripted executions.
+  The physical probe adds about 1–6 s per scene and 18 s per reach column.
 - **Time per execution:** scripted CaP trials include process start-up,
   checking, recording and settling. The pool's average is about 20–60 s. The
   collection probes took 3–14 s per trajectory.
-- **Wall time:** about 70–200 CPU-hours, or roughly 2–6 hours on 32–48
-  workers on GPUs 6 and 7 with the existing scheduler. There is no API cost.
+- **Wall time:** larger counts run longer, so assume 30–90 s per execution.
+  That is about 225–675 CPU-hours, or roughly 5–15 hours on 48 workers on
+  GPUs 6 and 7. There is no API cost.
+- **Memory:** about 0.6 GB of MuJoCo stack per relaxed environment, about
+  30 GB on 48 workers.
 
 ### 5.6 Outputs
 
@@ -437,8 +482,10 @@ Figures:
   ([TASK_PARTIAL_REWARD.md, Section 3.4](TASK_PARTIAL_REWARD.md#34-restack)).
 - **Reverse uses `ON_star_zero`.** CaP freezes the geometry at program entry,
   which is independent of N, so no special handling is needed.
-- **Contact buffer.** Above about 20 blocks, MuJoCo's `nconmax` stops
-  simulation. Raising it is an environment change (decision D5).
+- **Contact buffer.** With MuJoCo's default `nconmax`, simulation stops at
+  about 20 blocks. The relaxed environment enlarges the buffers (Section 3.5).
+  A buffer overflow during a rollout is still recorded as
+  `simulator_failure`, not as a policy failure.
 - **Budget scaling** changes per-trial limits. It must be applied identically
   to every program and recorded in the results.
 
@@ -460,14 +507,14 @@ Figures:
    (Section 5.1) for every program, with no early stopping. The alternative is
    to stop each program at its first failing count, which is cheaper but
    loses non-monotone cases.
-5. **D5. Environment limits.** Workspace bounds are decided: the user chose
-   one opt-in switch that relaxes them for every task (2026-10-29;
-   Section 3.5). Still open is `nconmax`, now the binding limit of every task
-   (19 blocks; Pyramid k = 4).
-   - Recommendation: keep it, and report 19 as the end of the test range.
-   - The alternative is to raise it under a separately named option. That
-     needs a new stability and approach check for towers of 20 or more
-     blocks.
+5. **D5. Environment limits.** Decided by the user (2026-10-29;
+   Section 3.5): one opt-in switch relaxes every task's workspace bounds and
+   enlarges MuJoCo's contact buffers (1000 contacts, 4000 constraint rows).
+   - The remaining limits are physical: arm height for the towers, and
+     reachable area for Grid and Pyramid.
+   - Grid and Pyramid could hold more blocks if their sources used the whole
+     free area or the Grid goals were centred at Y = 0. That would change
+     their layout semantics further; it is not planned.
 6. **D6. Smaller counts.** Recommendation: include 2 and 3 for the tower tasks
    (and 2 × 2 for Grid, k = 2 for Pyramid) as a cheap sanity check. The
    alternative is upward only.

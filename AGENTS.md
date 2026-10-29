@@ -468,8 +468,9 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   `make_goal_env`, CaP `RunConfig`; default off, default draws unchanged).
   Every task's reset and goal region becomes the measured reachable region
   (base-relative X >= 0.35 m, radius <= 0.80 m), with tower sites at X
-  0.40-0.60 m; separation, gripper clearance and sides are kept. Limits then
-  reach 19 blocks (contact buffer); see the
+  0.40-0.60 m; separation, gripper clearance and sides are kept. MuJoCo's
+  contact buffers grow to nconmax 1000 / njmax 4000 (default XML unchanged).
+  Towers then reach 22 blocks on every seed (arm height); see the
   [relaxed-bounds note](roboverify/synthesis/docs/relaxed_reset_bounds.md).
 
 - **`synthesis/environment/motion_reference.py`** — typed runtime-only operands
