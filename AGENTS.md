@@ -471,10 +471,11 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   0.40-0.60 m; separation, gripper clearance and sides are kept. MuJoCo's
   contact buffers grow to nconmax 1000 / njmax 4000 (default XML unchanged);
   Grid/Pyramid goals sit on the midline with sources in any free area.
-  Towers then reach 22 blocks on every seed (arm height), Grid 6 x 4 and
-  Pyramid k = 7. The feasible seeds form the versioned CaP test-case set
-  `synthesis/cap/generalization/testsets/relaxed_v1.json` (1,524 cases,
-  `testset.py build|verify`); see the
+  Feasibility uses one Move's 50-step reach (`cap/generalization/reach.py`):
+  the arm creeps above about 1.0 m, so towers stop at 10-12 blocks, Grid at
+  6 x 4 and Pyramid at k = 5. The feasible seeds form the versioned CaP
+  test-case set `synthesis/cap/generalization/testsets/relaxed_v2.json`
+  (721 cases, `testset.py build|verify`; `relaxed_v1` withdrawn); see the
   [relaxed-bounds note](roboverify/synthesis/docs/relaxed_reset_bounds.md).
 
 - **`synthesis/environment/motion_reference.py`** — typed runtime-only operands

@@ -5,6 +5,8 @@
   `runs/cap-generalization/20261028-max-blocks/` (Section 3.4).
   2026-10-29: the opt-in relaxed reset bounds of Section 3.5 are implemented
   for all six tasks and measured; the checker itself is not implemented.
+  Later on 2026-10-29 reach was redefined by the 50-step primitive budget
+  (Section 3.3.1), which withdrew `relaxed_v1` in favour of `relaxed_v2`.
 - **Input:** the final programs of a CaP experiment. First the 300 `final_v2`
   programs (246 distinct after alpha-renamed AST deduplication, see
   [Revision 8, Section 3.1](revision_8_verification.md#31-size-and-duplicates)),
@@ -27,7 +29,8 @@
      reachable workspace and enlarged MuJoCo contact buffers.
   3. **Feasibility only asks whether the initial and target states are
      physically realizable and reachable.** Both must be buildable and
-     stable, and every block centre must be within the arm's measured reach.
+     stable, and every column must be served by Moves within the
+     primitive's 50-step budget (decided by the user, 2026-10-29).
      It is decided without running a policy (Sections 3.3 and 4).
   4. **Every failure is attributed** either to the environment or to the
      policy (Section 4):
@@ -56,26 +59,32 @@
    The tower tasks reach the arm's height limit at 18–19 blocks, and from 20
    blocks MuJoCo's contact buffer overflows. Stack is limited by the reset
    sampler, Grid by goal cells out of reach, and Pyramid by source capacity.
-   With the opt-in relaxed environment
+   These limits used a servo reach of up to about 3,000 steps and
+   overestimate what a Move (50 steps) can do; Section 3.3.1 has the
+   correction. With the opt-in relaxed environment
    (`relax_boundaries_for_generalization_test`, Section 3.5), which adds the
-   reachable workspace and enlarged contact buffers, the limits on all 10 seeds
-   become:
-   - Stack, Unstack and Reverse: 22 (up to 24–25 on some seeds);
-   - ReStack: 22 in total, with 2, 4 or 8 loose blocks;
-   - Grid: 24 (6 × 4), with goals on the robot's midline and sources in any
-     free area;
-   - Pyramid: k = 7 (28 blocks).
+   reachable workspace and enlarged contact buffers, and with reach decided by
+   the 50-step primitive budget, the limits become:
+   - Stack: 6 on all 10 seeds, 7–10 on 9, 11 on 8, 12 on 2;
+   - Unstack and Reverse: 10 on all seeds, 11 on 7, 12 on 3;
+   - ReStack: 10 in total, with 2, 4 or 8 loose blocks (11 on 28/30
+     layouts and seeds, 12 on 1);
+   - Grid: 23 shapes up to 6 × 4 (24), each on all seeds, with goals on the
+     robot's midline and sources in any free area;
+   - Pyramid: k = 5 (15 blocks).
 
-   The binding limits are then physical: the arm's maximum height (about
-   1.59 m) for towers, and the reachable table area for Grid and Pyramid.
-   The feasible seeds form the test-case set `relaxed_v1` (1,524 cases;
-   Section 3.6).
+   The binding limits are one Move's reach: from the arm's start posture the
+   gripper gets no higher than about 1.0 m within 50 steps (towers of 10–11
+   blocks), and it cannot get within 2 mm of the table in front of the
+   robot's body (base-relative X 0.35 m near the midline). The feasible seeds
+   form the test-case set `relaxed_v2` (721 cases; Section 3.6).
 3. **A failure counts against the policy only on a physically feasible
    scene.** Feasibility is decided per (task, count, seed) without running
    any program:
    - the reset scene and one teleported goal scene are built, stable and
      satisfy the pre- and postcondition;
-   - every top block centre is within the arm's measured reach.
+   - every initial and goal column is served by Moves within the 50-step
+     primitive budget (Section 3.3.1).
 
    Controller budgets, transport heights and program design are therefore
    part of what the checker measures, not part of feasibility. Section 4
@@ -208,6 +217,44 @@ Pyramid can therefore be tested at only one count above the trained one.
 The relaxed bounds of Section 3.5 do not change this: there, k = 5 fits the
 workspace but overflows the contact buffer (decision D5).
 
+#### 3.3.1 Reach within one Move (correction, 2026-10-29)
+
+The reach above used up to 1,000 servo steps per segment and up to three
+segments. A Move has 50 steps. From the arm's start posture the gripper rises
+to about 1.0 m within a few dozen steps and then creeps at about 0.2 mm per
+step, with forearm/wrist self-contact observed; after hundreds of steps it is
+higher and moves freely again. The "1.59 m" ceiling was therefore reachable
+only by servoing far beyond one Move. A smoke run showed the effect: a CaP
+Reverse policy lifting the gripper above a 12-block tower stopped at 0.994 m
+and failed with `Move did not converge`
+(`runs/cap-generalization/20261029-policy-timing/diagnostics/`).
+
+On the user's decision, reach is now defined by the primitive budget
+(`synthesis/cap/generalization/reach.py`). With an empty gripper in an
+otherwise empty relaxed scene, every initial and goal column must allow:
+- one Move from the start posture to the hover point, 0.05 m above the top
+  centre;
+- one Move down to the top centre, where a block is grasped or released;
+- one Move back up to the hover point, which a carried block needs to clear
+  the column.
+
+Each Move uses Move's own controller, its 50-step budget and its 2 mm
+tolerance. A long chain of millimetre Moves could creep higher; the criterion
+deliberately excludes that. Measured with this check:
+
+| Column site (from the base) | Tallest tower served |
+| --- | ---: |
+| X 0.40–0.50, Y 0 or ±0.20 | 11 blocks |
+| X 0.60, Y 0.20; X 0.55, Y 0.25 | 10 blocks |
+| Table level, X 0.35, Y 0 (in front of the body) | not served: the arm stays 2–3 mm off target even after 1,000 steps |
+| Table level elsewhere in the relaxed region | served |
+
+The re-scoring is in `runs/cap-generalization/20261029-budget-feasibility/`
+(`scripts/rescore.py`, `columns.jsonl`). It re-scores the existing probe
+scenes; stability and conditions were not re-run, because they do not depend
+on reach. The default-environment limits in the table above were not
+re-measured; they overestimate in the same way.
+
 ### 3.4 Probes
 
 `runs/cap-generalization/20261028-max-blocks/` contains everything:
@@ -257,19 +304,19 @@ The earlier three-seed probes (`scratchpad/r9/`) are superseded.
   identical, draw for draw, and the model XML is unchanged.
 - **Measured limits:** the Section 3.3 probe was run with the switch on,
   10 seeds per layout; towers were tested up to 26 blocks and Pyramid up to
-  k = 7.
+  k = 7. The table below uses the 50-step primitive reach of Section 3.3.1;
+  the earlier long-servo limits (towers 22, Pyramid k = 7) are withdrawn.
   - Data: `runs/cap-generalization/20261028-max-blocks/physical_relaxed_v2/`.
-  - Reach above 1.55 m was measured again with a 2.2 m ceiling. No column
-    reached above 1.594 m.
+  - Re-scoring: `runs/cap-generalization/20261029-budget-feasibility/`.
 
-  | Task | Default (Section 3.3) | Relaxed: all 10 seeds | Relaxed: some seeds | Binding limit |
+  | Task | Default (Section 3.3, long servo) | Relaxed: all 10 seeds | Relaxed: some seeds | Binding limit |
   | --- | --- | --- | --- | --- |
-  | Stack | 2–6 | 2–22 | 23 (8/10), 24 (4/10) | Arm height: a 23-block top centre is at 1.52 m |
-  | Unstack | 2–18 | 2–22 | 23 (8/10), 24 (7/10), 25 (4/10) | Arm height |
-  | Reverse | 2–18 | 2–22 | 23 (7/10), 24 (5/10) | Arm height |
-  | ReStack | total 4–18, 2 loose | total 4–22 with 2, 4 or 8 loose | 23 (6–7/10), 24 (2/10) | Arm height (rebuilt tower) |
-  | Grid | ≤ 3 × 3, 4 × 2, 2 × 4, 5 × 1 | up to 6 × 4 (24); 26 shapes with 4–24 cells | 6 × 3 (9/10), 4 × 5 (8/10) | Goals: 6 or more columns exceed the region. Sources: shapes such as 5 × 5 and 7 × 3 leave too little free area |
-  | Pyramid | k = 2–4 | k = 2–7 (28 blocks) | — | Goals: the k = 8 bottom row exceeds the region |
+  | Stack | 2–6 | 2–6 | 7–10 (9/10), 11 (8/10), 12 (2/10) | One Move's height (about 1.0 m); seed 5 starts a block in front of the body |
+  | Unstack | 2–18 | 2–10 | 11 (7/10), 12 (3/10) | One Move's height |
+  | Reverse | 2–18 | 2–10 | 11 (7/10), 12 (3/10) | One Move's height |
+  | ReStack | total 4–18, 2 loose | total 4–10 with 2, 4 or 8 loose | 11 (28/30), 12 (1/29) | One Move's height (rebuilt tower) |
+  | Grid | ≤ 3 × 3, 4 × 2, 2 × 4, 5 × 1 | 23 shapes, 4–24 cells, up to 6 × 4 | — | A goal cell at X 0.35 m on the midline (1 × 4, 1 × 5, 3 × 4, 3 × 5, 5 × 4) is not served; 6 or more columns exceed the region; shapes such as 5 × 5 leave too little source area |
+  | Pyramid | k = 2–4 | k = 2–5 (15 blocks) | — | k = 6 and 7 put a goal at X 0.35 m on the midline; k = 8 exceeds the region |
 
   Grid and Pyramid were probed separately (`physical_relaxed_v3/`), with
   every Grid shape from 2 × 2 to 30 cells and Pyramid k up to 8.
@@ -286,18 +333,19 @@ The earlier three-seed probes (`scratchpad/r9/`) are superseded.
   trained count, so that layout failures can be separated from count
   failures (Section 7).
 
-### 3.6 Test-case set `relaxed_v1`
+### 3.6 Test-case set `relaxed_v2`
 
-Every seed found feasible in the relaxed probes is a test case. Each case is
-one (task, layout, seed) scene, independent of any policy.
+Every seed found feasible in the relaxed probes, with reach decided by the
+50-step primitive budget (Section 3.3.1), is a test case. Each case is one
+(task, layout, seed) scene, independent of any policy.
 
-- **Manifest** (committed): `synthesis/cap/generalization/testsets/relaxed_v1.json`.
+- **Manifest** (committed): `synthesis/cap/generalization/testsets/relaxed_v2.json`.
   - One line per case: run-config overrides, probe evidence (drifts and
     reach margins), and the SHA-256 of the settled initial state.
   - The header records the environment (relaxed switch, buffers, 50 settling
     steps), the feasibility criterion, the source probe runs and the git
     commit.
-- **Snapshots** (not committed): `runs/cap-generalization/testsets/relaxed_v1/snapshots/<case_id>.npz`.
+- **Snapshots** (not committed): `runs/cap-generalization/testsets/relaxed_v2/snapshots/<case_id>.npz`.
   The reset depends only on the case, so they are rebuilt from the
   manifest.
 - **Builder:** `synthesis/cap/generalization/testset.py`.
@@ -306,18 +354,20 @@ one (task, layout, seed) scene, independent of any policy.
     probe (1e-4 m), writes the snapshot and records the hash.
   - `verify` rebuilds every case and compares hashes. A mismatch means the
     environment changed and the set must be rebuilt under a new name.
-  - On 2026-10-29 all 1,524 cases reproduced their hash.
+- **History:** `relaxed_v1` (1,524 cases, commit `f06f1ad`) used the
+  long-servo reach and is withdrawn. `relaxed_v2` is the subset of it that
+  passes the 50-step reach: all 721 cases keep their `relaxed_v1` hash.
 - **Contents:**
 
   | Task | Cases | Counts |
   | --- | ---: | --- |
-  | Stack | 222 | 2–24 |
-  | Unstack | 229 | 2–25 |
-  | Reverse | 222 | 2–24 |
-  | ReStack | 514 | totals 4–24, with 2, 4 or 8 loose blocks |
-  | Grid | 277 | 28 shapes, 4–24 cells |
-  | Pyramid | 60 | k = 2–7 (3–28 blocks) |
-  | **Total** | **1,524** | |
+  | Stack | 96 | 2–12 |
+  | Unstack | 100 | 2–12 |
+  | Reverse | 100 | 2–12 |
+  | ReStack | 158 | totals 4–12, with 2, 4 or 8 loose blocks |
+  | Grid | 227 | 23 shapes, 4–24 cells |
+  | Pyramid | 40 | k = 2–5 (3–15 blocks) |
+  | **Total** | **721** | |
 
   Seeds 0–9 per layout. Counts near each limit have fewer cases, because
   only feasible seeds are included.
@@ -331,35 +381,22 @@ one (task, layout, seed) scene, independent of any policy.
   | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
   | 2 | 10 | 10 | 10 | — | — | — |
   | 3 | 10 | 10 | 10 | — | — | 10 |
-  | 4 | 10 | 10 | 10 | 10 | 30 (3) | — |
-  | 5 | 10 | 10 | 10 | 10 | 20 (2) | — |
+  | 4 | 10 | 10 | 10 | 10 | 20 (2) | — |
+  | 5 | 10 | 10 | 10 | 10 | 10 | — |
   | 6 | 10 | 10 | 10 | 20 (2) | 30 (3) | 10 |
-  | 7 | 10 | 10 | 10 | 20 (2) | 10 | — |
-  | 8 | 10 | 10 | 10 | 20 (2) | 30 (3) | — |
-  | 9 | 10 | 10 | 10 | 20 (2) | 20 (2) | — |
-  | 10 | 10 | 10 | 10 | 29 (3) | 20 (2) | 10 |
-  | 11 | 10 | 10 | 10 | 30 (3) | — | — |
-  | 12 | 10 | 10 | 10 | 29 (3) | 30 (3) | — |
-  | 13 | 10 | 10 | 10 | 30 (3) | — | — |
-  | 14 | 10 | 10 | 10 | 30 (3) | 10 | — |
-  | 15 | 10 | 10 | 10 | 30 (3) | 20 (2) | 10 |
-  | 16 | 10 | 10 | 10 | 30 (3) | 20 (2) | — |
-  | 17 | 10 | 10 | 10 | 30 (3) | — | — |
-  | 18 | 10 | 10 | 10 | 30 (3) | 9 | — |
-  | 19 | 10 | 10 | 10 | 30 (3) | — | — |
-  | 20 | 10 | 10 | 10 | 30 (3) | 18 (2) | — |
-  | 21 | 10 | 10 | 10 | 30 (3) | — | 10 |
-  | 22 | 10 | 10 | 10 | 30 (3) | — | — |
-  | 23 | 8 | 8 | 7 | 20 (3) | — | — |
-  | 24 | 4 | 7 | 5 | 6 (3) | 10 | — |
-  | 25 | — | 4 | — | — | — | — |
-  | 28 | — | — | — | — | — | 10 |
-  | **Total** | **222** | **229** | **222** | **514** | **277** | **60** |
-
-  The tower rows above about 10 blocks are under review: the probe allowed
-  up to about 3,000 servo steps per reach check, but one Move has 50 steps,
-  within which the gripper reaches only 0.93–1.02 m above the tower sites
-  (`runs/cap-generalization/20261029-policy-timing/diagnostics/budget_ceiling.out`).
+  | 7 | 9 | 10 | 10 | 20 (2) | 10 | — |
+  | 8 | 9 | 10 | 10 | 20 (2) | 30 (3) | — |
+  | 9 | 9 | 10 | 10 | 20 (2) | 20 (2) | — |
+  | 10 | 9 | 10 | 10 | 29 (3) | 20 (2) | 10 |
+  | 11 | 8 | 7 | 7 | 28 (3) | — | — |
+  | 12 | 2 | 3 | 3 | 1 | 20 (2) | — |
+  | 14 | — | — | — | — | 10 | — |
+  | 15 | — | — | — | — | 10 | 10 |
+  | 16 | — | — | — | — | 20 (2) | — |
+  | 18 | — | — | — | — | 9 | — |
+  | 20 | — | — | — | — | 8 | — |
+  | 24 | — | — | — | — | 10 | — |
+  | **Total** | **96** | **100** | **100** | **158** | **227** | **40** |
 
 ## 4. Separating policy failures from environment limits
 
@@ -395,19 +432,19 @@ They show that a feasible scene can also be solved through the DSL.
 
 ### 5.1 Count schedule per task
 
-With the relaxed environment the schedule is the test-case set `relaxed_v1`
+With the relaxed environment the schedule is the test-case set `relaxed_v2`
 (Section 3.6). It covers every count physically feasible on at least one
 seed, including the counts below the trained one. The default-reset column
 is kept for comparison:
 
-| Task | Default reset | Relaxed reset (Section 3.5) |
+| Task | Default reset (long-servo reach) | Relaxed reset, `relaxed_v2` |
 | --- | --- | --- |
-| Stack | 4, 5, 6, 7 | 4–24 |
-| Unstack | 4–19 | 4–25 |
-| Reverse | 4–19 | 4–24 |
-| ReStack (tower, loose) | (3, 2) = 5 … (17, 2) = 19 | totals 5–24, with 2, 4 and 8 loose blocks (for example (16, 8) = 24) |
-| Grid (rows × cols) | 3 × 2, 4 × 2, 2 × 4, 3 × 3, 5 × 1 | 28 shapes from 2 × 2 to 6 × 4 |
-| Pyramid (k) | 3, 4 | 2–7 |
+| Stack | 4, 5, 6, 7 | 2–12 |
+| Unstack | 4–19 | 2–12 |
+| Reverse | 4–19 | 2–12 |
+| ReStack (tower, loose) | (3, 2) = 5 … (17, 2) = 19 | totals 4–12, with 2, 4 and 8 loose blocks |
+| Grid (rows × cols) | 3 × 2, 4 × 2, 2 × 4, 3 × 3, 5 × 1 | 23 shapes from 2 × 2 to 6 × 4 |
+| Pyramid (k) | 3, 4 | 2–5 |
 
 Seeds that are physically infeasible at a count are excluded from that
 count's denominator and reported separately.
@@ -469,20 +506,22 @@ A policy that loops without progress is then still caught, as
 ### 5.5 Cost
 
 - **Jobs:** each program runs the test cases of its own task. There are
-  about 41 distinct programs per task (246 in total) and 1,524 cases in
-  `relaxed_v1`:
-  - with all 10 seeds, about 62,000 scripted executions;
-  - with 5 seeds per layout (D1), about 31,000.
+  about 41 distinct programs per task (246 in total) and 721 cases in
+  `relaxed_v2`: about 29,600 scripted executions with all 10 seeds, about
+  half with 5 seeds per layout (D1).
 
   The test set is already built, so no probing is needed per run.
-- **Time per execution:** scripted CaP trials include process start-up,
-  checking, recording and settling. The pool's average is about 20–60 s. The
-  collection probes took 3–14 s per trajectory.
-- **Wall time:** larger counts run longer, so assume 30–90 s per execution.
-  With 5 seeds that is about 260–780 CPU-hours, or roughly 5–16 hours on 48
-  workers on GPUs 6 and 7; all 10 seeds double it. There is no API cost.
-- **Memory:** about 0.6 GB of MuJoCo stack per relaxed environment, about
-  30 GB on 48 workers.
+- **Time per execution** (measured, video off,
+  `runs/cap-generalization/20261029-policy-timing/report.md`): about 7 s
+  fixed per process plus (2.2 + 0.32 N) ms per simulation step, with 45–95
+  steps per block for a completed run. Executions that fail early take
+  2–7 s.
+- **Wall time:** one policy (one program per task) on all 721 cases takes
+  1.0–2.0 CPU-hours; all programs with all 10 seeds take 41–82 CPU-hours,
+  about 1–2 hours on 48 workers on GPUs 6 and 7. There is no API cost. A
+  program that loops without progress runs to its budget; a per-case limit
+  of 120–300 s bounds this.
+- **Memory:** about 1.1 GB per worker process, about 50 GB on 48 workers.
 
 ### 5.6 Outputs
 
@@ -607,9 +646,9 @@ Figures:
    enlarges MuJoCo's contact buffers (1000 contacts, 4000 constraint rows).
    - On the user's request, Grid and Pyramid goals were also centred on the
      midline and their sources allowed into any free area. This raised Grid
-     to 6 × 4 and Pyramid to k = 7.
-   - The remaining limits are physical: arm height for the towers, and
-     reachable area for Grid and Pyramid.
+     to 6 × 4 and Pyramid to k = 5 under the 50-step reach.
+   - The remaining limits are one Move's reach: height for the towers, and
+     the table in front of the robot's body for Grid and Pyramid.
 6. **D6. Smaller counts.** Recommendation: include 2 and 3 for the tower tasks
    (and 2 × 2 for Grid, k = 2 for Pyramid) as a cheap sanity check. The
    alternative is upward only.

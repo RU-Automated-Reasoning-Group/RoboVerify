@@ -94,25 +94,28 @@ A seed is feasible when all of these hold:
   steps;
 - a teleported goal stays within 5 mm and satisfies the postcondition;
 - every raised top centre is below the reach measured above its column;
-- every table-level block centre is reached exactly.
+- every table-level block centre is reached exactly;
+- every initial and goal column is served by Moves within the primitive's
+  50-step budget (`synthesis/cap/generalization/reach.py`).
 
-Reach above 1.55 m was measured again with a 2.2 m ceiling. The original
-reach measurement stops at 1.6 m. No column of any scene reached above
-1.594 m.
+The last condition was added on 2026-10-29 (Revision 9, Section 3.3.1). The
+reach of the probe servoed up to 1,000 steps per segment: from the start
+posture the arm rises to about 1.0 m quickly and then creeps at about
+0.2 mm per step, so the earlier tower limit of 22 blocks (reach up to
+1.594 m) was not available to a Move. The re-scoring is in
+`runs/cap-generalization/20261029-budget-feasibility/`.
 
-| Task | Default: feasible on all 10 seeds | Relaxed: all 10 seeds | Relaxed: some seeds | Binding limit |
+| Task | Default: feasible on all 10 seeds (long-servo reach) | Relaxed: all 10 seeds | Relaxed: some seeds | Binding limit |
 | --- | --- | --- | --- | --- |
-| Stack | 2–6 | **2–22** | 23 (8/10), 24 (4/10) | Arm height: a 23-block top centre is at 1.52 m, against a reach of at most 1.59 m |
-| Unstack | 2–18 | **2–22** | 23 (8/10), 24 (7/10), 25 (4/10) | Arm height |
-| Reverse | 2–18 | **2–22** | 23 (7/10), 24 (5/10) | Arm height (the reversed tower) |
-| ReStack (tower + 2, 4 or 8 loose) | total 4–18, 2 loose | **total 4–22** | 23 (6–7/10), 24 (2/10) | Arm height (the rebuilt tower) |
-| Grid (rows × cols) | ≤ 3 × 3, 4 × 2, 2 × 4, 5 × 1 | **up to 6 × 4 (24)**: every probed shape with at most 5 columns and 24 cells except those below | 6 × 3 (9/10), 4 × 5 (8/10) | Goals: 6 or more columns are wider than the region. Sources: 9 × 2, 7 × 3, 8 × 3, 5 × 5, 9 × 3, 7 × 4 and 6 × 5 leave too little free area for the sources |
-| Pyramid (k) | 2–4 | **2–7 (28 blocks)** | — | Goals: the k = 8 bottom row (0.455 m) is wider than the region |
+| Stack | 2–6 | **2–6** | 7–10 (9/10), 11 (8/10), 12 (2/10) | One Move's height (about 1.0 m); seed 5 starts a block in front of the body |
+| Unstack | 2–18 | **2–10** | 11 (7/10), 12 (3/10) | One Move's height |
+| Reverse | 2–18 | **2–10** | 11 (7/10), 12 (3/10) | One Move's height (also the reversed tower) |
+| ReStack (tower + 2, 4 or 8 loose) | total 4–18, 2 loose | **total 4–10** | 11 (28/30), 12 (1/29) | One Move's height (the rebuilt tower) |
+| Grid (rows × cols) | ≤ 3 × 3, 4 × 2, 2 × 4, 5 × 1 | **23 shapes up to 6 × 4 (24)** | — | A goal cell at X 0.35 m on the midline is not served (1 × 4, 1 × 5, 3 × 4, 3 × 5, 5 × 4). 6 or more columns are wider than the region. 9 × 2, 7 × 3, 8 × 3, 5 × 5, 9 × 3, 7 × 4 and 6 × 5 leave too little free area for the sources |
+| Pyramid (k) | 2–4 | **2–5 (15 blocks)** | — | k = 6 and 7 put a goal at X 0.35 m on the midline; the k = 8 bottom row (0.455 m) is wider than the region |
 
 - **No simulator failures:** no contact-buffer overflow occurred, and no
   block touched the robot after a goal teleport.
-- **Tower margins:** at 22 blocks the top centre is 1.43–1.47 m, at least
-  5 mm below the reach measured above its column.
 - **Known gap:** in the run with the default buffers, ReStack 2 + 8 and
   4 + 8 lost seed 0. A loose block at (0.39, 0.70) lies inside the region
   (radius 0.799 m), between measured 5 cm cells, and the gripper did not
@@ -141,7 +144,7 @@ reach measurement stops at 1.6 m. No column of any scene reached above
 - **Chosen:** `nconmax` 1000 and `njmax` 4000.
   - This leaves about three times the worst case measured.
   - At 31 rows per block it holds roughly 125 blocks, far more than the
-    22–25 the arm can stack.
+    10–12 blocks one Move can stack.
 - **Cost:** MuJoCo sizes its stack automatically, roughly with njmax
   squared. Measured on an Unstack scene with 12 blocks:
 
@@ -198,16 +201,18 @@ These are diagnostics in the run folder, not repository code:
 ## 7. Test-case set
 
 The feasible seeds are collected in a versioned test-case set:
-`synthesis/cap/generalization/testsets/relaxed_v1.json`, with its builder
+`synthesis/cap/generalization/testsets/relaxed_v2.json`, with its builder
 `synthesis/cap/generalization/testset.py`. Revision 9, Section 3.6 has the
-details.
+details and the seeds per block count. `relaxed_v1` (1,524 cases) used the
+long-servo reach and is withdrawn; `relaxed_v2` is its subset that passes the
+50-step reach, with identical initial states.
 
 | Task | Cases | Block counts |
 | --- | ---: | --- |
-| Stack | 222 | 2–24 |
-| Unstack | 229 | 2–25 |
-| Reverse | 222 | 2–24 |
-| ReStack | 514 | totals 4–24, with 2, 4 or 8 loose blocks |
-| Grid | 277 | 4–24 (28 shapes) |
-| Pyramid | 60 | k = 2–7 (3–28) |
-| **Total** | **1,524** | |
+| Stack | 96 | 2–12 |
+| Unstack | 100 | 2–12 |
+| Reverse | 100 | 2–12 |
+| ReStack | 158 | totals 4–12, with 2, 4 or 8 loose blocks |
+| Grid | 227 | 4–24 (23 shapes) |
+| Pyramid | 40 | k = 2–5 (3–15) |
+| **Total** | **721** | |
