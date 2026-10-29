@@ -62,11 +62,14 @@
    become:
    - Stack, Unstack and Reverse: 22 (up to 24–25 on some seeds);
    - ReStack: 22 in total, with 2, 4 or 8 loose blocks;
-   - Grid: 16 (4 × 4);
-   - Pyramid: k = 5 (15 blocks).
+   - Grid: 24 (6 × 4), with goals on the robot's midline and sources in any
+     free area;
+   - Pyramid: k = 7 (28 blocks).
 
    The binding limits are then physical: the arm's maximum height (about
    1.59 m) for towers, and the reachable table area for Grid and Pyramid.
+   The feasible seeds form the test-case set `relaxed_v1` (1,524 cases;
+   Section 3.6).
 3. **A failure counts against the policy only on a physically feasible
    scene.** Feasibility is decided per (task, count, seed) without running
    any program:
@@ -237,8 +240,9 @@ The earlier three-seed probes (`scratchpad/r9/`) are superseded.
     are sampled at X 0.40–0.60 m, where reach is highest. The towers stay on
     their original side.
   - **Loose blocks:** ReStack's loose blocks may use the whole higher-Y side.
-  - **Goal tasks:** Grid and Pyramid goals are centred at X 0.50 m, and their
-    sources may use the whole lower-Y side.
+  - **Goal tasks:** Grid and Pyramid goals are centred at X 0.50 m and on
+    the robot's midline (Y = 0). Their sources may use any part of the region
+    at least 0.105 m (Chebyshev) from every goal centre (commit `d7ecfea`).
 - **Contact buffers:** `nconmax` 1000 and `njmax` 4000, instead of MuJoCo's
   defaults of 100 and 500.
   - At 100 contacts, about 15 are always taken by the robot base against the
@@ -264,8 +268,11 @@ The earlier three-seed probes (`scratchpad/r9/`) are superseded.
   | Unstack | 2–18 | 2–22 | 23 (8/10), 24 (7/10), 25 (4/10) | Arm height |
   | Reverse | 2–18 | 2–22 | 23 (7/10), 24 (5/10) | Arm height |
   | ReStack | total 4–18, 2 loose | total 4–22 with 2, 4 or 8 loose | 23 (6–7/10), 24 (2/10) | Arm height (rebuilt tower) |
-  | Grid | ≤ 3 × 3, 4 × 2, 2 × 4, 5 × 1 | up to 4 × 4; also 3 × 4, 4 × 3, 5 × 3, 5 × 2, 2 × 5, 6 × 1 | — | Reachable area: 3 × 5, 4 × 5 and others have a goal outside it |
-  | Pyramid | k = 2–4 | k = 2–5 | — | Source area: the lower-Y side holds 19 scattered sources, and k = 6 needs 21 |
+  | Grid | ≤ 3 × 3, 4 × 2, 2 × 4, 5 × 1 | up to 6 × 4 (24); 26 shapes with 4–24 cells | 6 × 3 (9/10), 4 × 5 (8/10) | Goals: 6 or more columns exceed the region. Sources: shapes such as 5 × 5 and 7 × 3 leave too little free area |
+  | Pyramid | k = 2–4 | k = 2–7 (28 blocks) | — | Goals: the k = 8 bottom row exceeds the region |
+
+  Grid and Pyramid were probed separately (`physical_relaxed_v3/`), with
+  every Grid shape from 2 × 2 to 30 cells and Pyramid k up to 8.
 
   There were no simulator failures, and no robot contacts after a goal
   teleport.
@@ -278,6 +285,42 @@ The earlier three-seed probes (`scratchpad/r9/`) are superseded.
   trained count. The checker therefore runs the relaxed reset from the
   trained count, so that layout failures can be separated from count
   failures (Section 7).
+
+### 3.6 Test-case set `relaxed_v1`
+
+Every seed found feasible in the relaxed probes is a test case. Each case is
+one (task, layout, seed) scene, independent of any policy.
+
+- **Manifest** (committed): `synthesis/cap/generalization/testsets/relaxed_v1.json`.
+  - One line per case: run-config overrides, probe evidence (drifts and
+    reach margins), and the SHA-256 of the settled initial state.
+  - The header records the environment (relaxed switch, buffers, 50 settling
+    steps), the feasibility criterion, the source probe runs and the git
+    commit.
+- **Snapshots** (not committed): `runs/cap-generalization/testsets/relaxed_v1/snapshots/<case_id>.npz`.
+  The reset depends only on the case, so they are rebuilt from the
+  manifest.
+- **Builder:** `synthesis/cap/generalization/testset.py`.
+  - `build` rebuilds every feasible probe scene through CaP's own
+    `prepare_environment`. It checks that the rebuilt column tops match the
+    probe (1e-4 m), writes the snapshot and records the hash.
+  - `verify` rebuilds every case and compares hashes. A mismatch means the
+    environment changed and the set must be rebuilt under a new name.
+  - On 2026-10-29 all 1,524 cases reproduced their hash.
+- **Contents:**
+
+  | Task | Cases | Counts |
+  | --- | ---: | --- |
+  | Stack | 222 | 2–24 |
+  | Unstack | 229 | 2–25 |
+  | Reverse | 222 | 2–24 |
+  | ReStack | 514 | totals 4–24, with 2, 4 or 8 loose blocks |
+  | Grid | 277 | 28 shapes, 4–24 cells |
+  | Pyramid | 60 | k = 2–7 (3–28 blocks) |
+  | **Total** | **1,524** | |
+
+  Seeds 0–9 per layout. Counts near each limit have fewer cases, because
+  only feasible seeds are included.
 
 ## 4. Separating policy failures from environment limits
 
@@ -313,8 +356,10 @@ They show that a feasible scene can also be solved through the DSL.
 
 ### 5.1 Count schedule per task
 
-The schedule starts at the trained count and extends to the largest count
-that is physically feasible on at least one seed (Sections 3.3 and 3.5):
+With the relaxed environment the schedule is the test-case set `relaxed_v1`
+(Section 3.6). It covers every count physically feasible on at least one
+seed, including the counts below the trained one. The default-reset column
+is kept for comparison:
 
 | Task | Default reset | Relaxed reset (Section 3.5) |
 | --- | --- | --- |
@@ -322,8 +367,8 @@ that is physically feasible on at least one seed (Sections 3.3 and 3.5):
 | Unstack | 4–19 | 4–25 |
 | Reverse | 4–19 | 4–24 |
 | ReStack (tower, loose) | (3, 2) = 5 … (17, 2) = 19 | totals 5–24, with 2, 4 and 8 loose blocks (for example (16, 8) = 24) |
-| Grid (rows × cols) | 3 × 2, 4 × 2, 2 × 4, 3 × 3, 5 × 1 | 3 × 2 … 4 × 4 (12 layouts) |
-| Pyramid (k) | 3, 4 | 3, 4, 5 |
+| Grid (rows × cols) | 3 × 2, 4 × 2, 2 × 4, 3 × 3, 5 × 1 | 28 shapes from 2 × 2 to 6 × 4 |
+| Pyramid (k) | 3, 4 | 2–7 |
 
 Seeds that are physically infeasible at a count are excluded from that
 count's denominator and reported separately.
@@ -378,20 +423,19 @@ A policy that loops without progress is then still caught, as
 
 ### 5.5 Cost
 
-- **Jobs:** with the relaxed schedule (Section 5.1), there are about 22
-  counts per task on average:
-  - Stack 21, Unstack 22, Reverse 21;
-  - ReStack 54 over its three loose-block variants;
-  - Grid 12, Pyramid 3.
+- **Jobs:** each program runs the test cases of its own task. There are
+  about 41 distinct programs per task (246 in total) and 1,524 cases in
+  `relaxed_v1`:
+  - with all 10 seeds, about 62,000 scripted executions;
+  - with 5 seeds per layout (D1), about 31,000.
 
-  246 distinct programs × 22 counts × 5 seeds ≈ 27,000 scripted executions.
-  The physical probe adds about 1–6 s per scene and 18 s per reach column.
+  The test set is already built, so no probing is needed per run.
 - **Time per execution:** scripted CaP trials include process start-up,
   checking, recording and settling. The pool's average is about 20–60 s. The
   collection probes took 3–14 s per trajectory.
 - **Wall time:** larger counts run longer, so assume 30–90 s per execution.
-  That is about 225–675 CPU-hours, or roughly 5–15 hours on 48 workers on
-  GPUs 6 and 7. There is no API cost.
+  With 5 seeds that is about 260–780 CPU-hours, or roughly 5–16 hours on 48
+  workers on GPUs 6 and 7; all 10 seeds double it. There is no API cost.
 - **Memory:** about 0.6 GB of MuJoCo stack per relaxed environment, about
   30 GB on 48 workers.
 
@@ -425,13 +469,19 @@ Figures:
 ## 6. Code layout
 
 - `synthesis/cap/generalization/`:
+  - `testset.py` (implemented): versioned test-case sets, with `build` and
+    `verify` (Section 3.6); manifests live in `testsets/`. Tests:
+    `synthesis/cap/tests/test_generalization_testset.py`.
   - `programs.py`: extract the final programs from a run root (successful
     round, active checkpoint) and deduplicate on the alpha-renamed AST hash.
     This is shared with Revision 8 M0.
   - `schedule.py`: per-task count schedules → run-config overrides, and
     scaled budgets.
-  - `feasibility.py`: the physical probe of Section 3.3 (reset, goal
-    teleport, stability, reach map) and images of the initial and goal state.
+  - `feasibility.py`: the physical probe of Sections 3.3 and 3.5 (reset,
+    goal teleport, stability, reach map) and images of the initial and goal
+    state. It currently lives as diagnostic scripts in
+    `runs/cap-generalization/20261028-max-blocks/scripts/`. A new test-case
+    set needs it in the repository.
   - `outcomes.py`: classification from batch rows and the feasibility table.
 - `synthesis/cap/experiments/revision9_generalization.py`: driver. It runs
   without model access, is resumable, and has GPUs 6 and 7 only in its
@@ -510,11 +560,11 @@ Figures:
 5. **D5. Environment limits.** Decided by the user (2026-10-29;
    Section 3.5): one opt-in switch relaxes every task's workspace bounds and
    enlarges MuJoCo's contact buffers (1000 contacts, 4000 constraint rows).
+   - On the user's request, Grid and Pyramid goals were also centred on the
+     midline and their sources allowed into any free area. This raised Grid
+     to 6 × 4 and Pyramid to k = 7.
    - The remaining limits are physical: arm height for the towers, and
      reachable area for Grid and Pyramid.
-   - Grid and Pyramid could hold more blocks if their sources used the whole
-     free area or the Grid goals were centred at Y = 0. That would change
-     their layout semantics further; it is not planned.
 6. **D6. Smaller counts.** Recommendation: include 2 and 3 for the tower tasks
    (and 2 × 2 for Grid, k = 2 for Pyramid) as a cheap sanity check. The
    alternative is upward only.

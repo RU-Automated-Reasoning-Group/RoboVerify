@@ -469,8 +469,12 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   Every task's reset and goal region becomes the measured reachable region
   (base-relative X >= 0.35 m, radius <= 0.80 m), with tower sites at X
   0.40-0.60 m; separation, gripper clearance and sides are kept. MuJoCo's
-  contact buffers grow to nconmax 1000 / njmax 4000 (default XML unchanged).
-  Towers then reach 22 blocks on every seed (arm height); see the
+  contact buffers grow to nconmax 1000 / njmax 4000 (default XML unchanged);
+  Grid/Pyramid goals sit on the midline with sources in any free area.
+  Towers then reach 22 blocks on every seed (arm height), Grid 6 x 4 and
+  Pyramid k = 7. The feasible seeds form the versioned CaP test-case set
+  `synthesis/cap/generalization/testsets/relaxed_v1.json` (1,524 cases,
+  `testset.py build|verify`); see the
   [relaxed-bounds note](roboverify/synthesis/docs/relaxed_reset_bounds.md).
 
 - **`synthesis/environment/motion_reference.py`** — typed runtime-only operands

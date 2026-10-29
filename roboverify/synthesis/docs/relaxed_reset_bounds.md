@@ -53,7 +53,7 @@ One shared region (`relaxed_workspace.py`): **X ≥ 0.35 m and XY radius ≤
 | Stack | `b0` (the tower base, from `base_block_id`) first, in X 0.40–0.60, Y −0.20–0.20; the other blocks anywhere in the region |
 | Unstack, Reverse | Tower in X 0.40–0.60, Y 0.15–0.25 (still on the higher-Y side) |
 | ReStack | Tower as Unstack; loose blocks anywhere in the region with Y ≥ 0.15. The 2-loose-block capacity check is skipped |
-| Grid, Pyramid | Goals centred at X 0.50 (shifted forward to X ≥ 0.35), first row at Y 0.10 as before; every goal must lie in the region, else `ValueError`. Sources anywhere in the region with Y ≤ −0.08 |
+| Grid, Pyramid | Goals centred at X 0.50 (shifted forward to X ≥ 0.35) and on the robot's midline (Y = 0); every goal must lie in the region, else `ValueError`. Sources anywhere in the region at least 0.105 m (Chebyshev) from every goal centre and from each other |
 
 - **Contact buffers:** `nconmax` 1000 and `njmax` 4000
   (`RELAXED_CONTACT_BUFFER`), written into the generated model XML. Section 4
@@ -62,7 +62,7 @@ One shared region (`relaxed_workspace.py`): **X ≥ 0.35 m and XY radius ≤
   - Scattered separation (0.10 m; 0.105 m for ReStack and goal sources);
   - the 0.10 m initial-gripper clearance;
   - resting heights;
-  - the side on which each task keeps its sources and goals.
+  - the side on which the tower tasks keep their towers and loose blocks.
 - **Sampling:**
   - random sequential placement, up to 100 restarts × 400 candidates;
   - if every restart jams, a random subset of the separation lattice, which
@@ -79,8 +79,12 @@ One shared region (`relaxed_workspace.py`): **X ≥ 0.35 m and XY radius ≤
 
 - **Probe:** the Revision 9 Section 3.3 probe, run with the switch on,
   contact buffers included.
-- **Location:** `runs/cap-generalization/20261028-max-blocks/physical_relaxed_v2/`,
-  produced by `physical_probe_relaxed.py` and `physical_summary_relaxed.py`.
+- **Location:** `runs/cap-generalization/20261028-max-blocks/`, produced by
+  `physical_probe_relaxed.py` and `physical_summary_relaxed.py`.
+  - `physical_relaxed_v2/` holds the tower tasks.
+  - `physical_relaxed_v3/` holds Grid and Pyramid, after their goals moved
+    to the midline and their sources to any free area. Every Grid shape from
+    2 × 2 to 30 cells and Pyramid k up to 8 were probed.
   - `physical_relaxed/` is the earlier run with the default buffers.
 - **Seeds:** 0–9 per layout. Towers and Stack were tested up to 26 blocks,
   and Pyramid up to k = 7.
@@ -102,8 +106,8 @@ reach measurement stops at 1.6 m. No column of any scene reached above
 | Unstack | 2–18 | **2–22** | 23 (8/10), 24 (7/10), 25 (4/10) | Arm height |
 | Reverse | 2–18 | **2–22** | 23 (7/10), 24 (5/10) | Arm height (the reversed tower) |
 | ReStack (tower + 2, 4 or 8 loose) | total 4–18, 2 loose | **total 4–22** | 23 (6–7/10), 24 (2/10) | Arm height (the rebuilt tower) |
-| Grid (rows × cols) | ≤ 3 × 3, 4 × 2, 2 × 4, 5 × 1 | **up to 4 × 4 (16)**; also 3 × 4, 4 × 3, 5 × 3, 5 × 2, 2 × 5, 6 × 1 | — | Reachable area: 3 × 5, 4 × 5, 5 × 4, 6 × 2, 2 × 6, 6 × 3, 7 × 2, 1 × 6 and 7 × 1 have a goal outside the region |
-| Pyramid (k) | 2–4 | **2–5 (15 blocks)** | — | Source area: the lower-Y side holds at most 19 scattered sources, and k = 6 needs 21 |
+| Grid (rows × cols) | ≤ 3 × 3, 4 × 2, 2 × 4, 5 × 1 | **up to 6 × 4 (24)**: every probed shape with at most 5 columns and 24 cells except those below | 6 × 3 (9/10), 4 × 5 (8/10) | Goals: 6 or more columns are wider than the region. Sources: 9 × 2, 7 × 3, 8 × 3, 5 × 5, 9 × 3, 7 × 4 and 6 × 5 leave too little free area for the sources |
+| Pyramid (k) | 2–4 | **2–7 (28 blocks)** | — | Goals: the k = 8 bottom row (0.455 m) is wider than the region |
 
 - **No simulator failures:** no contact-buffer overflow occurred, and no
   block touched the robot after a goal teleport.
@@ -186,8 +190,24 @@ These are diagnostics in the run folder, not repository code:
   wider table, may still fail, and such failures count against the policy.
   - The 2026-10-28 best-site test found that the open gripper approaching a
     19-block tower knocks it over. The probe does not test the approach.
-- **Grid and Pyramid could go further.** Their sources stay on the lower-Y
-  side and their goals start at Y = 0.10. Using all free reachable area for
-  sources, or centring the Grid goals at Y = 0, would fit more blocks. That
-  would change those tasks' layout semantics further, so it is not part of
-  this option.
+- **Grid and Pyramid layouts move the most.** Their goals now sit on the
+  robot's midline, and sources surround them on both sides. These are the
+  largest layout changes in relaxed mode, so their trained-count baseline
+  matters most.
+
+## 7. Test-case set
+
+The feasible seeds are collected in a versioned test-case set:
+`synthesis/cap/generalization/testsets/relaxed_v1.json`, with its builder
+`synthesis/cap/generalization/testset.py`. Revision 9, Section 3.6 has the
+details.
+
+| Task | Cases | Block counts |
+| --- | ---: | --- |
+| Stack | 222 | 2–24 |
+| Unstack | 229 | 2–25 |
+| Reverse | 222 | 2–24 |
+| ReStack | 514 | totals 4–24, with 2, 4 or 8 loose blocks |
+| Grid | 277 | 4–24 (28 shapes) |
+| Pyramid | 60 | k = 2–7 (3–28) |
+| **Total** | **1,524** | |
