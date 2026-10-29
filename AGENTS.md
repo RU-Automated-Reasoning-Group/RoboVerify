@@ -463,6 +463,15 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   center X is initial-gripper X minus 0.10 m for Grid and 0.14 m for Pyramid,
   keeping the latter reachable at its higher goal clearance.
 
+- **`synthesis/environment/relaxed_workspace.py`** — opt-in
+  `relax_boundaries_for_generalization_test` (constructor, factories,
+  `make_goal_env`, CaP `RunConfig`; default off, default draws unchanged).
+  Every task's reset and goal region becomes the measured reachable region
+  (base-relative X >= 0.35 m, radius <= 0.80 m), with tower sites at X
+  0.40-0.60 m; separation, gripper clearance and sides are kept. Limits then
+  reach 19 blocks (contact buffer); see the
+  [relaxed-bounds note](roboverify/synthesis/docs/relaxed_reset_bounds.md).
+
 - **`synthesis/environment/motion_reference.py`** — typed runtime-only operands
   Y_min, Z_m and gripper, resolved at instruction entry. The shared controller
   freezes each target for its servo loop. Fingerprints include these semantics;

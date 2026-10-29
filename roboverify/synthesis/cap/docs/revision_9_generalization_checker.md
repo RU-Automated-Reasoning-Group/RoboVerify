@@ -3,8 +3,8 @@
 - **Status:** plan, 2026-10-28. Nothing in this document is implemented. The
   feasibility limits in Section 3 come from the max-block probe in
   `runs/cap-generalization/20261028-max-blocks/` (Section 3.4).
-  2026-10-29: Section 3.5 plans a relaxed Stack reset for this checker (not
-  implemented).
+  2026-10-29: the opt-in relaxed reset bounds of Section 3.5 are implemented
+  for all six tasks and measured; the checker itself is not implemented.
 - **Input:** the final programs of a CaP experiment. First the 300 `final_v2`
   programs (246 distinct after alpha-renamed AST deduplication, see
   [Revision 8, Section 3.1](revision_8_verification.md#31-size-and-duplicates)),
@@ -30,9 +30,7 @@
    metric.
 2. **Physical limits, independent of any policy** (all 10 seeds;
    Section 3.3):
-   - Stack: 6 blocks (7 on 4 of 10 seeds) with the default reset. A relaxed
-     Stack reset, planned in Section 3.5, should raise this to the tower
-     limit;
+   - Stack: 6 blocks (7 on 4 of 10 seeds);
    - Unstack and Reverse: 18 (19 on some seeds);
    - ReStack: 18 = 16-block tower + 2 loose (19 on some seeds);
    - Grid: 9 (3 × 3), also 4 × 2, 2 × 4 and 5 × 1;
@@ -41,8 +39,15 @@
    The tower tasks reach the arm's height limit at 18–19 blocks, and from 20
    blocks MuJoCo's contact buffer overflows. Stack is limited by the reset
    sampler, Grid by goal cells out of reach, and Pyramid by source capacity.
-   For Stack, the checker will use an opt-in relaxed reset
-   (`relax_boundaries_for_generalization_test`, Section 3.5).
+   With the opt-in relaxed bounds
+   (`relax_boundaries_for_generalization_test`, Section 3.5), the limits on
+   all 10 seeds become:
+   - Stack, Unstack and Reverse: 19;
+   - ReStack: 19 in total, with 2, 4 or 8 loose blocks;
+   - Grid: 16 (4 × 4);
+   - Pyramid: unchanged at k = 4.
+
+   MuJoCo's contact buffer is then the binding limit for every task.
 3. **A failure counts against the policy only on a physically feasible
    scene.** Feasibility is decided per (task, count, seed) without running
    any program:
@@ -177,8 +182,9 @@ what this revision measures. For example:
   did not converge within its 50-step budget;
 - ReStack N = 8: the 8-block tower built by the robot fell during stacking.
 
-Pyramid can therefore be tested at only one count above the trained one,
-unless the source workspace is enlarged (decision D5).
+Pyramid can therefore be tested at only one count above the trained one.
+The relaxed bounds of Section 3.5 do not change this: there, k = 5 fits the
+workspace but overflows the contact buffer (decision D5).
 
 ### 3.4 Probes
 
@@ -195,35 +201,50 @@ unless the source workspace is enlarged (decision D5).
 
 The earlier three-seed probes (`scratchpad/r9/`) are superseded.
 
-### 3.5 Relaxed Stack reset (planned)
+### 3.5 Relaxed reset bounds (implemented)
 
-- **Status:** plan, 2026-10-29, requested by the user. The full plan is in
-  [synthesis/docs/stack_relaxed_reset.md](../../docs/stack_relaxed_reset.md).
-- **Why:** Stack's limit of 6 comes from the reset rectangle in
-  [stack_reset.py](../../environment/stack_reset.py). The rectangle is
-  base-relative X 0.54–0.70 and Y −0.20–0.20, within 0.70 m of the base. The
-  arm and the simulator allow 18-block towers (Section 3.3).
-- **Option:** `relax_boundaries_for_generalization_test`, default off and
-  Stack only. When it is on:
-  - `b0`, the tower base, is sampled first in X 0.40–0.60 and Y −0.20–0.20.
-    Path-aware reach there is 1.45–1.59 m, against 1.242 m for an 18-block top
-    centre.
-  - The other blocks are sampled in X 0.40–0.70 and Y −0.40–0.40, within
-    0.75 m of the base. Every cell is reachable at table height.
-  - Scattered separation, the gripper clearance and the bounded retries are
-    unchanged.
-  - With the option off, the reset is unchanged, draw for draw.
-- **Sampler capacity** (rules only, 20 seeds): 17 blocks on 20 seeds, 18 on
-  19, 19 on 9.
-- **Plumbing:** the keyword goes from the environment constructor through
-  `make_roboverify_env` to a Stack-only `RunConfig` field. It is recorded in
-  trial manifests only when it is on.
-- **Validation:** unit tests, the Section 3.3 physical probe for Stack
-  N = 4–19 in relaxed mode, and the supplied Stack program at 4 blocks.
-  The probe, not this estimate, sets the Stack schedule.
-- **Baseline:** the relaxed layout also differs from the trained one. The
-  checker therefore runs the relaxed reset from the trained count (4 blocks),
-  so layout failures can be separated from count failures (Section 7).
+- **Status:** implemented 2026-10-29 at the user's request, for all six
+  tasks. Commits `7d9ec08` (environment) and `3f82cdb` (CaP `RunConfig`).
+  Details are in
+  [synthesis/docs/relaxed_reset_bounds.md](../../docs/relaxed_reset_bounds.md).
+- **Option:** `relax_boundaries_for_generalization_test`, default off; one
+  switch for every task. It is a constructor keyword, a `make_roboverify_*` /
+  `make_goal_env` option and a `RunConfig` field. `environment_options`
+  records it only when it is on.
+- **Region:** resets and goals use one shared region measured as reachable:
+  base-relative X ≥ 0.35 m and XY radius ≤ 0.80 m.
+  - **Towers:** Stack's `b0` and the Unstack/Reverse/ReStack source towers
+    are sampled at X 0.40–0.60 m, where reach is highest. The towers stay on
+    their original side.
+  - **Loose blocks:** ReStack's loose blocks may use the whole higher-Y side.
+  - **Goal tasks:** Grid and Pyramid goals are centred at X 0.50 m, and their
+    sources may use the whole lower-Y side.
+- **Unchanged:** Scattered separation, the gripper clearance and explicit
+  failure on exhausted retries. With the switch off, every reset is
+  identical, draw for draw.
+- **Measured limits:** the Section 3.3 probe was run with the switch on,
+  10 seeds per layout. Data is in `runs/cap-generalization/20261028-max-blocks/physical_relaxed/`.
+
+  | Task | Default (Section 3.3) | Relaxed, feasible on all 10 seeds | Relaxed binding limit |
+  | --- | --- | --- | --- |
+  | Stack | 2–6 | 2–19 | Contact buffer at 20 |
+  | Unstack, Reverse | 2–18 | 2–19 | Contact buffer at 20 |
+  | ReStack | total 4–18, 2 loose | total 4–19 with 2, 4 or 8 loose (two layouts lose seed 0 to an unreachable edge point) | Contact buffer at 20 |
+  | Grid | ≤ 3 × 3, 4 × 2, 2 × 4, 5 × 1 | up to 4 × 4; also 3 × 4, 4 × 3, 5 × 3, 5 × 2, 2 × 5, 6 × 1 | Workspace (3 × 5, 6 × 2 and others have a goal outside it); 20 goals overflow the contact buffer |
+  | Pyramid | k = 2–4 | k = 2–4 | k = 5: the 15-block goal overflows the contact buffer while settling |
+
+- **Contact buffer:** `nconmax` is 100, and about 15 contacts are always
+  taken by the robot base against the table plane. Raising it is a separate
+  environment change (decision D5).
+- **Probe adaptations:**
+  - the arm is parked away from every goal block before the goal teleport;
+    the old park point stood inside the relaxed tower sites;
+  - Unstack's probe goal cells stay inside the region;
+  - table-level block centres are checked for reach exactly.
+- **Baseline:** relaxed scenes differ from the trained layouts even at the
+  trained count. The checker therefore runs the relaxed reset from the
+  trained count, so that layout failures can be separated from count
+  failures (Section 7).
 
 ## 4. Separating "policy failed" from "scene infeasible"
 
@@ -255,16 +276,16 @@ They show that a feasible scene can also be solved through the DSL.
 ### 5.1 Count schedule per task
 
 The schedule starts at the trained count and extends to the largest count
-that is physically feasible on at least one seed (Section 3.3):
+that is physically feasible on at least one seed (Sections 3.3 and 3.5):
 
-| Task | Schedule |
-| --- | --- |
-| Stack | Default reset: 4, 5, 6, 7. Relaxed reset (Section 3.5): 4 up to the largest count the relaxed probe finds feasible on some seed, expected 18–19 |
-| Unstack | 4–19 |
-| Reverse | 4–19 |
-| ReStack (tower, loose) | (3, 2) = 5 … (17, 2) = 19 |
-| Grid (rows × cols) | 3 × 2, 4 × 2, 2 × 4, 3 × 3, 5 × 1 |
-| Pyramid (k) | 3, 4 |
+| Task | Default reset | Relaxed reset (Section 3.5) |
+| --- | --- | --- |
+| Stack | 4, 5, 6, 7 | 4–19 |
+| Unstack | 4–19 | 4–19 |
+| Reverse | 4–19 | 4–19 |
+| ReStack (tower, loose) | (3, 2) = 5 … (17, 2) = 19 | as default, plus more loose blocks, e.g. (11, 8) = 19 |
+| Grid (rows × cols) | 3 × 2, 4 × 2, 2 × 4, 3 × 3, 5 × 1 | 3 × 2 … 4 × 4 (12 layouts) |
+| Pyramid (k) | 3, 4 | 3, 4 |
 
 Seeds that are physically infeasible at a count are excluded from that
 count's denominator and reported separately.
@@ -371,9 +392,10 @@ Figures:
   without model access, is resumable, and has GPUs 6 and 7 only in its
   allowlist.
 - `synthesis/cap/reports/generalization_report.py`.
-- The relaxed Stack reset (Section 3.5) changes `environment/stack_reset.py`,
-  the environment constructor and factory, and `RunConfig`. It lands as a
-  separate commit with its own tests, before the checker.
+- The relaxed reset bounds (Section 3.5) are already in place:
+  `environment/relaxed_workspace.py`, the samplers, the environment
+  constructor and factories, and `RunConfig`. The checker only sets the
+  switch in its run-config overrides.
 
 **Tests** (`synthesis/cap/tests/test_generalization.py`):
 - schedule overrides produce valid `RunConfig`s for every task and count;
@@ -390,10 +412,14 @@ Figures:
   that the bounded sampler can still place. At Stack 7 the sampler fails on
   some seeds, so the feasible scenes are the easy ones. Report the
   sampler-failure rate next to every curve.
-- **Relaxed Stack layout shift.** The relaxed reset (Section 3.5) places
-  blocks up to 0.40 m to the side and 0.14 m closer to the base than in
-  training. Report Stack curves from the relaxed 4-block baseline, and
-  report the default-reset counts 4–7 separately.
+- **Relaxed layout shift.** The relaxed reset (Section 3.5) changes the
+  layout distribution even at the trained count:
+  - Stack blocks may lie 0.70 m to the side;
+  - towers move up to 0.14 m towards the base;
+  - goal layouts move 0.15 m towards the base.
+
+  Report relaxed curves relative to the relaxed baseline at the trained
+  count, and report the default-reset schedule separately.
 - **Feasibility is a necessary condition, not a constructive proof.** The
   probe checks the start, a goal state and reach, not every intermediate
   state of some solution. For example, carrying a block over a tall tower may
@@ -434,12 +460,14 @@ Figures:
    (Section 5.1) for every program, with no early stopping. The alternative is
    to stop each program at its first failing count, which is cheaper but
    loses non-monotone cases.
-5. **D5. Environment limits.** Stack is decided: the user chose an opt-in
-   relaxed reset (2026-10-29; Section 3.5). For the other limits the
-   recommendation is unchanged: keep the environments as they are and report
-   each ceiling as the end of the test range. Those limits are the Pyramid
-   source workspace, the Grid goal workspace and `nconmax`. The alternative
-   is a separately named option for each, as for Stack.
+5. **D5. Environment limits.** Workspace bounds are decided: the user chose
+   one opt-in switch that relaxes them for every task (2026-10-29;
+   Section 3.5). Still open is `nconmax`, now the binding limit of every task
+   (19 blocks; Pyramid k = 4).
+   - Recommendation: keep it, and report 19 as the end of the test range.
+   - The alternative is to raise it under a separately named option. That
+     needs a new stability and approach check for towers of 20 or more
+     blocks.
 6. **D6. Smaller counts.** Recommendation: include 2 and 3 for the tower tasks
    (and 2 × 2 for Grid, k = 2 for Pyramid) as a cheap sanity check. The
    alternative is upward only.
