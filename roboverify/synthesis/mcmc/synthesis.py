@@ -802,12 +802,15 @@ ROBOVERIFY_PYRAMID_ENV_KWARGS = {
 def make_roboverify_stack_env(
     num_blocks: int = 4,
     render_mode: str = "rgb_array",
+    *,
+    relax_boundaries_for_generalization_test: bool = False,
 ) -> GymToGymnasium:
     """Create the RoboVerifyStack env used for stack demo rollouts and MCMC eval."""
     return GymToGymnasium(
         FetchPickAndPlaceConstruction(
             name=f"roboverify_stack_{num_blocks}",
             num_blocks=num_blocks,
+            relax_boundaries_for_generalization_test=relax_boundaries_for_generalization_test,
             **ROBOVERIFY_STACK_ENV_KWARGS,
         ),
         render_mode=render_mode,
@@ -817,12 +820,15 @@ def make_roboverify_stack_env(
 def make_roboverify_unstack_env(
     num_blocks: int = 4,
     render_mode: str = "rgb_array",
+    *,
+    relax_boundaries_for_generalization_test: bool = False,
 ) -> GymToGymnasium:
     """Create the standard right-to-left Unstack env for rollouts and MCMC eval."""
     return GymToGymnasium(
         FetchPickAndPlaceConstruction(
             name=f"roboverify_unstack_{num_blocks}",
             num_blocks=num_blocks,
+            relax_boundaries_for_generalization_test=relax_boundaries_for_generalization_test,
             **ROBOVERIFY_UNSTACK_ENV_KWARGS,
         ),
         render_mode=render_mode,
@@ -832,12 +838,15 @@ def make_roboverify_unstack_env(
 def make_roboverify_reverse_env(
     num_blocks: int = 4,
     render_mode: str = "rgb_array",
+    *,
+    relax_boundaries_for_generalization_test: bool = False,
 ) -> GymToGymnasium:
     """Create Reverse with its source tower on the robot's higher-Y side."""
     return GymToGymnasium(
         FetchPickAndPlaceConstruction(
             name=f"roboverify_reverse_{num_blocks}",
             num_blocks=num_blocks,
+            relax_boundaries_for_generalization_test=relax_boundaries_for_generalization_test,
             **ROBOVERIFY_REVERSE_ENV_KWARGS,
         ),
         render_mode=render_mode,
@@ -849,6 +858,7 @@ def make_roboverify_restack_env(
     render_mode: str = "rgb_array",
     *,
     initial_tower_blocks: int | None = None,
+    relax_boundaries_for_generalization_test: bool = False,
 ) -> GymToGymnasium:
     """Create a lateral source tower containing b0, plus loose blocks."""
     return GymToGymnasium(
@@ -856,6 +866,7 @@ def make_roboverify_restack_env(
             name=f"roboverify_restack_{num_blocks}",
             num_blocks=num_blocks,
             initial_tower_blocks=initial_tower_blocks,
+            relax_boundaries_for_generalization_test=relax_boundaries_for_generalization_test,
             **ROBOVERIFY_RESTACK_ENV_KWARGS,
         ),
         render_mode=render_mode,
@@ -866,6 +877,8 @@ def make_roboverify_grid_env(
     grid_rows: int = 3,
     grid_cols: int = 2,
     render_mode: str = "rgb_array",
+    *,
+    relax_boundaries_for_generalization_test: bool = False,
 ) -> GymToGymnasium:
     """Create the RoboVerifyGrid env with ``grid_rows * grid_cols`` blocks."""
     return GymToGymnasium(
@@ -874,6 +887,7 @@ def make_roboverify_grid_env(
             num_blocks=grid_rows * grid_cols,
             grid_rows=grid_rows,
             grid_cols=grid_cols,
+            relax_boundaries_for_generalization_test=relax_boundaries_for_generalization_test,
             **ROBOVERIFY_GRID_ENV_KWARGS,
         ),
         render_mode=render_mode,
@@ -884,6 +898,7 @@ def make_roboverify_pyramid_env(
     render_mode: str = "rgb_array",
     *,
     bottom_row_blocks: int = 3,
+    relax_boundaries_for_generalization_test: bool = False,
 ) -> GymToGymnasium:
     """Create layers k, k-1, ..., 1 from bottom_row_blocks=k."""
     from synthesis.environment.goal_layout import pyramid_layers
@@ -894,6 +909,7 @@ def make_roboverify_pyramid_env(
             name=f"roboverify_pyramid_{bottom_row_blocks}",
             num_blocks=num_blocks,
             bottom_row_blocks=bottom_row_blocks,
+            relax_boundaries_for_generalization_test=relax_boundaries_for_generalization_test,
             **ROBOVERIFY_PYRAMID_ENV_KWARGS,
         ),
         render_mode=render_mode,
@@ -906,25 +922,32 @@ def make_roboverify_env(
     render_mode: str = "rgb_array",
     *,
     initial_tower_blocks: int | None = None,
+    relax_boundaries_for_generalization_test: bool = False,
 ) -> GymToGymnasium:
     """Create a RoboVerify tower-task environment."""
+    relaxed = dict(
+        relax_boundaries_for_generalization_test=relax_boundaries_for_generalization_test
+    )
     if task == "restack":
         return make_roboverify_restack_env(
             num_blocks=num_blocks,
             render_mode=render_mode,
             initial_tower_blocks=initial_tower_blocks,
+            **relaxed,
         )
     if initial_tower_blocks is not None:
         raise ValueError("initial_tower_blocks requires the Restack task")
     if task == "stack":
-        return make_roboverify_stack_env(num_blocks=num_blocks, render_mode=render_mode)
+        return make_roboverify_stack_env(
+            num_blocks=num_blocks, render_mode=render_mode, **relaxed
+        )
     if task == "unstack":
         return make_roboverify_unstack_env(
-            num_blocks=num_blocks, render_mode=render_mode
+            num_blocks=num_blocks, render_mode=render_mode, **relaxed
         )
     if task == "reverse":
         return make_roboverify_reverse_env(
-            num_blocks=num_blocks, render_mode=render_mode
+            num_blocks=num_blocks, render_mode=render_mode, **relaxed
         )
     if task in ("grid", "2dgrid"):
         raise ValueError(

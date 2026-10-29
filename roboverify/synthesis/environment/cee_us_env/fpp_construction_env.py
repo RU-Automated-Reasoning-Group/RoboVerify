@@ -13,6 +13,11 @@ from synthesis.environment.cee_us_env.abstract_environments import MaskedGoalSpa
 from synthesis.environment.cee_us_env.fpp_construction.construction import FetchBlockConstructionEnv
 from synthesis.environment.cee_us_env.robotics import GymRoboticsGroundTruthSupportEnv
 from synthesis.environment.goal_layout import GoalLayout, occupancy
+from synthesis.environment.relaxed_workspace import (
+    check_relaxed_goals,
+    relaxed_goal_origin_x,
+    sample_relaxed_goal_sources,
+)
 from synthesis.environment.restack_reset import resolve_tower_blocks, sample_restack_layout
 from synthesis.environment.stack_reset import sample_stack_xy
 from synthesis.environment.tower_reset import sample_tower_xy
@@ -50,8 +55,22 @@ class FetchPickAndPlaceConstruction(
         simple=False,
         base_block_id=None,
         initial_tower_blocks=None,
+        relax_boundaries_for_generalization_test=False,
         **kwargs,
     ):
+        if relax_boundaries_for_generalization_test and kwargs.get("case") not in (
+            *ROBOVERIFY_CASES,
+            "RoboVerifyGrid",
+            "RoboVerifyPyramid",
+        ):
+            raise ValueError(
+                "relax_boundaries_for_generalization_test applies only to RoboVerify tasks"
+            )
+        # Opt-in reachable-workspace bounds for generalization tests
+        # (relaxed_workspace.py); set before the parent constructor resets.
+        self.relax_boundaries_for_generalization_test = bool(
+            relax_boundaries_for_generalization_test
+        )
         self.restack_initial_tower_blocks = (
             resolve_tower_blocks(kwargs["num_blocks"], initial_tower_blocks)
             if kwargs.get("case") == "RoboVerifyRestack"
@@ -101,6 +120,7 @@ class FetchPickAndPlaceConstruction(
             shaped_reward=shaped_reward,
             base_block_id=base_block_id,
             initial_tower_blocks=initial_tower_blocks,
+            relax_boundaries_for_generalization_test=relax_boundaries_for_generalization_test,
             **kwargs,
         )
 
@@ -457,7 +477,11 @@ class FetchPickAndPlaceConstruction(
         """
         self.sim.set_state(self.initial_state)
         positions = sample_stack_xy(
-            self.num_blocks, self.robot_base_xy, self.initial_gripper_xpos[:2]
+            self.num_blocks,
+            self.robot_base_xy,
+            self.initial_gripper_xpos[:2],
+            relax_boundaries_for_generalization_test=self.relax_boundaries_for_generalization_test,
+            base_index=getattr(self, "roboverify_base_block_id", None) or 0,
         )
         for obj_name, object_xypos in zip(self.object_names, positions):
             object_qpos = self.sim.data.get_joint_qpos(f"{obj_name}:joint")
@@ -483,6 +507,7 @@ class FetchPickAndPlaceConstruction(
             self.num_blocks,
             self.robot_base_xy,
             task="unstack" if self.case == "RoboVerifyUnstack" else "reverse",
+            relax_boundaries_for_generalization_test=self.relax_boundaries_for_generalization_test,
         )
 
         for level, block_id in enumerate(tower_order):
@@ -504,6 +529,7 @@ class FetchPickAndPlaceConstruction(
             self.roboverify_base_block_id,
             self.robot_base_xy,
             self.initial_gripper_xpos[:2],
+            relax_boundaries_for_generalization_test=self.relax_boundaries_for_generalization_test,
         )
         for block_id, name in enumerate(self.object_names):
             qpos = self.sim.data.get_joint_qpos(f"{name}:joint")
@@ -617,9 +643,12 @@ class FetchPickAndPlaceConstruction(
         spacing = self._roboverify_grid_cell_spacing()
         grid_width = max(0, self.grid_cols - 1) * spacing
         workspace_x = self.initial_gripper_xpos[0] + ROBOVERIFY_GRID_WORKSPACE_X_OFFSET
+        left_x = workspace_x - 0.5 * grid_width
+        if self.relax_boundaries_for_generalization_test:
+            left_x = relaxed_goal_origin_x(self.robot_base_xy[0], grid_width)
         return np.array(
             [
-                workspace_x - 0.5 * grid_width,
+                left_x,
                 self.robot_base_xy[1] + ROBOVERIFY_GRID_GOAL_Y_OFFSET,
             ],
             dtype=np.float32,
@@ -643,9 +672,12 @@ class FetchPickAndPlaceConstruction(
         row_spacing = self._roboverify_pyramid_row_spacing()
         base_width = (self.pyramid_layer_sizes[0] - 1) * row_spacing
         workspace_x = self.initial_gripper_xpos[0] + ROBOVERIFY_GRID_WORKSPACE_X_OFFSET
+        left_x = workspace_x - 0.5 * base_width
+        if self.relax_boundaries_for_generalization_test:
+            left_x = relaxed_goal_origin_x(self.robot_base_xy[0], base_width)
         return np.array(
             [
-                workspace_x - 0.5 * base_width,
+                left_x,
                 self.robot_base_xy[1] + ROBOVERIFY_GRID_GOAL_Y_OFFSET,
             ],
             dtype=np.float32,
@@ -719,7 +751,21 @@ class FetchPickAndPlaceConstruction(
         cols = max(2, int(np.ceil(np.sqrt(self.num_blocks))))
         rows = int(np.ceil(self.num_blocks / cols))
         spacing = 2 * BLOCK_LENGTH + 0.005
-        left_positions = self._roboverify_random_scattered_layout(
+        if self.relax_boundaries_for_generalization_test:
+            left_positions = sample_relaxed_goal_sources(
+                self.num_blocks, self.robot_base_xy, self.initial_gripper_xpos[:2]
+            )
+        else:
+            left_positions = self._default_goal_source_layout(cols, rows, spacing)
+        for obj_name, object_xypos in zip(self.object_names, left_positions):
+            object_qpos = self.sim.data.get_joint_qpos(f"{obj_name}:joint")
+            assert object_qpos.shape == (7,)
+            object_qpos[:2] = object_xypos
+            object_qpos[2] = self.height_offset
+            self.sim.data.set_joint_qpos(f"{obj_name}:joint", object_qpos)
+
+    def _default_goal_source_layout(self, cols, rows, spacing):
+        return self._roboverify_random_scattered_layout(
             self.num_blocks,
             self._roboverify_grid_block_center_xy(),
             x_half_range=max(self.obj_range, (cols - 1) * spacing / 2 + 0.005),
@@ -728,12 +774,6 @@ class FetchPickAndPlaceConstruction(
             ),
             accept_candidate=self._roboverify_grid_block_accept,
         )
-        for obj_name, object_xypos in zip(self.object_names, left_positions):
-            object_qpos = self.sim.data.get_joint_qpos(f"{obj_name}:joint")
-            assert object_qpos.shape == (7,)
-            object_qpos[:2] = object_xypos
-            object_qpos[2] = self.height_offset
-            self.sim.data.set_joint_qpos(f"{obj_name}:joint", object_qpos)
 
     def _reset_sim_roboverify_grid(self):
         """
@@ -772,7 +812,9 @@ class FetchPickAndPlaceConstruction(
         radii = np.linalg.norm(
             np.asarray(positions)[:, :2] - self.robot_base_xy, axis=1
         )
-        if np.any(radii > self.manipulability_r):
+        if self.relax_boundaries_for_generalization_test:
+            check_relaxed_goals(positions, self.robot_base_xy)
+        elif np.any(radii > self.manipulability_r):
             raise ValueError("Goal layout exceeds the robot's nominal XY workspace")
         self.goal_layout = GoalLayout.from_positions(positions, rows)
         self.roboverify_goal_marker_positions = self.goal_layout.positions

@@ -43,10 +43,14 @@ def make_goal_env(task, config):
         make_roboverify_pyramid_env,
     )
 
+    config = dict(config)
+    relaxed = config.pop("relax_boundaries_for_generalization_test", False)
     _, config = resolve_goal_configuration(task, **config)
     factory = (
         make_roboverify_grid_env if task == "grid" else make_roboverify_pyramid_env
     )
+    if relaxed:
+        config["relax_boundaries_for_generalization_test"] = True
     return factory(**config)
 
 

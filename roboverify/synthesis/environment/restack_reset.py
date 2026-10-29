@@ -20,19 +20,29 @@ def resolve_tower_blocks(num_blocks, initial_tower_blocks=None):
     return count
 
 
-def sample_restack_layout(num_blocks, tower_blocks, base_id, base_xy, gripper_xy):
+def sample_restack_layout(
+    num_blocks,
+    tower_blocks,
+    base_id,
+    base_xy,
+    gripper_xy,
+    *,
+    relax_boundaries_for_generalization_test=False,
+):
     """Return block XY positions and integer heights, with b0 inside the tower.
 
     The tower shares Unstack/Reverse's workspace. Loose blocks may extend closer
     to the robot in X, but all source blocks remain on its higher-Y side.
     Bounded retries refuse configurations that do not fit; bounds never expand.
+    The opt-in relaxed mode (`relaxed_workspace`) samples the tower at a
+    high-reach site and loose blocks anywhere reachable on the higher-Y side.
     """
     tower_blocks = resolve_tower_blocks(num_blocks, tower_blocks)
     base_xy, gripper_xy = np.asarray(base_xy), np.asarray(gripper_xy)
     columns = num_blocks - tower_blocks + 1
     # The Y interval is narrower than Scattered separation, so columns must fit in X.
     capacity = 1 + int((RESTACK_X_RANGE[1] - RESTACK_X_RANGE[0]) / RESTACK_SEPARATION)
-    if columns > capacity:
+    if columns > capacity and not relax_boundaries_for_generalization_test:
         raise ValueError("Restack source workspace cannot fit this many loose blocks")
     order = np.random.permutation(
         [i for i in range(num_blocks) if i != base_id]
@@ -41,6 +51,15 @@ def sample_restack_layout(num_blocks, tower_blocks, base_id, base_xy, gripper_xy
     tower = order[: tower_blocks - 1]
     tower.insert(level, base_id)
     loose = order[tower_blocks - 1 :]
+    if relax_boundaries_for_generalization_test:
+        from synthesis.environment.relaxed_workspace import (
+            sample_relaxed_restack_centers,
+        )
+
+        centers = sample_relaxed_restack_centers(
+            columns, base_xy, gripper_xy, RESTACK_SEPARATION
+        )
+        return _layout(num_blocks, tower, loose, centers)
     for _ in range(100):
         centers = []
         for column in range(columns):
@@ -59,10 +78,14 @@ def sample_restack_layout(num_blocks, tower_blocks, base_id, base_xy, gripper_xy
             else:
                 break
         else:
-            xy, heights = np.empty((num_blocks, 2)), np.zeros(num_blocks, dtype=int)
-            for height, block in enumerate(tower):
-                xy[block], heights[block] = centers[0], height
-            for block, center in zip(loose, centers[1:]):
-                xy[block] = center
-            return xy, heights
+            return _layout(num_blocks, tower, loose, centers)
     raise ValueError("Restack lateral reset exhausted its bounded layout retries")
+
+
+def _layout(num_blocks, tower, loose, centers):
+    xy, heights = np.empty((num_blocks, 2)), np.zeros(num_blocks, dtype=int)
+    for height, block in enumerate(tower):
+        xy[block], heights[block] = centers[0], height
+    for block, center in zip(loose, centers[1:]):
+        xy[block] = center
+    return xy, heights
