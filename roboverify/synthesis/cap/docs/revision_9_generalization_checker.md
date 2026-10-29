@@ -1,12 +1,16 @@
 # Revision 9: a block-count generalization checker for CaP policies
 
-- **Status:** plan, 2026-10-28. Nothing in this document is implemented. The
-  feasibility limits in Section 3 come from the max-block probe in
-  `runs/cap-generalization/20261028-max-blocks/` (Section 3.4).
-  2026-10-29: the opt-in relaxed reset bounds of Section 3.5 are implemented
-  for all six tasks and measured; the checker itself is not implemented.
-  Later on 2026-10-29 reach was redefined by the 50-step primitive budget
-  (Section 3.3.1), which withdrew `relaxed_v1` in favour of `relaxed_v2`.
+- **Status:** 2026-10-28 plan; updated 2026-10-29 for the test-case set
+  `relaxed_v2`.
+  - Implemented: the opt-in relaxed environment (Section 3.5), the 50-step
+    primitive reach (Section 3.3.1), the test-case set `relaxed_v2`
+    (Section 3.6), program extraction (`generalization/programs.py`) and the
+    replay driver (`experiments/revision9_generalization.py`, Section 5).
+  - Reach was redefined by the 50-step primitive budget on 2026-10-29; this
+    withdrew `relaxed_v1` in favour of `relaxed_v2`. Limits measured with the
+    earlier long-servo reach (Sections 3.2–3.4) are kept as history and
+    overestimate what one Move reaches.
+  - Results: [revision_9_report.md](revision_9_report.md).
 - **Input:** the final programs of a CaP experiment. First the 300 `final_v2`
   programs (246 distinct after alpha-renamed AST deduplication, see
   [Revision 8, Section 3.1](revision_8_verification.md#31-size-and-duplicates)),
@@ -48,23 +52,8 @@
    `task-spec-v2+final-release-v1`, and partial reward
    ([TASK_PARTIAL_REWARD.md](TASK_PARTIAL_REWARD.md)) is a graded secondary
    metric.
-2. **Physical limits, independent of any policy** (all 10 seeds;
-   Section 3.3):
-   - Stack: 6 blocks (7 on 4 of 10 seeds);
-   - Unstack and Reverse: 18 (19 on some seeds);
-   - ReStack: 18 = 16-block tower + 2 loose (19 on some seeds);
-   - Grid: 9 (3 × 3), also 4 × 2, 2 × 4 and 5 × 1;
-   - Pyramid: 10 (4-3-2-1).
-
-   The tower tasks reach the arm's height limit at 18–19 blocks, and from 20
-   blocks MuJoCo's contact buffer overflows. Stack is limited by the reset
-   sampler, Grid by goal cells out of reach, and Pyramid by source capacity.
-   These limits used a servo reach of up to about 3,000 steps and
-   overestimate what a Move (50 steps) can do; Section 3.3.1 has the
-   correction. With the opt-in relaxed environment
-   (`relax_boundaries_for_generalization_test`, Section 3.5), which adds the
-   reachable workspace and enlarged contact buffers, and with reach decided by
-   the 50-step primitive budget, the limits become:
+2. **Physical limits, independent of any policy** (relaxed environment,
+   reach within one 50-step Move; Sections 3.3.1 and 3.5):
    - Stack: 6 on all 10 seeds, 7–10 on 9, 11 on 8, 12 on 2;
    - Unstack and Reverse: 10 on all seeds, 11 on 7, 12 on 3;
    - ReStack: 10 in total, with 2, 4 or 8 loose blocks (11 on 28/30
@@ -77,7 +66,14 @@
    gripper gets no higher than about 1.0 m within 50 steps (towers of 10–11
    blocks), and it cannot get within 2 mm of the table in front of the
    robot's body (base-relative X 0.35 m near the midline). The feasible seeds
-   form the test-case set `relaxed_v2` (721 cases; Section 3.6).
+   form the test-case set `relaxed_v2` (721 cases; Section 3.6), which is the
+   checker's schedule.
+
+   The relaxed environment (`relax_boundaries_for_generalization_test`,
+   Section 3.5) adds the reachable workspace and enlarged contact buffers.
+   The default environment's limits (Section 3.3: Stack 6, towers 18, Grid
+   3 × 3, Pyramid k = 4) used a servo reach of up to about 3,000 steps and
+   are no longer used.
 3. **A failure counts against the policy only on a physically feasible
    scene.** Feasibility is decided per (task, count, seed) without running
    any program:
@@ -89,13 +85,12 @@
    Controller budgets, transport heights and program design are therefore
    part of what the checker measures, not part of feasibility. Section 4
    gives the details.
-4. **Recommended order:**
-   - **G0:** physical feasibility tables per task (done for seeds 0–9,
-     Section 3.3).
-   - **G1:** scripted replay of all distinct programs over the schedule
-     (5 seeds per count).
-   - **G2:** the report.
-   - **G3 (optional):** wo_demo programs and comparisons.
+4. **Order:**
+   - **G0:** physical feasibility and the test-case set (done: `relaxed_v2`).
+   - **G1:** scripted replay of every distinct final program of `final_v2`
+     and `final_v2_wo_demo` on every case of its task (done, Section 5).
+   - **G2:** the report ([revision_9_report.md](revision_9_report.md)),
+     including RoboVerify's programs on the same cases.
 
 ## 2. How block counts are configured today
 
@@ -454,9 +449,10 @@ generality claim downward, and the environments support them.
 
 ### 5.2 Scenes and stopping
 
-- **Seeds:** 5 per count (seeds 0–4; decision D1), the same for every
-  program. At the trained count these scenes overlap the evaluation scenes,
-  which [Revision 8 M0](revision_8_verification.md#7-milestones) covers.
+- **Seeds:** every case of `relaxed_v2`: all feasible seeds of 0–9 per
+  layout, the same for every program (decision D1). At the trained count
+  these relaxed scenes differ from the training and evaluation scenes of
+  final_v2 (Section 7, relaxed layout shift).
 - **No early stopping by default:** every program runs the whole schedule,
   because a failure at N does not imply failure at N + 1 (a scene-dependent
   failure can recur). The cost is small (Section 5.5).
@@ -467,50 +463,56 @@ generality claim downward, and the environments support them.
 
 ### 5.3 Execution
 
-- **Batches:** one scripted batch per distinct program:
-  - `create_batch(directory, config, model, responses=[source], experiment_variants=[...], seed_per_trial=True, trials=5)`;
-  - one variant per count, whose `run_config` override sets `num_blocks` and
-    the layout options;
-  - `recovery.enabled: false`, demonstrations off, `video_mode: "off"`
-    (render only failures, on request).
-  - Videos must be `deferred`, never `inline`: inline rendering changes the
-    simulation (`stack-n22-s0` fails after 1,000 steps with it and 1,556
-    without, reproducibly), while deferred recording gave the same execution
-    as no video in all 18 timing cases
+- **Jobs:** one process per (distinct program, chunk of cases of its task),
+  about 220 blocks of cases per chunk. Every case is one `runner.run` call:
+  - `config_final_v2_wo_demo.configuration(task, ...)`, which is final_v2's
+    run configuration with demonstrations off, overridden only by the case
+    (seed, layout, relaxed switch) and the budgets of Section 5.4;
+  - `recovery.enabled: false`, `video_mode: "off"`.
+  - Videos, when wanted, must be `deferred`, never `inline`: inline rendering
+    changes the simulation (`stack-n22-s0` fails after 1,000 steps with it
+    and 1,556 without, reproducibly), while deferred recording gave the same
+    execution as no video in all 18 timing cases
     (`runs/cap-generalization/20261029-policy-timing/report.md`). Deferred
-    recording makes execution 1.2–2× slower, so keep it off for the full set.
-- **Model:** `ScriptedModel` returns the source for the single round-0 call.
-  The shared DSL checker re-checks it. With demonstrations off, the
-  information-boundary check does not apply.
-- **No model:** no key and no request gate. `transport_control` is unused
-  because nothing goes out.
-- **Run configuration:** final_v2's run configuration
-  (`config_final_v2.run_config(task, demonstrations=False, ...)`) with only
-  the counts and budgets overridden. The condition mode, prompt package,
-  controller, settling and release check stay as they are.
-- **Feasibility:** the physical probe runs once per (task, count, seed)
-  before any program, into `scenes.json`.
+    recording makes execution 1.2–2× slower, so it is off for the full set; a
+    case can be re-run with video afterwards, because execution is
+    deterministic.
+- **Model:** `ScriptedModel` returns the program (the executed checkpoint's
+  `policy.py`) for the single round-0 call. The shared DSL checker re-checks
+  it. With demonstrations off, the information-boundary check does not apply.
+- **No model:** no key and no request gate.
+- **Run configuration:** the condition mode, prompt package, controller,
+  settling (50 steps) and final-release check stay as in final_v2.
+- **RoboVerify programs** run through `cfg.collection.record_execution`
+  from the case snapshot (hash checked against the manifest), with the same
+  50-step primitives and 50 settling steps, scored by the shared task check
+  (`task-spec-v2`).
+- **Resumable:** each job appends one row per case to
+  `results/<kind>/<task>/<program>-<chunk>.jsonl` and skips finished cases.
+- **Feasibility** is part of the test-case set (Section 3.6); nothing is
+  probed per run.
 
 ### 5.4 Budgets
 
 Fixed budgets would confound "does not generalize" with "ran out of budget".
-Recommendation (decision D3):
-- scale `max_steps` and `max_sim_steps` by `(N / N_trained)³` (ticks) and
-  `(N / N_trained)` × 4 (sim steps);
-- keep the 50-step primitive budget and `timeout` 3,600 s;
-- record the usage of every budget per execution.
+Implemented (decision D3), with N_trained from `TASKS` (4, 4, 4, 5, 6, 6):
+- `max_steps` (execution ticks) 10,000 × max(1, N / N_trained)³;
+- `max_sim_steps` 10,000 × max(1, N / N_trained);
+- the 50-step primitive budget unchanged; `timeout` 1,200 s per case.
 
-A policy that loops without progress is then still caught, as
-`budget_exhausted`.
+Usage of every budget is recorded per execution. A policy that loops without
+progress is then still caught, as `budget_exhausted`.
 
 ### 5.5 Cost
 
-- **Jobs:** each program runs the test cases of its own task. There are
-  about 41 distinct programs per task (246 in total) and 721 cases in
-  `relaxed_v2`: about 29,600 scripted executions with all 10 seeds, about
-  half with 5 seeds per layout (D1).
+- **Jobs:** each program runs the test cases of its own task:
+  252 distinct final_v2 programs and 300 distinct final_v2_wo_demo programs
+  (552 in total; two programs occur in both pools), on 721 cases: 68,086
+  scripted executions.
 
-  The test set is already built, so no probing is needed per run.
+  Revision 8 counted 246 distinct final_v2 programs; `programs.alpha_hash`
+  renames only the names a program binds itself, which merges slightly fewer
+  Grid and Pyramid programs.
 - **Time per execution** (measured, video off,
   `runs/cap-generalization/20261029-policy-timing/report.md`): about 7 s
   fixed per process plus (2.2 + 0.32 N) ms per simulation step, with 45–95
@@ -522,28 +524,32 @@ A policy that loops without progress is then still caught, as
   program that loops without progress runs to its budget; a per-case limit
   of 120–300 s bounds this.
 - **Memory:** about 1.1 GB per worker process, about 50 GB on 48 workers.
+- **Measured** (2026-10-29 run): the 68,086 CaP executions took 207
+  CPU-hours (median 6.7 s per case), 2.2 hours on up to 100 workers. With
+  per-step run files on the network file system the run was I/O bound (about
+  150 cases per minute); writing them to tmpfs (`R9_LOCAL_RUN_ROOT`) raised
+  this to 400–700 per minute.
 
 ### 5.6 Outputs
 
-Artifacts go under `runs/cap-generalization/<run>/`:
-- `programs.json`: hash, task, trials sharing the source, source path;
-- one batch per program;
-- `scenes.json`: physical feasibility per (task, count, seed), with the
-  failing condition and the reach margin;
-- `results.jsonl`: one row per execution, with outcome, partial reward, env
-  steps, budget usage, failure status and reason.
+Artifacts go under `runs/cap-generalization/20261029-full-eval/`:
+- `programs.json`: every trial's program (pool, task, trial, seed, round,
+  source path, text and alpha-renamed hashes);
+- `jobs.json`: the jobs (program, chunk of cases);
+- `results/<kind>/<task>/*.jsonl`: one row per execution, with outcome,
+  partial reward, simulation steps, ticks, budget usage, status and reason;
+- `cap_runs/`: the CaP run directories (large per-step files removed for
+  successful executions).
 
-The report is `docs/revision_9_report.md`, written by
+The report is [revision_9_report.md](revision_9_report.md), written by
 `reports/generalization_report.py`. Per task it contains:
-- a feasibility table (scene_infeasible / feasible by count, with the
-  binding limit);
-- success rate against count, over distinct programs and also weighted by
-  trial, with Wilson intervals;
+- success rate against count, over distinct programs and weighted by trial,
+  with Wilson intervals;
 - mean partial reward against count;
 - the distribution of the largest generalizing count;
-- the failure statuses at the first failing count, for example
-  `primitive_failed` versus `failed` versus postcondition false;
-- examples of the most common failure shape, linked to sources.
+- the failure statuses, for example `primitive_failed` versus
+  postcondition false;
+- RoboVerify's programs on the same cases.
 
 Figures:
 - success against N per task (one panel per task, as in the final report);
@@ -553,37 +559,34 @@ Figures:
 ## 6. Code layout
 
 - `synthesis/cap/generalization/`:
-  - `testset.py` (implemented): versioned test-case sets, with `build` and
-    `verify` (Section 3.6); manifests live in `testsets/`. Tests:
+  - `testset.py`: versioned test-case sets, with `build` and `verify`
+    (Section 3.6); manifests live in `testsets/`. Tests:
     `synthesis/cap/tests/test_generalization_testset.py`.
-  - `programs.py`: extract the final programs from a run root (successful
-    round, active checkpoint) and deduplicate on the alpha-renamed AST hash.
-    This is shared with Revision 8 M0.
-  - `schedule.py`: per-task count schedules → run-config overrides, and
-    scaled budgets.
-  - `feasibility.py`: the physical probe of Sections 3.3 and 3.5 (reset,
-    goal teleport, stability, reach map) and images of the initial and goal
-    state. It currently lives as diagnostic scripts in
+  - `reach.py`: the 50-step primitive reach check (Section 3.3.1).
+  - `programs.py`: extracts the final program of every successful trial
+    (successful round, active checkpoint) and deduplicates on the
+    alpha-renamed AST hash. Shared with Revision 8 M0.
+  - `feasibility.py` (not in the repository): the physical probe of
+    Sections 3.3 and 3.5 lives as diagnostic scripts in
     `runs/cap-generalization/20261028-max-blocks/scripts/`. A new test-case
     set needs it in the repository.
-  - `outcomes.py`: classification from batch rows and the feasibility table.
-- `synthesis/cap/experiments/revision9_generalization.py`: driver. It runs
-  without model access, is resumable, and has GPUs 6 and 7 only in its
-  allowlist.
-- `synthesis/cap/reports/generalization_report.py`.
-- The relaxed reset bounds (Section 3.5) are already in place:
-  `environment/relaxed_workspace.py`, the samplers, the environment
-  constructor and factories, and `RunConfig`. The checker only sets the
-  switch in its run-config overrides.
+- `synthesis/cap/experiments/revision9_generalization.py`: the driver.
+  Scaled budgets (Section 5.4), outcome classification (Section 4), the CaP
+  and RoboVerify executors, and a resumable process-per-job launcher. It
+  makes no model calls; `--gpus` defaults to 6,7. `R9_LOCAL_RUN_ROOT` puts
+  the per-step CaP run files on a local disk and keeps only `result.json`.
+- `synthesis/cap/reports/generalization_report.py`: tables and figures of
+  [revision_9_report.md](revision_9_report.md).
+- The relaxed reset bounds (Section 3.5): `environment/relaxed_workspace.py`,
+  the samplers, the environment constructor and factories, and `RunConfig`.
+  The driver only sets the switch through the case's run-config overrides.
 
 **Tests** (`synthesis/cap/tests/test_generalization.py`):
-- schedule overrides produce valid `RunConfig`s for every task and count;
-- scripted replay of a small fixed Stack program at 3 and 4 blocks in MuJoCo;
-- feasibility logic: a reset error, an unstable or false goal, or a top block
-  above reach each make a scene infeasible;
-- the largest generalizing count over synthetic outcome tables, including
-  gaps;
-- budget scaling.
+- budget scaling and outcome classification;
+- program extraction and the alpha-renamed hash (renamed locals and dropped
+  comments hash equal; a changed constant does not);
+- the report's failure kinds and largest generalizing count over synthetic
+  rows.
 
 ## 7. Risks
 
@@ -623,24 +626,18 @@ Figures:
 - **Budget scaling** changes per-trial limits. It must be applied identically
   to every program and recorded in the results.
 
-## 8. Open decisions
+## 8. Decisions
 
-1. **D1. Seeds per count.** Recommendation: 5, the same for all programs. The
-   alternative is 10, which doubles the cost but tightens the per-program
-   estimates.
-2. **D2. Feasibility criterion.** Recommendation: use the physical
-   feasibility of Section 3.3 (build, stability, goal teleport, measured
-   reach) and treat the oracles as diagnostics only. The alternative is
-   execution witnesses (supplied programs, oracles, the CaP pool). These
-   conflate controller limits with physics and give lower ceilings.
-3. **D3. Budgets.** Recommendation: scale `max_steps` and `max_sim_steps` with
-   N (Section 5.4), and count `budget_exhausted` on a feasible scene as a
-   policy failure. The alternative is final_v2's fixed budgets, which make
-   larger counts partly a budget test.
-4. **D4. Schedule and stopping.** Recommendation: run the full schedule
-   (Section 5.1) for every program, with no early stopping. The alternative is
-   to stop each program at its first failing count, which is cheaper but
-   loses non-monotone cases.
+1. **D1. Seeds per count.** Decided (2026-10-29): every case of
+   `relaxed_v2`, i.e. all feasible seeds of 0–9, the same for all programs.
+2. **D2. Feasibility criterion.** Decided: physical feasibility (Section 3.3:
+   build, stability, goal teleport) with reach within one 50-step Move
+   (Section 3.3.1). The oracles are diagnostics only.
+3. **D3. Budgets.** Adopted: ticks scale with (N / N_trained)³ and simulation
+   steps with N / N_trained (Section 5.4); `budget_exhausted` on a feasible
+   scene is a policy failure.
+4. **D4. Schedule and stopping.** Adopted: the full schedule for every
+   program, without early stopping.
 5. **D5. Environment limits.** Decided by the user (2026-10-29;
    Section 3.5): one opt-in switch relaxes every task's workspace bounds and
    enlarges MuJoCo's contact buffers (1000 contacts, 4000 constraint rows).
@@ -649,9 +646,7 @@ Figures:
      to 6 × 4 and Pyramid to k = 5 under the 50-step reach.
    - The remaining limits are one Move's reach: height for the towers, and
      the table in front of the robot's body for Grid and Pyramid.
-6. **D6. Smaller counts.** Recommendation: include 2 and 3 for the tower tasks
-   (and 2 × 2 for Grid, k = 2 for Pyramid) as a cheap sanity check. The
-   alternative is upward only.
-7. **D7. Program pool.** Recommendation: run final_v2 (246 distinct programs)
-   first, and wo_demo when that experiment finishes, with identical schedules
-   and seeds so the two can be compared.
+6. **D6. Smaller counts.** Adopted: counts 2 and 3 (and 2 × 2, k = 2) are
+   in `relaxed_v2`.
+7. **D7. Program pool.** Decided: final_v2 and final_v2_wo_demo, with
+   identical cases, plus RoboVerify's programs.
