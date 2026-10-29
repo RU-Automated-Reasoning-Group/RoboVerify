@@ -10,10 +10,10 @@ probe and its relaxed run). Closer to the base, X <= 0.30 m near Y = 0 lies
 under the robot.
 
 Tower sites (Stack's b0, the Unstack/Reverse/Restack source tower) are sampled
-in X [0.40, 0.60] m. Every tower top of the relaxed run, up to 19 blocks
-(1.32 m), was at least 0.14 m below the reach measured above its column. Separation rules, gripper clearance and
-the side on which each task keeps its sources and goals are unchanged, and
-exhausted retries still fail explicitly.
+in X [0.40, 0.60] m, where the arm reaches 1.45-1.59 m; the tower tasks keep
+their sides. Grid and Pyramid goals are centred on the robot's midline, and
+their sources may use any free part of the region. Separation rules, gripper
+clearance and explicit failure on exhausted retries are unchanged.
 
 The default bounds of each task are untouched; nothing here runs unless the
 option is enabled. Relaxed scenes differ from the trained layout distribution
@@ -31,10 +31,12 @@ RELAXED_STACK_BASE_Y_RANGE = (-0.20, 0.20)
 # Unstack/Reverse/Restack keep their source tower on the higher-Y side.
 RELAXED_LATERAL_TOWER_Y_RANGE = (0.15, 0.25)
 RELAXED_LATERAL_MIN_Y = 0.15
-# Goal layouts are centred here in X, then shifted forward to RELAXED_MIN_X.
+# Grid/Pyramid goal layouts are centred here in X (then shifted forward to
+# RELAXED_MIN_X) and on the robot's midline (Y = 0) in Y.
 RELAXED_GOAL_CENTER_X = 0.50
-# Grid/Pyramid sources stay on the lower-Y side, as in the default reset.
-RELAXED_SOURCE_MAX_Y = -0.08
+# Their sources may use any free reachable area: Chebyshev distance of at
+# least this from every goal centre, as from each other.
+RELAXED_SOURCE_SEPARATION = 2 * BLOCK_LENGTH + 0.005
 GRIPPER_CLEARANCE = 0.10
 # MuJoCo contact and constraint-row capacity (nconmax, njmax). The defaults
 # (100, 500) overflow at about 20 blocks. A toppling 40-block tower peaked at
@@ -163,20 +165,26 @@ def sample_relaxed_restack_centers(columns, base_xy, gripper_xy, separation):
     return [tower] + loose
 
 
-def sample_relaxed_goal_sources(count, base_xy, gripper_xy):
-    """Grid/Pyramid source blocks on the lower-Y side."""
+def sample_relaxed_goal_sources(count, base_xy, gripper_xy, goal_xy):
+    """Grid/Pyramid sources anywhere in the region, clear of every goal cell."""
     return _sample_region(
         count,
         base_xy,
         gripper_xy,
-        y_range=(-RELAXED_MAX_RADIUS, RELAXED_SOURCE_MAX_Y),
-        separation=2 * BLOCK_LENGTH + 0.005,
+        y_range=(-RELAXED_MAX_RADIUS, RELAXED_MAX_RADIUS),
+        separation=RELAXED_SOURCE_SEPARATION,
+        placed=[np.asarray(g, float)[:2] for g in goal_xy],
     )
 
 
 def relaxed_goal_origin_x(base_x, width):
     """Left goal X of a layout `width` wide, centred at 0.50 m when possible."""
     return base_x + max(RELAXED_MIN_X, RELAXED_GOAL_CENTER_X - 0.5 * width)
+
+
+def relaxed_goal_origin_y(base_y, height):
+    """Lowest goal-row Y of a layout `height` deep, centred on the midline."""
+    return base_y - 0.5 * height
 
 
 def check_relaxed_goals(positions, base_xy):

@@ -17,6 +17,7 @@ from synthesis.environment.relaxed_workspace import (
     RELAXED_CONTACT_BUFFER,
     check_relaxed_goals,
     relaxed_goal_origin_x,
+    relaxed_goal_origin_y,
     sample_relaxed_goal_sources,
 )
 from synthesis.environment.restack_reset import resolve_tower_blocks, sample_restack_layout
@@ -653,12 +654,16 @@ class FetchPickAndPlaceConstruction(
         grid_width = max(0, self.grid_cols - 1) * spacing
         workspace_x = self.initial_gripper_xpos[0] + ROBOVERIFY_GRID_WORKSPACE_X_OFFSET
         left_x = workspace_x - 0.5 * grid_width
+        low_y = self.robot_base_xy[1] + ROBOVERIFY_GRID_GOAL_Y_OFFSET
         if self.relax_boundaries_for_generalization_test:
             left_x = relaxed_goal_origin_x(self.robot_base_xy[0], grid_width)
+            low_y = relaxed_goal_origin_y(
+                self.robot_base_xy[1], max(0, self.grid_rows - 1) * spacing
+            )
         return np.array(
             [
                 left_x,
-                self.robot_base_xy[1] + ROBOVERIFY_GRID_GOAL_Y_OFFSET,
+                low_y,
             ],
             dtype=np.float32,
         )
@@ -682,12 +687,14 @@ class FetchPickAndPlaceConstruction(
         base_width = (self.pyramid_layer_sizes[0] - 1) * row_spacing
         workspace_x = self.initial_gripper_xpos[0] + ROBOVERIFY_GRID_WORKSPACE_X_OFFSET
         left_x = workspace_x - 0.5 * base_width
+        row_y = self.robot_base_xy[1] + ROBOVERIFY_GRID_GOAL_Y_OFFSET
         if self.relax_boundaries_for_generalization_test:
             left_x = relaxed_goal_origin_x(self.robot_base_xy[0], base_width)
+            row_y = relaxed_goal_origin_y(self.robot_base_xy[1], 0.0)
         return np.array(
             [
                 left_x,
-                self.robot_base_xy[1] + ROBOVERIFY_GRID_GOAL_Y_OFFSET,
+                row_y,
             ],
             dtype=np.float32,
         )
@@ -762,7 +769,10 @@ class FetchPickAndPlaceConstruction(
         spacing = 2 * BLOCK_LENGTH + 0.005
         if self.relax_boundaries_for_generalization_test:
             left_positions = sample_relaxed_goal_sources(
-                self.num_blocks, self.robot_base_xy, self.initial_gripper_xpos[:2]
+                self.num_blocks,
+                self.robot_base_xy,
+                self.initial_gripper_xpos[:2],
+                self.goal_layout.positions,
             )
         else:
             left_positions = self._default_goal_source_layout(cols, rows, spacing)
