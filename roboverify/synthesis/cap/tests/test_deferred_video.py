@@ -23,6 +23,7 @@ from ..deferred_video import (
     RenderPool,
     digest,
     drain_queue,
+    environment_metadata,
     read,
     render_job,
     resolved_video,
@@ -222,6 +223,49 @@ class DeferredVideoTests(unittest.TestCase):
             self.assertEqual(render_job(path)["status"], "failed")
             self.assertEqual(
                 (Path(result["run_dir"]) / "result.json").read_bytes(), original
+            )
+
+    def test_relaxed_environment_is_rebuilt_relaxed(self):
+        class Scene:
+            sim = None
+            num_blocks = 3
+
+            def __init__(self, relaxed):
+                self.relax_boundaries_for_generalization_test = relaxed
+
+            def render(self, width=8, height=8):
+                pass
+
+        self.assertNotIn(
+            "relax_boundaries_for_generalization_test",
+            environment_metadata(Scene(False)),
+        )
+        self.assertTrue(
+            environment_metadata(Scene(True))[
+                "relax_boundaries_for_generalization_test"
+            ]
+        )
+        for relaxed in (False, True):
+            result, _ = self.trial("deferred", recovery=False)
+            path = self.execution(result) / "render_job.json"
+            if relaxed:
+                job = read(path)
+                job["environment"]["relax_boundaries_for_generalization_test"] = True
+                atomic_json(path, job)
+                status = read(path.with_name("render_status.json"))
+                status["job_sha256"] = digest(path)
+                atomic_json(path.with_name("render_status.json"), status)
+            configs = []
+
+            def factory(config, snapshot):
+                configs.append(config)
+                raise RuntimeError("stop after configuration")
+
+            self.assertEqual(
+                render_job(path, environment_factory=factory)["status"], "failed"
+            )
+            self.assertEqual(
+                configs[0].relax_boundaries_for_generalization_test, relaxed
             )
 
     def test_interrupted_job_and_coordinator_lock(self):

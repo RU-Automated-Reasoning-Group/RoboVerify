@@ -54,7 +54,7 @@ def environment_metadata(env):
         and signature.parameters[name].default is not inspect.Parameter.empty
     }
     model = getattr(inner.sim, "model", None)
-    return {
+    metadata = {
         "class": f"{cls.__module__}.{cls.__qualname__}",
         "source_hashes": sources,
         "model_xml_sha256": (
@@ -70,6 +70,11 @@ def environment_metadata(env):
         },
         "fps": 20,
     }
+    if getattr(inner, "relax_boundaries_for_generalization_test", False):
+        # The rebuilt environment needs the same reset bounds and contact buffers;
+        # the key is absent otherwise, so earlier jobs keep matching.
+        metadata["relax_boundaries_for_generalization_test"] = True
+    return metadata
 
 
 def enqueue(directory, queue_root, metadata, *, seed, task, context):
@@ -236,6 +241,8 @@ def render_job(path, *, environment_factory=None, assignment=None):
                 )
             elif layout is not None and job["task"] == "pyramid":
                 options = dict(bottom_row_blocks=layout.row_lengths[0])
+            if job["environment"].get("relax_boundaries_for_generalization_test"):
+                options["relax_boundaries_for_generalization_test"] = True
             config = RunConfig(
                 task=job["task"],
                 num_blocks=trace.num_blocks,
