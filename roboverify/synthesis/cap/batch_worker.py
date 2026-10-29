@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .batch import atomic_json
 from .config import ModelConfig, stored_run_config
-from .llm import HTTPModel, ScriptedModel
+from .llm import HTTPModel, ReplayOpener, ScriptedModel
 from .serving.prefix_cache import affinity_key
 
 
@@ -48,17 +48,23 @@ def main(path):
     backend = (
         ScriptedModel(spec["responses"]) if spec.get("responses") is not None else None
     )
-    if backend is None and spec.get("transport_control"):
-        from .request_control import RotatingRequestGate, SharedRequestGate
+    if backend is None and (spec.get("transport_control") or spec.get("replay_calls")):
+        opener = None
+        if spec.get("transport_control"):
+            from .request_control import RotatingRequestGate, SharedRequestGate
 
-        gate = (
-            RotatingRequestGate
-            if "credential_limits" in spec["transport_control"]
-            else SharedRequestGate
-        )
+            gate = (
+                RotatingRequestGate
+                if "credential_limits" in spec["transport_control"]
+                else SharedRequestGate
+            )
+            opener = gate(**spec["transport_control"], job_id=spec["id"])
+        if spec.get("replay_calls"):
+            # A rerun reuses the recorded replies to its leading requests.
+            opener = ReplayOpener(spec["replay_calls"], opener)
         backend = HTTPModel(
             model,
-            opener=gate(**spec["transport_control"], job_id=spec["id"]),
+            opener=opener,
             # Stable per job, so a resumed trial returns to the same instance.
             affinity_key=affinity_key(spec["batch_dir"], spec["id"]),
         )

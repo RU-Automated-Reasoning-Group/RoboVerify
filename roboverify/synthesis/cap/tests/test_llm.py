@@ -2,10 +2,12 @@
 
 import io
 import json
+import tempfile
 import unittest
+from pathlib import Path
 
 from ..config import ModelConfig
-from ..llm import HTTPModel, ModelError
+from ..llm import HTTPModel, ModelError, ReplayOpener
 
 
 class ProviderTests(unittest.TestCase):
@@ -79,6 +81,44 @@ class ProviderTests(unittest.TestCase):
     def test_credential_value_cannot_be_used_as_variable_name(self):
         with self.assertRaisesRegex(ValueError, "environment-variable name"):
             ModelConfig(api_key_env="not-an-environment-variable")
+
+
+def chat_reply(text, cost):
+    return {
+        "choices": [{"message": {"content": text}, "finish_reason": "stop"}],
+        "usage": {"total_tokens": 9, "cost": cost},
+        "provider": "Anthropic",
+    }
+
+
+class ReplayTests(unittest.TestCase):
+    def test_recorded_replies_precede_live_requests(self):
+        config = ModelConfig(api_key_env="")
+        live = []
+
+        def delegate(request, timeout):
+            live.append(json.loads(request.data))
+            return io.BytesIO(json.dumps(chat_reply("pass", 0.2)).encode())
+
+        with tempfile.TemporaryDirectory() as tmp:
+            request, response = Path(tmp, "request.json"), Path(tmp, "response.json")
+            request.write_text(json.dumps(HTTPModel(config).payload("Round 0")))
+            response.write_text(json.dumps(chat_reply("Pick(b0)", 0.1)))
+            recorded = [{"request": request, "response": response}]
+            client = HTTPModel(config, ReplayOpener(recorded, delegate))
+            first = client.generate("Round 0", 5)
+            self.assertEqual(first.text, "Pick(b0)")
+            self.assertEqual(first.usage["cost"], 0.1)
+            self.assertEqual(first.raw["replayed_from"], str(response))
+            self.assertEqual(live, [])
+            second = client.generate("Round 1", 5)
+            self.assertEqual(second.text, "pass")
+            self.assertNotIn("replayed_from", second.raw)
+            self.assertEqual(len(live), 1)
+            changed = HTTPModel(config, ReplayOpener(recorded, delegate))
+            with self.assertRaisesRegex(ModelError, "differs"):
+                changed.generate("Another round 0", 5)
+            self.assertEqual(len(live), 1)
 
 
 if __name__ == "__main__":

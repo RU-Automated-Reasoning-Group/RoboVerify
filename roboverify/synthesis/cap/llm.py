@@ -1,12 +1,14 @@
 """Text-only model transports shared by both methods; no SDK coupling."""
 
 import hashlib
+import io
 import json
 import os
 import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from .contracts import CapError
 from .serving.prefix_cache import AFFINITY_HEADER, BACKEND_HEADER, cached_prompt_tokens
@@ -244,6 +246,48 @@ def server_provenance(config, opener=None, timeout=10):
         ],
         "extra_body": config.extra_body,
     }
+
+
+class _RecordedReply(io.BytesIO):
+    headers = {}
+
+
+class ReplayOpener:
+    """Return recorded replies to a rerun's leading requests, then delegate.
+
+    ``recorded`` lists ``{"request": path, "response": path}`` pairs from an
+    earlier trial's ``lmp/call_*`` artifacts. Each leading request must equal its
+    recorded body, or the rerun fails closed; a replayed reply is not sent to
+    ``delegate`` (no new provider request or spend) and is marked
+    ``replayed_from``. Later requests go to ``delegate``.
+    """
+
+    def __init__(self, recorded, delegate=None):
+        self.recorded = [
+            (
+                json.loads(Path(item["request"]).read_text()),
+                json.loads(Path(item["response"]).read_text()),
+                str(item["response"]),
+            )
+            for item in recorded
+        ]
+        self.delegate = delegate or urllib.request.urlopen
+        self.replayed = 0
+
+    @property
+    def credential_envs(self):
+        return getattr(self.delegate, "credential_envs", ())
+
+    def __call__(self, request, timeout):
+        if self.replayed == len(self.recorded):
+            return self.delegate(request, timeout=timeout)
+        body, raw, source = self.recorded[self.replayed]
+        if json.loads(request.data) != body:
+            raise ModelError(
+                f"Request {self.replayed + 1} differs from its recorded request"
+            )
+        self.replayed += 1
+        return _RecordedReply(json.dumps(raw | {"replayed_from": source}).encode())
 
 
 class ScriptedModel:
