@@ -115,8 +115,8 @@ class GeneralizationTestsetTests(unittest.TestCase):
         )
         self.assertNotEqual(ts.state_sha256(moved), ts.state_sha256(snapshot))
 
-    def test_committed_relaxed_v1_manifest(self):
-        payload, cases = ts.load_manifest(ts.TESTSET_DIR / "relaxed_v1.json")
+    def test_committed_relaxed_v2_manifest(self):
+        payload, cases = ts.load_manifest(ts.TESTSET_DIR / "relaxed_v2.json")
         self.assertTrue(
             payload["environment"]["relax_boundaries_for_generalization_test"]
         )
@@ -130,16 +130,37 @@ class GeneralizationTestsetTests(unittest.TestCase):
             largest[case.task] = max(
                 largest.get(case.task, 0), case.layout["num_blocks"]
             )
-        self.assertGreaterEqual(largest["stack"], 22)
-        self.assertGreaterEqual(largest["pyramid"], 28)
+        self.assertIn("50-step primitive reach", payload["feasibility"]["criterion"])
+        # Towers above about 12 blocks are out of one Move's reach (reach.py).
+        self.assertEqual(largest["stack"], 12)
+        self.assertEqual(largest["pyramid"], 15)
         for case in cases[:: max(1, len(cases) // 50)]:
             ts.run_config(case)
 
     def test_simulator_rebuild_matches_the_committed_hash(self):
-        _, cases = ts.load_manifest(ts.TESTSET_DIR / "relaxed_v1.json")
+        _, cases = ts.load_manifest(ts.TESTSET_DIR / "relaxed_v2.json")
         case = next(c for c in cases if c.case_id == "stack-n4-s0")
         snapshot, _ = ts.initial_snapshot(case)
         self.assertEqual(ts.state_sha256(snapshot), case.initial_state_sha256)
+
+
+class PrimitiveReachTests(unittest.TestCase):
+    def test_one_move_reach_bounds_towers_and_table_edges(self):
+        from ..generalization.reach import PrimitiveReach
+
+        reach = PrimitiveReach()
+        try:
+            base, rest = reach.base, reach.inner.height_offset
+            site = base + [0.50, 0.20]
+            # An 11-block tower's top (level 10) is served; level 12 is not.
+            self.assertTrue(reach.column(site, rest + 0.05 * 10).reachable)
+            high = reach.column(site, rest + 0.05 * 12)
+            self.assertFalse(high.hover)
+            self.assertTrue(reach.column(base + [0.75, 0.0], rest).reachable)
+            # In front of the robot's body the arm stays 2-3 mm off target.
+            self.assertFalse(reach.column(base + [0.35, 0.0], rest).reachable)
+        finally:
+            reach.close()
 
 
 if __name__ == "__main__":

@@ -3,9 +3,9 @@
 A test case is one (task, layout, seed) scene in the relaxed environment
 (`relax_boundaries_for_generalization_test`) that a physical-feasibility probe
 found feasible: the reset scene and a teleported goal are built and stable,
-satisfy their conditions, and every block centre is within the arm's measured
-reach (Revision 9, Sections 3.3 and 3.5). Feasibility never depends on a
-policy.
+satisfy their conditions, and every initial and goal column can be served by
+Moves within the primitive's 50-step budget (`reach.py`; Revision 9,
+Sections 3.3 and 3.5). Feasibility never depends on a policy.
 
 Two layers:
 - the manifest (committed, `testsets/<name>.json`) lists every case with its
@@ -336,7 +336,11 @@ def build(args):
                 "reset passes validate_start and drifts < 5 mm over 100 steps; a "
                 "teleported goal drifts < 5 mm over 100 steps and satisfies the "
                 "postcondition; every raised top centre is below the path-aware "
-                "reach above its column; every table-level centre is reached"
+                "reach above its column; every table-level centre is reached; "
+                "every initial and goal column passes the 50-step primitive "
+                "reach check (synthesis.cap.generalization.reach: one Move from "
+                "the start posture to 0.05 m above the top centre, one down to "
+                "it and one back up, each converging to 2 mm)"
             ),
             sources=sources,
         ),
