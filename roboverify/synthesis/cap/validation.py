@@ -6,6 +6,8 @@ Missing helpers are obligations during local checking, never implicit validity.
 
 import ast
 import math
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 
 from .contracts import (
@@ -30,6 +32,30 @@ TYPE_KINDS = frozenset(
     {"object", "goal", "number", "bool", "position", "vector", "none"}
 )
 MAX_ANALYSIS_STEPS = 100000
+# A scoped override of MAX_ANALYSIS_STEPS (RunConfig.max_analysis_steps); None
+# keeps the module default.
+_ANALYSIS_STEP_LIMIT = ContextVar("analysis_step_limit", default=None)
+
+
+@contextmanager
+def analysis_step_limit(steps):
+    """Run DSL analyses in this scope with a work budget of ``steps``.
+
+    ``None`` keeps ``MAX_ANALYSIS_STEPS``. The budget bounds checker work only;
+    the verdict of an analysis that finishes does not depend on it.
+    """
+    if steps is not None and (type(steps) is not int or steps < 1):
+        raise ValueError("The analysis step limit must be a positive integer")
+    token = _ANALYSIS_STEP_LIMIT.set(steps)
+    try:
+        yield
+    finally:
+        _ANALYSIS_STEP_LIMIT.reset(token)
+
+
+def current_analysis_step_limit():
+    steps = _ANALYSIS_STEP_LIMIT.get()
+    return MAX_ANALYSIS_STEPS if steps is None else steps
 
 
 class AnalysisLimit(CapError):
@@ -378,6 +404,7 @@ class Checker:
         self.unit = "policy"
         self.missing = {}
         self.analysis_steps = 0
+        self.max_analysis_steps = current_analysis_step_limit()
         self.type_parents = {}
         self.type_domains = {}
         self.type_revision = 0
@@ -387,7 +414,7 @@ class Checker:
 
     def step(self):
         self.analysis_steps += 1
-        if self.analysis_steps > MAX_ANALYSIS_STEPS:
+        if self.analysis_steps > self.max_analysis_steps:
             raise AnalysisLimit("DSL analysis work budget exhausted")
 
     def generic_inputs(self, names):

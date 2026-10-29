@@ -51,6 +51,7 @@ from .tasks import (
     task_context,
     validate_start,
 )
+from .validation import analysis_step_limit
 
 
 @contextmanager
@@ -307,7 +308,7 @@ def run_once(
         outcome["post_settling_steps"] = config.post_settling_steps
     status, reason = "failed", ""
     try:
-        with deadline(budget):
+        with deadline(budget), analysis_step_limit(config.max_analysis_steps):
             check_task(config.task)
             instruction = instruction or TASK_INSTRUCTIONS[config.task]
             if demonstrations is not None:

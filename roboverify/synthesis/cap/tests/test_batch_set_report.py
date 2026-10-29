@@ -172,6 +172,22 @@ class DriverConfigurationTests(unittest.TestCase):
                 asdict(frozen) | {"demonstrations": None},
             )
 
+    def test_analysis_budget_is_an_explicit_recorded_override(self):
+        frozen, _, _ = experiment.FROZEN["final_v2_wo_demo"].configuration(
+            "restack", seed=0
+        )
+        self.assertIsNone(frozen.max_analysis_steps)
+        config, _, _, overrides = experiment.configuration(
+            "restack",
+            "claude-opus-5.5",
+            demonstrations=False,
+            frozen="final_v2_wo_demo",
+            max_analysis_steps=1_000_000,
+        )
+        self.assertEqual(config.max_analysis_steps, 1_000_000)
+        self.assertEqual(overrides["max_analysis_steps"], 1_000_000)
+        self.assertEqual(asdict(config) | {"max_analysis_steps": None}, asdict(frozen))
+
 
 if __name__ == "__main__":
     unittest.main()

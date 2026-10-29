@@ -12,6 +12,7 @@ from ..contracts import Bundle, ConstraintFailure
 from ..llm import LoggedModel, ScriptedModel
 from ..logger import CapLogger
 from ..runner import make_method
+from ..validation import analysis_step_limit
 from .test_condition_modes import PositionAdapter
 
 MODES = ("dsl_only", "coordinate_predicates")
@@ -197,6 +198,19 @@ class Revision3CheckerTests(unittest.TestCase):
             report = check_bundle(Bundle("x=b0\ny=b0\nPick(x)"), DSLContract())
         self.assertEqual(report.status, "error", report.to_dict())
         self.assertIn("analysis", report.reason.lower())
+
+    def test_analysis_step_limit_is_scoped(self):
+        bundle = Bundle("x=b0\ny=b0\nPick(x)")
+        with patch("synthesis.cap.validation.MAX_ANALYSIS_STEPS", 2):
+            with analysis_step_limit(1000):
+                self.assertEqual(check_bundle(bundle, DSLContract()).status, "pass")
+            with analysis_step_limit(None):
+                self.assertEqual(check_bundle(bundle, DSLContract()).status, "error")
+            self.assertEqual(check_bundle(bundle, DSLContract()).status, "error")
+        for invalid in (0, -1, 1.5, True):
+            with self.subTest(limit=invalid), self.assertRaises(ValueError):
+                with analysis_step_limit(invalid):
+                    pass
 
 
 class Revision3MethodTests(unittest.TestCase):

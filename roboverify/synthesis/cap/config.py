@@ -406,6 +406,10 @@ class RunConfig:
     # (final-release-v1, config_final_v1). On by default; config_frozen_v1-v7
     # and run configs recorded before the option existed keep it off.
     final_release_check: bool = True
+    # Work budget of the static DSL analysis; None keeps the checker default
+    # (validation.MAX_ANALYSIS_STEPS, 100,000). An unfinished analysis is
+    # neither a violation nor an approval, so the trial ends without a rollout.
+    max_analysis_steps: int | None = None
 
     def __post_init__(self):
         for name, tasks in TASK_OPTIONS.items():
@@ -464,6 +468,10 @@ class RunConfig:
             raise ValueError("initial_settling_steps must be a nonnegative integer")
         if type(self.final_release_check) is not bool:
             raise ValueError("final_release_check must be Boolean")
+        if self.max_analysis_steps is not None and (
+            type(self.max_analysis_steps) is not int or self.max_analysis_steps < 1
+        ):
+            raise ValueError("max_analysis_steps must be a positive integer or None")
 
 
 def stored_run_config(settings):

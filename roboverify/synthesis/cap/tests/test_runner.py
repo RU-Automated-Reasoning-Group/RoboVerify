@@ -7,6 +7,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from synthesis.cfg.recordings import load_traces
 from synthesis.cfg.reset import restore
@@ -42,6 +43,7 @@ class RunnerTests(unittest.TestCase):
             num_blocks=1,
             save_video=options.pop("save_video", False),
             output_root=self.tmp.name,
+            max_analysis_steps=options.pop("max_analysis_steps", None),
         )
         with contextlib.redirect_stdout(io.StringIO()):
             return run(
@@ -128,6 +130,17 @@ class RunnerTests(unittest.TestCase):
         np.testing.assert_array_equal(
             load_traces(path)[0].states[0], load_traces(new_path)[0].states[0]
         )
+
+    def test_configured_analysis_budget_reaches_the_checker(self):
+        source = "x=b0\ny=b0\nPick(x)"
+        with patch("synthesis.cap.validation.MAX_ANALYSIS_STEPS", 2):
+            exhausted = self.execute("cap_method_1", [source])
+            raised = self.execute("cap_method_1", [source], max_analysis_steps=1000)
+        self.assertEqual(exhausted["status"], "analysis_failed")
+        self.assertEqual(raised["status"], "completed")
+        self.assertTrue(raised["success"])
+        with self.assertRaises(ValueError):
+            RunConfig(max_analysis_steps=0)
 
     def test_generation_diagnostic_does_not_report_rollout_success(self):
         result = self.execute("cap_method_1", ["Pick(b0)"], generate_only=True)

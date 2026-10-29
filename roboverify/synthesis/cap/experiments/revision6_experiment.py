@@ -22,7 +22,9 @@ reasoning option (OpenRouter's ``reasoning.effort`` in place of vLLM's chat
 template switch), and measure the demonstration block with the provider's
 prompt-token counts (``provider_usage``), since they have no local tokenizer.
 Credentials are read from ``VLLM_API_KEY`` / ``OPENROUTER_API_KEY`` only.
-``--report-only`` rewrites the combined report from existing batches.
+``--max-analysis-steps N`` sets the static DSL analysis work budget
+(``RunConfig.max_analysis_steps``; default: the checker's 100,000) and records it
+as an override. ``--report-only`` rewrites the combined report from existing batches.
 """
 
 import argparse
@@ -78,11 +80,22 @@ EXPERIMENTS = {
 TASKS = tuple(config_frozen_v3.TASKS)
 
 
-def configuration(task, label, *, demonstrations=True, seed=0, frozen="v3"):
+def configuration(
+    task,
+    label,
+    *,
+    demonstrations=True,
+    seed=0,
+    frozen="v3",
+    max_analysis_steps=None,
+):
     """(RunConfig, ModelConfig, instruction, overrides) for one batch."""
     frozen = FROZEN[frozen]
     config, model, instruction = frozen.configuration(task, demonstrations, seed=seed)
     overrides = {}
+    if max_analysis_steps is not None:
+        config = replace(config, max_analysis_steps=max_analysis_steps)
+        overrides["max_analysis_steps"] = max_analysis_steps
     if MODELS[label] is not None:
         # Record only what differs from the frozen version (v7 is hosted). A
         # version that lists the model keeps its own routing and cache settings.
@@ -120,10 +133,24 @@ def serving_record(model, frozen):
 
 
 def create(
-    directory, task, label, *, trials, seed_start, workers, demonstrations, frozen
+    directory,
+    task,
+    label,
+    *,
+    trials,
+    seed_start,
+    workers,
+    demonstrations,
+    frozen,
+    max_analysis_steps=None,
 ):
     config, model, instruction, overrides = configuration(
-        task, label, demonstrations=demonstrations, seed=seed_start, frozen=frozen
+        task,
+        label,
+        demonstrations=demonstrations,
+        seed=seed_start,
+        frozen=frozen,
+        max_analysis_steps=max_analysis_steps,
     )
     version = frozen
     frozen = FROZEN[version]
@@ -222,6 +249,11 @@ def main():
         help="default: the frozen version's setting (on unless it disables them)",
     )
     parser.add_argument("--frozen", choices=sorted(FROZEN), default="v3")
+    parser.add_argument(
+        "--max-analysis-steps",
+        type=int,
+        help="DSL analysis work budget (default: the checker's 100,000)",
+    )
     parser.add_argument("--report-only", action="store_true")
     parser.add_argument("--title", default="Revision 6 demonstrations")
     parser.add_argument("--note", action="append", default=[])
@@ -239,6 +271,7 @@ def main():
         workers=args.workers,
         demonstrations=args.demonstrations == "on",
         frozen=args.frozen,
+        max_analysis_steps=args.max_analysis_steps,
     )
     if args.batch:
         label, task = args.batch
@@ -288,6 +321,8 @@ def main():
                     "--frozen",
                     args.frozen,
                 ]
+                if args.max_analysis_steps is not None:
+                    command += ["--max-analysis-steps", str(args.max_analysis_steps)]
                 processes.append(
                     (
                         label,
