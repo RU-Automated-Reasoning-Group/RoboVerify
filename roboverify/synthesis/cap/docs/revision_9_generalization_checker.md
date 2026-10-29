@@ -321,6 +321,45 @@ one (task, layout, seed) scene, independent of any policy.
 
   Seeds 0–9 per layout. Counts near each limit have fewer cases, because
   only feasible seeds are included.
+- **Seeds per block count:** rows are block counts, columns are tasks, and
+  each entry is the number of feasible seeds (cases) at that count; "—" means
+  no case. ReStack and Grid have several layouts per count (source-tower
+  heights, grid shapes); for them the entry sums the seeds over the layouts,
+  whose number is in parentheses. Pyramid counts are k(k+1)/2.
+
+  | Blocks | Stack | Unstack | Reverse | ReStack | Grid | Pyramid |
+  | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+  | 2 | 10 | 10 | 10 | — | — | — |
+  | 3 | 10 | 10 | 10 | — | — | 10 |
+  | 4 | 10 | 10 | 10 | 10 | 30 (3) | — |
+  | 5 | 10 | 10 | 10 | 10 | 20 (2) | — |
+  | 6 | 10 | 10 | 10 | 20 (2) | 30 (3) | 10 |
+  | 7 | 10 | 10 | 10 | 20 (2) | 10 | — |
+  | 8 | 10 | 10 | 10 | 20 (2) | 30 (3) | — |
+  | 9 | 10 | 10 | 10 | 20 (2) | 20 (2) | — |
+  | 10 | 10 | 10 | 10 | 29 (3) | 20 (2) | 10 |
+  | 11 | 10 | 10 | 10 | 30 (3) | — | — |
+  | 12 | 10 | 10 | 10 | 29 (3) | 30 (3) | — |
+  | 13 | 10 | 10 | 10 | 30 (3) | — | — |
+  | 14 | 10 | 10 | 10 | 30 (3) | 10 | — |
+  | 15 | 10 | 10 | 10 | 30 (3) | 20 (2) | 10 |
+  | 16 | 10 | 10 | 10 | 30 (3) | 20 (2) | — |
+  | 17 | 10 | 10 | 10 | 30 (3) | — | — |
+  | 18 | 10 | 10 | 10 | 30 (3) | 9 | — |
+  | 19 | 10 | 10 | 10 | 30 (3) | — | — |
+  | 20 | 10 | 10 | 10 | 30 (3) | 18 (2) | — |
+  | 21 | 10 | 10 | 10 | 30 (3) | — | 10 |
+  | 22 | 10 | 10 | 10 | 30 (3) | — | — |
+  | 23 | 8 | 8 | 7 | 20 (3) | — | — |
+  | 24 | 4 | 7 | 5 | 6 (3) | 10 | — |
+  | 25 | — | 4 | — | — | — | — |
+  | 28 | — | — | — | — | — | 10 |
+  | **Total** | **222** | **229** | **222** | **514** | **277** | **60** |
+
+  The tower rows above about 10 blocks are under review: the probe allowed
+  up to about 3,000 servo steps per reach check, but one Move has 50 steps,
+  within which the gripper reaches only 0.93–1.02 m above the tower sites
+  (`runs/cap-generalization/20261029-policy-timing/diagnostics/budget_ceiling.out`).
 
 ## 4. Separating policy failures from environment limits
 
