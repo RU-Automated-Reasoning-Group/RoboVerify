@@ -41,6 +41,7 @@ TRAINED = {
     "grid": 6,
     "pyramid": 6,
 }
+SYNTHESIS_GROUPS = ("stack", "stack_big", "unstack")
 POOLS = (("final_v2", "final_v2"), ("final_v2_wo_demo", "final_v2 w/o demo"))
 COLOURS = {
     "final_v2": "#3182bd",
@@ -53,6 +54,7 @@ FAILURE_ORDER = (
     "move_not_converged",
     "pick_not_converged",
     "release_not_converged",
+    "get_failed",
     "postcondition_false",
     "toppled_while_settling",
     "unreleased_block",
@@ -67,6 +69,7 @@ FAILURE_COLOURS = {
     "move_not_converged": "#fd8d3c",
     "pick_not_converged": "#fdae6b",
     "release_not_converged": "#fdd0a2",
+    "get_failed": "#3182bd",
     "postcondition_false": "#de2d26",
     "toppled_while_settling": "#fc9272",
     "unreleased_block": "#9e9ac8",
@@ -109,6 +112,8 @@ def failure_kind(row):
         )
     if "still has a guard witness" in reason:
         return "loop_limit"
+    if "No object satisfies get condition" in reason:
+        return "get_failed"
     if status == "unreleased_block" or "unreleased" in reason:
         return "unreleased_block"
     if (
@@ -176,6 +181,8 @@ def load(run):
     ):
         summary = json.loads(path.read_text())
         group = path.parents[1].name
+        if group not in SYNTHESIS_GROUPS:
+            continue
         summary["group"] = group
         summary["task"] = "unstack" if group == "unstack" else "stack"
         attempts[group].append(summary)
@@ -316,6 +323,24 @@ def summarize(data):
                 },
                 failures=dict(failures),
             )
+        supplied = pols.get(("rv_supplied", task))
+        for arm in ("final_v2", "final_v2_wo_demo"):
+            if arm not in entry or not supplied:
+                continue
+            reference = supplied[0]["rows"]
+            same = total = identical = 0
+            for p in pols[(arm, task)]:
+                matches = [
+                    bool(p["rows"][c].get("success"))
+                    == bool(reference[c].get("success"))
+                    for c in cases
+                    if c in p["rows"] and c in reference
+                ]
+                same += sum(matches)
+                total += len(matches)
+                identical += bool(matches) and all(matches)
+            entry[arm]["supplied_agreement"] = same / total if total else None
+            entry[arm]["supplied_identical"] = identical
         summary["tasks"][task] = entry
     for group, rows in data["attempts"].items():
         summary["attempts"][group] = dict(
@@ -365,6 +390,46 @@ def tables(summary, case_counts):
                 f" {pct(e['distinct_success'])} | {pct(e['trained_success'])} |"
                 f" {e['fully_general']}/{e['complete']} | {e['trained_all']}/{e['complete']} |"
             )
+    lines.append("")
+    lines += [
+        "**Agreement with RoboVerify's supplied program** (per-case success equal; trials whose every case agrees)",
+        "",
+        "| Task | final_v2 agreement | final_v2 identical | w/o demo agreement | w/o demo identical |",
+        "| --- | ---: | ---: | ---: | ---: |",
+    ]
+    for task in TASKS:
+        e = summary["tasks"][task]
+        cells = []
+        for arm in ("final_v2", "final_v2_wo_demo"):
+            a = e.get(arm, {})
+            cells += [
+                pct(a.get("supplied_agreement")),
+                f"{a.get('supplied_identical', 0)}/{a.get('complete', 0)}",
+            ]
+        lines.append(f"| {LABELS[task]} | " + " | ".join(cells) + " |")
+    lines.append("")
+    lines += [
+        "**Largest generalizing count** (median over trials; share of trials reaching at least the trained count)",
+        "",
+        "| Task | Trained | final_v2 median | final_v2 ≥ trained | w/o demo median | w/o demo ≥ trained | RoboVerify supplied |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for task in TASKS:
+        e = summary["tasks"][task]
+        cells = []
+        for arm in ("final_v2", "final_v2_wo_demo"):
+            values = sorted(e.get(arm, {}).get("largest", []))
+            cells.append(str(values[len(values) // 2]) if values else "—")
+            cells.append(
+                f"{sum(v >= TRAINED[task] for v in values)}/{len(values)}"
+                if values
+                else "—"
+            )
+        supplied = e.get("rv_supplied", {}).get("largest", [])
+        cells.append(str(supplied[0]) if supplied else "—")
+        lines.append(
+            f"| {LABELS[task]} | {TRAINED[task]} | " + " | ".join(cells) + " |"
+        )
     lines.append("")
     for task in TASKS:
         entry = summary["tasks"][task]
