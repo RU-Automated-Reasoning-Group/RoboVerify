@@ -189,5 +189,30 @@ class DriverConfigurationTests(unittest.TestCase):
         self.assertEqual(asdict(config) | {"max_analysis_steps": None}, asdict(frozen))
 
 
+class FinalReportUsageTests(unittest.TestCase):
+    def test_a_replayed_reply_is_counted_once_with_its_rerun(self):
+        from ..reports import final_report
+
+        with tempfile.TemporaryDirectory() as tmp:
+            usage = {"prompt_tokens": 3, "completion_tokens": 2, "cost": 0.5}
+            original = Path(tmp, "replaced/job-1/call_0001/response.json")
+            original.parent.mkdir(parents=True)
+            original.write_text(json.dumps({"usage": usage}))
+            other = Path(tmp, "replaced/job-2/call_0001/response.json")
+            other.parent.mkdir(parents=True)
+            other.write_text(json.dumps({"usage": usage}))
+            replayed = Path(tmp, "trials/job/call_0001/response.json")
+            replayed.parent.mkdir(parents=True)
+            replayed.write_text(
+                json.dumps({"usage": usage, "replayed_from": str(original)})
+            )
+            sources = final_report.replayed_sources(tmp)
+            self.assertEqual(sources, {str(original)})
+            scored, _ = final_report.provider_usage(tmp)
+            self.assertEqual((scored["calls"], scored["replayed"]), (1, 1))
+            replaced, _ = final_report.provider_usage(tmp, "replaced", sources)
+            self.assertEqual((replaced["calls"], replaced["cost"]), (1, 0.5))
+
+
 if __name__ == "__main__":
     unittest.main()

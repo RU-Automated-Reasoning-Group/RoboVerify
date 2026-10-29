@@ -76,13 +76,16 @@ def attempt_status(attempt):
     return status if status in STATUS_ORDER else "other"
 
 
-def provider_usage(batch_directory, part="trials"):
+def provider_usage(batch_directory, part="trials", skip=()):
     """Totals over the logged responses below ``part`` of one batch (each call
-    counted once); ``replaced`` holds trials requeued after infrastructure
-    failures."""
+    counted once); ``replaced`` holds requeued trials. ``skip`` lists response
+    files to leave out: a rerun's replayed reply is counted with the rerun, so
+    its recorded original is skipped in ``replaced``. ``replayed`` counts the
+    replayed replies (no new provider request)."""
+    skip = {os.path.realpath(p) for p in skip}
     files = {
         os.path.realpath(p) for p in Path(batch_directory, part).rglob("response.json")
-    }
+    } - skip
     total = Counter()
     providers = Counter()
     for path in files:
@@ -90,6 +93,7 @@ def provider_usage(batch_directory, part="trials"):
         usage = raw.get("usage") or {}
         details = usage.get("prompt_tokens_details") or {}
         total["calls"] += 1
+        total["replayed"] += "replayed_from" in raw
         total["prompt"] += usage.get("prompt_tokens") or 0
         total["completion"] += usage.get("completion_tokens") or 0
         total["cached"] += details.get("cached_tokens") or 0
@@ -97,6 +101,15 @@ def provider_usage(batch_directory, part="trials"):
         total["cost"] += usage.get("cost") or 0.0
         providers[raw.get("provider") or "unknown"] += 1
     return dict(total), dict(providers)
+
+
+def replayed_sources(batch_directory):
+    """Recorded responses that a rerun in ``trials`` replayed."""
+    return {
+        json.loads(p.read_text())["replayed_from"]
+        for p in Path(batch_directory, "trials").rglob("response.json")
+        if "replayed_from" in p.read_text()
+    }
 
 
 def summarize(batches):
@@ -134,7 +147,9 @@ def summarize(batches):
         used, served = provider_usage(b["path"])
         usage.update(used)
         providers.update(served)
-        replaced_usage.update(provider_usage(b["path"], "replaced")[0])
+        replaced_usage.update(
+            provider_usage(b["path"], "replaced", replayed_sources(b["path"]))[0]
+        )
         log = Path(b["path"], "requeued.json")
         requeued += json.loads(log.read_text()) if log.exists() else []
     costs = [
@@ -333,17 +348,19 @@ def tables(results):
     )
     out.append("")
     out.append(
-        "Trials requeued after infrastructure failures (rerun with the same seed):"
+        "Trials requeued and rerun with the same seed (calls and cost of the"
+        " replaced attempts, without replies replayed by a rerun):"
     )
     out.append("")
-    out.append("| Task | Interrupted at stop | HTTP 429 | Calls | Cost |")
-    out.append("| --- | ---: | ---: | ---: | ---: |")
+    out.append("| Task | Interrupted at stop | HTTP 429 | Other | Calls | Cost |")
+    out.append("| --- | ---: | ---: | ---: | ---: | ---: |")
     for r in results:
         q, u = r["requeued"], r["replaced_usage"]
+        stopped = sum(v for k, v in q.items() if k.startswith("interrupted"))
+        limited = sum(v for k, v in q.items() if "429" in k)
         out.append(
-            f"| {LABELS[r['task']]} |"
-            f" {sum(v for k, v in q.items() if k.startswith('interrupted'))} |"
-            f" {sum(v for k, v in q.items() if '429' in k)} |"
+            f"| {LABELS[r['task']]} | {stopped} | {limited} |"
+            f" {sum(q.values()) - stopped - limited} |"
             f" {u.get('calls', 0)} | ${u.get('cost', 0):.2f} |"
         )
     return "\n".join(out) + "\n"
