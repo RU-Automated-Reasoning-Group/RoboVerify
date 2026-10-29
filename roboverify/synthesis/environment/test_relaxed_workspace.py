@@ -185,6 +185,18 @@ class RelaxedWorkspaceTests(unittest.TestCase):
         self.assert_reachable(blocks)
         self.assertTrue(np.all(blocks[:, 1] - BASE[1] <= RELAXED_SOURCE_MAX_Y + 1e-6))
 
+    def test_contact_buffers_are_raised_only_when_relaxed(self):
+        from synthesis.environment.relaxed_workspace import RELAXED_CONTACT_BUFFER
+        from synthesis.mcmc.synthesis import make_roboverify_env
+
+        for relaxed, sizes in ((False, (100, 500)), (True, RELAXED_CONTACT_BUFFER)):
+            env = make_roboverify_env(
+                "unstack", 4, relax_boundaries_for_generalization_test=relaxed
+            )
+            self.addCleanup(env.close)
+            model = env.env.sim.model
+            self.assertEqual((model.nconmax, model.njmax), sizes)
+
     def test_default_goal_layout_unchanged_and_relaxed_rejects_far_goals(self):
         from synthesis.mcmc.synthesis import make_roboverify_grid_env
 

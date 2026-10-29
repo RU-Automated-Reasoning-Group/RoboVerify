@@ -14,6 +14,7 @@ from synthesis.environment.cee_us_env.fpp_construction.construction import Fetch
 from synthesis.environment.cee_us_env.robotics import GymRoboticsGroundTruthSupportEnv
 from synthesis.environment.goal_layout import GoalLayout, occupancy
 from synthesis.environment.relaxed_workspace import (
+    RELAXED_CONTACT_BUFFER,
     check_relaxed_goals,
     relaxed_goal_origin_x,
     sample_relaxed_goal_sources,
@@ -80,8 +81,16 @@ class FetchPickAndPlaceConstruction(
         self.sparse = sparse
         self.simple = simple
 
-        FetchBlockConstructionEnv.__init__(self, **kwargs)
-        GymRoboticsGroundTruthSupportEnv.__init__(self, name=name, **kwargs)
+        # Both constructors build the MuJoCo model (the second through the MRO).
+        contact_buffer = (
+            RELAXED_CONTACT_BUFFER if relax_boundaries_for_generalization_test else None
+        )
+        FetchBlockConstructionEnv.__init__(
+            self, contact_buffer=contact_buffer, **kwargs
+        )
+        GymRoboticsGroundTruthSupportEnv.__init__(
+            self, name=name, contact_buffer=contact_buffer, **kwargs
+        )
 
         if self.case in ROBOVERIFY_CASES:
             # table0 is a horizontal plane; its world z is the physical surface,

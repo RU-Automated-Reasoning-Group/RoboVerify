@@ -31,6 +31,7 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
         grid_rows=None,
         grid_cols=None,
         bottom_row_blocks=3,
+        contact_buffer=None,
     ):
         # Different parameters for the construction task:
         #   num_blocks: int (default: 1)
@@ -112,7 +113,16 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
             delete=False,
             suffix=".xml",
         ) as fp:
-            fp.write(generate_xml(self.num_blocks))
+            xml = generate_xml(self.num_blocks)
+            if contact_buffer is not None:
+                # (nconmax, njmax); None keeps MuJoCo's defaults (100, 500).
+                nconmax, njmax = contact_buffer
+                xml = xml.replace(
+                    "<mujoco>",
+                    f'<mujoco>\n    <size nconmax="{nconmax}" njmax="{njmax}"></size>',
+                    1,
+                )
+            fp.write(xml)
             MODEL_XML_PATH = fp.name
 
         self.robot_base_xy = np.array([0.69189994, 0.74409998])

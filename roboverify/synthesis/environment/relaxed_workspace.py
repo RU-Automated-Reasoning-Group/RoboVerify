@@ -1,6 +1,7 @@
 """Opt-in relaxed reset and goal bounds for block-count generalization tests.
 
-`relax_boundaries_for_generalization_test` replaces each task's reset and goal
+`relax_boundaries_for_generalization_test` raises MuJoCo's contact buffers
+(RELAXED_CONTACT_BUFFER) and replaces each task's reset and goal
 workspace with one shared region, measured as reachable by the arm:
 base-relative X >= 0.35 m and XY radius <= 0.80 m. Every 5 cm cell of that
 region was reached by the empty gripper at Z >= 0.64 m on a straight or
@@ -35,6 +36,12 @@ RELAXED_GOAL_CENTER_X = 0.50
 # Grid/Pyramid sources stay on the lower-Y side, as in the default reset.
 RELAXED_SOURCE_MAX_Y = -0.08
 GRIPPER_CLEARANCE = 0.10
+# MuJoCo contact and constraint-row capacity (nconmax, njmax). The defaults
+# (100, 500) overflow at about 20 blocks. A toppling 40-block tower peaked at
+# 306 contacts and 1,230 rows (about 8 and 31 per block), so this leaves a
+# 3x margin. MuJoCo sizes its stack roughly with njmax squared (about 640 MB
+# here, against 2.5 GB at njmax 8000); step time is unchanged.
+RELAXED_CONTACT_BUFFER = (1000, 4000)
 _EPS = 1e-6  # goal layouts are float32
 
 
