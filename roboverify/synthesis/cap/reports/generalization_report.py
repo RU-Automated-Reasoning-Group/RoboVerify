@@ -515,7 +515,7 @@ def figures(data, summary, directory, prefix):
         ("rv_supplied", "RoboVerify supplied program", "--", "x"),
     )
 
-    def curves(key, ylabel, name, title):
+    def curves(key, ylabel, name, title, bands=True):
         fig, axes = plt.subplots(2, 3, figsize=(13, 7), sharey=True)
         for ax, task in zip(axes.flat, TASKS):
             entry = summary["tasks"][task]
@@ -532,7 +532,7 @@ def figures(data, summary, directory, prefix):
                     ys = [table[n]["mean"] for n in ns]
                     lo = [table[n]["ci"][0] for n in ns]
                     hi = [table[n]["ci"][1] for n in ns]
-                    if entry[arm]["complete"] > 1:
+                    if bands and entry[arm]["complete"] > 1:
                         ax.fill_between(
                             ns,
                             np.multiply(lo, 100),
@@ -586,6 +586,13 @@ def figures(data, summary, directory, prefix):
         "mean partial reward (%)",
         "partial_reward",
         "Partial reward against block count",
+    )
+    curves(
+        "by_count",
+        "success rate (%)",
+        "success_rate",
+        "Success rate against block count (task-spec-v2)",
+        bands=False,
     )
 
     # Per-trial success heatmaps: rows are trials, columns block counts.
