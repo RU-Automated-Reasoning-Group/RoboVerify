@@ -57,7 +57,8 @@ what is specific to `synthesis/cap/`.
 
 - Run the final experiment with
   `bash synthesis/cap/run_final.sh --demo on|off --task TASK --model MODEL`
-  from `roboverify/`. It calls
+  from `roboverify/`, after `bash synthesis/cap/collect_demos.sh` for
+  `--demo on`. It calls
   [experiments/revision6_experiment.py](experiments/revision6_experiment.py)
   with `--frozen final_v2` or `--frozen final_v2_wo_demo --max-analysis-steps
   1000000` and no GPU reservations unless `--gpu UUID` is given. Use the module
@@ -107,8 +108,13 @@ what is specific to `synthesis/cap/`.
   ([Revision 7.1](docs/revision_7_1_general_task_spec.md)). Add a new prompt
   package version rather than editing an existing one.
 - **Demonstrations.** The on and off arms must differ only in the
-  demonstration block. The six pinned archives are verified by SHA-256 and are
-  not in git. Never include an evaluation scene among the demonstrations (the
+  demonstration block. The six pinned archives are not in git;
+  `bash synthesis/cap/collect_demos.sh` re-collects them, deterministically,
+  and must run before any demonstrations-on experiment. The loader accepts an
+  archive by its file SHA-256 pin or by the pinned archive's content digest
+  (`demonstrations.CONTENT_PINS`, which excludes only per-trace wall time) and
+  records `pin_match`. Never loosen that check; a new collection that fails it
+  means the simulator or controllers changed. Never include an evaluation scene among the demonstrations (the
   runner rejects such a scene before any request). Report
   `demonstration_tokens` next to the effort tokens (`known_tokens`).
 - **Scenes.** Use the paper's block counts per task, as the frozen `TASKS`

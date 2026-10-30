@@ -418,7 +418,7 @@ Implemented on branch `feature/cap-demonstrations`. The LLM summarization in the
 
 ### 6.6 Data and validation
 
-**Archives.** `synthesis.entry.collect_demos` with the provided groundtruth programs, seeds 1000–1014, at the paper's counts (Stack/Unstack/Reverse 4 blocks, ReStack 5 with a 3-block tower, Grid 3×2, Pyramid 3+2+1). All 15 seeds were valid for every task. The archives are in `demos/cap-revision6/<task>/demonstrations.npz`, with collection reports and logs. They are not committed; v3 pins their SHA-256.
+**Archives.** `synthesis.entry.collect_demos` with the provided groundtruth programs, seeds 1000–1014, at the paper's counts (Stack/Unstack/Reverse 4 blocks, ReStack 5 with a 3-block tower, Grid 3×2, Pyramid 3+2+1). All 15 seeds were valid for every task. The archives are in `demos/cap-revision6/<task>/demonstrations.npz`, with collection reports and logs. They are not committed; v3 pins their SHA-256. Since 2026-10-30, [`collect_demos.sh`](../collect_demos.sh) re-collects the archives pinned by the final configurations. A re-collection reproduces every array and metadata field except the per-trace wall time `elapsed_seconds`, so the loader also accepts the pinned archive's content digest (`demonstrations.CONTENT_PINS`) and records `pin_match`. The rendered demonstration block was checked to be byte-identical for all six tasks.
 
 **Tests.**
 

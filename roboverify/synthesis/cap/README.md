@@ -62,12 +62,22 @@ the command line or in a JSON configuration.
 export OPENROUTER_API_KEY=sk-or-...
 ```
 
-### 3. Demonstration archives (demonstrations on only)
+### 3. Collect the demonstrations (required before `--demo on`)
 
-With demonstrations on, every request starts with 15 recorded expert
-executions per task. The six pinned archives are not in git, and their
-SHA-256 is checked, so a fresh collection does not replace them. Copy these
-files from the authors into the same paths below `roboverify/`:
+**To run with demonstrations on, run this once first.** With demonstrations
+on, every request starts with 15 recorded expert executions per task. These
+archives are not in git, so `run_final.sh --demo on` stops before any model
+call if one is missing. Demonstrations off needs no archive and can skip this
+step.
+
+```bash
+bash synthesis/cap/collect_demos.sh
+```
+
+[collect_demos.sh](collect_demos.sh) runs RoboVerify's groundtruth programs on
+seeds 1000–1014 at the paper's block counts for all six tasks, in parallel
+(about 30 seconds on a many-core machine; `--task TASK` limits it). It needs no
+API key. It checks every archive against its pin before installing it:
 
 | Task | Archive |
 | --- | --- |
@@ -78,18 +88,30 @@ files from the authors into the same paths below `roboverify/`:
 | Grid | `demos/cap-revision6/grid/demonstrations.npz` |
 | Pyramid | `demos/cap-revision6/pyramid/demonstrations.npz` |
 
-The pins are in [config_frozen_v3.py](configs/config_frozen_v3.py) and
-[config_frozen_v4.py](configs/config_frozen_v4.py). Demonstrations off needs no
-archive.
+Collection is deterministic. A re-collected archive equals the original in
+every simulator array and metadata field except the recorded wall time per
+trace, so its file hash differs from the SHA-256 pins in
+[config_frozen_v3.py](configs/config_frozen_v3.py) and
+[config_frozen_v4.py](configs/config_frozen_v4.py). The loader therefore also
+accepts the pinned archive's content digest (`CONTENT_PINS` in
+[demonstrations.py](demonstrations.py)), and each trial records which match
+was used (`pin_match`: `file` or `content`). The demonstration text sent to the
+model is byte-identical in both cases. If an archive fails its pin, for
+example after a simulator or controller change, the script installs nothing
+for that task and exits with an error.
 
 ### 4. Run
 
 One command per experiment. [run_final.sh](run_final.sh) sets the simulator
 environment, chooses the frozen configuration and launches one batch per
-(model, task), all in parallel:
+(model, task), all in parallel. For `--demo on`, run step 3 first.
 
 ```bash
 bash synthesis/cap/run_final.sh --demo on --task stack --model claude-opus-5.5
+```
+
+```bash
+bash synthesis/cap/run_final.sh --demo off --task stack --model claude-opus-5.5
 ```
 
 | Option | Values | Default |
@@ -263,7 +285,7 @@ Configurable shared failure recovery is implemented as `cap-recovery-v1`. Demons
 | Path | Contents |
 | --- | --- |
 | `*.py` (package root) | Shared runtime: task adapter and scoring (`adapter`, `tasks`, `runner`, `runtime`, `recovery`), DSL contract and checker (`contracts`, `checker`, `validation`, `audit`), model access and prompts (`llm`, `prompt_package`, `primitive_prompts`, `primitive_feedback`), batch execution (`batch`, `batch_worker`, `gpu_scheduler`, `request_control`, `deferred_video`), logging and budgets |
-| `run_final.sh` | One-command launcher for the final experiment ([Quick start](#quick-start-run-the-final-experiment)) |
+| `run_final.sh`, `collect_demos.sh` | One-command launcher for the final experiment and collection of its demonstration archives ([Quick start](#quick-start-run-the-final-experiment)) |
 | `cap_google_baseline/`, `cap_method_1/`, `cap_method_2/` | The three methods |
 | `configs/` | Versioned experiment configurations (`config_frozen_v1` to `config_frozen_v7`, then `config_final_v1`, `config_final_v2` and `config_final_v2_wo_demo`; use final_v2 and final_v2_wo_demo for new hosted-model experiments) |
 | `experiments/` | Batch launchers (`python -m synthesis.cap.experiments.<module>`). `revision6_experiment` runs one batch per (model, task) under `config_frozen_v3` by default (`--frozen v6`, `v7`, `final_v1`, `final_v2`, `final_v2_wo_demo` for later versions), local or OpenRouter models, and writes the combined report. `revision9_generalization` replays final programs on the `relaxed_v2` test-case set. The others are the Revision 4.2, 4.3 and 7.2 experiments. |
