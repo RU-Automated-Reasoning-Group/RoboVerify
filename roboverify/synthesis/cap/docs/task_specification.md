@@ -88,7 +88,7 @@ To match the paper's scale, use these task settings ([`RunConfig`](../config.py)
 | --- | ---: | --- | --- |
 | Stack | 4 | — | 3 |
 | Unstack | 4 | — | 3 |
-| Reverse | 4 | — (the reference program supports 2–4 blocks) | 3 |
+| Reverse | 4 | — | 3 |
 | ReStack | 5 | `initial_tower_blocks: 3` (as drawn in Fig. 10d; not stated in the text) | 4 blocks, tower `max(2, n − 1)` |
 | Grid | 6 | `grid_rows`, `grid_cols` with rows × cols = 6 | 3 × 2 |
 | Pyramid | 6 | `bottom_row_blocks: 3` (layers 3, 2, 1) | `bottom_row_blocks: 3` |

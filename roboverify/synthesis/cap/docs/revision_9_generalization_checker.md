@@ -135,7 +135,7 @@
 | Goal-task source capacity | `_roboverify_random_scattered_layout` plus the deterministic fallback inside the source rectangle | `ValueError: Cannot fit N scattered blocks in the goal-task workspace` |
 | Contact buffer | generated XML, `nconmax` 100 | `MujocoException: Pre-allocated contact buffer is full` at about 20 blocks |
 | Arm reach in Z | Fetch kinematics | Physical limit for towers (Section 3.3). Within one 50-step primitive the reachable height is lower still, so that shortfall is `primitive_failed`, a policy/controller failure |
-| Supplied-program design | `examples/reverse.py` accepts 2–4 blocks; the tower examples set their clearance to `N·L + 0.10` above the table reference; `While` defaults to `max_iters=10` | Oracle failures that say nothing about task feasibility |
+| Supplied-program design | `examples/reverse.py` accepted 2–4 blocks until 2026-10-30 (check removed, [report](revision_9_report.md)); the tower examples set their clearance to `N·L + 0.10` above the table reference; `While` defaults to `max_iters=10` | Oracle failures that say nothing about task feasibility |
 
 ### 3.2 Arm reach within one primitive budget (measured)
 

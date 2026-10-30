@@ -27,6 +27,9 @@
   simulation-step budgets scale with N (Revision 9, Section 5.4); 228 of
   68,086 CaP executions (0.3%) exhausted them. The 68,086 CaP executions took
   207 CPU-hours (median 6.7 s), about 2.2 hours on up to 100 workers.
+- **Reverse update (2026-10-30):** the supplied Reverse program's 2–4
+  block check was removed and its 100 cases were rerun; every RoboVerify
+  Reverse number below is from that rerun (Section 5).
 - **Run directory:** `runs/cap-generalization/20261029-full-eval/` (file
   list in Section 8). Code: commits `96c08dc` and `d17817d`.
 
@@ -41,7 +44,7 @@
    | --- | --- | --- | --- |
    | Stack (4) | 92.8% / 26.8% / 3.6% | 98.0% / 41.8% / 3.8% | 100% / 60% / 0% |
    | Unstack (4) | 100% / 81.6% / 1.4% | 87.2% / 70.6% / 35.6% | 100% / 80% / 0% |
-   | Reverse (4) | 97.0% / 66.6% / 18.2% | 99.6% / 67.8% / 5.8% | 100% / 0% / 0% |
+   | Reverse (4) | 97.0% / 66.6% / 18.2% | 99.6% / 67.8% / 5.8% | 100% / 100% / 30% |
    | ReStack (5) | 68.0% / 27.9% / 0.5% | 80.0% / 26.8% / 1.4% | 60% / 0% / 0% |
    | Grid (6) | 100% / 97.7% (8) / 97.4% (10) | 94.8% / 81.3% / 75.1% | 100% / 100% / 100% |
    | Pyramid (6) | 90.0% / 70.0% (10) / 20.0% (15) | 94.2% / 68.0% / 47.8% | 90% / 70% / 20% |
@@ -102,7 +105,7 @@ RoboVerify program is one program (no band).
 | Unstack | 100 | RoboVerify supplied | 1 (1) | 51.0% [51.0%, 51.0%] | 51.0% | 100.0% | 0/1 | 1/1 |
 | Reverse | 100 | final_v2 | 50 (50) | 52.6% [48.9%, 55.9%] | 52.6% | 97.0% | 0/50 | 46/50 |
 | Reverse | 100 | final_v2 w/o demo | 50 (50) | 48.5% [46.4%, 50.5%] | 48.5% | 99.6% | 0/50 | 49/50 |
-| Reverse | 100 | RoboVerify supplied | 1 (1) | 30.0% [30.0%, 30.0%] | 30.0% | 100.0% | 0/1 | 1/1 |
+| Reverse | 100 | RoboVerify supplied | 1 (1) | 62.0% [62.0%, 62.0%] | 62.0% | 100.0% | 0/1 | 1/1 |
 | ReStack | 158 | final_v2 | 50 (50) | 18.6% [16.8%, 20.4%] | 18.6% | 68.0% | 0/50 | 1/50 |
 | ReStack | 158 | final_v2 w/o demo | 50 (50) | 21.4% [19.5%, 23.4%] | 21.4% | 80.0% | 0/50 | 18/50 |
 | ReStack | 158 | RoboVerify supplied | 1 (1) | 10.8% [10.8%, 10.8%] | 10.8% | 60.0% | 0/1 | 0/1 |
@@ -142,7 +145,7 @@ program's cliff at 7 blocks.
 | Unstack | RoboVerify supplied | 51.0% | 49.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | Reverse | final_v2 | 52.6% | 26.1% | 3.6% | 0.7% | 3.0% | 12.7% | 0.0% | 0.0% | 0.0% | 1.3% | 0.0% | 0.0% | 0.0% |
 | Reverse | final_v2 w/o demo | 48.5% | 35.1% | 1.3% | 1.3% | 4.1% | 9.0% | 0.0% | 0.0% | 0.0% | 0.7% | 0.0% | 0.0% | 0.0% |
-| Reverse | RoboVerify supplied | 30.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 70.0% | 0.0% | 0.0% |
+| Reverse | RoboVerify supplied | 62.0% | 13.0% | 5.0% | 0.0% | 0.0% | 20.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | ReStack | final_v2 | 18.6% | 73.6% | 4.1% | 0.6% | 3.1% | 0.0% | 0.0% | 0.0% | 0.0% | 0.1% | 0.0% | 0.0% | 0.0% |
 | ReStack | final_v2 w/o demo | 21.4% | 62.9% | 2.4% | 4.1% | 7.8% | 0.0% | 0.0% | 0.7% | 0.0% | 0.5% | 0.0% | 0.0% | 0.0% |
 | ReStack | RoboVerify supplied | 10.8% | 0.0% | 0.0% | 0.0% | 0.0% | 2.5% | 0.0% | 0.0% | 86.7% | 0.0% | 0.0% | 0.0% | 0.0% |
@@ -180,9 +183,12 @@ program's cliff at 7 blocks.
   budgets.
 - RoboVerify's supplied programs: `loop_limit` (Stack 44%, ReStack 87%; a
   `While` still has a guard witness after its iteration bound, 200 for
-  Stack and the program's own 10 for ReStack's loop 3), `unsupported_count`
-  (Reverse refuses more than 4 blocks by design) and `move_not_converged`
-  (Unstack, the `Y_min` pattern above).
+  Stack and the program's own 10 for ReStack's loop 3) and
+  `move_not_converged` (Unstack, the `Y_min` pattern above; Reverse 13%,
+  from 8 blocks, the growing clearance above). Reverse also ends with
+  `postcondition_false` (20%, 7–10 blocks): in `reverse-n9-s0` the 9-block
+  source tower falls during the first transfer, after which `b0` is the
+  only loop witness and the loop exits after two iterations.
 
 ## 4. Largest generalizing count and partial reward
 
@@ -194,7 +200,7 @@ program's cliff at 7 blocks.
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Stack | 4 | 4 | 32/50 | 4 | 42/50 | 5 |
 | Unstack | 4 | 5 | 50/50 | 3 | 24/50 | 5 |
-| Reverse | 4 | 6 | 46/50 | 5 | 49/50 | 4 |
+| Reverse | 4 | 6 | 46/50 | 5 | 49/50 | 6 |
 | ReStack | 5 | 0 | 0/50 | 0 | 4/50 | 0 |
 | Grid | 6 | 15 | 50/50 | 15 | 44/50 | 15 |
 | Pyramid | 6 | 3 | 0/50 | 6 | 34/50 | 3 |
@@ -264,7 +270,12 @@ and audit. They generalize no better than CaP:
   end in `loop_limit`;
 - Unstack: 100% up to 5, then the `Y_min` parking pattern leaves the reachable
   region (10% at 7, 0–10% beyond);
-- Reverse: the program accepts 2–4 blocks only (0% from 5);
+- Reverse: 100% up to 6 blocks, 90% at 7, 30% at 8, 0% from 9. The
+  program originally refused counts outside 2–4 (`unsupported_count`, 30%
+  overall); on 2026-10-30 that check was removed from
+  `synthesis/examples/reverse.py` and the 100 Reverse cases were rerun
+  (62% overall). The earlier rows are kept in
+  `superseded/reverse-supplied-with-count-check/`;
 - ReStack: 80% at 4, 60% at the trained 5, 0% from 7;
 - Grid: 100% up to 15 cells, 20% at 6 × 4;
 - Pyramid: 100%, 90%, 70%, 20% for k = 2–5.
@@ -293,7 +304,7 @@ and audit. They generalize no better than CaP:
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | final_v2 | 100.0% | 100.0% | 97.0% | 89.2% | 66.6% | 54.0% | 18.2% | 0.6% | 0.0% | 0.0% | 0.0% |
 | final_v2 w/o demo | 100.0% | 100.0% | 99.6% | 89.4% | 67.8% | 22.0% | 5.8% | 0.0% | 0.0% | 0.0% | 0.0% |
-| RoboVerify supplied | 100.0% | 100.0% | 100.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
+| RoboVerify supplied | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% | 90.0% | 30.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 
 **ReStack: success by block count** (mean over policies; cases per count in parentheses)
 
@@ -349,7 +360,10 @@ and audit. They generalize no better than CaP:
   `quarantine_unstack_misrouted/`: six Unstack attempts that were first
   launched into Stack folders by a path error, moved aside and rerun;
 - `revision9_data.json`, `revision9_tables.md`: the report's numbers;
-- `scripts/`: job preparation, the RoboVerify synthesis wrappers and launchers.
+- `scripts/`: job preparation, the RoboVerify synthesis wrappers and launchers;
+- `superseded/reverse-supplied-with-count-check/`: the original Reverse
+  supplied rows and logs (2–4 block check in place);
+  `launch_supplied_reverse_nocheck.log`: the 2026-10-30 rerun.
 
 Reproduce (from `roboverify/`, simulator environment configured):
 

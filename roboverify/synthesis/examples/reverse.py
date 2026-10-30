@@ -20,8 +20,6 @@ DESTINATION_OFFSET = (0.45, -0.15)
 
 
 def build_program(context, *, num_blocks):
-    if num_blocks not in (2, 3, 4):
-        raise ValueError("The Reverse groundtruth program supports 2--4 blocks")
     selected, other, base, current, table = z3.Consts(
         "b_prime n b0 b tbl", context.BoxSort
     )
