@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from dataclasses import asdict, replace
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 
@@ -16,8 +17,10 @@ from synthesis.cfg.reset import restore
 from ..budget import Budget
 from ..config import DemonstrationConfig, ModelConfig, RunConfig
 from ..demonstrations import (
+    CONTENT_PINS,
     SERIALIZATION_VERSION,
     DemonstrationError,
+    archive_content_sha256,
     compact,
     count_tokens,
     event_frames,
@@ -102,6 +105,7 @@ def write_archive(
     status="valid",
     tolerance=0.001,
     bindings=None,
+    elapsed_seconds=None,
 ):
     arrays, rows = {}, []
     for i, (seed, states, actions) in enumerate(traces):
@@ -128,7 +132,12 @@ def write_archive(
                     "task_spec": {"precondition": "SECRET_TASK_SPEC_forall"},
                     "fingerprint": "f1ngerpr1nt5ecret",
                     "source": "SECRET_SOURCE_module",
-                },
+                }
+                | (
+                    {}
+                    if elapsed_seconds is None
+                    else {"elapsed_seconds": elapsed_seconds}
+                ),
             )
         )
     arrays["metadata"] = np.asarray(
@@ -189,6 +198,41 @@ class Fixture(unittest.TestCase):
             save_video=False,
             demonstrations=settings,
         )
+
+
+class ArchivePinTests(Fixture):
+    def write(self, name, elapsed_seconds, seed_offset=0.0):
+        path = self.root / name
+        traces = []
+        for seed, bases in SCENES:
+            states, actions = stack_trajectory(bases, seed)
+            traces.append((seed, states + seed_offset, actions))
+        write_archive(path, traces, elapsed_seconds=elapsed_seconds)
+        return path
+
+    def test_a_recollection_matches_the_pin_by_content_only(self):
+        pinned = self.write("pinned.npz", 1.5)
+        pin = hashlib.sha256(pinned.read_bytes()).hexdigest()
+        recollected = self.write("recollected.npz", 2.5)
+        altered = self.write("altered.npz", 2.5, seed_offset=1e-9)
+        self.assertNotEqual(pin, hashlib.sha256(recollected.read_bytes()).hexdigest())
+        with self.assertRaisesRegex(DemonstrationError, "differs from the pin"):
+            load_demonstrations(
+                self.config(archive=str(recollected), archive_sha256=pin)
+            )
+        content = {pin: archive_content_sha256(pinned)}
+        with mock.patch.dict(CONTENT_PINS, content):
+            for path, match in ((pinned, "file"), (recollected, "content")):
+                _, record = load_demonstrations(
+                    self.config(archive=str(path), archive_sha256=pin)
+                )
+                self.assertEqual(record["pin_match"], match)
+            with self.assertRaisesRegex(DemonstrationError, "differs from the pin"):
+                load_demonstrations(
+                    self.config(archive=str(altered), archive_sha256=pin)
+                )
+        _, record = load_demonstrations(self.config())
+        self.assertIsNone(record["pin_match"])
 
 
 class ConfigTests(unittest.TestCase):

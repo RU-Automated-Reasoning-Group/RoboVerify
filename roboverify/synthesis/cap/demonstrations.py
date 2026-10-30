@@ -36,6 +36,33 @@ HOLD_DISTANCE = 0.03
 SAME_SCENE_DISTANCE = 0.001
 PREDICATE_ORDER = ("ON", "ON_star", "Higher", "Scattered", "ON_star_zero")
 TRACE_ID = re.compile(r"d(0|[1-9][0-9]*)")
+# Collection is deterministic except for each trace's wall time
+# (``elapsed_seconds``), so a re-collected archive (``collect_demos.sh``) has
+# different bytes. A file pin is also satisfied by the content digest of the
+# pinned archive (``archive_content_sha256``): every array and metadata field
+# except that wall time.
+CONTENT_PINS = {
+    # config_frozen_v3: stack, restack, grid, pyramid
+    "ea3c125bd8b446231093874c4a3c4146744717a213035d8c9e5d8afe911518a5": (
+        "7fe79afdad7ce1955d6299276d285df62435f08c68dd4c1283003ed6723f9e93"
+    ),
+    "08e41dc4f663dc725eea6925c76158d166396ec90054b2454d671d18afd3286d": (
+        "80b05ac9309758189c5e7aa586a645a997238791ccde0b43e3da83b63ace6b5f"
+    ),
+    "2b2f308f6c9bad452d0d542ed00b3b954c2a90e648e8b9d26259e59aa09a92c6": (
+        "308c4c91b9c2fb06f9e97dd24501969c4ccc0b4a12179e53f1364f3124138b05"
+    ),
+    "29cbb7360b7fb7c5c85df9448cf1833a97cea900cf0e0561bc8171423dbae8cb": (
+        "485433db5cf882146bc28fccba0a5e36d75c7ccd3e0501a3044268b8944b7029"
+    ),
+    # config_frozen_v4: unstack, reverse (settled collection)
+    "81a19a151af668d498768b740f34868172abaf12b582ddeefa49d89b6637a50b": (
+        "72da30c492f58a23e6672ef2b894bf9749f3e8d01eec56b936f8446f531e77bc"
+    ),
+    "78a389ed9a4a6296ee1f9c0ac3c0ec4cc7f23d9096d9629f9a04a3a8ced7fad5": (
+        "096d740c15f92670b92da858b223c420fbfb374734c0e7b5db36167855ba0c95"
+    ),
+}
 
 
 class DemonstrationError(CapError):
@@ -101,6 +128,34 @@ class Demonstration:
 # ---------------------------------------------------------------- loading
 
 
+def archive_content_sha256(path):
+    """Digest of an archive's arrays and metadata without trace wall times."""
+    import numpy as np
+
+    digest = hashlib.sha256()
+    with np.load(path, allow_pickle=False) as data:
+        meta = json.loads(str(data["metadata"]))
+        for row in meta.get("traces", []):
+            row.get("metadata", {}).pop("elapsed_seconds", None)
+        for name in sorted(data.files):
+            if name == "metadata":
+                continue
+            array = np.ascontiguousarray(data[name])
+            digest.update(json.dumps([name, array.shape, array.dtype.str]).encode())
+            digest.update(array.tobytes())
+    digest.update(json.dumps(meta, sort_keys=True).encode())
+    return digest.hexdigest()
+
+
+def check_archive_pin(path, pin):
+    """``"file"`` or ``"content"``: how ``path`` satisfies ``pin``; raises otherwise."""
+    if sha256_bytes(Path(path).read_bytes()) == pin:
+        return "file"
+    if CONTENT_PINS.get(pin) and archive_content_sha256(path) == CONTENT_PINS[pin]:
+        return "content"
+    raise DemonstrationError("Demonstration archive hash differs from the pin")
+
+
 def _expected_environment(config):
     from .tasks import environment_options
 
@@ -122,8 +177,11 @@ def load_demonstrations(config):
     if path.suffix != ".npz" or not path.is_file():
         raise DemonstrationError(f"Demonstration archive not found: {path}")
     archive_sha256 = sha256_bytes(path.read_bytes())
-    if settings.archive_sha256 and settings.archive_sha256 != archive_sha256:
-        raise DemonstrationError("Demonstration archive hash differs from the pin")
+    pin_match = (
+        check_archive_pin(path, settings.archive_sha256)
+        if settings.archive_sha256
+        else None
+    )
     expected_environment = _expected_environment(config)
     try:
         with np.load(path, allow_pickle=False) as data:
@@ -162,6 +220,7 @@ def load_demonstrations(config):
     return demonstrations, {
         "path": str(path.resolve()),
         "sha256": archive_sha256,
+        "pin_match": pin_match,
         "format": FORMAT,
         "format_version": VERSION,
         "available_trace_ids": available,

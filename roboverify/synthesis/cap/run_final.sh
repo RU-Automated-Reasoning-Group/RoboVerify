@@ -98,8 +98,9 @@ tasks = sys.argv[2::2] or list(frozen.TASKS)
 missing = [frozen.ARCHIVES[t][0] for t in tasks if not Path(frozen.ARCHIVES[t][0]).is_file()]
 if missing:
     sys.exit(
-        "Missing demonstration archives (see synthesis/cap/README.md, Quick start):\n  "
+        "Missing demonstration archives:\n  "
         + "\n  ".join(missing)
+        + "\nRun `bash synthesis/cap/collect_demos.sh` first, or use --demo off."
     )
 PY
 fi
