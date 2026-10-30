@@ -3,10 +3,10 @@
 #
 #   bash synthesis/cap/run_final.sh --demo on --task stack --model claude-opus-5.5
 #
-# Demonstrations on runs config_final_v2 (docs/final_v1_report.md); off runs
-# config_final_v2_wo_demo with its 1,000,000-step analysis budget
-# (docs/final_v2_wo_demo_report.md). Every other setting comes from those frozen
-# configurations. The combined report is written to ROOT/report.md.
+# Both arms run config_final_v3: final v2 (docs/final_v1_report.md,
+# docs/final_v2_wo_demo_report.md) with a 1,000,000-step analysis budget;
+# --demo selects the arm. Every other setting comes from that frozen
+# configuration. The combined report is written to ROOT/report.md.
 set -euo pipefail
 
 usage() {
@@ -53,8 +53,8 @@ done
 
 case "$demo" in
     # A locally collected archive need not match the pin; the run records it.
-    on) frozen=(--frozen final_v2 --accept-unpinned-demonstrations) ;;
-    off) frozen=(--frozen final_v2_wo_demo --max-analysis-steps 1000000) ;;
+    on) frozen=(--frozen final_v3 --demonstrations on --accept-unpinned-demonstrations) ;;
+    off) frozen=(--frozen final_v3 --demonstrations off) ;;
     *) echo "--demo must be on or off" >&2; exit 2 ;;
 esac
 [ ${#models[@]} -gt 0 ] || models=(--model claude-opus-5.5)
@@ -93,7 +93,7 @@ if [ "$demo" = on ]; then
 import sys
 from pathlib import Path
 
-from synthesis.cap.configs import config_final_v2 as frozen
+from synthesis.cap.configs import config_final_v3 as frozen
 
 tasks = sys.argv[2::2] or list(frozen.TASKS)
 missing = [frozen.ARCHIVES[t][0] for t in tasks if not Path(frozen.ARCHIVES[t][0]).is_file()]

@@ -5,7 +5,7 @@
 #
 # Runs RoboVerify's groundtruth programs (synthesis.entry.collect_demos) on
 # seeds 1000-1014 at the paper's block counts and installs each validated
-# archive at the path config_final_v2 expects. Run it once before
+# archive at the path config_final_v3 expects. Run it once before
 # run_final.sh --demo on. On the authors' machine a re-collected archive differs
 # from the original only in recorded wall times and matches the pin's content
 # digest (demonstrations.CONTENT_PINS). Elsewhere the simulation may differ
@@ -69,7 +69,7 @@ pin() {
     "${python[@]}" - "$@" <<'PY'
 import sys
 
-from synthesis.cap.configs import config_final_v2 as frozen
+from synthesis.cap.configs import config_final_v3 as frozen
 from synthesis.cap.demonstrations import DemonstrationError, check_archive_pin
 
 command, task = sys.argv[1:3]

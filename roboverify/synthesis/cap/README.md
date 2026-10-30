@@ -3,10 +3,13 @@
 Code as Policies (CaP) baselines for RoboVerify's block tasks: an LLM writes a
 Python policy against RoboVerify's `Pick`/`Move`/`Release` DSL, the policy runs
 in RoboVerify's MuJoCo Fetch environment, and success is RoboVerify's own task
-specification. The final configuration is Method 2 with failure recovery and
-Claude Opus 5.5. Its results are in the
-[demonstrations-on report](docs/final_v1_report.md) and the
-[demonstrations-off report](docs/final_v2_wo_demo_report.md).
+specification. The final configuration is
+[config_final_v3](configs/config_final_v3.py): Method 2 with failure recovery
+and Claude Opus 5.5, with demonstrations on or off. The reported results were
+run under its predecessors `config_final_v2` and `config_final_v2_wo_demo`
+([demonstrations-on report](docs/final_v1_report.md),
+[demonstrations-off report](docs/final_v2_wo_demo_report.md)); final_v3 differs
+only in its static DSL analysis budget (1,000,000 steps for both arms).
 
 ## Quick start: run the final experiment
 
@@ -125,7 +128,7 @@ bash synthesis/cap/run_final.sh --demo off --task stack --model claude-opus-5.5
 
 | Option | Values | Default |
 | --- | --- | --- |
-| `--demo` | `on`: [config_final_v2](configs/config_final_v2.py); `off`: [config_final_v2_wo_demo](configs/config_final_v2_wo_demo.py) with the 1,000,000-step analysis budget | `on` |
+| `--demo` | demonstrations `on` or `off`; both arms run [config_final_v3](configs/config_final_v3.py) | `on` |
 | `--task` | `stack`, `unstack`, `reverse`, `restack`, `grid`, `pyramid`; repeatable | all six |
 | `--model` | `claude-opus-5.5`, `claude-haiku-5.5`, or any OpenRouter id such as `openai/gpt-6.1-sol`; repeatable | `claude-opus-5.5` |
 | `--trials` | scenes per task, seeds `S` to `S + N - 1` | 5 (the reports use 50) |
@@ -149,7 +152,7 @@ The command calls `synthesis.cap.experiments.revision6_experiment`, whose
 options are listed in its module docstring:
 
 ```bash
-uv run python -m synthesis.cap.experiments.revision6_experiment --root runs/my-run --model claude-opus-5.5 --task stack --frozen final_v2_wo_demo --max-analysis-steps 1000000 --trials 5 --workers 2 --no-gpu-scheduler
+uv run python -m synthesis.cap.experiments.revision6_experiment --root runs/my-run --model claude-opus-5.5 --task stack --frozen final_v3 --demonstrations off --trials 5 --workers 2 --no-gpu-scheduler
 ```
 
 ### 5. Results
@@ -177,7 +180,12 @@ uv run python -m synthesis.cap.reports.final_report ROOT --output ROOT/analysis 
 
 ### 6. Reproduce the reported numbers
 
-Use `--trials 50 --seed-start 0` for all six tasks. The exact commands, the
+Use `--trials 50 --seed-start 0` for all six tasks. The reports were run under
+`config_final_v2` (demonstrations on, default 100,000-step analysis budget) and
+`config_final_v2_wo_demo` (off, 1,000,000 steps); `config_final_v3` gives both
+arms 1,000,000 steps. In those runs only ReStack seed 3 without demonstrations
+needed more than 100,000 steps. To repeat a report exactly, call
+`revision6_experiment` with its `--frozen` version. The exact commands, the
 supplement batch (seed 50 replaces seed 39, which matches a demonstration) and
 the report invocations are in
 [final_v1_report.md, Section 8](docs/final_v1_report.md#8-reproduction) and
@@ -280,6 +288,7 @@ methods. Baseline modes are prompt-only; method-1 modes are checked:
 - [Revision 7.5: provider prompt caching (`config_final_v2`) — implemented](docs/revision_7_5_prompt_cache.md).
 - [Final results: `final_v1` prompts, Opus 5.5, 50 trials per task (run under `config_final_v2`)](docs/final_v1_report.md).
 - [Final results without demonstrations: `final_v2_wo_demo`, Opus 5.5, 50 trials per task](docs/final_v2_wo_demo_report.md).
+- `config_final_v3`: final_v2 for both arms with a 1,000,000-step static analysis budget; the current final configuration.
 - [Revision 8: verifying CaP-generated programs with RoboVerify — plan, not implemented](docs/revision_8_verification.md).
 - [Revision 9: block-count generalization checker — implemented](docs/revision_9_generalization_checker.md); [report](docs/revision_9_report.md).
 
@@ -296,8 +305,8 @@ Configurable shared failure recovery is implemented as `cap-recovery-v1`. Demons
 | `*.py` (package root) | Shared runtime: task adapter and scoring (`adapter`, `tasks`, `runner`, `runtime`, `recovery`), DSL contract and checker (`contracts`, `checker`, `validation`, `audit`), model access and prompts (`llm`, `prompt_package`, `primitive_prompts`, `primitive_feedback`), batch execution (`batch`, `batch_worker`, `gpu_scheduler`, `request_control`, `deferred_video`), logging and budgets |
 | `run_final.sh`, `collect_demos.sh` | One-command launcher for the final experiment and collection of its demonstration archives ([Quick start](#quick-start-run-the-final-experiment)) |
 | `cap_google_baseline/`, `cap_method_1/`, `cap_method_2/` | The three methods |
-| `configs/` | Versioned experiment configurations (`config_frozen_v1` to `config_frozen_v7`, then `config_final_v1`, `config_final_v2` and `config_final_v2_wo_demo`; use final_v2 and final_v2_wo_demo for new hosted-model experiments) |
-| `experiments/` | Batch launchers (`python -m synthesis.cap.experiments.<module>`). `revision6_experiment` runs one batch per (model, task) under `config_frozen_v3` by default (`--frozen v6`, `v7`, `final_v1`, `final_v2`, `final_v2_wo_demo` for later versions), local or OpenRouter models, and writes the combined report. `revision9_generalization` replays final programs on the `relaxed_v2` test-case set. The others are the Revision 4.2, 4.3 and 7.2 experiments. |
+| `configs/` | Versioned experiment configurations (`config_frozen_v1` to `config_frozen_v7`, then `config_final_v1`, `config_final_v2`, `config_final_v2_wo_demo` and `config_final_v3`; use final_v3 for new hosted-model experiments, with demonstrations on or off) |
+| `experiments/` | Batch launchers (`python -m synthesis.cap.experiments.<module>`). `revision6_experiment` runs one batch per (model, task) under `config_frozen_v3` by default (`--frozen v6`, `v7`, `final_v1`, `final_v2`, `final_v2_wo_demo`, `final_v3` for later versions), local or OpenRouter models, and writes the combined report. `revision9_generalization` replays final programs on the `relaxed_v2` test-case set. The others are the Revision 4.2, 4.3 and 7.2 experiments. |
 | `generalization/` | Revision 9: program extraction, 50-step reach feasibility and the versioned test-case set `testsets/relaxed_v2.json` |
 | `reports/` | Tables, figures and analyses of finished batches (`python -m synthesis.cap.reports.<module>`). Each batch writes its own `report.md`; `batch_set_report ROOT` combines every batch below `ROOT` into `ROOT/report.md`. |
 | `serving/` | vLLM-side code (reasoning-termination guard) |

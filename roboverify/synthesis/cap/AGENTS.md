@@ -34,16 +34,20 @@ what is specific to `synthesis/cap/`.
 
 ## Current state (2026-10-30)
 
-- **Final configurations.** [config_final_v2](configs/config_final_v2.py)
-  (demonstrations on) and [config_final_v2_wo_demo](configs/config_final_v2_wo_demo.py)
-  (off; nothing else differs). Both use `config_final_v1`'s prompts byte for
-  byte with provider prompt caching: Claude Opus 5.5 (or Haiku 5.5) on
+- **Final configuration.** [config_final_v3](configs/config_final_v3.py),
+  one version for both arms (`configuration(task, demonstrations=False)` for
+  off). It is [config_final_v2](configs/config_final_v2.py) (on) and
+  [config_final_v2_wo_demo](configs/config_final_v2_wo_demo.py) (off) with the
+  static DSL analysis budget `max_analysis_steps` raised to 1,000,000 for both.
+  It uses `config_final_v1`'s prompts byte for byte with provider prompt
+  caching: Claude Opus 5.5 (or Haiku 5.5) on
   OpenRouter, reasoning effort medium, `cap_method_2`, `dsl_only`, `typed_v5`,
   primitive prompt `primitive-prompt-v2`, recovery on (4 rounds, feedback
   profile `full`, RDP keyframes), block counts Stack/Unstack/Reverse 4,
   ReStack 5, Grid 2 × 3, Pyramid 3-2-1.
-- **Final results.** 300/300 trials succeed in both arms (50 per task, Opus
-  5.5); demonstrations raise round-0 success on most tasks. See the
+- **Final results.** Run under final_v2 / final_v2_wo_demo: 300/300 trials
+  succeed in both arms (50 per task, Opus 5.5); demonstrations raise round-0
+  success on most tasks. No final_v3 run exists yet. See the
   [demonstrations-on](docs/final_v1_report.md) and
   [demonstrations-off](docs/final_v2_wo_demo_report.md) reports.
 - **Generalization (Revision 9, implemented).** The final programs replayed on
@@ -60,8 +64,7 @@ what is specific to `synthesis/cap/`.
   from `roboverify/`, after `bash synthesis/cap/collect_demos.sh` for
   `--demo on`. It calls
   [experiments/revision6_experiment.py](experiments/revision6_experiment.py)
-  with `--frozen final_v2` or `--frozen final_v2_wo_demo --max-analysis-steps
-  1000000` and no GPU reservations unless `--gpu UUID` is given. Use the module
+  with `--frozen final_v3 --demonstrations on|off` and no GPU reservations unless `--gpu UUID` is given. Use the module
   directly for other frozen versions or this host's GPU allowlist (its default
   without `--gpu`/`--no-gpu-scheduler`).
 - Read results through `ROOT/report.md`, `<model>/<task>/summary.json` and the
@@ -86,8 +89,8 @@ what is specific to `synthesis/cap/`.
   (`success`, `settled_environment_success`) only as diagnostics. Score
   RoboVerify executions in a comparison with the same criterion
   ([settled-success notes](../cfg/docs/settled_postcondition.md)).
-- **Frozen configurations.** Build new experiments from `config_final_v2` /
-  `config_final_v2_wo_demo` via `configuration(task, seed=...)`, which returns
+- **Frozen configurations.** Build new experiments from `config_final_v3`
+  via `configuration(task, demonstrations, seed=...)`, which returns
   the run config, model config and instruction; do not restate its values.
   Never edit a frozen version (`config_frozen_v1`–`v7`, `config_final_*`).
   Change the configuration only when a task fails because the CaP interface

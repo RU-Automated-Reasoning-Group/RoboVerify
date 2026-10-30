@@ -16,7 +16,8 @@ seeds under separate roots, ``--frozen v7`` the hosted-model
 configuration ``config_final_v1``: v7 with the final release check (Revision 7.4);
 ``--frozen final_v2`` adds provider prompt caching (Revision 7.5), and
 ``--frozen final_v2_wo_demo`` is final v2 without demonstrations (its default;
-``--demonstrations on`` is rejected). The local model uses v3's model config unchanged.
+``--demonstrations on`` is rejected). ``--frozen final_v3`` is final v2 with a
+1,000,000-step analysis budget, for both arms (``--demonstrations on|off``). The local model uses v3's model config unchanged.
 Hosted OpenRouter models replace only the endpoint, the model name and the
 reasoning option (OpenRouter's ``reasoning.effort`` in place of vLLM's chat
 template switch), and measure the demonstration block with the provider's
@@ -47,6 +48,7 @@ from ..configs import (
     config_final_v1,
     config_final_v2,
     config_final_v2_wo_demo,
+    config_final_v3,
     config_frozen_v3,
     config_frozen_v6,
     config_frozen_v7,
@@ -79,6 +81,7 @@ FROZEN = {
     "final_v1": config_final_v1,
     "final_v2": config_final_v2,
     "final_v2_wo_demo": config_final_v2_wo_demo,
+    "final_v3": config_final_v3,
 }
 EXPERIMENTS = {
     "v3": "revision6_frozen_v3_demonstrations",
@@ -87,6 +90,7 @@ EXPERIMENTS = {
     "final_v1": "final_v1",
     "final_v2": "final_v2",
     "final_v2_wo_demo": "final_v2_wo_demo",
+    "final_v3": "final_v3",
 }
 TASKS = tuple(config_frozen_v3.TASKS)
 
