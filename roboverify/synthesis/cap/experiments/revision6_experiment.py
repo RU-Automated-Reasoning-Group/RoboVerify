@@ -22,6 +22,9 @@ reasoning option (OpenRouter's ``reasoning.effort`` in place of vLLM's chat
 template switch), and measure the demonstration block with the provider's
 prompt-token counts (``provider_usage``), since they have no local tokenizer.
 Credentials are read from ``VLLM_API_KEY`` / ``OPENROUTER_API_KEY`` only.
+``--model`` also accepts any OpenRouter model id (``provider/name``), configured
+like the listed hosted models. ``--gpu UUID`` (repeatable) replaces this host's
+GPU allowlist; ``--no-gpu-scheduler`` runs workers without GPU reservations.
 ``--max-analysis-steps N`` sets the static DSL analysis work budget
 (``RunConfig.max_analysis_steps``; default: the checker's 100,000) and records it
 as an override. ``--report-only`` rewrites the combined report from existing batches.
@@ -80,6 +83,17 @@ EXPERIMENTS = {
 TASKS = tuple(config_frozen_v3.TASKS)
 
 
+def model_settings(label):
+    """Model settings for a listed label or an OpenRouter id (``provider/name``)."""
+    if label in MODELS:
+        return MODELS[label]
+    if "/" in label:
+        return OPENROUTER | {"model": label}
+    raise ValueError(
+        f"Unknown model {label!r}: use one of {sorted(MODELS)} or an OpenRouter id"
+    )
+
+
 def configuration(
     task,
     label,
@@ -96,10 +110,10 @@ def configuration(
     if max_analysis_steps is not None:
         config = replace(config, max_analysis_steps=max_analysis_steps)
         overrides["max_analysis_steps"] = max_analysis_steps
-    if MODELS[label] is not None:
+    if model_settings(label) is not None:
         # Record only what differs from the frozen version (v7 is hosted). A
         # version that lists the model keeps its own routing and cache settings.
-        settings = getattr(frozen, "MODELS", {}).get(label, MODELS[label])
+        settings = getattr(frozen, "MODELS", {}).get(label, model_settings(label))
         hosted = frozen.model_config(**settings)
         if hosted != model:
             model = hosted
@@ -143,6 +157,7 @@ def create(
     demonstrations,
     frozen,
     max_analysis_steps=None,
+    gpus=GPU_UUIDS,
 ):
     config, model, instruction, overrides = configuration(
         task,
@@ -173,15 +188,19 @@ def create(
         trials=trials,
         max_workers=workers,
         schedule_seed=6000 + seed_start,
-        gpu_config=GPUConfig(
-            GPU_UUIDS,
-            "/tmp/roboverify-cap-gpu-reservations",
-            max_workers_per_gpu=48,
-            min_free_memory_mb=2048,
-            worker_memory_mb=128,
-            gpu_poll_interval_seconds=2,
-            gpu_sample_window_seconds=10,
-            admission_timeout_seconds=60,
+        gpu_config=(
+            GPUConfig(
+                list(gpus),
+                "/tmp/roboverify-cap-gpu-reservations",
+                max_workers_per_gpu=48,
+                min_free_memory_mb=2048,
+                worker_memory_mb=128,
+                gpu_poll_interval_seconds=2,
+                gpu_sample_window_seconds=10,
+                admission_timeout_seconds=60,
+            )
+            if gpus
+            else None
         ),
         transport_control={
             "state_path": str(directory / "request_gate.json"),
@@ -210,7 +229,7 @@ def create(
             "scene_seeds": [seed_start, seed_start + trials - 1],
             "task_settings": frozen.TASKS[task],
             "serving": serving_record(model, frozen),
-            "worker_gpus": GPU_UUIDS,
+            "worker_gpus": list(gpus or []),
             "request_limit": request_limit,
             "git_sha": subprocess.check_output(
                 ["git", "rev-parse", "HEAD"], text=True
@@ -238,7 +257,11 @@ def run_batch(directory, task, label, **settings):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--root", type=Path, required=True)
-    parser.add_argument("--model", action="append", choices=sorted(MODELS))
+    parser.add_argument(
+        "--model",
+        action="append",
+        help=f"one of {sorted(MODELS)} or an OpenRouter model id (provider/name)",
+    )
     parser.add_argument("--task", action="append", choices=TASKS)
     parser.add_argument("--trials", type=int, default=5)
     parser.add_argument("--seed-start", type=int, default=0)
@@ -253,6 +276,18 @@ def main():
         "--max-analysis-steps",
         type=int,
         help="DSL analysis work budget (default: the checker's 100,000)",
+    )
+    gpu = parser.add_mutually_exclusive_group()
+    gpu.add_argument(
+        "--gpu",
+        action="append",
+        metavar="UUID",
+        help="allowed GPU UUID, repeatable (default: this host's allowlist)",
+    )
+    gpu.add_argument(
+        "--no-gpu-scheduler",
+        action="store_true",
+        help="run workers without GPU reservations",
     )
     parser.add_argument("--report-only", action="store_true")
     parser.add_argument("--title", default="Revision 6 demonstrations")
@@ -272,7 +307,13 @@ def main():
         demonstrations=args.demonstrations == "on",
         frozen=args.frozen,
         max_analysis_steps=args.max_analysis_steps,
+        gpus=[] if args.no_gpu_scheduler else args.gpu or GPU_UUIDS,
     )
+    for label in args.model or []:
+        try:
+            model_settings(label)
+        except ValueError as error:
+            parser.error(str(error))
     if args.batch:
         label, task = args.batch
         summary = run_batch(root / label / task, task, label, **settings)
@@ -293,7 +334,11 @@ def main():
             TASKS
         )
         for label in models:
-            env = "VLLM_API_KEY" if MODELS[label] is None else OPENROUTER["api_key_env"]
+            env = (
+                "VLLM_API_KEY"
+                if model_settings(label) is None
+                else OPENROUTER["api_key_env"]
+            )
             if not os.environ.get(env):
                 parser.error(f"{label} needs the {env} environment variable")
         root.mkdir(parents=True, exist_ok=True)
@@ -323,6 +368,10 @@ def main():
                 ]
                 if args.max_analysis_steps is not None:
                     command += ["--max-analysis-steps", str(args.max_analysis_steps)]
+                if args.no_gpu_scheduler:
+                    command += ["--no-gpu-scheduler"]
+                for uuid in args.gpu or []:
+                    command += ["--gpu", uuid]
                 processes.append(
                     (
                         label,

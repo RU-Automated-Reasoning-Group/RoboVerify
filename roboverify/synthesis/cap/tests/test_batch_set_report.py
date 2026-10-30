@@ -188,6 +188,44 @@ class DriverConfigurationTests(unittest.TestCase):
         self.assertEqual(overrides["max_analysis_steps"], 1_000_000)
         self.assertEqual(asdict(config) | {"max_analysis_steps": None}, asdict(frozen))
 
+    def test_any_openrouter_id_is_a_hosted_model_override(self):
+        frozen, _, _ = experiment.FROZEN["final_v2_wo_demo"].configuration(
+            "stack", seed=0
+        )
+        config, model, _, overrides = experiment.configuration(
+            "stack",
+            "openai/gpt-6.1-sol",
+            demonstrations=False,
+            frozen="final_v2_wo_demo",
+        )
+        self.assertEqual(config, frozen)
+        self.assertEqual(
+            (model.provider, model.model), ("openrouter", "openai/gpt-6.1-sol")
+        )
+        self.assertEqual(model.extra_body, {"reasoning": {"effort": "medium"}})
+        self.assertEqual(overrides["model_config"]["model"], "openai/gpt-6.1-sol")
+        with self.assertRaisesRegex(ValueError, "OpenRouter id"):
+            experiment.model_settings("gpt")
+
+    def test_a_batch_without_gpus_has_no_gpu_scheduler(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / "batch"
+            experiment.create(
+                directory,
+                "stack",
+                "claude-opus-5.5",
+                trials=1,
+                seed_start=0,
+                workers=1,
+                demonstrations=False,
+                frozen="final_v2_wo_demo",
+                gpus=[],
+            )
+            manifest = json.loads((directory / "manifest.json").read_text())
+            plan = json.loads((directory / "comparison_plan.json").read_text())
+        self.assertIsNone(manifest["gpu_config"])
+        self.assertEqual(plan["worker_gpus"], [])
+
 
 class FinalReportUsageTests(unittest.TestCase):
     def test_a_replayed_reply_is_counted_once_with_its_rerun(self):
