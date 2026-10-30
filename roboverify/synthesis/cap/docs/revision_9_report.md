@@ -71,7 +71,9 @@
 5. **RoboVerify synthesized no program** (Section 5). All 50 Stack syntheses
    (`synthesize_cfg --mode full --quotient`, default budget, 29–108 min each)
    ended `budget_exhausted` (45) or `no_separator` (5) with unresolved CFG
-   regions; all 50 Unstack syntheses stopped at the 60-second Unstack limit.
+   regions. Four further Stack runs with four times the search budget
+   (5.1–7.1 h each) stopped the same way. All 50 Unstack syntheses stopped
+   at the 60-second Unstack limit.
    Reverse, ReStack, Grid and Pyramid have no RoboVerify synthesis
    (README task table). The RoboVerify column is therefore the supplied,
    hand-written programs; only Stack's is formally verified.
@@ -230,15 +232,24 @@ verification configuration of the supplied Stack proof
 | Group | Attempts | Statuses | With a program | verified_model | Median synthesis wall (s) |
 | --- | ---: | --- | ---: | ---: | ---: |
 | stack | 50 | budget_exhausted 45, no_separator 5 | 0 | 0 | 3508 |
+| stack_big | 4 | budget_exhausted 4 | 0 | 0 | 20899 |
 | unstack | 50 | budget_exhausted 29, killed_after_120s 21 | 0 | 0 | 60 |
 
 - Stack: in the inspected runs the straight-line search ended each block
   with `PostScore` 0 (no candidate in the near-best pool reaches the
   postcondition) and refined it; every run stopped with unresolved CFG
   regions (`Cannot lower an unresolved region`), so no executable program
-  existed to evaluate. Four extra runs with four times the search budget
-  (`--iterations 80 --cem-iterations 4 --cem-samples 16 --refinements 10`)
-  were still running when this report was written (Section 7).
+  existed to evaluate.
+- Stack, larger budget (`stack_big`, demonstrations of runs 0–3): four runs
+  with four times the search budget (`--iterations 80 --cem-iterations 4
+  --cem-samples 16 --refinements 10`) took 5.1–7.1 h and ended exactly as
+  the default runs did. Each searched three blocks (v0, v0.0, v0.0.0), all
+  with `PostScore` 0; the first two refinements found separators and the
+  third ended `budget_exhausted`, after 2 of the 10 allowed refinements.
+  Most default-budget runs stop at the same third refinement. The stop is
+  the predicate enumerator's own bound (`synthesis/predicates`, 5 s by
+  default via `--predicate-seconds`), which these options do not change; the
+  refinement limit is not reached.
 - Unstack: the 60-second Unstack limit ends synthesis during the first
   search block. In 21 runs `synthesize_cfg`'s own alarm did not stop the
   process, and the outer 120-second guard ended it.
@@ -318,9 +329,10 @@ and audit. They generalize no better than CaP:
   resample trials and do not capture case-to-case variation.
 - **Partial reward** depends on whether the executor stops at the first
   unconverged primitive (CaP) or continues (RoboVerify).
-- **Pending:** the four larger-budget Stack syntheses (`stack_big/`, 8-hour
-  cap). If one returns a program, its replay on the Stack cases is written to
-  `results/roboverify/stack_big/` and this report is regenerated.
+- **RoboVerify synthesis budget.** Only the default budget and one
+  four-times-larger search budget were tried (Section 5). The predicate
+  enumerator bound was left at its default, so this report does not show
+  that Stack synthesis fails for every budget.
 
 ## 8. Files
 
