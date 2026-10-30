@@ -1,10 +1,12 @@
 """Combined report over several CaP batches, and the Revision 6 driver's configs."""
 
+import hashlib
 import json
 import tempfile
 import unittest
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
+from unittest import mock
 
 from ..experiments import revision6_experiment as experiment
 from ..reports.batch_set_report import find_batches, write
@@ -206,6 +208,39 @@ class DriverConfigurationTests(unittest.TestCase):
         self.assertEqual(overrides["model_config"]["model"], "openai/gpt-6.1-sol")
         with self.assertRaisesRegex(ValueError, "OpenRouter id"):
             experiment.model_settings("gpt")
+
+    def test_an_unpinned_archive_is_used_only_when_accepted_and_recorded(self):
+        from .test_demonstrations import SCENES, stack_trajectory, write_archive
+
+        frozen = experiment.FROZEN["final_v2"]
+        pin = frozen.ARCHIVES["stack"][1]
+        original = frozen.configuration
+
+        def local_archive(task, demonstrations=True, **settings):
+            config, model, instruction = original(task, demonstrations, **settings)
+            config.demonstrations = replace(config.demonstrations, archive=str(local))
+            return config, model, instruction
+
+        with tempfile.TemporaryDirectory() as tmp:
+            local = Path(tmp) / "demonstrations.npz"
+            write_archive(local, [(1000, *stack_trajectory(SCENES[0][1], 1000))])
+            used = hashlib.sha256(local.read_bytes()).hexdigest()
+            with mock.patch.object(frozen, "configuration", local_archive):
+                strict, _, _, strict_overrides = experiment.configuration(
+                    "stack", "claude-opus-5.5", frozen="final_v2"
+                )
+                lenient, _, _, overrides = experiment.configuration(
+                    "stack",
+                    "claude-opus-5.5",
+                    frozen="final_v2",
+                    accept_unpinned_demonstrations=True,
+                )
+        self.assertEqual(strict.demonstrations.archive_sha256, pin)
+        self.assertNotIn("demonstrations.archive_sha256", strict_overrides)
+        self.assertIsNone(lenient.demonstrations.archive_sha256)
+        self.assertEqual(
+            overrides["demonstrations.archive_sha256"], {"pinned": pin, "used": used}
+        )
 
     def test_a_batch_without_gpus_has_no_gpu_scheduler(self):
         with tempfile.TemporaryDirectory() as tmp:

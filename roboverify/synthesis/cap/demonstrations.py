@@ -151,8 +151,12 @@ def check_archive_pin(path, pin):
     """``"file"`` or ``"content"``: how ``path`` satisfies ``pin``; raises otherwise."""
     if sha256_bytes(Path(path).read_bytes()) == pin:
         return "file"
-    if CONTENT_PINS.get(pin) and archive_content_sha256(path) == CONTENT_PINS[pin]:
-        return "content"
+    if CONTENT_PINS.get(pin):
+        try:
+            if archive_content_sha256(path) == CONTENT_PINS[pin]:
+                return "content"
+        except (KeyError, TypeError, ValueError, OSError):
+            pass  # unreadable: reported as a mismatch, rejected by the loader
     raise DemonstrationError("Demonstration archive hash differs from the pin")
 
 

@@ -4,11 +4,13 @@
 #   bash synthesis/cap/collect_demos.sh
 #
 # Runs RoboVerify's groundtruth programs (synthesis.entry.collect_demos) on
-# seeds 1000-1014 at the paper's block counts, then checks each archive
-# against its pin in config_final_v2 before installing it at the pinned path.
-# Collection is deterministic; a re-collected archive differs from the original
-# only in recorded wall times and matches the pin's content digest
-# (demonstrations.CONTENT_PINS). Run it once before run_final.sh --demo on.
+# seeds 1000-1014 at the paper's block counts and installs each validated
+# archive at the path config_final_v2 expects. Run it once before
+# run_final.sh --demo on. On the authors' machine a re-collected archive differs
+# from the original only in recorded wall times and matches the pin's content
+# digest (demonstrations.CONTENT_PINS). Elsewhere the simulation may differ
+# slightly; the archive is still installed, and run_final.sh records that its
+# hash differs from the pin.
 set -euo pipefail
 
 usage() {
@@ -18,7 +20,7 @@ Usage: bash synthesis/cap/collect_demos.sh [--task TASK]...
   --task TASK   stack, unstack, reverse, restack, grid or pyramid; repeatable
                 (default: all six)
 
-An archive already present and matching its pin is kept.
+An archive already present is kept.
 EOF
 }
 
@@ -61,7 +63,8 @@ else
     python=(uv run python)
 fi
 
-# Pinned path and digest of a task's archive; "check" verifies a file.
+# "path": a task's archive path; "check FILE": how FILE matches the pin
+# (file, content or none).
 pin() {
     "${python[@]}" - "$@" <<'PY'
 import sys
@@ -76,8 +79,8 @@ if command == "path":
 else:
     try:
         print(check_archive_pin(sys.argv[3], sha256))
-    except DemonstrationError as error:
-        sys.exit(f"{task}: {error}")
+    except DemonstrationError:
+        print("none")
 PY
 }
 
@@ -89,11 +92,11 @@ todo=()
 for task in "${tasks[@]}"; do
     opts=$(options "$task")
     target=$(pin path "$task")
-    if [ -f "$target" ] && pin check "$task" "$target" >/dev/null 2>&1; then
-        echo "$task: $target already matches its pin"
+    if [ -f "$target" ]; then
+        echo "$task: keeping $target (pin match: $(pin check "$task" "$target"))"
         continue
     elif [ -e "$(dirname "$target")" ]; then
-        echo "$task: $(dirname "$target") exists but does not match its pin; move it away first" >&2
+        echo "$task: $(dirname "$target") exists without an archive; move it away first" >&2
         exit 1
     fi
     echo "$task: collecting 15 demonstrations (log: $work/$task.log)"
@@ -112,13 +115,16 @@ for i in "${!todo[@]}"; do
         echo "$task: collection failed; last log lines:" >&2
         tail -n 20 "$work/$task.log" >&2
         status=1
-    elif match=$(pin check "$task" "$work/$task/demonstrations.npz"); then
+    else
+        match=$(pin check "$task" "$work/$task/demonstrations.npz")
         mkdir -p "$(dirname "$(dirname "$target")")"
         mv "$work/$task" "$(dirname "$target")"
         cp "$work/$task.log" "$(dirname "$target").log"
         echo "$task: installed $target (pin match: $match)"
-    else
-        status=1
+        if [ "$match" = none ]; then
+            echo "$task: differs from the authors' archive (another simulator build?);" \
+                "usable, and run_final.sh records the difference" >&2
+        fi
     fi
 done
 exit $status

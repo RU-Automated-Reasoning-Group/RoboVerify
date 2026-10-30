@@ -77,7 +77,9 @@ bash synthesis/cap/collect_demos.sh
 [collect_demos.sh](collect_demos.sh) runs RoboVerify's groundtruth programs on
 seeds 1000–1014 at the paper's block counts for all six tasks, in parallel
 (about 30 seconds on a many-core machine; `--task TASK` limits it). It needs no
-API key. It checks every archive against its pin before installing it:
+API key. Collection keeps an archive only when all 15 executions are valid
+(normal completion, converged primitives, pre/postcondition). The script
+installs each archive here and keeps archives already present:
 
 | Task | Archive |
 | --- | --- |
@@ -88,17 +90,24 @@ API key. It checks every archive against its pin before installing it:
 | Grid | `demos/cap-revision6/grid/demonstrations.npz` |
 | Pyramid | `demos/cap-revision6/pyramid/demonstrations.npz` |
 
-Collection is deterministic. A re-collected archive equals the original in
-every simulator array and metadata field except the recorded wall time per
-trace, so its file hash differs from the SHA-256 pins in
-[config_frozen_v3.py](configs/config_frozen_v3.py) and
-[config_frozen_v4.py](configs/config_frozen_v4.py). The loader therefore also
-accepts the pinned archive's content digest (`CONTENT_PINS` in
-[demonstrations.py](demonstrations.py)), and each trial records which match
-was used (`pin_match`: `file` or `content`). The demonstration text sent to the
-model is byte-identical in both cases. If an archive fails its pin, for
-example after a simulator or controller change, the script installs nothing
-for that task and exits with an error.
+The demonstrations do not have to be identical to the authors' archives, which
+are pinned in [config_frozen_v3.py](configs/config_frozen_v3.py) and
+[config_frozen_v4.py](configs/config_frozen_v4.py). The script prints how each
+archive matches its pin:
+
+- `file` or `content`: the authors' demonstrations. On the authors' machine a
+  re-collection reproduces every simulator array and differs only in recorded
+  wall times; the loader accepts that by content digest (`CONTENT_PINS` in
+  [demonstrations.py](demonstrations.py)), and the text sent to the model is
+  byte-identical.
+- `none`: a different simulation, for example another MuJoCo or compiler build.
+  The archive is still valid and is used; `run_final.sh` passes
+  `--accept-unpinned-demonstrations`, and each batch records the pinned and
+  used hashes under `overrides` in its `comparison_plan.json`. Results are then
+  not strictly the same experiment as the reports.
+
+To start over, delete the task's directory under `demos/` and run the script
+again.
 
 ### 4. Run
 

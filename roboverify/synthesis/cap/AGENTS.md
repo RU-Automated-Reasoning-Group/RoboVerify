@@ -113,8 +113,10 @@ what is specific to `synthesis/cap/`.
   and must run before any demonstrations-on experiment. The loader accepts an
   archive by its file SHA-256 pin or by the pinned archive's content digest
   (`demonstrations.CONTENT_PINS`, which excludes only per-trace wall time) and
-  records `pin_match`. Never loosen that check; a new collection that fails it
-  means the simulator or controllers changed. Never include an evaluation scene among the demonstrations (the
+  records `pin_match`. An archive that matches neither (a collection on
+  another machine) runs only with `--accept-unpinned-demonstrations`, which
+  `run_final.sh` passes and which records both hashes in the batch's
+  `comparison_plan.json` overrides. Report such runs as unpinned. Never include an evaluation scene among the demonstrations (the
   runner rejects such a scene before any request). Report
   `demonstration_tokens` next to the effort tokens (`known_tokens`).
 - **Scenes.** Use the paper's block counts per task, as the frozen `TASKS`

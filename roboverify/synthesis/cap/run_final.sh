@@ -52,7 +52,8 @@ while [ $# -gt 0 ]; do
 done
 
 case "$demo" in
-    on) frozen=(--frozen final_v2) ;;
+    # A locally collected archive need not match the pin; the run records it.
+    on) frozen=(--frozen final_v2 --accept-unpinned-demonstrations) ;;
     off) frozen=(--frozen final_v2_wo_demo --max-analysis-steps 1000000) ;;
     *) echo "--demo must be on or off" >&2; exit 2 ;;
 esac

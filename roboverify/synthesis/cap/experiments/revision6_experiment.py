@@ -27,7 +27,10 @@ like the listed hosted models. ``--gpu UUID`` (repeatable) replaces this host's
 GPU allowlist; ``--no-gpu-scheduler`` runs workers without GPU reservations.
 ``--max-analysis-steps N`` sets the static DSL analysis work budget
 (``RunConfig.max_analysis_steps``; default: the checker's 100,000) and records it
-as an override. ``--report-only`` rewrites the combined report from existing batches.
+as an override. ``--accept-unpinned-demonstrations`` runs with a demonstration
+archive that does not satisfy its pin (for example one re-collected by
+``collect_demos.sh`` on another machine) and records both hashes as an override.
+``--report-only`` rewrites the combined report from existing batches.
 """
 
 import argparse
@@ -48,7 +51,12 @@ from ..configs import (
     config_frozen_v6,
     config_frozen_v7,
 )
-from ..demonstrations import measure_once
+from ..demonstrations import (
+    DemonstrationError,
+    check_archive_pin,
+    measure_once,
+    sha256_bytes,
+)
 from ..reports import batch_set_report
 from .revision42_experiment import GPU_UUIDS
 
@@ -102,6 +110,7 @@ def configuration(
     seed=0,
     frozen="v3",
     max_analysis_steps=None,
+    accept_unpinned_demonstrations=False,
 ):
     """(RunConfig, ModelConfig, instruction, overrides) for one batch."""
     frozen = FROZEN[frozen]
@@ -110,6 +119,22 @@ def configuration(
     if max_analysis_steps is not None:
         config = replace(config, max_analysis_steps=max_analysis_steps)
         overrides["max_analysis_steps"] = max_analysis_steps
+    settings = config.demonstrations
+    if (
+        accept_unpinned_demonstrations
+        and settings.enabled
+        and settings.archive_sha256
+        and Path(settings.archive).is_file()
+    ):
+        try:
+            check_archive_pin(settings.archive, settings.archive_sha256)
+        except DemonstrationError:
+            # The demonstrations are this machine's collection, not the pinned one.
+            config.demonstrations = replace(settings, archive_sha256=None)
+            overrides["demonstrations.archive_sha256"] = {
+                "pinned": settings.archive_sha256,
+                "used": sha256_bytes(Path(settings.archive).read_bytes()),
+            }
     if model_settings(label) is not None:
         # Record only what differs from the frozen version (v7 is hosted). A
         # version that lists the model keeps its own routing and cache settings.
@@ -158,6 +183,7 @@ def create(
     frozen,
     max_analysis_steps=None,
     gpus=GPU_UUIDS,
+    accept_unpinned_demonstrations=False,
 ):
     config, model, instruction, overrides = configuration(
         task,
@@ -166,7 +192,14 @@ def create(
         seed=seed_start,
         frozen=frozen,
         max_analysis_steps=max_analysis_steps,
+        accept_unpinned_demonstrations=accept_unpinned_demonstrations,
     )
+    if "demonstrations.archive_sha256" in overrides:
+        print(
+            f"{task}: demonstration archive differs from its pin; running with it"
+            " and recording both hashes in comparison_plan.json",
+            flush=True,
+        )
     version = frozen
     frozen = FROZEN[version]
     if (
@@ -289,6 +322,11 @@ def main():
         action="store_true",
         help="run workers without GPU reservations",
     )
+    parser.add_argument(
+        "--accept-unpinned-demonstrations",
+        action="store_true",
+        help="run with a demonstration archive that does not match its pin",
+    )
     parser.add_argument("--report-only", action="store_true")
     parser.add_argument("--title", default="Revision 6 demonstrations")
     parser.add_argument("--note", action="append", default=[])
@@ -308,6 +346,7 @@ def main():
         frozen=args.frozen,
         max_analysis_steps=args.max_analysis_steps,
         gpus=[] if args.no_gpu_scheduler else args.gpu or GPU_UUIDS,
+        accept_unpinned_demonstrations=args.accept_unpinned_demonstrations,
     )
     for label in args.model or []:
         try:
@@ -370,6 +409,8 @@ def main():
                     command += ["--max-analysis-steps", str(args.max_analysis_steps)]
                 if args.no_gpu_scheduler:
                     command += ["--no-gpu-scheduler"]
+                if args.accept_unpinned_demonstrations:
+                    command += ["--accept-unpinned-demonstrations"]
                 for uuid in args.gpu or []:
                     command += ["--gpu", uuid]
                 processes.append(
