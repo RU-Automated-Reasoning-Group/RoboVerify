@@ -1,5 +1,208 @@
 # CaP methods on RoboVerify
 
+Code as Policies (CaP) baselines for RoboVerify's block tasks: an LLM writes a
+Python policy against RoboVerify's `Pick`/`Move`/`Release` DSL, the policy runs
+in RoboVerify's MuJoCo Fetch environment, and success is RoboVerify's own task
+specification. The final configuration is Method 2 with failure recovery and
+Claude Opus 5.5. Its results are in the
+[demonstrations-on report](docs/final_v1_report.md) and the
+[demonstrations-off report](docs/final_v2_wo_demo_report.md).
+
+## Quick start: run the final experiment
+
+All commands run from `roboverify/` (the directory holding `pyproject.toml`).
+
+### 1. Set up RoboVerify (once)
+
+The authoritative environment notes are in the repository's
+[AGENTS.md, Environment](../../../AGENTS.md#environment). On a fresh Linux
+machine:
+
+1. Install [uv](https://docs.astral.sh/uv/), the MuJoCo 2.1.0 binaries, the
+   mujoco-py build dependencies and ffmpeg:
+
+   ```bash
+   mkdir -p ~/.mujoco && curl -L https://github.com/google-deepmind/mujoco/releases/download/2.1.0/mujoco210-linux-x86_64.tar.gz | tar -xz -C ~/.mujoco
+   ```
+
+   ```bash
+   sudo apt install build-essential libgl1-mesa-dev libglew-dev libosmesa6-dev patchelf ffmpeg
+   ```
+
+2. Set the simulator variables in every new shell (`run_final.sh` does this
+   itself), then install the locked Python 3.10 environment:
+
+   ```bash
+   unset LD_PRELOAD; export MUJOCO_PY_MUJOCO_PATH="$HOME/.mujoco/mujoco210"; export LD_LIBRARY_PATH="$MUJOCO_PY_MUJOCO_PATH/bin:/usr/lib/nvidia"
+   ```
+
+   ```bash
+   uv sync
+   ```
+
+3. Check that the simulator imports. The first import compiles mujoco-py and
+   takes a few minutes:
+
+   ```bash
+   uv run python -c "import mujoco_py; from synthesis.mcmc.synthesis import make_roboverify_stack_env"
+   ```
+
+A local `.runtime/mujoco210` directory or link takes precedence over
+`~/.mujoco/mujoco210`. Tests are `unittest`; `uv run python -m unittest
+discover -s synthesis/cap -t . -p 'test_*.py'` runs the CaP suite.
+
+### 2. Model credentials
+
+The final configurations call models through [OpenRouter](https://openrouter.ai/).
+Export the key, or put the line `OPENROUTER_API_KEY=...` in the ignored file
+`.runtime/cap-openrouter.env`, which `run_final.sh` reads. Never pass a key on
+the command line or in a JSON configuration.
+
+```bash
+export OPENROUTER_API_KEY=sk-or-...
+```
+
+### 3. Demonstration archives (demonstrations on only)
+
+With demonstrations on, every request starts with 15 recorded expert
+executions per task. The six pinned archives are not in git, and their
+SHA-256 is checked, so a fresh collection does not replace them. Copy these
+files from the authors into the same paths below `roboverify/`:
+
+| Task | Archive |
+| --- | --- |
+| Stack | `demos/cap-revision6/stack/demonstrations.npz` |
+| Unstack | `demos/cap-revision6-v4/unstack/demonstrations.npz` |
+| Reverse | `demos/cap-revision6-v4/reverse/demonstrations.npz` |
+| ReStack | `demos/cap-revision6/restack/demonstrations.npz` |
+| Grid | `demos/cap-revision6/grid/demonstrations.npz` |
+| Pyramid | `demos/cap-revision6/pyramid/demonstrations.npz` |
+
+The pins are in [config_frozen_v3.py](configs/config_frozen_v3.py) and
+[config_frozen_v4.py](configs/config_frozen_v4.py). Demonstrations off needs no
+archive.
+
+### 4. Run
+
+One command per experiment. [run_final.sh](run_final.sh) sets the simulator
+environment, chooses the frozen configuration and launches one batch per
+(model, task), all in parallel:
+
+```bash
+bash synthesis/cap/run_final.sh --demo on --task stack --model claude-opus-5.5
+```
+
+| Option | Values | Default |
+| --- | --- | --- |
+| `--demo` | `on`: [config_final_v2](configs/config_final_v2.py); `off`: [config_final_v2_wo_demo](configs/config_final_v2_wo_demo.py) with the 1,000,000-step analysis budget | `on` |
+| `--task` | `stack`, `unstack`, `reverse`, `restack`, `grid`, `pyramid`; repeatable | all six |
+| `--model` | `claude-opus-5.5`, `claude-haiku-5.5`, or any OpenRouter id such as `openai/gpt-6.1-sol`; repeatable | `claude-opus-5.5` |
+| `--trials` | scenes per task, seeds `S` to `S + N - 1` | 5 (the reports use 50) |
+| `--seed-start` | first scene seed `S` | 0 |
+| `--workers` | parallel trials per task; keep at most 2–3 per OpenRouter key | 2 |
+| `--root` | output directory | `runs/cap-final/<UTC time>-demo-<on/off>` |
+| `--gpu` | GPU UUID that workers may reserve, repeatable (`nvidia-smi -L`) | none: no GPU reservations |
+
+Everything else (method, prompts, block counts, budgets, recovery, success
+criterion) comes from the frozen configuration, so runs are comparable with
+the reports. Claude models use the reported settings, including prompt caching
+and routing to Anthropic. Another OpenRouter id gets the same prompts with
+reasoning effort medium and no provider pinning; such models are untested.
+Rerunning the same command with the same `--root` resumes a stopped run
+without repeating finished trials.
+
+Cost guide: the reported 300-trial Opus runs cost about $0.10 per trial with
+demonstrations and $0.19 without; ReStack is the most expensive task.
+
+The command calls `synthesis.cap.experiments.revision6_experiment`, whose
+options are listed in its module docstring:
+
+```bash
+uv run python -m synthesis.cap.experiments.revision6_experiment --root runs/my-run --model claude-opus-5.5 --task stack --frozen final_v2_wo_demo --max-analysis-steps 1000000 --trials 5 --workers 2 --no-gpu-scheduler
+```
+
+### 5. Results
+
+`run_final.sh` prints the report path at the end. Below `ROOT`:
+
+| Path | Contents |
+| --- | --- |
+| `report.md` | Combined report: one row per task with round-0 (first program) and final success, then one row per trial with tokens, calls, recovery rounds, env steps and failure reason |
+| `<model>/<task>/report.md`, `summary.json` | The same for one batch; `summary.json` is machine-readable |
+| `<model>/<task>/trials/<trial>/report.txt` | Status, success fields, calls and tokens of one trial |
+| `.../trials/<trial>/cap/<run>/attempts/round_<k>/cap/<run>/artifacts/trial_001/` | One attempt (round 0 is the first program, rounds 1–4 recovery): `checkpoints/cp_*/policy.py` (generated program), `lmp/call_*/` (prompt and response), `execution/rollout_001/video.mp4`, `initial_state.npz` |
+| `launch_<model>_<task>.log` | Batch launcher output, for errors |
+
+The success metric is `task_spec_success` under `task-spec-v2+final-release-v1`:
+RoboVerify's pre/postcondition after 50 settling steps, and the gripper must
+not hold a block at the end. Videos render after the trials finish; a video
+failure never changes a result.
+
+Tables and figures like those in the reports:
+
+```bash
+uv run python -m synthesis.cap.reports.final_report ROOT --output ROOT/analysis --plots ROOT/analysis/plots --prefix my_run
+```
+
+### 6. Reproduce the reported numbers
+
+Use `--trials 50 --seed-start 0` for all six tasks. The exact commands, the
+supplement batch (seed 50 replaces seed 39, which matches a demonstration) and
+the report invocations are in
+[final_v1_report.md, Section 8](docs/final_v1_report.md#8-reproduction) and
+[final_v2_wo_demo_report.md, Section 9](docs/final_v2_wo_demo_report.md#9-reproduction).
+
+## Single trials (`run_cap`)
+
+`run_final.sh` is the experiment interface. For debugging a single trial,
+`synthesis.entry.run_cap` runs one trial with options given on the command line;
+its defaults are not the frozen final configuration.
+Configure the simulator environment as above, then run from `roboverify/`:
+
+```bash
+uv run python -m synthesis.entry.run_cap --method cap_method_1 --task stack --num-blocks 3 --provider openrouter --model deepseek/deepseek-v4.1-flash
+```
+
+Set `OPENROUTER_API_KEY` in the launching environment. Do not put credentials in
+command-line arguments or JSON configuration files. Video recording is enabled
+by default in **deferred** mode: record full snapshots during rollout, then render
+videos in separate workers. `--video-mode inline|deferred|off` selects the behavior.
+Rendering requires ffmpeg/ffprobe. Legacy explicit `--save-video` selects inline
+when `--video-mode` is absent; `--no-save-video` selects off. Contradictory explicit
+settings are rejected.
+
+To compare on an identical state, reuse the saved `initial_state.npz` from the
+first run, or use a current demonstration archive with `--trace-index`:
+
+```bash
+uv run python -m synthesis.entry.run_cap --method cap_google_baseline --task stack --num-blocks 3 --initial-state runs/cap/<first-run>/artifacts/trial_001/initial_state.npz
+```
+
+Replace `<first-run>` with the actual directory before running. Saved snapshots
+restore directly; fresh Stack and ReStack preparation performs the same 50
+settling steps as upstream collection before recording. `--initial-tower-blocks`
+sets the ReStack source-tower height; `--grid-rows`/`--grid-cols` and
+`--bottom-row-blocks` are reserved for the goal tasks. Trials record success only after normal completion and the
+terminal task check. An earlier success flag or a successful state reached by
+a failed program is not counted as a success. `--max-model-calls`, `--max-attempts`, `--max-depth`, and `--max-steps`
+additionally bound generation/repair/execution. `--max-tokens` limits reported
+token usage; when usage is unavailable, call/time limits still apply and the
+unknown-usage call count is reported explicitly.
+
+Alternative transports keep the method and environment unchanged:
+
+```bash
+uv run python -m synthesis.entry.run_cap --method cap_method_1 --provider openai --model YOUR_MODEL --api-style responses
+uv run python -m synthesis.entry.run_cap --method cap_method_1 --provider vllm --model YOUR_SERVED_MODEL --base-url http://localhost:8000/v1
+```
+
+OpenAI reads `OPENAI_API_KEY`; local vLLM defaults to no authentication header.
+Use `--api-key-env VARIABLE_NAME` when a local server requires authentication.
+Selecting a model without the required API parameter support is a configuration
+failure, not grounds to silently alter the experiment.
+
+## Overview
+
 Three implementations share text model transport, DSL environment bindings,
 immutable code checkpoints, recording, and independent trial evaluation:
 
@@ -45,6 +248,9 @@ methods. Baseline modes are prompt-only; method-1 modes are checked:
 - [Revision 7.4: final release check, status `unreleased_block` (`config_final_v1`) — implemented](docs/revision_7_4_check_final_release.md).
 - [Revision 7.5: provider prompt caching (`config_final_v2`) — implemented](docs/revision_7_5_prompt_cache.md).
 - [Final results: `final_v1` prompts, Opus 5.5, 50 trials per task (run under `config_final_v2`)](docs/final_v1_report.md).
+- [Final results without demonstrations: `final_v2_wo_demo`, Opus 5.5, 50 trials per task](docs/final_v2_wo_demo_report.md).
+- [Revision 8: verifying CaP-generated programs with RoboVerify — plan, not implemented](docs/revision_8_verification.md).
+- [Revision 9: block-count generalization checker — implemented](docs/revision_9_generalization_checker.md); [report](docs/revision_9_report.md).
 
 Revision 3 fixes loop-carried effect propagation and generic helper type merging
 in the shared checker (`shared-contract-v3`). All 106 CaP tests pass, including
@@ -57,9 +263,11 @@ Configurable shared failure recovery is implemented as `cap-recovery-v1`. Demons
 | Path | Contents |
 | --- | --- |
 | `*.py` (package root) | Shared runtime: task adapter and scoring (`adapter`, `tasks`, `runner`, `runtime`, `recovery`), DSL contract and checker (`contracts`, `checker`, `validation`, `audit`), model access and prompts (`llm`, `prompt_package`, `primitive_prompts`, `primitive_feedback`), batch execution (`batch`, `batch_worker`, `gpu_scheduler`, `request_control`, `deferred_video`), logging and budgets |
+| `run_final.sh` | One-command launcher for the final experiment ([Quick start](#quick-start-run-the-final-experiment)) |
 | `cap_google_baseline/`, `cap_method_1/`, `cap_method_2/` | The three methods |
-| `configs/` | Versioned experiment configurations (`config_frozen_v1` to `config_frozen_v7`, then `config_final_v1` and `config_final_v2`; use final_v2 for new hosted-model experiments) |
-| `experiments/` | Batch launchers for the Revision 4.2, 4.3 and 6 experiments (`python -m synthesis.cap.experiments.<module>`). `revision6_experiment` runs one batch per (model, task) under `config_frozen_v3` (`--frozen v6` for Revision 7.1, `--frozen v7` for Revision 7.3, `--frozen final_v1` for Revision 7.4, `--frozen final_v2` for final experiments with prompt caching), local or OpenRouter models, and writes the combined report. |
+| `configs/` | Versioned experiment configurations (`config_frozen_v1` to `config_frozen_v7`, then `config_final_v1`, `config_final_v2` and `config_final_v2_wo_demo`; use final_v2 and final_v2_wo_demo for new hosted-model experiments) |
+| `experiments/` | Batch launchers (`python -m synthesis.cap.experiments.<module>`). `revision6_experiment` runs one batch per (model, task) under `config_frozen_v3` by default (`--frozen v6`, `v7`, `final_v1`, `final_v2`, `final_v2_wo_demo` for later versions), local or OpenRouter models, and writes the combined report. `revision9_generalization` replays final programs on the `relaxed_v2` test-case set. The others are the Revision 4.2, 4.3 and 7.2 experiments. |
+| `generalization/` | Revision 9: program extraction, 50-step reach feasibility and the versioned test-case set `testsets/relaxed_v2.json` |
 | `reports/` | Tables, figures and analyses of finished batches (`python -m synthesis.cap.reports.<module>`). Each batch writes its own `report.md`; `batch_set_report ROOT` combines every batch below `ROOT` into `ROOT/report.md`. |
 | `serving/` | vLLM-side code (reasoning-termination guard) |
 | `tests/` | Unit and integration tests, with fixtures in `tests/testdata/` |
@@ -332,60 +540,6 @@ No tool calling, image input, or provider-side code execution is required.
 Record and match actual model/provider settings between methods. Missing token
 usage is tracked separately from known token counts. Transport retries consume
 the same model-call budget and do not become code repair for the baseline.
-
-## Run
-
-Run from `roboverify/`. For physical execution, configure the simulator environment
-as documented in the root `AGENTS.md`:
-
-```bash
-unset LD_PRELOAD
-if [ -d "$PWD/.runtime/mujoco210" ]; then
-    export MUJOCO_PY_MUJOCO_PATH="$PWD/.runtime/mujoco210"
-else
-    export MUJOCO_PY_MUJOCO_PATH="$HOME/.mujoco/mujoco210"
-fi
-export LD_LIBRARY_PATH="$MUJOCO_PY_MUJOCO_PATH/bin:/usr/lib/nvidia"
-uv run python -m synthesis.entry.run_cap --method cap_method_1 --task stack --num-blocks 3 --provider openrouter --model deepseek/deepseek-v4.1-flash
-```
-
-Set `OPENROUTER_API_KEY` in the launching environment. Do not put credentials in
-command-line arguments or JSON configuration files. Video recording is enabled
-by default in **deferred** mode: record full snapshots during rollout, then render
-videos in separate workers. `--video-mode inline|deferred|off` selects the behavior.
-Rendering requires ffmpeg/ffprobe. Legacy explicit `--save-video` selects inline
-when `--video-mode` is absent; `--no-save-video` selects off. Contradictory explicit
-settings are rejected.
-
-To compare on an identical state, reuse the saved `initial_state.npz` from the
-first run, or use a current demonstration archive with `--trace-index`:
-
-```bash
-uv run python -m synthesis.entry.run_cap --method cap_google_baseline --task stack --num-blocks 3 --initial-state runs/cap/<first-run>/artifacts/trial_001/initial_state.npz
-```
-
-Replace `<first-run>` with the actual directory before running. Saved snapshots
-restore directly; fresh Stack and ReStack preparation performs the same 50
-settling steps as upstream collection before recording. `--initial-tower-blocks`
-sets the ReStack source-tower height; `--grid-rows`/`--grid-cols` and
-`--bottom-row-blocks` are reserved for the goal tasks. Trials record success only after normal completion and the
-terminal task check. An earlier success flag or a successful state reached by
-a failed program is not counted as a success. `--max-model-calls`, `--max-attempts`, `--max-depth`, and `--max-steps`
-additionally bound generation/repair/execution. `--max-tokens` limits reported
-token usage; when usage is unavailable, call/time limits still apply and the
-unknown-usage call count is reported explicitly.
-
-Alternative transports keep the method and environment unchanged:
-
-```bash
-uv run python -m synthesis.entry.run_cap --method cap_method_1 --provider openai --model YOUR_MODEL --api-style responses
-uv run python -m synthesis.entry.run_cap --method cap_method_1 --provider vllm --model YOUR_SERVED_MODEL --base-url http://localhost:8000/v1
-```
-
-OpenAI reads `OPENAI_API_KEY`; local vLLM defaults to no authentication header.
-Use `--api-key-env VARIABLE_NAME` when a local server requires authentication.
-Selecting a model without the required API parameter support is a configuration
-failure, not grounds to silently alter the experiment.
 
 ## Resource budgets and timing
 
@@ -913,7 +1067,6 @@ the JSON. The opt-in hardware test additionally checks serial/parallel trajector
 and video parity; its environment variables and results are documented in
 [Revision 4.1 validation](docs/revision_4_1_gpu_scheduling.md#16-validation).
 
-
 ## Revision 4.2 primitive prompt and feedback ablations
 
 All methods accept optional `primitive_prompt` and `primitive_feedback` objects
@@ -976,7 +1129,6 @@ success, primitive nonconvergence, conditional recovery transitions, per-trial
 tokens and artifact links, plus [plots](docs/plots/). Scripted preflight runs are
 explicitly excluded from the live-trial denominator.
 
-
 The completed MiniMax Revision 4.2 batch has 20 trials in each of 11 settings. Full-treatment
 success is Baseline 18/20, Method 1 18/20, and Method 2 20/20; ablation results are
 in the linked report. Extension batches add Baseline ablations and `only_prompt`
@@ -988,7 +1140,6 @@ limitation and all failures remain reported. The final interpretation is also
 saved in `final_interpretation.md` (the combined MiniMax/Haiku version is in
 `runs/cap-revision42/20261021-combined-minimax-haiku55/`) for use after
 regenerating numerical tables and plots.
-
 
 ## Deferred video rendering
 
