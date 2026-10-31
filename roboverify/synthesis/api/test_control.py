@@ -345,6 +345,39 @@ class ControlTests(unittest.TestCase):
         self.assertEqual(trace.metadata["status"], "incomplete")
         self.assertIn("step limit", trace.metadata["reason"])
 
+    def test_unconverged_control_is_the_cause_of_a_later_loop_limit(self):
+        from synthesis.cfg.test_collection import example_trace
+
+        trace = example_trace()
+        loop_limit = "Loop 1 still has a guard witness after 200 iterations"
+        trace.metadata.update(status="incomplete", reason=loop_limit)
+        trace.events = (
+            {
+                "kind": "instruction_end",
+                "path": "1.0",
+                "control": {"converged": True, "steps": 7},
+            },
+            {
+                "kind": "instruction_end",
+                "path": "1.0",
+                "control": {"converged": False, "steps": 50, "phase": "approach"},
+            },
+            {
+                "kind": "instruction_end",
+                "path": "1.1",
+                "control": {"converged": False, "steps": 50, "phase": "move"},
+            },
+        )
+        self.assertFalse(validate_trace(trace))
+        reason = trace.metadata["reason"]
+        self.assertTrue(reason.startswith("Controller step limit at 1.0: "), reason)
+        self.assertIn("'approach'", reason)
+        self.assertTrue(reason.endswith(loop_limit), reason)
+        self.assertEqual(trace.metadata["status"], "incomplete")
+        # Validating again does not prefix the cause twice.
+        self.assertFalse(validate_trace(trace))
+        self.assertEqual(trace.metadata["reason"], reason)
+
 
 class SimulatorControlTests(unittest.TestCase):
     def test_head_contacts_are_disabled_without_removing_mass_or_arm_contacts(self):

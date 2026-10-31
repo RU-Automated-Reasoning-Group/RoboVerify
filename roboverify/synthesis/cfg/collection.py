@@ -328,8 +328,7 @@ def validate_trace(trace):
     diagnostic. Goal tasks keep their Release-event checks in both cases.
     """
     settled = (trace.metadata.get("validation") or {}).get("settled")
-    if trace.metadata.get("status") != "completed" or not trace.states:
-        return False
+    status = trace.metadata.get("status")
     failed_controls = [
         e
         for e in trace.events
@@ -338,10 +337,17 @@ def validate_trace(trace):
     ]
     if failed_controls:
         event = failed_controls[0]
-        trace.metadata.update(
-            status="incomplete",
-            reason=f"Controller step limit at {event['path']}: {event['control']}",
-        )
+        cause = f"Controller step limit at {event['path']}: {event['control']}"
+        reason = trace.metadata.get("reason") or ""
+        if status == "completed":
+            trace.metadata.update(status="incomplete", reason=cause)
+        elif not reason.startswith(cause):
+            # Execution continues after a primitive misses its target, so a
+            # later loop limit, timeout or error is a consequence; report the
+            # first non-converged primitive as the cause.
+            trace.metadata["reason"] = f"{cause}; then: {reason}" if reason else cause
+        return False
+    if status != "completed" or not trace.states:
         return False
     require_final_post = settled is None
     if trace.task in GOAL_TASKS:

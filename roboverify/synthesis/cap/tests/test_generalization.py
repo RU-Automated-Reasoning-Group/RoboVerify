@@ -138,6 +138,18 @@ class ReportTests(unittest.TestCase):
             ),
             "loop_limit",
         )
+        # A loop limit caused by an earlier non-converged primitive.
+        self.assertEqual(
+            report.failure_kind(
+                {
+                    "status": "incomplete",
+                    "reason": "Controller step limit at 3.0: {'converged': False, "
+                    "'phase': 'move'}; then: Loop 3 still has a guard witness "
+                    "after 10 iterations",
+                }
+            ),
+            "move_not_converged",
+        )
         self.assertEqual(
             report.failure_kind(
                 {
