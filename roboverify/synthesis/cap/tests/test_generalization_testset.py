@@ -46,6 +46,14 @@ class GeneralizationTestsetTests(unittest.TestCase):
                 self.assertEqual(config.num_blocks, case.layout["num_blocks"])
                 self.assertEqual(config.seed, case.seed)
 
+    def test_unrelaxed_cases_build_the_default_reset(self):
+        case = ts.GeneralizationCase("stack", {"num_blocks": 4}, 0, relaxed=False)
+        self.assertEqual(case.case_id, "stack-n4-s0")
+        self.assertFalse(
+            case.run_config_overrides()["relax_boundaries_for_generalization_test"]
+        )
+        self.assertFalse(ts.run_config(case).relax_boundaries_for_generalization_test)
+
     def test_only_feasible_rows_of_selected_tasks_become_cases(self):
         rows = [
             scored_row("stack", {"num_blocks": 4}, 0),
@@ -73,6 +81,33 @@ class GeneralizationTestsetTests(unittest.TestCase):
             self.assertEqual(payload["counts"], {"stack": {"4": 3}})
             self.assertEqual(loaded, cases)
             self.assertEqual(loaded[2].evidence, {"x": 1})
+            self.assertNotIn("relaxed", path.read_text())
+            unrelaxed = [
+                ts.GeneralizationCase(
+                    c.task, c.layout, c.seed, c.initial_state_sha256, relaxed=False
+                )
+                for c in cases
+            ]
+            environment = {ts.RELAXED_KEY: False}
+            with self.assertRaisesRegex(ValueError, "relaxation"):
+                ts.write_manifest(
+                    path,
+                    "set",
+                    cases,
+                    environment=environment,
+                    feasibility={},
+                    git_commit=None,
+                )
+            ts.write_manifest(
+                path,
+                "set",
+                unrelaxed,
+                environment=environment,
+                feasibility={},
+                git_commit=None,
+            )
+            _, loaded = ts.load_manifest(path)
+            self.assertEqual(loaded, unrelaxed)
             ts.write_manifest(
                 path,
                 "set",
@@ -134,12 +169,49 @@ class GeneralizationTestsetTests(unittest.TestCase):
         # Towers above about 12 blocks are out of one Move's reach (reach.py).
         self.assertEqual(largest["stack"], 12)
         self.assertEqual(largest["pyramid"], 15)
+        self.assertTrue(all(c.relaxed for c in cases))
         for case in cases[:: max(1, len(cases) // 50)]:
-            ts.run_config(case)
+            self.assertTrue(
+                ts.run_config(case).relax_boundaries_for_generalization_test
+            )
+
+    def test_committed_unrelaxed_v1_manifest(self):
+        payload, cases = ts.load_manifest(ts.TESTSET_DIR / "unrelaxed_v1.json")
+        self.assertIs(
+            payload["environment"]["relax_boundaries_for_generalization_test"], False
+        )
+        self.assertEqual(payload["environment"]["contact_buffer"], [100, 500])
+        self.assertFalse(any(c.relaxed for c in cases))
+        self.assertTrue(all(len(c.initial_state_sha256) == 64 for c in cases))
+        largest = {}
+        for case in cases:
+            largest[case.task] = max(
+                largest.get(case.task, 0), case.layout["num_blocks"]
+            )
+        # Default bounds: 7 scattered Stack blocks fit on some seeds only;
+        # Grid up to 3 x 3; Pyramid k = 4; ReStack at most 2 loose blocks.
+        self.assertEqual(
+            largest,
+            dict(stack=7, unstack=11, reverse=11, restack=11, grid=9, pyramid=10),
+        )
+        self.assertTrue(
+            all(
+                c.layout["num_blocks"] - c.layout["initial_tower_blocks"] == 2
+                for c in cases
+                if c.task == "restack"
+            )
+        )
+        self.assertFalse(
+            ts.run_config(cases[0]).relax_boundaries_for_generalization_test
+        )
 
     def test_simulator_rebuild_matches_the_committed_hash(self):
         _, cases = ts.load_manifest(ts.TESTSET_DIR / "relaxed_v2.json")
         case = next(c for c in cases if c.case_id == "stack-n4-s0")
+        snapshot, _ = ts.initial_snapshot(case)
+        self.assertEqual(ts.state_sha256(snapshot), case.initial_state_sha256)
+        _, cases = ts.load_manifest(ts.TESTSET_DIR / "unrelaxed_v1.json")
+        case = next(c for c in cases if c.case_id == "stack-n7-s2")
         snapshot, _ = ts.initial_snapshot(case)
         self.assertEqual(ts.state_sha256(snapshot), case.initial_state_sha256)
 

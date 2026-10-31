@@ -1,11 +1,13 @@
 """Versioned test-case sets for the block-count generalization checker.
 
-A test case is one (task, layout, seed) scene in the relaxed environment
-(`relax_boundaries_for_generalization_test`) that a physical-feasibility probe
-found feasible: the reset scene and a teleported goal are built and stable,
-satisfy their conditions, and every initial and goal column can be served by
-Moves within the primitive's 50-step budget (`reach.py`; Revision 9,
-Sections 3.3 and 3.5). Feasibility never depends on a policy.
+A test case is one (task, layout, seed) scene that a physical-feasibility
+probe found feasible: the reset scene and a teleported goal are built and
+stable, satisfy their conditions, and every initial and goal column can be
+served by Moves within the primitive's 50-step budget (`reach.py`; Revision 9,
+Sections 3.3 and 3.5). Feasibility never depends on a policy. A set is built
+either in the relaxed environment (`relax_boundaries_for_generalization_test`,
+the default) or, with `build --unrelaxed`, in each task's default reset; the
+manifest header records which, and every loaded case carries it.
 
 Two layers:
 - the manifest (committed, `testsets/<name>.json`) lists every case with its
@@ -16,8 +18,8 @@ Two layers:
   the case. A hash mismatch means the environment changed.
 
 CLI (from roboverify/, simulator environment configured):
-    python -m synthesis.cap.generalization.testset build NAME SCORED.json [...]
-        --source LABEL=SCORED.json --tasks LABEL=task,task --out DIR
+    python -m synthesis.cap.generalization.testset build NAME
+        --source LABEL=SCORED.json --tasks LABEL=task,task --out DIR [--unrelaxed]
     python -m synthesis.cap.generalization.testset verify MANIFEST --out DIR
 """
 
@@ -36,6 +38,7 @@ import numpy as np
 
 TESTSET_DIR = Path(__file__).with_name("testsets")
 FORMAT = "generalization-testset-v1"
+RELAXED_KEY = "relax_boundaries_for_generalization_test"
 LAYOUT_FIELDS = (
     "num_blocks",
     "initial_tower_blocks",
@@ -59,6 +62,8 @@ class GeneralizationCase:
     seed: int
     initial_state_sha256: str = ""
     evidence: dict = field(default_factory=dict, compare=False)
+    # Recorded once in the manifest header (environment), not per case.
+    relaxed: bool = True
 
     @property
     def case_id(self):
@@ -73,11 +78,11 @@ class GeneralizationCase:
         return "-".join(parts)
 
     def run_config_overrides(self):
-        """RunConfig fields that build this scene (relaxed environment on)."""
+        """RunConfig fields that build this scene."""
         return dict(
             task=self.task,
             seed=self.seed,
-            relax_boundaries_for_generalization_test=True,
+            relax_boundaries_for_generalization_test=self.relaxed,
             **self.layout,
         )
 
@@ -185,7 +190,7 @@ TOPS_TOLERANCE = 1e-4
 # ------------------------------------------------------------------- manifest
 
 
-def cases_from_scored(rows, tasks=None):
+def cases_from_scored(rows, tasks=None, relaxed=True):
     """Feasible probe rows (physical_summary output) as unhashed cases, with
     the probe's initial column tops for the rebuild check."""
     cases = []
@@ -197,12 +202,17 @@ def cases_from_scored(rows, tasks=None):
             k: (None if row.get(k) is None else round(float(row[k]), 6))
             for k in EVIDENCE_FIELDS
         }
-        case = GeneralizationCase(row["task"], layout, int(row["seed"]), "", evidence)
+        case = GeneralizationCase(
+            row["task"], layout, int(row["seed"]), "", evidence, relaxed
+        )
         cases.append((case, sorted(row["initial_tops"])))
     return cases
 
 
 def write_manifest(path, name, cases, *, environment, feasibility, git_commit):
+    relaxed = environment.get(RELAXED_KEY, True)
+    if any(c.relaxed != relaxed for c in cases):
+        raise ValueError("Cases and the manifest environment differ in relaxation")
     payload = dict(
         format=FORMAT,
         name=name,
@@ -211,7 +221,7 @@ def write_manifest(path, name, cases, *, environment, feasibility, git_commit):
         environment=environment,
         feasibility=feasibility,
         counts=_counts(cases),
-        cases=[asdict(c) | {"case_id": c.case_id} for c in cases],
+        cases=[_case_record(c) for c in cases],
     )
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     # Readable header, one compact line per case (diffs stay per case).
@@ -223,10 +233,19 @@ def write_manifest(path, name, cases, *, environment, feasibility, git_commit):
     return payload
 
 
+def _case_record(case):
+    record = asdict(case)
+    del record["relaxed"]
+    return record | {"case_id": case.case_id}
+
+
 def load_manifest(path):
     payload = json.loads(Path(path).read_text())
     if payload.get("format") != FORMAT:
         raise ValueError(f"Not a {FORMAT} manifest: {path}")
+    relaxed = payload["environment"].get(RELAXED_KEY, True)
+    if type(relaxed) is not bool:
+        raise ValueError(f"{RELAXED_KEY} must be Boolean: {path}")
     cases = []
     for item in payload["cases"]:
         case = GeneralizationCase(
@@ -235,6 +254,7 @@ def load_manifest(path):
             item["seed"],
             item["initial_state_sha256"],
             item.get("evidence", {}),
+            relaxed,
         )
         if case.case_id != item["case_id"]:
             raise ValueError(f"Case id mismatch: {item['case_id']}")
@@ -293,6 +313,7 @@ def _git_commit():
 def build(args):
     from synthesis.environment.relaxed_workspace import RELAXED_CONTACT_BUFFER
 
+    relaxed = not args.unrelaxed
     cases, sources, expected = [], [], {}
     for spec in args.source:
         label, path = spec.split("=", 1)
@@ -301,7 +322,7 @@ def build(args):
             if item.startswith(f"{label}="):
                 tasks = set(item.split("=", 1)[1].split(","))
         rows = json.loads(Path(path).read_text())
-        for case, tops in cases_from_scored(rows, tasks):
+        for case, tops in cases_from_scored(rows, tasks, relaxed):
             case.evidence["source"] = label
             cases.append(case)
             expected[case.case_id] = tops
@@ -319,18 +340,21 @@ def build(args):
         raise ValueError("Sources overlap: duplicate test cases")
     hashes = materialize(cases, args.out, args.workers, expected)
     cases = [
-        GeneralizationCase(c.task, c.layout, c.seed, hashes[c.case_id], c.evidence)
+        GeneralizationCase(
+            c.task, c.layout, c.seed, hashes[c.case_id], c.evidence, relaxed
+        )
         for c in cases
     ]
     payload = write_manifest(
         args.manifest or TESTSET_DIR / f"{args.name}.json",
         args.name,
         cases,
-        environment=dict(
-            relax_boundaries_for_generalization_test=True,
-            contact_buffer=list(RELAXED_CONTACT_BUFFER),
-            initial_settling_steps=50,
-        ),
+        environment={
+            RELAXED_KEY: relaxed,
+            # MuJoCo's defaults (nconmax, njmax) unless relaxed.
+            "contact_buffer": list(RELAXED_CONTACT_BUFFER if relaxed else (100, 500)),
+            "initial_settling_steps": 50,
+        },
         feasibility=dict(
             criterion=(
                 "reset passes validate_start and drifts < 5 mm over 100 steps; a "
@@ -372,6 +396,11 @@ def main(argv=None):
     b.add_argument("--manifest", help="default: testsets/NAME.json")
     b.add_argument("--out", help="snapshot directory (under runs/)")
     b.add_argument("--workers", type=int, default=8)
+    b.add_argument(
+        "--unrelaxed",
+        action="store_true",
+        help="each task's default reset instead of the relaxed environment",
+    )
     v = sub.add_parser("verify")
     v.add_argument("manifest")
     v.add_argument("--out")

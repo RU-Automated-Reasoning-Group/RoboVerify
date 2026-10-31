@@ -4,7 +4,8 @@ From the arm's start posture, the gripper rises quickly to about 1.0 m and
 then only creeps (about 0.2 mm per step, with forearm/wrist self-contact
 observed): hundreds of servo steps later it is higher, and from that
 reconfigured posture it moves freely again. A Move has 50 steps, so a column
-is reachable when, with an empty gripper in an otherwise empty relaxed scene:
+is reachable when, with an empty gripper in an otherwise empty scene (relaxed
+by default; the arm and table are the same in the default environment):
 
 - one Move from the start posture reaches the hover point, `CLEARANCE` above
   the column's top centre;
@@ -46,15 +47,15 @@ class ColumnReach:
 
 
 class PrimitiveReach:
-    """One empty relaxed environment reused for many column checks."""
+    """One empty environment reused for many column checks."""
 
-    def __init__(self, limit=PRIMITIVE_LIMIT, clearance=CLEARANCE):
+    def __init__(self, limit=PRIMITIVE_LIMIT, clearance=CLEARANCE, relaxed=True):
         from synthesis.cfg.reset import inner_env
         from synthesis.mcmc.synthesis import make_roboverify_env
 
         self.limit, self.clearance = limit, clearance
         self.env = make_roboverify_env(
-            "stack", num_blocks=1, relax_boundaries_for_generalization_test=True
+            "stack", num_blocks=1, relax_boundaries_for_generalization_test=relaxed
         )
         self.env.reset(seed=0)
         self.inner = inner_env(self.env)
