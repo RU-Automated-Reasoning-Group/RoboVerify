@@ -30,6 +30,13 @@
 - **Reverse update (2026-10-30):** the supplied Reverse program's 2–4
   block check was removed and its 100 cases were rerun; every RoboVerify
   Reverse number below is from that rerun (Section 5).
+- **Root-cause update (2026-10-31):** RoboVerify's executor continues after
+  a primitive that does not converge, so such a run used to be reported by
+  its symptom, typically a `While` that still had a witness at its iteration
+  bound (`loop_limit`). `validate_trace` now reports the first
+  non-converged primitive as the cause. The supplied programs were rerun on
+  all 721 cases: no outcome changed, and every former `loop_limit` is now a
+  `pick_not_converged` or `move_not_converged` (Sections 3 and 5).
 - **Run directory:** `runs/cap-generalization/20261029-full-eval/` (file
   list in Section 8). Code: commits `96c08dc` and `d17817d`.
 
@@ -82,10 +89,11 @@
    hand-written programs; only Stack's is formally verified.
 6. **Verification did not give generalization.** The verified Stack program
    succeeds on all cases up to 5 blocks, then fails like the CaP programs
-   (60% at 6, 0% from 8), mostly ending in `loop_limit` (its loop still has
-   a witness after 200 iterations). The verified motion model has no reach
-   or settling limit (smoke test,
-   `runs/cap-generalization/20261029-smoke/report.md`).
+   (60% at 6, 0% from 8), mostly because a Pick does not converge within
+   its 50 steps. The verified motion model has no reach or settling limit
+   (smoke test, `runs/cap-generalization/20261029-smoke/report.md`). On the
+   default Stack reset the same program stacks 6 blocks on all 10 seeds
+   (Section 5).
 
 ## 2. Success against block count
 
@@ -139,7 +147,7 @@ program's cliff at 7 blocks.
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | Stack | final_v2 | 40.7% | 2.0% | 22.2% | 0.3% | 31.4% | 3.2% | 0.0% | 0.0% | 0.0% | 0.1% | 0.0% | 0.0% | 0.0% |
 | Stack | final_v2 w/o demo | 44.9% | 35.1% | 1.8% | 0.9% | 15.0% | 0.8% | 0.0% | 0.0% | 0.0% | 1.5% | 0.0% | 0.0% | 0.0% |
-| Stack | RoboVerify supplied | 49.0% | 0.0% | 0.0% | 0.0% | 0.0% | 7.3% | 0.0% | 0.0% | 43.8% | 0.0% | 0.0% | 0.0% | 0.0% |
+| Stack | RoboVerify supplied | 49.0% | 2.1% | 41.7% | 0.0% | 0.0% | 7.3% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | Unstack | final_v2 | 51.4% | 45.5% | 0.2% | 0.4% | 0.8% | 1.6% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | Unstack | final_v2 w/o demo | 58.0% | 37.5% | 1.6% | 0.1% | 0.4% | 2.0% | 0.2% | 0.0% | 0.0% | 0.1% | 0.0% | 0.0% | 0.0% |
 | Unstack | RoboVerify supplied | 51.0% | 49.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
@@ -148,7 +156,7 @@ program's cliff at 7 blocks.
 | Reverse | RoboVerify supplied | 62.0% | 13.0% | 5.0% | 0.0% | 0.0% | 20.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | ReStack | final_v2 | 18.6% | 73.6% | 4.1% | 0.6% | 3.1% | 0.0% | 0.0% | 0.0% | 0.0% | 0.1% | 0.0% | 0.0% | 0.0% |
 | ReStack | final_v2 w/o demo | 21.4% | 62.9% | 2.4% | 4.1% | 7.8% | 0.0% | 0.0% | 0.7% | 0.0% | 0.5% | 0.0% | 0.0% | 0.0% |
-| ReStack | RoboVerify supplied | 10.8% | 0.0% | 0.0% | 0.0% | 0.0% | 2.5% | 0.0% | 0.0% | 86.7% | 0.0% | 0.0% | 0.0% | 0.0% |
+| ReStack | RoboVerify supplied | 10.8% | 86.7% | 0.0% | 0.0% | 0.0% | 2.5% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | Grid | final_v2 | 92.8% | 3.4% | 0.0% | 0.0% | 0.0% | 3.8% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | Grid | final_v2 w/o demo | 82.9% | 15.6% | 0.0% | 0.1% | 0.0% | 1.4% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | Grid | RoboVerify supplied | 93.4% | 2.2% | 0.0% | 0.0% | 0.0% | 4.4% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
@@ -181,11 +189,25 @@ program's cliff at 7 blocks.
   without error but the settled goal does not hold.
 - **`budget_exhausted`** (0.3%): loops without progress under the scaled
   budgets.
-- RoboVerify's supplied programs: `loop_limit` (Stack 44%, ReStack 87%; a
-  `While` still has a guard witness after its iteration bound, 200 for
-  Stack and the program's own 10 for ReStack's loop 3) and
-  `move_not_converged` (Unstack, the `Y_min` pattern above; Reverse 13%,
-  from 8 blocks, the growing clearance above). Reverse also ends with
+- RoboVerify's supplied programs fail mostly by primitives that do not
+  converge. The executor continues after such a primitive, and the run then
+  usually ends at a loop's iteration bound; the first non-converged
+  primitive is reported as the cause:
+  - Stack `pick_not_converged` (42%): the Pick of a late block, from the
+    previous Release pose above the tower. In the inspected 6- and 7-block
+    cases that block lies at the edge of the relaxed region (0.76–0.80 m
+    from the base) or just in front of the body (0.36 m); the arm then
+    carries nothing, moves onto the tower and knocks it over, and the loop
+    reaches 200 iterations. Two 8- and 10-block cases fail on the lift
+    (`move_not_converged`, 2%);
+  - ReStack `move_not_converged` (87%): the first Move of the rebuild loop
+    lifts the gripper to N × 0.05 + 0.10 m above a loose block; in the
+    4–6-block cases that block lies 0.78–0.80 m from the base, where one
+    Move does not reach that height;
+  - `move_not_converged` for Unstack (the `Y_min` pattern above) and
+    Reverse (13%, from 8 blocks, the growing clearance above).
+
+  Reverse also ends with
   `postcondition_false` (20%, 7–10 blocks): in `reverse-n9-s0` the 9-block
   source tower falls during the first transfer, after which `b0` is the
   only loop witness and the loop exits after two iterations.
@@ -272,8 +294,13 @@ above); the others are reference programs validated by collection
 and audit. They generalize no better than CaP:
 - Stack: 100% up to 5 blocks, 60% at 6, 0% from 8. In the smoke test the
   7-block tower drifted beyond the ON* tolerance while settling, and from 10
-  blocks the lift to 0.10 m above the tower exceeded one Move; most failures
-  end in `loop_limit`;
+  blocks the lift to 0.10 m above the tower exceeded one Move. Most
+  failures are a Pick that does not converge (Section 3). On the default
+  Stack reset (seeds 0–9) the program succeeds on 10/10 at 4, 5 and 6
+  blocks; the default reset can sample 7 blocks on 4 seeds only, and 1 of
+  them succeeds. At 6 blocks the relaxed towers also lean more after
+  settling (largest XY offset from b0 10–32 mm, against 9–16 mm on the
+  default reset);
 - Unstack: 100% up to 5, then the `Y_min` parking pattern leaves the reachable
   region (10% at 7, 0–10% beyond);
 - Reverse: 100% up to 6 blocks, 90% at 7, 30% at 8, 0% from 9. The
@@ -282,7 +309,9 @@ and audit. They generalize no better than CaP:
   `synthesis/examples/reverse.py` and the 100 Reverse cases were rerun
   (62% overall). The earlier rows are kept in
   `superseded/reverse-supplied-with-count-check/`;
-- ReStack: 80% at 4, 60% at the trained 5, 0% from 7;
+- ReStack: 80% at 4, 60% at the trained 5, 0% from 7. On the default
+  ReStack reset, whose loose blocks lie in one strip at Y 0.15–0.25 m, it
+  succeeds on 10/10 at 4 and 10/10 at 5 blocks (seeds 0–9);
 - Grid: 100% up to 15 cells, 20% at 6 × 4;
 - Pyramid: 100%, 90%, 70%, 20% for k = 2–5.
 
@@ -370,6 +399,14 @@ and audit. They generalize no better than CaP:
 - `superseded/reverse-supplied-with-count-check/`: the original Reverse
   supplied rows and logs (2–4 block check in place);
   `launch_supplied_reverse_nocheck.log`: the 2026-10-30 rerun.
+- `superseded/supplied-before-root-cause/`: every supplied-program row,
+  log, `revision9_*` table and the example list before the 2026-10-31
+  root-cause rerun; `launch_supplied_root_cause.log`: that rerun.
+- `diagnostics/supplied-root-cause/`: the diagnostic scripts and outputs
+  behind Sections 3 and 5 (first non-converged primitive of each failing
+  Stack and ReStack case, the default-reset comparison, and the
+  precondition check of all 721 snapshots: every case satisfies its task
+  precondition, and table-level blocks are at least 0.1025 m apart).
 - `videos/<task>/<arm>/nNN-{success,failure}-<case>.mp4`: the Section 9
   example videos, each with a `.json` of the original and re-executed
   outcome; `videos/examples.json` lists the selection, `videos/table.md`
@@ -387,6 +424,7 @@ python -m synthesis.cap.reports.generalization_report runs/cap-generalization/20
     --output runs/cap-generalization/20261029-full-eval --plots synthesis/cap/docs/plots --prefix revision9
 python runs/cap-generalization/20261029-full-eval/scripts/render_examples.py select
 python runs/cap-generalization/20261029-full-eval/scripts/render_examples.py render --workers 24
+python runs/cap-generalization/20261029-full-eval/scripts/render_examples.py relabel
 python runs/cap-generalization/20261029-full-eval/scripts/render_examples.py table \
     > runs/cap-generalization/20261029-full-eval/videos/table.md
 ```
@@ -402,7 +440,10 @@ the first such execution in case and program order. Each example was
 re-executed from its case snapshot with video on (CaP: the same scripted
 replay with `video_mode="inline"`; RoboVerify: `record_execution` with a
 video path); all 273 re-executions reproduced the original outcome. The
-percentage is the plotted success rate. The videos are in the ignored run
+percentage is the plotted success rate. After the 2026-10-31 root-cause
+rerun, `render_examples.py relabel` took each example's failure kind from
+the new rows; the videos are unchanged, and 15 RoboVerify Stack and ReStack
+labels changed from `loop_limit`. The videos are in the ignored run
 directory, so the links work only in a checkout that has it.
 **Stack**
 
@@ -413,12 +454,12 @@ directory, so the links work only in a checkout that has it.
 | 4 | 92.8%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2/n04-success-stack-n4-s0.mp4)<br>[get_failed](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2/n04-failure-stack-n4-s1.mp4) | 98.0%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2_wo_demo/n04-success-stack-n4-s0.mp4)<br>[get_failed](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2_wo_demo/n04-failure-stack-n4-s1.mp4) | 100.0%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/stack/rv_supplied/n04-success-stack-n4-s0.mp4) |
 | 5 | 57.6%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2/n05-success-stack-n5-s0.mp4)<br>[get_failed](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2/n05-failure-stack-n5-s0.mp4) | 72.6%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2_wo_demo/n05-success-stack-n5-s0.mp4)<br>[get_failed](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2_wo_demo/n05-failure-stack-n5-s0.mp4) | 100.0%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/stack/rv_supplied/n05-success-stack-n5-s0.mp4) |
 | 6 | 26.8%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2/n06-success-stack-n6-s0.mp4)<br>[get_failed](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2/n06-failure-stack-n6-s0.mp4) | 41.8%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2_wo_demo/n06-success-stack-n6-s0.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2_wo_demo/n06-failure-stack-n6-s0.mp4) | 60.0%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/stack/rv_supplied/n06-success-stack-n6-s0.mp4)<br>[postcondition_false](../../../runs/cap-generalization/20261029-full-eval/videos/stack/rv_supplied/n06-failure-stack-n6-s2.mp4) |
-| 7 | 11.8%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2/n07-success-stack-n7-s0.mp4)<br>[get_failed](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2/n07-failure-stack-n7-s0.mp4) | 16.9%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2_wo_demo/n07-success-stack-n7-s0.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2_wo_demo/n07-failure-stack-n7-s0.mp4) | 11.1%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/stack/rv_supplied/n07-success-stack-n7-s1.mp4)<br>[loop_limit](../../../runs/cap-generalization/20261029-full-eval/videos/stack/rv_supplied/n07-failure-stack-n7-s2.mp4) |
-| 8 | 3.6%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2/n08-success-stack-n8-s0.mp4)<br>[get_failed](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2/n08-failure-stack-n8-s0.mp4) | 3.8%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2_wo_demo/n08-success-stack-n8-s0.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2_wo_demo/n08-failure-stack-n8-s0.mp4) | 0.0%<br>[loop_limit](../../../runs/cap-generalization/20261029-full-eval/videos/stack/rv_supplied/n08-failure-stack-n8-s0.mp4) |
-| 9 | 0.0%<br>[get_failed](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2/n09-failure-stack-n9-s0.mp4) | 0.2%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2_wo_demo/n09-success-stack-n9-s7.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2_wo_demo/n09-failure-stack-n9-s0.mp4) | 0.0%<br>[loop_limit](../../../runs/cap-generalization/20261029-full-eval/videos/stack/rv_supplied/n09-failure-stack-n9-s0.mp4) |
-| 10 | 0.0%<br>[get_failed](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2/n10-failure-stack-n10-s0.mp4) | 0.0%<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2_wo_demo/n10-failure-stack-n10-s0.mp4) | 0.0%<br>[loop_limit](../../../runs/cap-generalization/20261029-full-eval/videos/stack/rv_supplied/n10-failure-stack-n10-s0.mp4) |
-| 11 | 0.0%<br>[pick_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2/n11-failure-stack-n11-s0.mp4) | 0.0%<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2_wo_demo/n11-failure-stack-n11-s0.mp4) | 0.0%<br>[loop_limit](../../../runs/cap-generalization/20261029-full-eval/videos/stack/rv_supplied/n11-failure-stack-n11-s0.mp4) |
-| 12 | 0.0%<br>[get_failed](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2/n12-failure-stack-n12-s7.mp4) | 0.0%<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2_wo_demo/n12-failure-stack-n12-s7.mp4) | 0.0%<br>[loop_limit](../../../runs/cap-generalization/20261029-full-eval/videos/stack/rv_supplied/n12-failure-stack-n12-s7.mp4) |
+| 7 | 11.8%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2/n07-success-stack-n7-s0.mp4)<br>[get_failed](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2/n07-failure-stack-n7-s0.mp4) | 16.9%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2_wo_demo/n07-success-stack-n7-s0.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2_wo_demo/n07-failure-stack-n7-s0.mp4) | 11.1%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/stack/rv_supplied/n07-success-stack-n7-s1.mp4)<br>[pick_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/stack/rv_supplied/n07-failure-stack-n7-s2.mp4) |
+| 8 | 3.6%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2/n08-success-stack-n8-s0.mp4)<br>[get_failed](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2/n08-failure-stack-n8-s0.mp4) | 3.8%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2_wo_demo/n08-success-stack-n8-s0.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2_wo_demo/n08-failure-stack-n8-s0.mp4) | 0.0%<br>[pick_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/stack/rv_supplied/n08-failure-stack-n8-s0.mp4) |
+| 9 | 0.0%<br>[get_failed](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2/n09-failure-stack-n9-s0.mp4) | 0.2%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2_wo_demo/n09-success-stack-n9-s7.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2_wo_demo/n09-failure-stack-n9-s0.mp4) | 0.0%<br>[pick_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/stack/rv_supplied/n09-failure-stack-n9-s0.mp4) |
+| 10 | 0.0%<br>[get_failed](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2/n10-failure-stack-n10-s0.mp4) | 0.0%<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2_wo_demo/n10-failure-stack-n10-s0.mp4) | 0.0%<br>[pick_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/stack/rv_supplied/n10-failure-stack-n10-s0.mp4) |
+| 11 | 0.0%<br>[pick_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2/n11-failure-stack-n11-s0.mp4) | 0.0%<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2_wo_demo/n11-failure-stack-n11-s0.mp4) | 0.0%<br>[pick_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/stack/rv_supplied/n11-failure-stack-n11-s0.mp4) |
+| 12 | 0.0%<br>[get_failed](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2/n12-failure-stack-n12-s7.mp4) | 0.0%<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/stack/final_v2_wo_demo/n12-failure-stack-n12-s7.mp4) | 0.0%<br>[pick_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/stack/rv_supplied/n12-failure-stack-n12-s7.mp4) |
 
 **Unstack**
 
@@ -456,15 +497,15 @@ directory, so the links work only in a checkout that has it.
 
 | Blocks | final_v2 | final_v2 w/o demo | RoboVerify supplied |
 | ---: | --- | --- | --- |
-| 4 | 67.0%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2/n04-success-restack-n4-t2-s0.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2/n04-failure-restack-n4-t2-s0.mp4) | 90.4%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2_wo_demo/n04-success-restack-n4-t2-s0.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2_wo_demo/n04-failure-restack-n4-t2-s3.mp4) | 80.0%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/restack/rv_supplied/n04-success-restack-n4-t2-s0.mp4)<br>[loop_limit](../../../runs/cap-generalization/20261029-full-eval/videos/restack/rv_supplied/n04-failure-restack-n4-t2-s3.mp4) |
-| 5 | 68.0%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2/n05-success-restack-n5-t3-s0.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2/n05-failure-restack-n5-t3-s0.mp4) | 80.0%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2_wo_demo/n05-success-restack-n5-t3-s0.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2_wo_demo/n05-failure-restack-n5-t3-s0.mp4) | 60.0%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/restack/rv_supplied/n05-success-restack-n5-t3-s1.mp4)<br>[loop_limit](../../../runs/cap-generalization/20261029-full-eval/videos/restack/rv_supplied/n05-failure-restack-n5-t3-s0.mp4) |
-| 6 | 43.8%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2/n06-success-restack-n6-t2-s3.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2/n06-failure-restack-n6-t2-s0.mp4) | 45.8%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2_wo_demo/n06-success-restack-n6-t2-s1.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2_wo_demo/n06-failure-restack-n6-t2-s0.mp4) | 15.0%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/restack/rv_supplied/n06-success-restack-n6-t2-s8.mp4)<br>[loop_limit](../../../runs/cap-generalization/20261029-full-eval/videos/restack/rv_supplied/n06-failure-restack-n6-t2-s0.mp4) |
-| 7 | 27.9%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2/n07-success-restack-n7-t3-s4.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2/n07-failure-restack-n7-t3-s0.mp4) | 26.8%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2_wo_demo/n07-success-restack-n7-t3-s0.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2_wo_demo/n07-failure-restack-n7-t3-s0.mp4) | 0.0%<br>[loop_limit](../../../runs/cap-generalization/20261029-full-eval/videos/restack/rv_supplied/n07-failure-restack-n7-t3-s0.mp4) |
-| 8 | 7.2%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2/n08-success-restack-n8-t4-s3.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2/n08-failure-restack-n8-t4-s0.mp4) | 9.8%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2_wo_demo/n08-success-restack-n8-t4-s0.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2_wo_demo/n08-failure-restack-n8-t4-s0.mp4) | 0.0%<br>[loop_limit](../../../runs/cap-generalization/20261029-full-eval/videos/restack/rv_supplied/n08-failure-restack-n8-t4-s0.mp4) |
-| 9 | 0.5%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2/n09-success-restack-n9-t5-s3.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2/n09-failure-restack-n9-t5-s0.mp4) | 1.4%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2_wo_demo/n09-success-restack-n9-t5-s1.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2_wo_demo/n09-failure-restack-n9-t5-s0.mp4) | 0.0%<br>[loop_limit](../../../runs/cap-generalization/20261029-full-eval/videos/restack/rv_supplied/n09-failure-restack-n9-t5-s0.mp4) |
-| 10 | 0.0%<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2/n10-failure-restack-n10-t2-s1.mp4) | 0.0%<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2_wo_demo/n10-failure-restack-n10-t2-s1.mp4) | 0.0%<br>[loop_limit](../../../runs/cap-generalization/20261029-full-eval/videos/restack/rv_supplied/n10-failure-restack-n10-t2-s1.mp4) |
-| 11 | 0.0%<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2/n11-failure-restack-n11-t3-s0.mp4) | 0.0%<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2_wo_demo/n11-failure-restack-n11-t3-s0.mp4) | 0.0%<br>[loop_limit](../../../runs/cap-generalization/20261029-full-eval/videos/restack/rv_supplied/n11-failure-restack-n11-t3-s0.mp4) |
-| 12 | 0.0%<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2/n12-failure-restack-n12-t8-s4.mp4) | 0.0%<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2_wo_demo/n12-failure-restack-n12-t8-s4.mp4) | 0.0%<br>[loop_limit](../../../runs/cap-generalization/20261029-full-eval/videos/restack/rv_supplied/n12-failure-restack-n12-t8-s4.mp4) |
+| 4 | 67.0%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2/n04-success-restack-n4-t2-s0.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2/n04-failure-restack-n4-t2-s0.mp4) | 90.4%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2_wo_demo/n04-success-restack-n4-t2-s0.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2_wo_demo/n04-failure-restack-n4-t2-s3.mp4) | 80.0%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/restack/rv_supplied/n04-success-restack-n4-t2-s0.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/rv_supplied/n04-failure-restack-n4-t2-s3.mp4) |
+| 5 | 68.0%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2/n05-success-restack-n5-t3-s0.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2/n05-failure-restack-n5-t3-s0.mp4) | 80.0%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2_wo_demo/n05-success-restack-n5-t3-s0.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2_wo_demo/n05-failure-restack-n5-t3-s0.mp4) | 60.0%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/restack/rv_supplied/n05-success-restack-n5-t3-s1.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/rv_supplied/n05-failure-restack-n5-t3-s0.mp4) |
+| 6 | 43.8%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2/n06-success-restack-n6-t2-s3.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2/n06-failure-restack-n6-t2-s0.mp4) | 45.8%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2_wo_demo/n06-success-restack-n6-t2-s1.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2_wo_demo/n06-failure-restack-n6-t2-s0.mp4) | 15.0%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/restack/rv_supplied/n06-success-restack-n6-t2-s8.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/rv_supplied/n06-failure-restack-n6-t2-s0.mp4) |
+| 7 | 27.9%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2/n07-success-restack-n7-t3-s4.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2/n07-failure-restack-n7-t3-s0.mp4) | 26.8%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2_wo_demo/n07-success-restack-n7-t3-s0.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2_wo_demo/n07-failure-restack-n7-t3-s0.mp4) | 0.0%<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/rv_supplied/n07-failure-restack-n7-t3-s0.mp4) |
+| 8 | 7.2%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2/n08-success-restack-n8-t4-s3.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2/n08-failure-restack-n8-t4-s0.mp4) | 9.8%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2_wo_demo/n08-success-restack-n8-t4-s0.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2_wo_demo/n08-failure-restack-n8-t4-s0.mp4) | 0.0%<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/rv_supplied/n08-failure-restack-n8-t4-s0.mp4) |
+| 9 | 0.5%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2/n09-success-restack-n9-t5-s3.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2/n09-failure-restack-n9-t5-s0.mp4) | 1.4%<br>[success](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2_wo_demo/n09-success-restack-n9-t5-s1.mp4)<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2_wo_demo/n09-failure-restack-n9-t5-s0.mp4) | 0.0%<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/rv_supplied/n09-failure-restack-n9-t5-s0.mp4) |
+| 10 | 0.0%<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2/n10-failure-restack-n10-t2-s1.mp4) | 0.0%<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2_wo_demo/n10-failure-restack-n10-t2-s1.mp4) | 0.0%<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/rv_supplied/n10-failure-restack-n10-t2-s1.mp4) |
+| 11 | 0.0%<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2/n11-failure-restack-n11-t3-s0.mp4) | 0.0%<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2_wo_demo/n11-failure-restack-n11-t3-s0.mp4) | 0.0%<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/rv_supplied/n11-failure-restack-n11-t3-s0.mp4) |
+| 12 | 0.0%<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2/n12-failure-restack-n12-t8-s4.mp4) | 0.0%<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/final_v2_wo_demo/n12-failure-restack-n12-t8-s4.mp4) | 0.0%<br>[move_not_converged](../../../runs/cap-generalization/20261029-full-eval/videos/restack/rv_supplied/n12-failure-restack-n12-t8-s4.mp4) |
 
 **Grid**
 
