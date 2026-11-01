@@ -53,7 +53,9 @@ what is specific to `synthesis/cap/`.
 - **Generalization (Revision 9, implemented).** The final programs replayed on
   721 physically feasible cases of other block counts (`relaxed_v2`): no CaP or
   supplied RoboVerify program generalizes to every count
-  ([report](docs/revision_9_report.md)).
+  ([report](docs/revision_9_report.md)). Revision 9.1 repeats it on the 388
+  default-reset cases of `unrelaxed_v1`: trained counts are solved, but
+  success still falls above them ([report](docs/revision_9_1_report.md)).
 - **Verification (Revision 8).** Running RoboVerify's verifier on CaP programs
   is a plan, not implemented ([plan](docs/revision_8_verification.md)).
 

@@ -218,12 +218,11 @@ teleported goal satisfied its postcondition.
 
 ## 7. Notes
 
-- **Driver and report:** the Revision 9 driver
-  (`experiments/revision9_generalization.py`, `TESTSET = "relaxed_v2"`) and
-  `reports/generalization_report.py` still name `relaxed_v2`. Evaluating
-  `unrelaxed_v1` needs that name changed or made an option. The scenes
-  themselves are rebuilt correctly, because they come from the manifest's
-  setting.
+- **Driver and report:** each Revision 9 job names its test-case set
+  (`testset`), and the driver reads RoboVerify snapshots from that set;
+  `reports/generalization_report.py --testset unrelaxed_v1` reads this
+  manifest. The evaluation on this set is
+  [revision_9_1_report.md](revision_9_1_report.md).
 - **Default contact buffer:** scenes up to 11 blocks stay far below the
   100-contact limit. A policy that knocks over a large scene could still
   overflow it during a rollout. Revision 9 counts that outcome as a
