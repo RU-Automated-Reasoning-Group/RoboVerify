@@ -1,7 +1,8 @@
 """Revision 9 driver: replay final programs on a generalization test-case set.
 
 Every distinct program runs, unchanged, on every case of its task in the
-test-case set (`relaxed_v2` by default). Programs come from two sources:
+test-case set named by each job (`relaxed_v2` unless a job says otherwise;
+RoboVerify snapshots are read from that set). Programs come from two sources:
 - CaP: the final programs of a CaP experiment (`generalization.programs`),
   replayed through the CaP runtime with a scripted response, recovery and
   demonstrations off, video off;
@@ -85,7 +86,8 @@ def classify(success, status, reason, budget_exhausted_by=None):
 # ------------------------------------------------------------------ executors
 
 
-def _cap_case(task, source, case, out):
+def _cap_case(task, source, case, out, testset=TESTSET):
+    # The scene is rebuilt from the case's run config; testset is unused.
     from synthesis.cap.configs import config_final_v2_wo_demo as cfg
     from synthesis.cap.llm import ScriptedModel
     from synthesis.cap.reports.partial_reward import attempt_reward
@@ -167,19 +169,19 @@ def _roboverify_env_factory(task, num_blocks, options):
     return lambda: make_roboverify_env(task, num_blocks=num_blocks, **options)
 
 
-def case_snapshot(case):
+def case_snapshot(case, testset=TESTSET):
     """The case's settled initial state; its hash must match the manifest."""
     from synthesis.cap.generalization import testset as ts
 
     snapshot = ts.load_snapshot(
-        SNAPSHOT_ROOT / TESTSET / "snapshots" / f"{case.case_id}.npz"
+        SNAPSHOT_ROOT / testset / "snapshots" / f"{case.case_id}.npz"
     )
     if ts.state_sha256(snapshot) != case.initial_state_sha256:
         raise ValueError(f"{case.case_id}: snapshot hash differs from the manifest")
     return snapshot
 
 
-def _roboverify_case(task, source, case, out):
+def _roboverify_case(task, source, case, out, testset=TESTSET):
     from synthesis.cfg.program_source import load_program
     from synthesis.verification_lib.highlevel_verification_lib import HighLevelContext
 
@@ -204,17 +206,17 @@ def _roboverify_case(task, source, case, out):
             sim_steps=0,
             partial_reward=0.0,
         )
-    return run_definition(task, definition, case)
+    return run_definition(task, definition, case, testset)
 
 
-def run_definition(task, definition, case):
+def run_definition(task, definition, case, testset=TESTSET):
     """Execute a RoboVerify ProgramDefinition from the case snapshot."""
     from synthesis.cap.generalization import testset as ts
     from synthesis.cap.tasks import environment_options
     from synthesis.cfg.collection import record_execution, validate_trace
 
     n = case.layout["num_blocks"]
-    snapshot = case_snapshot(case)
+    snapshot = case_snapshot(case, testset)
     options = environment_options(ts.run_config(case))
     start = time.time()
     trace = record_execution(
@@ -313,7 +315,9 @@ def worker(job_path):
             seed=case.seed,
         )
         try:
-            row |= execute(job["task"], source, case, Path(job["run_root"]))
+            row |= execute(
+                job["task"], source, case, Path(job["run_root"]), job["testset"]
+            )
         except Exception as exc:  # noqa: BLE001 - recorded per case
             row |= dict(
                 success=False,

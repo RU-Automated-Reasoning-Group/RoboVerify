@@ -9,6 +9,8 @@ synthesis summaries under `roboverify_synthesis/`), and writes
     python -m synthesis.cap.reports.generalization_report RUN \\
         --output synthesis/cap/docs --plots synthesis/cap/docs/plots --prefix revision9
 
+`--testset` names the test-case set the run used (default `relaxed_v2`).
+
 Every trial of a CaP pool contributes its program's results (trial-weighted);
 distinct programs are also counted once each. Success is the driver's
 `success` (`task-spec-v2+final-release-v1` for CaP, `task-spec-v2` for
@@ -156,11 +158,11 @@ def read_jsonl(paths):
     return rows
 
 
-def load(run):
+def load(run, testset="relaxed_v2"):
     run = Path(run)
     from synthesis.cap.generalization import testset as ts
 
-    _, cases = ts.load_manifest(ts.TESTSET_DIR / "relaxed_v2.json")
+    _, cases = ts.load_manifest(ts.TESTSET_DIR / f"{testset}.json")
     case_n = {c.case_id: c.layout["num_blocks"] for c in cases}
     task_cases = defaultdict(list)
     for c in cases:
@@ -773,10 +775,11 @@ def main(argv=None):
     parser.add_argument("--plots", default="synthesis/cap/docs/plots")
     parser.add_argument("--prefix", default="revision9")
     parser.add_argument("--partial", action="store_true")
+    parser.add_argument("--testset", default="relaxed_v2")
     args = parser.parse_args(argv)
     global PARTIAL
     PARTIAL = args.partial
-    data = load(args.run)
+    data = load(args.run, args.testset)
     summary = summarize(data)
     case_counts = {t: len(data["task_cases"][t]) for t in TASKS}
     out = Path(args.output)
