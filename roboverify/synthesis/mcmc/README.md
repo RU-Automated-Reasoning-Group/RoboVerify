@@ -107,3 +107,10 @@ three-instruction transfer. The supplied demo's exact five-instruction structure
 has calculated position 4,581,985 in the same order; that position was not timed
 by exhaustive search. This is a structure-search result, not a motion proof or
 an end-to-end synthesis result.
+
+For the standalone four-ID alphabet and goal `ON(1,0)`, the demo's first-iteration
+five-motion-instruction body has exact rank **63,105,263**. Before it, the
+production BMC filter would receive 63,105,263 candidates including its initial
+seed; 59,388,189 would reach a Z3 check. These are calculated invocation counts,
+not SAT/CEM counts or an exhaustive timed run. The target itself passes the
+production BMC gate. See the [standalone rank calculation](../../runs/enumeration-structure-only/20261109-standalone-stack-demo-rank/report.md).
