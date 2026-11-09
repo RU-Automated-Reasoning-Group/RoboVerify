@@ -1,10 +1,8 @@
-"""CLI entry point for an instrumented MCMC search.
+"""CLI entry point for MCMC or enumerative search with BMC and CEM.
 
-The MCMC path previously had no entry point: its only driver is
-``synthesis/entry/main.py``, whose body is a single ``if __name__`` block mixing
-commented-out experiments with an ``exit()`` partway through. This module gives the
-search a real, reproducible invocation whose every argument is recorded in
-``config.json``.
+Every argument, including the structural search strategy, is recorded in
+``config.json``. Enumeration requires a BMC goal and screens each candidate
+before invoking the same CEM optimizer used by MCMC.
 
 Examples::
 
@@ -20,10 +18,8 @@ Then read it with::
 
     uv run python -m synthesis.experiment.report --run runs/mcmc/latest
 
-Learning the goal feature is deliberately out of scope: this runs *one* search
-against a feature you name. The decision-tree staging that discovers a feature and
-splits demos around it lives in ``synthesis/mcmc/decision_tree.py`` and is driven by
-``synthesis/entry/main.py``.
+This runs one straight-line search against a feature you name. Structured search,
+predicate discovery, refinement and quotienting use ``synthesis.entry.synthesize_cfg``.
 """
 
 import argparse
@@ -53,7 +49,7 @@ def parse_goal_feature(text: str):
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run an instrumented MCMC program search into a run directory.",
+        description="Run MCMC or enumerative program search into a run directory.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     add_cli_arguments(parser)
@@ -83,8 +79,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv=None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
     config = config_from_args(args)
+
+    if config.search_strategy == "enumeration" and (
+        args.no_bmc or not args.goal_feature
+    ):
+        parser.error(
+            "--search-strategy enumeration requires --goal-feature with BMC enabled"
+        )
 
     goal_feature = parse_goal_feature(args.goal_feature) if args.goal_feature else None
     bmc_goal = None
@@ -180,17 +184,25 @@ def main(argv=None) -> int:
         raise
 
     logger.finish(
-        "completed",
-        best_cost=float(result.best_cost),
+        "no_feasible_candidate" if result.best_program is None else "completed",
+        search_strategy=config.search_strategy,
+        termination_reason=result.termination_reason,
+        best_checks_passed=result.best_checks_passed,
+        best_cost=float(result.best_cost) if result.best_program is not None else None,
         best_iter=result.best_iter,
         iters_completed=result.iters_completed,
         best_program=str(result.best_program),
     )
-    logger.progress_line(
-        f"[run] done: best cost {result.best_cost:.6g} at iteration "
-        f"{result.best_iter} over {result.iters_completed} iterations"
-    )
-    return 0
+    if result.best_program is None:
+        logger.progress_line(
+            f"[run] done: no BMC-feasible candidate after {result.iters_completed} iterations"
+        )
+    else:
+        logger.progress_line(
+            f"[run] done: best cost {result.best_cost:.6g} at iteration "
+            f"{result.best_iter} over {result.iters_completed} iterations"
+        )
+    return 0 if result.best_program is not None else 2
 
 
 if __name__ == "__main__":

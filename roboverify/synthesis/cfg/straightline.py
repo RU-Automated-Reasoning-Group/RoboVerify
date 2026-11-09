@@ -1,4 +1,4 @@
-"""Algorithm 5: annealed mutation/CEM, epsilon pool, then PostScore ranking."""
+"""Mutation or enumeration with CEM, epsilon pool, then PostScore ranking."""
 
 from copy import deepcopy
 from dataclasses import dataclass
@@ -9,6 +9,7 @@ import numpy as np
 from synthesis.cfg.execute import execute_current
 from synthesis.cfg.refine import scene_at
 from synthesis.cfg.reset import reset_segment
+from synthesis.entry.search_options import validate_search_strategy
 from synthesis.mcmc.distance import make_distance
 from synthesis.mcmc.search_core import (
     CandidatePool,
@@ -35,6 +36,10 @@ class SearchBudget:
     seed: int = 0
     temperature: float = 1.0
     decay: float = 0.95
+    search_strategy: str = "mcmc"
+
+    def __post_init__(self):
+        validate_search_strategy(self.search_strategy)
 
 
 @dataclass
@@ -47,6 +52,8 @@ class StraightLineResult:
     elapsed: float = 0.0
     postscore_seconds: float = 0.0
     iterations: int = 0
+    candidates_checked: int = 0
+    bmc_rejected: int = 0
 
 
 class SegmentRollout(list):
@@ -151,9 +158,15 @@ def straight_line_synthesize(
     logger=None,
     block_id="block",
     penalty=None,
-    penalty_weight=1.0
+    penalty_weight=1.0,
+    candidates=None,
+    feasible=None,
 ):
     budget = budget or SearchBudget()
+    enumeration = budget.search_strategy == "enumeration"
+    if enumeration and (candidates is None or feasible is None):
+        raise ValueError("Enumeration requires a candidate iterator and BMC screening")
+    candidate_iterator = iter(candidates) if enumeration else None
     if (
         not segments
         or budget.iterations < 0
@@ -215,10 +228,43 @@ def straight_line_synthesize(
         return float(np.mean(success))
 
     current = deepcopy(initial_program)
-    current_score = objective(current)
+    current_score = -float("inf") if enumeration else objective(current)
     last_distance = float("inf")
+    checked, rejected = 0, 0
+    status, iteration = "budget_exhausted", 0
     for iteration in range(budget.iterations + 1):
-        if iteration:
+        if enumeration:
+            try:
+                candidate = (
+                    deepcopy(initial_program)
+                    if iteration == 0
+                    else next(candidate_iterator)
+                )
+            except StopIteration:
+                status = "space_exhausted"
+                break
+            check = feasible(candidate)
+            checked += 1
+            if not check:
+                rejected += 1
+                if logger:
+                    logger.log_metrics(
+                        iteration,
+                        phase="straightline",
+                        block_id=block_id,
+                        search_strategy="enumeration",
+                        bmc_feasible=False,
+                        bmc_reason=getattr(check, "reason", "BMC rejected"),
+                    )
+                    logger.set_progress(
+                        iteration,
+                        budget.iterations + 1,
+                        phase="straightline",
+                        block_id=block_id,
+                    )
+                continue
+            current, current_score = optimize(candidate)
+        elif iteration:
             candidate, score = optimize(propose(deepcopy(current), rng))
             temperature = temperature_at(
                 iteration - 1, budget.temperature, budget.decay
@@ -237,6 +283,8 @@ def straight_line_synthesize(
                 distance=last_distance,
                 pool_size=len(pool.entries),
                 cost=current_score,
+                search_strategy=budget.search_strategy,
+                bmc_feasible=True if enumeration else None,
             )
             logger.set_progress(
                 iteration,
@@ -260,14 +308,23 @@ def straight_line_synthesize(
                     perf_counter() - start,
                     ranking_seconds,
                     iteration,
+                    checked,
+                    rejected,
                 )
+    if enumeration and pool.entries:
+        current = deepcopy(pool.entries[0].program)
+        last_distance = pool.entries[0].distance
+    elif enumeration:
+        status = "no_feasible_candidate"
     return StraightLineResult(
         current,
         False,
-        "budget_exhausted",
+        status,
         last_distance,
         elapsed=perf_counter() - start,
-        iterations=budget.iterations,
+        iterations=max(0, checked - 1) if enumeration else iteration,
+        candidates_checked=checked,
+        bmc_rejected=rejected,
     )
 
 

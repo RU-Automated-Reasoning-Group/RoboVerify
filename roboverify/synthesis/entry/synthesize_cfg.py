@@ -10,6 +10,7 @@ from synthesis.api.program import Program, generate_random_program
 from synthesis.cfg.artifacts import describe_cfg
 from synthesis.cfg.bindings import (
     close_objects,
+    enumerate_scoped,
     mutate_ids,
     mutate_scoped,
     require_closed,
@@ -37,6 +38,7 @@ from synthesis.cfg.verified_synthesis import verified_synthesis
 from synthesis.entry.inference_options import add_inference_options
 from synthesis.entry.motion_options import add_motion_options, motion_noise_from_args
 from synthesis.entry.predicate_options import add_predicate_options
+from synthesis.entry.search_options import add_search_options
 from synthesis.entry.verification_options import (
     add_verification_options,
     wp_options_from_args,
@@ -145,6 +147,7 @@ def _run(args, logger):
     cfg.synthesis_approach = args.synthesis_approach
     cfg._task_demos = list(segments)
     budget = SearchBudget(
+        search_strategy=getattr(args, "search_strategy", "mcmc"),
         iterations=args.iterations,
         cem_iterations=args.cem_iterations,
         cem_samples=args.cem_samples,
@@ -230,6 +233,24 @@ def _run(args, logger):
                 prefix="object_" + node.name.replace(".", "_"),
             )
 
+        search_options = {}
+        if budget.search_strategy == "enumeration":
+            from synthesis.api.instructions import Move, Pick, Release
+            from synthesis.cfg.search_feasibility import check_candidate_feasibility
+            from synthesis.mcmc.enumeration import enumerate_programs
+
+            search_options = {
+                "candidates": (
+                    enumerate_programs(
+                        {"Box": list(range(args.num_blocks))},
+                        [Pick, Move, Release],
+                        args.slots,
+                    )
+                    if id_first
+                    else enumerate_scoped(initial, node.available_scope, args.slots)
+                ),
+                "feasible": partial(check_candidate_feasibility, segments=demos),
+            }
         result = straight_line_synthesize(
             demos,
             post,
@@ -240,6 +261,7 @@ def _run(args, logger):
             logger=logger,
             block_id=node.name,
             penalty=penalty,
+            **search_options,
         )
         logger.log_event(
             "block_result",
@@ -247,6 +269,9 @@ def _run(args, logger):
             force=True,
             block_id=node.name,
             search_approach=node.synthesis_approach,
+            search_strategy=budget.search_strategy,
+            candidates_checked=result.candidates_checked,
+            bmc_rejected=result.bmc_rejected,
             distance=result.distance,
             post_score=result.post_score,
             elapsed=result.elapsed,
@@ -444,6 +469,7 @@ def main(argv=None):
     parser.add_argument("--num-blocks", type=int, default=3)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--slots", type=int, default=4)
+    add_search_options(parser)
     parser.add_argument("--iterations", type=int, default=20)
     parser.add_argument("--refinements", type=int, default=5)
     parser.add_argument("--cem-iterations", type=int, default=2)
