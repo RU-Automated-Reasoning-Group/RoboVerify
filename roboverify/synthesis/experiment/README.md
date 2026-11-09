@@ -8,7 +8,7 @@ historical reproducibility alone is not a reason to retain a runner.
 
 | Tools | Purpose |
 | --- | --- |
-| `mcmc/`, `config.py` | Instrumented MCMC search, checked against the shared search implementation. |
+| `mcmc/`, `config.py` | Instrumented MCMC or enumeration, sharing BMC screening and CEM; see the [search guide](../mcmc/README.md). |
 | `run_logger.py`, `report.py` | Logging used by the main pipeline and bounded inspection of run artifacts. |
 | `invariant_learning/` | Fixed-program counterexample learning; see its [guide](invariant_learning/README.md). |
 | `ablate_higher.py`, `motion_premise_ablation.py` | Current vocabulary and motion-premise ablations; see the [verification guide](../cfg/VERIFICATION.md#higher-removal-ablation). |

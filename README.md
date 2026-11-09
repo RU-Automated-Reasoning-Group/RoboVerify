@@ -142,6 +142,13 @@ relational quotienting and named loop-body search).
 Both return named programs to inference and verification. See the
 [approach guide](roboverify/synthesis/cfg/VERIFICATION.md#synthesis-approaches).
 
+Both the integrated and standalone search CLIs also accept
+`--search-strategy mcmc|enumeration` (default MCMC). Enumeration visits bounded
+primitive structures in increasing length, checks each with BMC, then tunes its
+float parameters using CEM. It retains the existing scoring and verification
+stages; see the [search guide](roboverify/synthesis/mcmc/README.md) for scope and
+budgets. This adds a search strategy, not a new end-to-end task result.
+
 Stack reset scatters blocks within **0.70 m horizontally of the robot base**,
 retaining block separation and initial gripper clearance. The shared Stack
 precondition also requires one initial block-height level, expressed as

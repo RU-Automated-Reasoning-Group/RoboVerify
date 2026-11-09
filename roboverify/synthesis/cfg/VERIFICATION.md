@@ -1803,8 +1803,14 @@ modes above, which still require demonstration archives.
 
 ## Synthesis approaches
 
+`--search-strategy mcmc|enumeration` independently selects candidate generation
+for either approach below; MCMC remains the default. Enumeration checks each
+primitive structure with BMC before tuning its floats with CEM. The strategy is
+retained for block resynthesis and named loop-body search. See the
+[search guide](../mcmc/README.md) for bounds, BMC scope and both CLI interfaces.
+
 `--synthesis-approach relational` is the default and retains the existing
-behavior: bind numeric seed operands to names before local MCMC, search over
+behavior: bind numeric seed operands to names before local search, search over
 those names, and allow existential classifiers to introduce scoped bindings.
 `--quotient` enables its existing interleaved flat-loop recovery.
 
