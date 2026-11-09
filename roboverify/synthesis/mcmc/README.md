@@ -114,3 +114,10 @@ production BMC filter would receive 63,105,263 candidates including its initial
 seed; 59,388,189 would reach a Z3 check. These are calculated invocation counts,
 not SAT/CEM counts or an exhaustive timed run. The target itself passes the
 production BMC gate. See the [standalone rank calculation](../../runs/enumeration-structure-only/20261109-standalone-stack-demo-rank/report.md).
+
+Among those preceding candidates, **28,254,518 satisfy the standalone BMC goal
+and have float parameters**, so they would enter CEM if optimization were enabled
+and search continued to the demo. This separate eligibility count was calculated
+from the current encoder's semantics and validated with 1,249 production-checker
+comparisons; no CEM was run. The linked report gives the counting argument,
+including the encoder's permissive behavior when moving a support.
