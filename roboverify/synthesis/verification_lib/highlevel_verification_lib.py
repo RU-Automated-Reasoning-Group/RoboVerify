@@ -1,12 +1,6 @@
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from synthesis.util.symbols import fresh_const
-from synthesis.verification_lib.height_predicate import (
-    get_height_predicate,
-    validate_height_predicate,
-)
-from synthesis.verification_lib.solver_options import get_minimize_unsat_core
 from z3 import (
     And,
     BoolSort,
@@ -26,6 +20,14 @@ from z3 import (
     sat,
     unsat,
 )
+
+from synthesis.util.symbols import fresh_const
+from synthesis.verification_lib.height_predicate import (
+    get_height_predicate,
+    validate_height_predicate,
+)
+from synthesis.verification_lib.solver_options import get_minimize_unsat_core
+from synthesis.verification_lib.wp_options import wp_options
 
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -61,10 +63,25 @@ class HighLevelContext:
         verification_mode: str = "box",
         sort_name: str = "Box",
         height_predicate: Optional[str] = None,
+        wp_system: Optional[str] = None,
+        support_complete: Optional[bool] = None,
+        reduction_max_slots: Optional[int] = None,
+        reduction_max_instances: Optional[int] = None,
     ):
         self.height_predicate = validate_height_predicate(
             height_predicate or get_height_predicate()
         )
+        self.wp_options = wp_options(
+            wp_system=wp_system,
+            support_complete=support_complete,
+            reduction_max_slots=reduction_max_slots,
+            reduction_max_instances=reduction_max_instances,
+        )
+        self.wp_system = self.wp_options.wp_system
+        if self.wp_system != "old" and (
+            self.height_predicate != "Higher" or verification_mode != "box"
+        ):
+            raise ValueError("New WP backends require the Higher block vocabulary")
         self.sort_name = sort_name
         self.mode = mode
         self.num_blocks = num_blocks
@@ -267,6 +284,12 @@ class HighLevelContext:
                 ),
                 "higher_tbl",
             )
+        if self.wp_system == "new":
+            from synthesis.verification_lib.relational_axioms import (
+                add_height_representatives,
+            )
+
+            add_height_representatives(self, s)
 
     def add_axiom_scattered(self, s: Solver):
         x, y, c = [fresh_const(self.BoxSort, name) for name in ("x", "y", "c")]
@@ -466,6 +489,10 @@ class HighLevelContext:
         return And(self._flat_order(a, b), self._flat_order(b, c))
 
     def add_axiom(self, s: Solver):
+        if self.wp_system == "reduction":
+            raise ValueError(
+                "Reduction uses compiled scene queries; use context.new_solver()"
+            )
         x, y, c = [fresh_const(self.BoxSort, name) for name in ("x", "y", "c")]
         s.assert_and_track(
             ForAll(
@@ -704,12 +731,7 @@ class HighLevelContext:
             )
 
     def start_verification(self, vc=None, viz_tag: Optional[str] = None) -> None:
-        s = Solver()
-        self.add_axiom(s)
-        self.add_axiom_on_star_zero(s)
-        self.add_axiom_height(s)
-        self.add_axiom_scattered(s)
-        self.add_axiom_goal_nested(s)
+        s = self.new_solver()
         if vc is not None:
             s.add(Not(vc))
         result = s.check()
@@ -728,6 +750,10 @@ class HighLevelContext:
         """Domain axioms and solver options are local, independent of imports."""
         if timeout_ms <= 0:
             raise ValueError("Solver timeout must be positive")
+        if self.wp_system == "reduction":
+            from synthesis.verification_lib.scene_reduction import ReductionSolver
+
+            return ReductionSolver(self, timeout_ms)
         solver = Solver()
         solver.set(timeout=timeout_ms, unsat_core=True)
         solver.set("smt.core.minimize", get_minimize_unsat_core())
@@ -757,15 +783,7 @@ class HighLevelContext:
         loop anyway, and returning ``unknown`` at least says so instead of
         wedging the run with no diagnosis.
         """
-        s = Solver()
-        s.set("timeout", timeout_ms)
-        if self.verification_mode == "goals":
-            self.add_axiom_goal_nested(s)
-        else:
-            self.add_axiom(s)
-            self.add_axiom_on_star_zero(s)
-            self.add_axiom_height(s)
-            self.add_axiom_scattered(s)
+        s = self.new_solver(timeout_ms)
 
         if formula is not None:
             s.add(formula)
@@ -798,14 +816,7 @@ class HighLevelContext:
 
         Returns (z3_result, model_or_none). The model is present only when result is sat.
         """
-        s = Solver()
-        if self.verification_mode == "goals":
-            self.add_axiom_goal_nested(s)
-        else:
-            self.add_axiom(s)
-            self.add_axiom_on_star_zero(s)
-            self.add_axiom_height(s)
-            self.add_axiom_scattered(s)
+        s = self.new_solver()
 
         if p is not None:
             s.add(p)

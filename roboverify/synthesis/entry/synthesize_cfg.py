@@ -37,7 +37,10 @@ from synthesis.cfg.verified_synthesis import verified_synthesis
 from synthesis.entry.inference_options import add_inference_options
 from synthesis.entry.motion_options import add_motion_options, motion_noise_from_args
 from synthesis.entry.predicate_options import add_predicate_options
-from synthesis.entry.verification_options import add_verification_options
+from synthesis.entry.verification_options import (
+    add_verification_options,
+    wp_options_from_args,
+)
 from synthesis.experiment.run_logger import RunLogger
 from synthesis.inference_lib.minimization import using_invariant_minimizer
 from synthesis.mcmc.synthesis import (
@@ -51,6 +54,7 @@ from synthesis.verification_lib.bmc_lib import NoiseSpec
 from synthesis.verification_lib.height_predicate import using_height_predicate
 from synthesis.verification_lib.highlevel_verification_lib import HighLevelContext
 from synthesis.verification_lib.solver_options import using_unsat_core_minimization
+from synthesis.verification_lib.wp_options import using_wp_system
 
 
 def run(args, logger):
@@ -62,6 +66,8 @@ def run(args, logger):
         getattr(args, "higher_tolerance", DEFAULT_HIGHER_TOLERANCE)
     ), using_unsat_core_minimization(
         getattr(args, "minimize_unsat_core", None)
+    ), using_wp_system(
+        **wp_options_from_args(args).kwargs()
     ):
         return _run(args, logger)
 
@@ -391,6 +397,8 @@ def _run(args, logger):
         motion=str(result.motion),
         demonstration_checks=demo_checks,
         task=args.task,
+        wp_system=context.wp_system,
+        support_complete=context.wp_options.support_complete,
     )
     return 0 if result or result.status == "verified_symbolic" else 2
 
@@ -503,6 +511,12 @@ def main(argv=None):
     )
     parser.add_argument("--smoke", action="store_true")
     args = parser.parse_args(argv)
+    try:
+        wp_options_from_args(args)
+        if args.wp_system != "old" and args.height_predicate != "Higher":
+            raise ValueError("New WP backends require --height-predicate Higher")
+    except ValueError as exc:
+        parser.error(str(exc))
     if args.task == "reverse" and args.mode != "verify":
         parser.error("Reverse currently supports supplied-program verification only")
     if args.loop_invariant and args.mode != "verify":

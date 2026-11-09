@@ -8,6 +8,7 @@ Unsupported summary shapes remain explicit failures.
 from copy import deepcopy
 
 import z3
+
 from synthesis.api.instructions import (
     Assign,
     Get,
@@ -475,7 +476,7 @@ def verify_cfg_motion(
                     )
                 else:
                     check_contract_realization(p)
-                    check_abstract_effects(p)
+                    check_abstract_effects(p, symbolic_context=context)
                     check_alignment(p)
                 p.initial = old_initial
                 pending = None
@@ -530,6 +531,7 @@ def symbolic_problem(cfg, original_context, size=None):
         use_tbl=original_context.use_tbl,
         exists_top=original_context.exists_top,
         height_predicate=original_context.height_predicate,
+        **original_context.wp_options.kwargs(),
         sort_name="Box" if size is None else "CFGBox_" + uuid4().hex,
     )
     clone = deepcopy(cfg)

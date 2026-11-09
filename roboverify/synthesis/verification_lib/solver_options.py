@@ -18,11 +18,16 @@ def finite_sat_witness(solver, context, *, restore_timeout_ms, witness_timeout_m
     The original assertions, timeout and unbounded proof obligations survive.
     """
     import z3
+
     from synthesis.util.symbols import fresh_const
 
     if restore_timeout_ms <= 0 or witness_timeout_ms <= 0:
         raise ValueError("Finite witness query budgets must be positive")
-    if context.verification_mode != "box" or context.mode != "declare":
+    if (
+        context.verification_mode != "box"
+        or context.mode != "declare"
+        or getattr(context, "wp_system", "old") == "reduction"
+    ):
         return False
     surroundings = tuple(solver.assertions())
     objects = [

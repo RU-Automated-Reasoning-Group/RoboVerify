@@ -11,6 +11,7 @@ from time import perf_counter
 from typing import Optional
 
 import z3
+
 from synthesis.api.instructions import Assign, PickPlaceByName, Skip
 from synthesis.util.symbols import fresh_const
 from synthesis.verification_lib.bmc_lib import NoiseSpec, bounded_noise
@@ -531,7 +532,7 @@ def check_contract_realization(problem):
     )
 
 
-def check_abstract_effects(problem):
+def check_abstract_effects(problem, symbolic_context=None):
     """Check the entire Put interpretation, not just its local placement atom.
 
     Every relation involving the manipulated object is checked against each
@@ -554,7 +555,7 @@ def check_abstract_effects(problem):
                 for c in problem.initial_condition
             )
         )
-        high = HighLevelContext(
+        high = symbolic_context or HighLevelContext(
             use_tbl=problem.context.use_tbl,
             height_predicate=problem.context.height_predicate,
         )
@@ -850,7 +851,7 @@ def verify_motion_block(
         if problem.check("transition_consistency").status == "valid":
             check_contract_realization(problem)
             check_frame_preservation(problem)
-            check_abstract_effects(problem)
+            check_abstract_effects(problem, symbolic_context=high)
             check_alignment(problem)
     return MotionVerificationResult(problem.checks, noise, 1, perf_counter() - start)
 

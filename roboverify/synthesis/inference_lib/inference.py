@@ -5,8 +5,9 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import sympy
-import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
 import z3
+
+import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
 from synthesis.inference_lib import quant_enum_merge
 from synthesis.inference_lib.minimization import espresso_form, get_invariant_minimizer
 from synthesis.util import on
@@ -890,18 +891,8 @@ def check_tautology(
     hard quantified query can hang, which in a counterexample-guided loop means
     the whole run wedges with no diagnosis.
     """
-    solver = z3.Solver()
-    solver.set("timeout", timeout_ms)
-
-    # add all axioms
     active_context = _ensure_context(context)
-    if active_context.verification_mode == "goals":
-        active_context.add_axiom_goal_nested(solver)
-    else:
-        active_context.add_axiom(solver)
-        active_context.add_axiom_on_star_zero(solver)
-        active_context.add_axiom_height(solver)
-        active_context.add_axiom_scattered(solver)
+    solver = active_context.new_solver(timeout_ms)
 
     solver.add(z3.Not(clause))
     if active_context.exists_top and finite_sat_witness(
@@ -1608,14 +1599,10 @@ def loop_inference(
     print("final result", final_result)
 
     print("checking equivalent with ground truth")
-    solver = z3.Solver()
+    solver = active_context.new_solver()
     solver.set(unsat_core=True)
     solver.set("smt.core.minimize", True)
 
-    active_context.add_axiom(solver)
-    active_context.add_axiom_on_star_zero(solver)
-    active_context.add_axiom_height(solver)
-    active_context.add_axiom_scattered(solver)
     # (b0,) = constants
     x, y, z = z3.Consts("x y z", active_context.BoxSort)
 
@@ -1835,15 +1822,7 @@ def check_redundancy(
         if key in seen:
             continue
         seen.add(key)
-        solver = z3.Solver()
-        solver.set(timeout=timeout_ms)
-        if active_context.verification_mode == "goals":
-            active_context.add_axiom_goal_nested(solver)
-        else:
-            active_context.add_axiom(solver)
-            active_context.add_axiom_on_star_zero(solver)
-            active_context.add_axiom_height(solver)
-            active_context.add_axiom_scattered(solver)
+        solver = active_context.new_solver(timeout_ms)
 
         for existing in filtered_invariants:
             ex_expr = existing.expr if hasattr(existing, "expr") else existing

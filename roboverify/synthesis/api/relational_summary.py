@@ -10,6 +10,7 @@ outside the paper's claimed AFR fragment.
 import itertools
 
 import z3
+
 from synthesis.api.instructions import Instruction
 from synthesis.util.symbols import fresh_const, open_quantifier
 
@@ -138,6 +139,10 @@ def successor_contract(summary, context, *, avoid=(), admissibility=None):
     """
     if not isinstance(summary, RelationalSummary):
         raise TypeError("Expected a RelationalSummary")
+    if context.wp_system == "reduction":
+        raise ValueError(
+            "RelationalSummary is outside the reduction vocabulary; use old or new WP"
+        )
     if summary.relation not in context.mutable_relations:
         raise ValueError("Summary height relation differs from the selected algebra")
     relation_sort = z3.ArraySort(

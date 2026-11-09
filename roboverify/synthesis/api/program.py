@@ -6,29 +6,6 @@ from pathlib import Path
 from typing import List, Optional, Sequence, Union
 
 import numpy as np
-import synthesis.inference_lib.inference
-import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
-import synthesis.verification_lib.lowlevel_verification_lib as lowlevel_verification_lib
-from synthesis.api.instructions import (
-    Assign,
-    Get,
-    GoalAssign,
-    Instruction,
-    MarkGoal,
-    Move,
-    MoveByName,
-    MoveDown,
-    MoveRight,
-    Pick,
-    PickByName,
-    Put,
-    Release,
-    ReleaseByName,
-    Seq,
-    Skip,
-    While,
-)
-from synthesis.util.symbols import fresh_const, rewrite_quantifier
 from z3 import (
     Z3_OP_UNINTERPRETED,
     And,
@@ -54,6 +31,30 @@ from z3 import (
     substitute_vars,
     unsat,
 )
+
+import synthesis.inference_lib.inference
+import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
+import synthesis.verification_lib.lowlevel_verification_lib as lowlevel_verification_lib
+from synthesis.api.instructions import (
+    Assign,
+    Get,
+    GoalAssign,
+    Instruction,
+    MarkGoal,
+    Move,
+    MoveByName,
+    MoveDown,
+    MoveRight,
+    Pick,
+    PickByName,
+    Put,
+    Release,
+    ReleaseByName,
+    Seq,
+    Skip,
+    While,
+)
+from synthesis.util.symbols import fresh_const, rewrite_quantifier
 
 
 def _outer_while_direct_body_move_down_var(
@@ -1251,6 +1252,11 @@ def put_effect(instruction, postcondition, context):
     Separate enabling conditions from effects: a failed precondition does not
     mean that every relation in the successor becomes false.
     """
+    if context.wp_system != "old":
+        from synthesis.api.shared_wp import put_effect as shared_put_effect
+
+        return shared_put_effect(instruction, postcondition, context)
+
     from synthesis.api.equal_height import rewrite_equal_height
 
     context.validate_height_formula(postcondition)
