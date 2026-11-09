@@ -229,3 +229,30 @@ transformer, normalization and Boolean compiler are tested implementations;
 there is no mechanically checked Python-to-Lean correspondence. These changes
 do not establish a new full Stack/Unstack/Reverse synthesis or motion result.
 Existing recorded benchmark results used the default `old` backend.
+
+### Fixed-invariant tower comparison
+
+A symbolic-only recheck of the current Stack, Unstack and Reverse programs uses
+the same previously learned invariant for each task across all three backends.
+Each case checks establishment, preservation and exit at 2–4 physical blocks
+and unboundedly, with 30 seconds per solver query. No inference, simulator
+execution or motion verification is performed. Optional C1 is off; reduction
+uses its default 64-slot and 200000-work compilation limits.
+
+| Task | `old` | `new` | `reduction` |
+| --- | --- | --- | --- |
+| Stack | 12 valid | 12 valid | 9 finite valid; 3 unbounded UNKNOWN |
+| Unstack | 12 valid | 11 valid; unbounded exit timeout | 9 finite valid; 3 unbounded UNKNOWN |
+| Reverse | 12 valid | 11 valid; unbounded exit timeout | 9 finite valid; 3 unbounded UNKNOWN |
+
+There are no counterexamples or vacuous results. Reduction's establishment /
+preservation bounds are 132 / 506 for Stack and 90 / 756 for Reverse, exceeding
+the default cap. Unstack establishment times out and preservation requires 90
+slots. Every reduction exit query is rejected for universal-before-existential
+alternation: all three actual selection guards have quantified matrices.
+Larger compilation limits alone cannot remove that fragment restriction.
+
+Detailed results, formulas, invariant provenance and timings are recorded under
+`runs/wp-backend-comparison/20261109-fixed-invariants/`, including `report.md` and
+`summary.json`. These fixed-invariant results do not establish new inference or
+controller performance; UNKNOWN remains inconclusive.
