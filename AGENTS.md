@@ -218,6 +218,15 @@ replayed and checked; ordinary execution retains lowest-ID selection.
 fixed; Stack is the initial adapter. Its proof is unbounded and separate from
 the bounded search for executable counterexamples.
 
+Symbolic verification exposes `--wp-system old|new|reduction` (default `old`).
+The alternatives use shared-height Put rules with either succinct relational
+axioms or exact complete-tower scene reduction. Optional support completeness
+belongs to `new`; reduction derives its own model bound and returns UNKNOWN on
+unsupported formulas or exhausted compilation budgets. Use `context.new_solver()`
+so inference and verification retain this selection. See the
+[WP backend guide](roboverify/synthesis/verification_lib/WP-BACKENDS.md) for scope,
+quantified-guard restrictions and the unproved Python/Lean correspondence.
+
 Higher/Scattered endpoint actions now use `RelationalSummary`, with a framed,
 nondeterministic WP that requires an admissible successor and correctness for
 every allowed successor. CFG summary inference and motion refinement share this

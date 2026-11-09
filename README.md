@@ -259,6 +259,15 @@ decidability result. This does not establish EPR membership of the production
 pipeline or arbitrary extra background axioms; see
 [discrepancy 1](PAPER-DISCREPANCIES.md#1-theorem-52-contradicts-the-papers-own-table-7-r_higher).
 
+Python now offers [three selectable WP backends](roboverify/synthesis/verification_lib/WP-BACKENDS.md)
+through `--wp-system old|new|reduction`. The default retains the existing rules
+and axioms; `new` uses shared height representatives with succinct relational
+axioms, and `reduction` compiles supported queries directly into Boolean choices
+of complete current/frozen tower scenes using the derived small-model bound.
+Unsupported queries and exhausted compilation budgets return `UNKNOWN`.
+Independent finite-scene tests cover both implementations; no mechanical
+Python/Lean correspondence or new full benchmark verification is claimed.
+
 [Higher and Scattered action summaries](roboverify/synthesis/verification_lib/RELATIONAL-SUMMARIES.md)
 now have an explicit framed, nondeterministic WP contract. CFG summary inference
 recognizes these endpoint atoms, and motion checking must establish the endpoint,

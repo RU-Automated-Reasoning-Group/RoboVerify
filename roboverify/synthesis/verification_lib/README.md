@@ -6,6 +6,11 @@ Its [Lean companion](../../proofs/wp_soundness/README.md) checks the relational
 rewrites and conditional program soundness under explicit model assumptions.
 Python correspondence and the motion checks below remain separate.
 
+The [WP backend guide](WP-BACKENDS.md) documents `--wp-system old|new|reduction`:
+existing rules/axioms, shared-height rules with relational axioms, or direct
+complete-tower model reduction. The last choice compiles supported symbolic
+queries to Boolean formulas; it does not replace geometric motion checking.
+
 [Higher/Scattered action summaries](RELATIONAL-SUMMARIES.md) additionally support
 inferred endpoint atoms through an explicit nondeterministic relation contract.
 CFG motion checks its endpoint, nonmover frame and successor-domain axioms;

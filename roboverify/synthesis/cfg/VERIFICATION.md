@@ -76,6 +76,24 @@ share this setting; see the [height comparison guide](../inference_lib/README.md
 
 ## Provided Stack verification
 
+### Selecting WP and the symbolic backend
+
+`--wp-system old|new|reduction` selects the existing WP/axioms (default), the
+shared-height WP with stronger relational axioms, or the shared-height WP with
+direct complete-tower model reduction. `--wp-support-complete` optionally adds
+support completeness to `new`. Both alternatives require `Higher`; the
+selection also reaches inference and rebuilt finite/unbounded contexts.
+
+The reduction checks its input fragment and derives its own countermodel bound.
+Unsupported quantifier alternation or exhausted compilation budgets return
+`UNKNOWN`. A finite check is never promoted to an unbounded proof. Quantified
+Unstack guards remain supported by `new`; they need not pass the unbounded
+reduction's fragment check. See the [backend guide](../verification_lib/WP-BACKENDS.md)
+for axioms, exact scope, budget flags and the Python API. Recorded benchmark
+results below use `old`; switching the backend does not reproduce them by itself.
+
+### Supplied Stack configuration
+
 The supplied program has an unchanged symbolic body
 `Put(b_prime, b); Assign(b, b_prime)`. Its physical placement uses b0 for XY and b
 for Z. Use the following explicit configuration with the settled archive:

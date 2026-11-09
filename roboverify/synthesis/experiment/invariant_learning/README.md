@@ -59,7 +59,8 @@ training data.
 | `--max-counterexample-blocks` | 4; search sizes 1 through this bound, starting again at 1 after each update. |
 | `--max-rounds` | 10 accepted learner updates at most; up to 11 verification attempts including the final check. |
 | `--max-loop-iterations` | Stack uses `num_blocks - 1`; override for a different bounded execution horizon. |
-| `--verification-timeout-ms` | 10000 per symbolic/initial-domain/reachability solver query; does not bound Python formula construction or learning. |
+| `--verification-timeout-ms` | 10000 per symbolic/initial-domain/reachability solver query; includes scene compilation in reduction mode, but not preceding VC construction or learning. |
+| `--wp-system` | `old` (default), `new` (shared-height WP and relational axioms), or `reduction` (shared-height WP and direct scene reduction). See the [backend guide](../../verification_lib/WP-BACKENDS.md) for supported formulas and budgets. |
 | `--trajectory-timeout-seconds` | 60 for generated-scene preparation and execution together. |
 | `--invariant-relations` | `ON_star Higher Scattered equality`. |
 | `--invariant-variables` | 2 quantified learner variables. |

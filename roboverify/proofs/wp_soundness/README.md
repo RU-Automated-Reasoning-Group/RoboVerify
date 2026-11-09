@@ -114,8 +114,11 @@ over the existing formula vocabulary. Its `wpPut_exact` and
 `wpSeparate_exact` cover **arbitrary postconditions**, including both
 quantifiers and negation, and use the same `PutStep`/`SeparateStep` execution
 relations as the original proofs. `wpPut_equiv` establishes equivalence with
-the existing guarded Put WP. These are alternatives in Lean; the production
-Python transformer has not been replaced.
+the existing guarded Put WP. Python now exposes this alternative through
+`--wp-system new|reduction`; the default retains the existing transformer.
+The [backend guide](../../synthesis/verification_lib/WP-BACKENDS.md) describes the
+relational axioms and Boolean scene compiler. The Python implementations are
+tested, but their correspondence with Lean has not been mechanically checked.
 
 For physical objects, write the following as formula abbreviations:
 
