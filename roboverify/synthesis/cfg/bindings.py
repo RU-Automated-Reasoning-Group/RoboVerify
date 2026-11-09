@@ -2,6 +2,8 @@
 
 from copy import deepcopy
 
+from z3.z3util import get_vars
+
 from synthesis.api.instructions import (
     Assign,
     Get,
@@ -14,7 +16,6 @@ from synthesis.api.program import Program
 from synthesis.cfg.physical import name_operands
 from synthesis.environment.motion_reference import OBSERVATION_REFERENCE_NAMES
 from synthesis.predicates.term import atom, boolean, free_names, negate, ref, to_z3
-from z3.z3util import get_vars
 
 
 def require_closed(instructions, available):
@@ -169,3 +170,21 @@ def mutate_ids(program, num_blocks):
     )
     require_ids(result.instructions, num_blocks)
     return result
+
+
+def enumerate_scoped(program, available, max_length):
+    """Freeze the existing Get prefix and enumerate its in-scope physical body."""
+    from synthesis.mcmc.enumeration import enumerate_programs
+
+    prefix = []
+    for instruction in program.instructions:
+        if not isinstance(instruction, Get):
+            break
+        prefix.append(instruction)
+    names = sorted(require_closed(prefix, available) - {"tbl"})
+    return enumerate_programs(
+        {"BoxName": names},
+        [PickByName, MoveByName, ReleaseByName],
+        max_length,
+        prefix=prefix,
+    )
