@@ -1,0 +1,1069 @@
+{
+  "task": {
+    "task": "stack",
+    "precondition": "and(forall @0,@1.(implies(not(eq(@0, @1)), and(not(ON_star(@0, @1)), Scattered(@0, @1)))), forall @0,@1.(Higher(@0, @1)))",
+    "postcondition": "forall @0.(ON_star(@0, b0))"
+  },
+  "program": {
+    "source": "synthesis.examples.stack:build_program",
+    "program": [
+      {
+        "instruction": "Assign",
+        "left": "b",
+        "right": "b0"
+      },
+      {
+        "instruction": "While",
+        "guard": "and(and(not(eq(b_prime, b))), forall @0.(or(eq(@0, b_prime), not(ON_star(@0, b_prime)))))",
+        "witnesses": [
+          "b_prime"
+        ],
+        "body": [
+          {
+            "instruction": "PickByName",
+            "operands": [
+              {
+                "type": "BoxName",
+                "val": "b_prime"
+              }
+            ],
+            "limit": 50,
+            "control": {
+              "position_tolerance": 0.002,
+              "gain": 20.0,
+              "gripper_threshold": 0.052,
+              "gripper_tolerance": 0.001
+            },
+            "action_scaling": "uniform-xyz-v1"
+          },
+          {
+            "instruction": "MoveByName",
+            "operands": [
+              {
+                "type": "BoxName",
+                "val": "b_prime"
+              },
+              {
+                "type": "BoxName",
+                "val": "b_prime"
+              },
+              {
+                "type": "BoxName",
+                "val": "b"
+              }
+            ],
+            "limit": 50,
+            "control": {
+              "position_tolerance": 0.002,
+              "gain": 20.0,
+              "gripper_threshold": 0.052,
+              "gripper_tolerance": 0.001
+            },
+            "action_scaling": "uniform-xyz-v1",
+            "offsets": [
+              0.0,
+              0.0,
+              0.1
+            ]
+          },
+          {
+            "instruction": "MoveByName",
+            "operands": [
+              {
+                "type": "BoxName",
+                "val": "b0"
+              },
+              {
+                "type": "BoxName",
+                "val": "b0"
+              },
+              {
+                "type": "BoxName",
+                "val": "b"
+              }
+            ],
+            "limit": 50,
+            "control": {
+              "position_tolerance": 0.002,
+              "gain": 20.0,
+              "gripper_threshold": 0.052,
+              "gripper_tolerance": 0.001
+            },
+            "action_scaling": "uniform-xyz-v1",
+            "offsets": [
+              0.0,
+              0.0,
+              0.1
+            ]
+          },
+          {
+            "instruction": "MoveByName",
+            "operands": [
+              {
+                "type": "BoxName",
+                "val": "b0"
+              },
+              {
+                "type": "BoxName",
+                "val": "b0"
+              },
+              {
+                "type": "BoxName",
+                "val": "b"
+              }
+            ],
+            "limit": 50,
+            "control": {
+              "position_tolerance": 0.002,
+              "gain": 20.0,
+              "gripper_threshold": 0.052,
+              "gripper_tolerance": 0.001
+            },
+            "action_scaling": "uniform-xyz-v1",
+            "offsets": [
+              0.0,
+              0.0,
+              0.05
+            ]
+          },
+          {
+            "instruction": "ReleaseByName",
+            "operands": [
+              {
+                "type": "BoxName",
+                "val": "b_prime"
+              }
+            ],
+            "limit": 50,
+            "control": {
+              "position_tolerance": 0.002,
+              "gain": 20.0,
+              "gripper_threshold": 0.052,
+              "gripper_tolerance": 0.001
+            },
+            "action_scaling": "uniform-xyz-v1",
+            "release_offset": 0.15
+          },
+          {
+            "instruction": "Assign",
+            "left": "b",
+            "right": "b_prime"
+          }
+        ],
+        "max_iters": null
+      }
+    ],
+    "fingerprint": "04fdc3a13b9ed4cb617d4c20a51002abcd732f036f5bbd3bb10e9c83f5d7389b",
+    "initial_bindings": {
+      "b0": 0
+    }
+  },
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "num_blocks": 4,
+  "higher_tolerance": 0.001,
+  "trajectories": [
+    {
+      "seed": 0,
+      "observations": 131,
+      "source": "synthesis.examples.stack:build_program",
+      "program": [
+        {
+          "instruction": "Assign",
+          "left": "b",
+          "right": "b0"
+        },
+        {
+          "instruction": "While",
+          "guard": "and(and(not(eq(b_prime, b))), forall @0.(or(eq(@0, b_prime), not(ON_star(@0, b_prime)))))",
+          "witnesses": [
+            "b_prime"
+          ],
+          "body": [
+            {
+              "instruction": "PickByName",
+              "operands": [
+                {
+                  "type": "BoxName",
+                  "val": "b_prime"
+                }
+              ],
+              "limit": 50,
+              "control": {
+                "position_tolerance": 0.002,
+                "gain": 20.0,
+                "gripper_threshold": 0.052,
+                "gripper_tolerance": 0.001
+              },
+              "action_scaling": "uniform-xyz-v1"
+            },
+            {
+              "instruction": "MoveByName",
+              "operands": [
+                {
+                  "type": "BoxName",
+                  "val": "b_prime"
+                },
+                {
+                  "type": "BoxName",
+                  "val": "b_prime"
+                },
+                {
+                  "type": "BoxName",
+                  "val": "b"
+                }
+              ],
+              "limit": 50,
+              "control": {
+                "position_tolerance": 0.002,
+                "gain": 20.0,
+                "gripper_threshold": 0.052,
+                "gripper_tolerance": 0.001
+              },
+              "action_scaling": "uniform-xyz-v1",
+              "offsets": [
+                0.0,
+                0.0,
+                0.1
+              ]
+            },
+            {
+              "instruction": "MoveByName",
+              "operands": [
+                {
+                  "type": "BoxName",
+                  "val": "b0"
+                },
+                {
+                  "type": "BoxName",
+                  "val": "b0"
+                },
+                {
+                  "type": "BoxName",
+                  "val": "b"
+                }
+              ],
+              "limit": 50,
+              "control": {
+                "position_tolerance": 0.002,
+                "gain": 20.0,
+                "gripper_threshold": 0.052,
+                "gripper_tolerance": 0.001
+              },
+              "action_scaling": "uniform-xyz-v1",
+              "offsets": [
+                0.0,
+                0.0,
+                0.1
+              ]
+            },
+            {
+              "instruction": "MoveByName",
+              "operands": [
+                {
+                  "type": "BoxName",
+                  "val": "b0"
+                },
+                {
+                  "type": "BoxName",
+                  "val": "b0"
+                },
+                {
+                  "type": "BoxName",
+                  "val": "b"
+                }
+              ],
+              "limit": 50,
+              "control": {
+                "position_tolerance": 0.002,
+                "gain": 20.0,
+                "gripper_threshold": 0.052,
+                "gripper_tolerance": 0.001
+              },
+              "action_scaling": "uniform-xyz-v1",
+              "offsets": [
+                0.0,
+                0.0,
+                0.05
+              ]
+            },
+            {
+              "instruction": "ReleaseByName",
+              "operands": [
+                {
+                  "type": "BoxName",
+                  "val": "b_prime"
+                }
+              ],
+              "limit": 50,
+              "control": {
+                "position_tolerance": 0.002,
+                "gain": 20.0,
+                "gripper_threshold": 0.052,
+                "gripper_tolerance": 0.001
+              },
+              "action_scaling": "uniform-xyz-v1",
+              "release_offset": 0.15
+            },
+            {
+              "instruction": "Assign",
+              "left": "b",
+              "right": "b_prime"
+            }
+          ],
+          "max_iters": null
+        }
+      ],
+      "fingerprint": "04fdc3a13b9ed4cb617d4c20a51002abcd732f036f5bbd3bb10e9c83f5d7389b",
+      "initial_bindings": {
+        "b0": 0
+      },
+      "higher_tolerance": 0.001,
+      "initialization": {
+        "source": "reset",
+        "settling_steps": 50
+      },
+      "status": "valid",
+      "reason": "",
+      "render_error": null,
+      "elapsed_seconds": 0.6626899614930153,
+      "max_loop_iterations": 3,
+      "timeout_seconds": 60,
+      "task_spec": {
+        "task": "stack",
+        "precondition": "and(forall @0,@1.(implies(not(eq(@0, @1)), and(not(ON_star(@0, @1)), Scattered(@0, @1)))), forall @0,@1.(Higher(@0, @1)))",
+        "postcondition": "forall @0.(ON_star(@0, b0))"
+      },
+      "validation": {
+        "total": 1,
+        "pre_holds": 1,
+        "post_at_end": 1,
+        "post_reached": 1,
+        "issues": []
+      }
+    },
+    {
+      "seed": 1,
+      "observations": 122,
+      "source": "synthesis.examples.stack:build_program",
+      "program": [
+        {
+          "instruction": "Assign",
+          "left": "b",
+          "right": "b0"
+        },
+        {
+          "instruction": "While",
+          "guard": "and(and(not(eq(b_prime, b))), forall @0.(or(eq(@0, b_prime), not(ON_star(@0, b_prime)))))",
+          "witnesses": [
+            "b_prime"
+          ],
+          "body": [
+            {
+              "instruction": "PickByName",
+              "operands": [
+                {
+                  "type": "BoxName",
+                  "val": "b_prime"
+                }
+              ],
+              "limit": 50,
+              "control": {
+                "position_tolerance": 0.002,
+                "gain": 20.0,
+                "gripper_threshold": 0.052,
+                "gripper_tolerance": 0.001
+              },
+              "action_scaling": "uniform-xyz-v1"
+            },
+            {
+              "instruction": "MoveByName",
+              "operands": [
+                {
+                  "type": "BoxName",
+                  "val": "b_prime"
+                },
+                {
+                  "type": "BoxName",
+                  "val": "b_prime"
+                },
+                {
+                  "type": "BoxName",
+                  "val": "b"
+                }
+              ],
+              "limit": 50,
+              "control": {
+                "position_tolerance": 0.002,
+                "gain": 20.0,
+                "gripper_threshold": 0.052,
+                "gripper_tolerance": 0.001
+              },
+              "action_scaling": "uniform-xyz-v1",
+              "offsets": [
+                0.0,
+                0.0,
+                0.1
+              ]
+            },
+            {
+              "instruction": "MoveByName",
+              "operands": [
+                {
+                  "type": "BoxName",
+                  "val": "b0"
+                },
+                {
+                  "type": "BoxName",
+                  "val": "b0"
+                },
+                {
+                  "type": "BoxName",
+                  "val": "b"
+                }
+              ],
+              "limit": 50,
+              "control": {
+                "position_tolerance": 0.002,
+                "gain": 20.0,
+                "gripper_threshold": 0.052,
+                "gripper_tolerance": 0.001
+              },
+              "action_scaling": "uniform-xyz-v1",
+              "offsets": [
+                0.0,
+                0.0,
+                0.1
+              ]
+            },
+            {
+              "instruction": "MoveByName",
+              "operands": [
+                {
+                  "type": "BoxName",
+                  "val": "b0"
+                },
+                {
+                  "type": "BoxName",
+                  "val": "b0"
+                },
+                {
+                  "type": "BoxName",
+                  "val": "b"
+                }
+              ],
+              "limit": 50,
+              "control": {
+                "position_tolerance": 0.002,
+                "gain": 20.0,
+                "gripper_threshold": 0.052,
+                "gripper_tolerance": 0.001
+              },
+              "action_scaling": "uniform-xyz-v1",
+              "offsets": [
+                0.0,
+                0.0,
+                0.05
+              ]
+            },
+            {
+              "instruction": "ReleaseByName",
+              "operands": [
+                {
+                  "type": "BoxName",
+                  "val": "b_prime"
+                }
+              ],
+              "limit": 50,
+              "control": {
+                "position_tolerance": 0.002,
+                "gain": 20.0,
+                "gripper_threshold": 0.052,
+                "gripper_tolerance": 0.001
+              },
+              "action_scaling": "uniform-xyz-v1",
+              "release_offset": 0.15
+            },
+            {
+              "instruction": "Assign",
+              "left": "b",
+              "right": "b_prime"
+            }
+          ],
+          "max_iters": null
+        }
+      ],
+      "fingerprint": "04fdc3a13b9ed4cb617d4c20a51002abcd732f036f5bbd3bb10e9c83f5d7389b",
+      "initial_bindings": {
+        "b0": 0
+      },
+      "higher_tolerance": 0.001,
+      "initialization": {
+        "source": "reset",
+        "settling_steps": 50
+      },
+      "status": "valid",
+      "reason": "",
+      "render_error": null,
+      "elapsed_seconds": 0.6367299742996693,
+      "max_loop_iterations": 3,
+      "timeout_seconds": 60,
+      "task_spec": {
+        "task": "stack",
+        "precondition": "and(forall @0,@1.(implies(not(eq(@0, @1)), and(not(ON_star(@0, @1)), Scattered(@0, @1)))), forall @0,@1.(Higher(@0, @1)))",
+        "postcondition": "forall @0.(ON_star(@0, b0))"
+      },
+      "validation": {
+        "total": 1,
+        "pre_holds": 1,
+        "post_at_end": 1,
+        "post_reached": 1,
+        "issues": []
+      }
+    },
+    {
+      "seed": 2,
+      "observations": 133,
+      "source": "synthesis.examples.stack:build_program",
+      "program": [
+        {
+          "instruction": "Assign",
+          "left": "b",
+          "right": "b0"
+        },
+        {
+          "instruction": "While",
+          "guard": "and(and(not(eq(b_prime, b))), forall @0.(or(eq(@0, b_prime), not(ON_star(@0, b_prime)))))",
+          "witnesses": [
+            "b_prime"
+          ],
+          "body": [
+            {
+              "instruction": "PickByName",
+              "operands": [
+                {
+                  "type": "BoxName",
+                  "val": "b_prime"
+                }
+              ],
+              "limit": 50,
+              "control": {
+                "position_tolerance": 0.002,
+                "gain": 20.0,
+                "gripper_threshold": 0.052,
+                "gripper_tolerance": 0.001
+              },
+              "action_scaling": "uniform-xyz-v1"
+            },
+            {
+              "instruction": "MoveByName",
+              "operands": [
+                {
+                  "type": "BoxName",
+                  "val": "b_prime"
+                },
+                {
+                  "type": "BoxName",
+                  "val": "b_prime"
+                },
+                {
+                  "type": "BoxName",
+                  "val": "b"
+                }
+              ],
+              "limit": 50,
+              "control": {
+                "position_tolerance": 0.002,
+                "gain": 20.0,
+                "gripper_threshold": 0.052,
+                "gripper_tolerance": 0.001
+              },
+              "action_scaling": "uniform-xyz-v1",
+              "offsets": [
+                0.0,
+                0.0,
+                0.1
+              ]
+            },
+            {
+              "instruction": "MoveByName",
+              "operands": [
+                {
+                  "type": "BoxName",
+                  "val": "b0"
+                },
+                {
+                  "type": "BoxName",
+                  "val": "b0"
+                },
+                {
+                  "type": "BoxName",
+                  "val": "b"
+                }
+              ],
+              "limit": 50,
+              "control": {
+                "position_tolerance": 0.002,
+                "gain": 20.0,
+                "gripper_threshold": 0.052,
+                "gripper_tolerance": 0.001
+              },
+              "action_scaling": "uniform-xyz-v1",
+              "offsets": [
+                0.0,
+                0.0,
+                0.1
+              ]
+            },
+            {
+              "instruction": "MoveByName",
+              "operands": [
+                {
+                  "type": "BoxName",
+                  "val": "b0"
+                },
+                {
+                  "type": "BoxName",
+                  "val": "b0"
+                },
+                {
+                  "type": "BoxName",
+                  "val": "b"
+                }
+              ],
+              "limit": 50,
+              "control": {
+                "position_tolerance": 0.002,
+                "gain": 20.0,
+                "gripper_threshold": 0.052,
+                "gripper_tolerance": 0.001
+              },
+              "action_scaling": "uniform-xyz-v1",
+              "offsets": [
+                0.0,
+                0.0,
+                0.05
+              ]
+            },
+            {
+              "instruction": "ReleaseByName",
+              "operands": [
+                {
+                  "type": "BoxName",
+                  "val": "b_prime"
+                }
+              ],
+              "limit": 50,
+              "control": {
+                "position_tolerance": 0.002,
+                "gain": 20.0,
+                "gripper_threshold": 0.052,
+                "gripper_tolerance": 0.001
+              },
+              "action_scaling": "uniform-xyz-v1",
+              "release_offset": 0.15
+            },
+            {
+              "instruction": "Assign",
+              "left": "b",
+              "right": "b_prime"
+            }
+          ],
+          "max_iters": null
+        }
+      ],
+      "fingerprint": "04fdc3a13b9ed4cb617d4c20a51002abcd732f036f5bbd3bb10e9c83f5d7389b",
+      "initial_bindings": {
+        "b0": 0
+      },
+      "higher_tolerance": 0.001,
+      "initialization": {
+        "source": "reset",
+        "settling_steps": 50
+      },
+      "status": "valid",
+      "reason": "",
+      "render_error": null,
+      "elapsed_seconds": 0.6411108896136284,
+      "max_loop_iterations": 3,
+      "timeout_seconds": 60,
+      "task_spec": {
+        "task": "stack",
+        "precondition": "and(forall @0,@1.(implies(not(eq(@0, @1)), and(not(ON_star(@0, @1)), Scattered(@0, @1)))), forall @0,@1.(Higher(@0, @1)))",
+        "postcondition": "forall @0.(ON_star(@0, b0))"
+      },
+      "validation": {
+        "total": 1,
+        "pre_holds": 1,
+        "post_at_end": 1,
+        "post_reached": 1,
+        "issues": []
+      }
+    },
+    {
+      "seed": 3,
+      "observations": 123,
+      "source": "synthesis.examples.stack:build_program",
+      "program": [
+        {
+          "instruction": "Assign",
+          "left": "b",
+          "right": "b0"
+        },
+        {
+          "instruction": "While",
+          "guard": "and(and(not(eq(b_prime, b))), forall @0.(or(eq(@0, b_prime), not(ON_star(@0, b_prime)))))",
+          "witnesses": [
+            "b_prime"
+          ],
+          "body": [
+            {
+              "instruction": "PickByName",
+              "operands": [
+                {
+                  "type": "BoxName",
+                  "val": "b_prime"
+                }
+              ],
+              "limit": 50,
+              "control": {
+                "position_tolerance": 0.002,
+                "gain": 20.0,
+                "gripper_threshold": 0.052,
+                "gripper_tolerance": 0.001
+              },
+              "action_scaling": "uniform-xyz-v1"
+            },
+            {
+              "instruction": "MoveByName",
+              "operands": [
+                {
+                  "type": "BoxName",
+                  "val": "b_prime"
+                },
+                {
+                  "type": "BoxName",
+                  "val": "b_prime"
+                },
+                {
+                  "type": "BoxName",
+                  "val": "b"
+                }
+              ],
+              "limit": 50,
+              "control": {
+                "position_tolerance": 0.002,
+                "gain": 20.0,
+                "gripper_threshold": 0.052,
+                "gripper_tolerance": 0.001
+              },
+              "action_scaling": "uniform-xyz-v1",
+              "offsets": [
+                0.0,
+                0.0,
+                0.1
+              ]
+            },
+            {
+              "instruction": "MoveByName",
+              "operands": [
+                {
+                  "type": "BoxName",
+                  "val": "b0"
+                },
+                {
+                  "type": "BoxName",
+                  "val": "b0"
+                },
+                {
+                  "type": "BoxName",
+                  "val": "b"
+                }
+              ],
+              "limit": 50,
+              "control": {
+                "position_tolerance": 0.002,
+                "gain": 20.0,
+                "gripper_threshold": 0.052,
+                "gripper_tolerance": 0.001
+              },
+              "action_scaling": "uniform-xyz-v1",
+              "offsets": [
+                0.0,
+                0.0,
+                0.1
+              ]
+            },
+            {
+              "instruction": "MoveByName",
+              "operands": [
+                {
+                  "type": "BoxName",
+                  "val": "b0"
+                },
+                {
+                  "type": "BoxName",
+                  "val": "b0"
+                },
+                {
+                  "type": "BoxName",
+                  "val": "b"
+                }
+              ],
+              "limit": 50,
+              "control": {
+                "position_tolerance": 0.002,
+                "gain": 20.0,
+                "gripper_threshold": 0.052,
+                "gripper_tolerance": 0.001
+              },
+              "action_scaling": "uniform-xyz-v1",
+              "offsets": [
+                0.0,
+                0.0,
+                0.05
+              ]
+            },
+            {
+              "instruction": "ReleaseByName",
+              "operands": [
+                {
+                  "type": "BoxName",
+                  "val": "b_prime"
+                }
+              ],
+              "limit": 50,
+              "control": {
+                "position_tolerance": 0.002,
+                "gain": 20.0,
+                "gripper_threshold": 0.052,
+                "gripper_tolerance": 0.001
+              },
+              "action_scaling": "uniform-xyz-v1",
+              "release_offset": 0.15
+            },
+            {
+              "instruction": "Assign",
+              "left": "b",
+              "right": "b_prime"
+            }
+          ],
+          "max_iters": null
+        }
+      ],
+      "fingerprint": "04fdc3a13b9ed4cb617d4c20a51002abcd732f036f5bbd3bb10e9c83f5d7389b",
+      "initial_bindings": {
+        "b0": 0
+      },
+      "higher_tolerance": 0.001,
+      "initialization": {
+        "source": "reset",
+        "settling_steps": 50
+      },
+      "status": "valid",
+      "reason": "",
+      "render_error": null,
+      "elapsed_seconds": 0.6123633962124586,
+      "max_loop_iterations": 3,
+      "timeout_seconds": 60,
+      "task_spec": {
+        "task": "stack",
+        "precondition": "and(forall @0,@1.(implies(not(eq(@0, @1)), and(not(ON_star(@0, @1)), Scattered(@0, @1)))), forall @0,@1.(Higher(@0, @1)))",
+        "postcondition": "forall @0.(ON_star(@0, b0))"
+      },
+      "validation": {
+        "total": 1,
+        "pre_holds": 1,
+        "post_at_end": 1,
+        "post_reached": 1,
+        "issues": []
+      }
+    },
+    {
+      "seed": 4,
+      "observations": 131,
+      "source": "synthesis.examples.stack:build_program",
+      "program": [
+        {
+          "instruction": "Assign",
+          "left": "b",
+          "right": "b0"
+        },
+        {
+          "instruction": "While",
+          "guard": "and(and(not(eq(b_prime, b))), forall @0.(or(eq(@0, b_prime), not(ON_star(@0, b_prime)))))",
+          "witnesses": [
+            "b_prime"
+          ],
+          "body": [
+            {
+              "instruction": "PickByName",
+              "operands": [
+                {
+                  "type": "BoxName",
+                  "val": "b_prime"
+                }
+              ],
+              "limit": 50,
+              "control": {
+                "position_tolerance": 0.002,
+                "gain": 20.0,
+                "gripper_threshold": 0.052,
+                "gripper_tolerance": 0.001
+              },
+              "action_scaling": "uniform-xyz-v1"
+            },
+            {
+              "instruction": "MoveByName",
+              "operands": [
+                {
+                  "type": "BoxName",
+                  "val": "b_prime"
+                },
+                {
+                  "type": "BoxName",
+                  "val": "b_prime"
+                },
+                {
+                  "type": "BoxName",
+                  "val": "b"
+                }
+              ],
+              "limit": 50,
+              "control": {
+                "position_tolerance": 0.002,
+                "gain": 20.0,
+                "gripper_threshold": 0.052,
+                "gripper_tolerance": 0.001
+              },
+              "action_scaling": "uniform-xyz-v1",
+              "offsets": [
+                0.0,
+                0.0,
+                0.1
+              ]
+            },
+            {
+              "instruction": "MoveByName",
+              "operands": [
+                {
+                  "type": "BoxName",
+                  "val": "b0"
+                },
+                {
+                  "type": "BoxName",
+                  "val": "b0"
+                },
+                {
+                  "type": "BoxName",
+                  "val": "b"
+                }
+              ],
+              "limit": 50,
+              "control": {
+                "position_tolerance": 0.002,
+                "gain": 20.0,
+                "gripper_threshold": 0.052,
+                "gripper_tolerance": 0.001
+              },
+              "action_scaling": "uniform-xyz-v1",
+              "offsets": [
+                0.0,
+                0.0,
+                0.1
+              ]
+            },
+            {
+              "instruction": "MoveByName",
+              "operands": [
+                {
+                  "type": "BoxName",
+                  "val": "b0"
+                },
+                {
+                  "type": "BoxName",
+                  "val": "b0"
+                },
+                {
+                  "type": "BoxName",
+                  "val": "b"
+                }
+              ],
+              "limit": 50,
+              "control": {
+                "position_tolerance": 0.002,
+                "gain": 20.0,
+                "gripper_threshold": 0.052,
+                "gripper_tolerance": 0.001
+              },
+              "action_scaling": "uniform-xyz-v1",
+              "offsets": [
+                0.0,
+                0.0,
+                0.05
+              ]
+            },
+            {
+              "instruction": "ReleaseByName",
+              "operands": [
+                {
+                  "type": "BoxName",
+                  "val": "b_prime"
+                }
+              ],
+              "limit": 50,
+              "control": {
+                "position_tolerance": 0.002,
+                "gain": 20.0,
+                "gripper_threshold": 0.052,
+                "gripper_tolerance": 0.001
+              },
+              "action_scaling": "uniform-xyz-v1",
+              "release_offset": 0.15
+            },
+            {
+              "instruction": "Assign",
+              "left": "b",
+              "right": "b_prime"
+            }
+          ],
+          "max_iters": null
+        }
+      ],
+      "fingerprint": "04fdc3a13b9ed4cb617d4c20a51002abcd732f036f5bbd3bb10e9c83f5d7389b",
+      "initial_bindings": {
+        "b0": 0
+      },
+      "higher_tolerance": 0.001,
+      "initialization": {
+        "source": "reset",
+        "settling_steps": 50
+      },
+      "status": "valid",
+      "reason": "",
+      "render_error": null,
+      "elapsed_seconds": 0.6505078580230474,
+      "max_loop_iterations": 3,
+      "timeout_seconds": 60,
+      "task_spec": {
+        "task": "stack",
+        "precondition": "and(forall @0,@1.(implies(not(eq(@0, @1)), and(not(ON_star(@0, @1)), Scattered(@0, @1)))), forall @0,@1.(Higher(@0, @1)))",
+        "postcondition": "forall @0.(ON_star(@0, b0))"
+      },
+      "validation": {
+        "total": 1,
+        "pre_holds": 1,
+        "post_at_end": 1,
+        "post_reached": 1,
+        "issues": []
+      }
+    }
+  ],
+  "status": "valid",
+  "media_status": "complete"
+}

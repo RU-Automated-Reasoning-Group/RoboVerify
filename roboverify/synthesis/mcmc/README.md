@@ -72,6 +72,55 @@ initial search and uses the selected strategy only if resynthesis is requested.
 
 ## Standalone search
 
+### Four-block Stack synthesis without verification
+
+The repository includes
+[`demonstrations.npz`](../../demos/stack/4-blocks-5-trajectories-pyeda-verification/demonstrations.npz)
+and its original
+[`collection.json`](../../demos/stack/4-blocks-5-trajectories-pyeda-verification/collection.json).
+This collection contains five validated four-block Stack trajectories from the
+provided `synthesis.examples.stack:build_program`, collected for the 2026-10-01
+PyEDA verification recheck. Full simulator snapshots let search restore the
+recorded starts without recollecting demonstrations.
+
+With the project dependencies and MuJoCo installed, run from the repository root:
+
+```bash
+cd roboverify
+unset LD_PRELOAD
+export LD_LIBRARY_PATH="$HOME/.mujoco/mujoco210/bin:/usr/lib/nvidia"
+
+uv run python -m synthesis.experiment.mcmc.run \
+  --task stack --num-blocks 4 \
+  --demos demos/stack/4-blocks-5-trajectories-pyeda-verification/demonstrations.npz \
+  --search-strategy mcmc --no-bmc \
+  --video-policy none --run-name stack-4-blocks-synthesis
+```
+
+This runs standalone straight-line MCMC/CEM imitation search over the archived
+demonstrations. It performs no symbolic or motion verification; `--no-bmc` also
+disables BMC feasibility pruning. It does not recover loops. The integrated
+`synthesis.entry.synthesize_cfg` CLI has no verification-disabled mode.
+The original collection's verification history does not verify a newly
+synthesized candidate.
+
+The command uses all five demonstration seeds and the default search budget of
+2,000 MCMC iterations and 10 CEM rounds per candidate. Add `--smoke` for a smaller
+diagnostic run (20 MCMC iterations, 2 CEM rounds and 2 seeds). These budgets do not
+guarantee successful task synthesis. Videos are disabled by the command above;
+use `--video-policy best` to render new best candidates.
+
+Inspect progress or the completed result from `roboverify/`:
+
+```bash
+uv run python -m synthesis.experiment.report --run runs/stack-4-blocks-synthesis/latest
+```
+
+The run directory records the resolved configuration, metrics and best-program
+artifacts. See [the environment and monitoring guide](../../../AGENTS.md).
+
+### Enumeration with BMC pruning
+
 The standalone driver uses exactly the same BMC goal check, CEM implementation,
 imitation cost and optional goal reward as its MCMC path. Enumeration requires
 `--goal-feature` and rejects `--no-bmc`:

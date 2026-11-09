@@ -164,8 +164,12 @@ retreat, stopping on full 3D error. Head collision geometry is disabled in the
 active CEE-US Fetch model; its appearance and mass are retained.
 The four historical demonstration archives were deleted at the user's request;
 reports and videos remain. The PyEDA verification recheck collected a fresh
-five-trajectory, four-block archive with the current controllers; its path is in
-the [verification command](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification).
+five-trajectory, four-block archive with the current controllers; that archive
+and its collection metadata are included in the repository. See the
+[four-block Stack synthesis instructions](roboverify/synthesis/mcmc/README.md#four-block-stack-synthesis-without-verification)
+to run standalone MCMC without verification, or the
+[verification command](roboverify/synthesis/cfg/VERIFICATION.md#provided-stack-verification)
+to verify the supplied program.
 The [Stack controller measurements](roboverify/synthesis/experiment/CONTROLLER-PATHS.md)
 diagnose Release drift and compare Pick stopping tolerances.
 
