@@ -96,3 +96,14 @@ Tests cover exhaustive small structure spaces, scope/alias handling, real BMC
 screening followed by real CEM on synthetic objectives, rejection without rollout,
 CLI routing into named loop bodies, and the existing simulator-backed MCMC parity
 checks. These checks do not establish end-to-end task synthesis performance.
+
+## Stack structure-only measurement
+
+The [2026-11-09 BMC-only experiment](../../runs/enumeration-structure-only/20261109-stack-body/report.md)
+called the enumerative search driver with CEM and simulation disabled. An explicit
+stacking endpoint goal accepted the first transfer after 3,431 enumerated
+candidates and 48.759 seconds across 45 recorded loop entries. It found a
+three-instruction transfer. The supplied demo's exact five-instruction structure
+has calculated position 4,581,985 in the same order; that position was not timed
+by exhaustive search. This is a structure-search result, not a motion proof or
+an end-to-end synthesis result.

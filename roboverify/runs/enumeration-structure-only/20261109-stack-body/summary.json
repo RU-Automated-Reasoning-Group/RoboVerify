@@ -1,0 +1,148 @@
+{
+  "git_commit": "2588b36c778824a3715f586c1b7153aa90f29210",
+  "archive": "demos/pipeline-audit-20261023/stack/demonstrations.npz",
+  "archive_matches_current_program": true,
+  "traces": 15,
+  "loop_entries": 45,
+  "num_blocks": 4,
+  "operands": [
+    "b",
+    "b0",
+    "b_prime"
+  ],
+  "alphabet_size": 33,
+  "cem_called": false,
+  "simulator_called": false,
+  "warm_start": "empty program, no supplied demo body",
+  "goal": "At each of 45 recorded loop entries: start empty-handed; end empty-handed with b_prime ON b using repository XY tolerance and exactly one block height above b, every other block unchanged; existential offsets per query",
+  "exact_demo": {
+    "primitive_length": 5,
+    "alphabet_digits": [
+      2,
+      27,
+      15,
+      15,
+      32
+    ],
+    "one_based_rank": 4581985,
+    "assignment_not_enumerated": "b := b_prime",
+    "structure": [
+      [
+        "PickByName",
+        [
+          "b_prime"
+        ]
+      ],
+      [
+        "MoveByName",
+        [
+          "b_prime",
+          "b_prime",
+          "b"
+        ]
+      ],
+      [
+        "MoveByName",
+        [
+          "b0",
+          "b0",
+          "b"
+        ]
+      ],
+      [
+        "MoveByName",
+        [
+          "b0",
+          "b0",
+          "b"
+        ]
+      ],
+      [
+        "ReleaseByName",
+        [
+          "b_prime"
+        ]
+      ]
+    ]
+  },
+  "python": "3.10.22",
+  "z3": "4.15.4",
+  "first_bmc_structure": {
+    "enumerated_candidates": 3431,
+    "warm_seed_checks": 1,
+    "total_candidates": 3432,
+    "bmc_queries": 3476,
+    "seconds": 48.75937486626208,
+    "query_and_encoding_seconds": 46.340114302933216,
+    "query_verdicts": {
+      "unsat": 3431,
+      "sat": 45
+    },
+    "examined_by_length": {
+      "0": 2,
+      "1": 33,
+      "2": 1089,
+      "3": 2308
+    },
+    "program": "begin\n\tPickByName(b_prime)\n\tMoveByName(b, b, b)\n\tReleaseByName(b, 0.0)\nend",
+    "structure": [
+      [
+        "PickByName",
+        [
+          "b_prime"
+        ]
+      ],
+      [
+        "MoveByName",
+        [
+          "b",
+          "b",
+          "b"
+        ]
+      ],
+      [
+        "ReleaseByName",
+        [
+          "b"
+        ]
+      ]
+    ],
+    "all_45_entries_feasible": true
+  },
+  "instrumented_log": "/tmp/stack-structure-search-logs/search/20261109-175701-2588b36",
+  "validation": {
+    "first_structure_fixed_witness": {
+      "all_45_entries_feasible": true,
+      "passed": 45,
+      "seconds": 0.5460129398852587,
+      "program": "begin\n\tPickByName(b_prime)\n\tMoveByName(b, b, b)\n\tReleaseByName(b, 0.15)\nend",
+      "parameters": {
+        "move_offsets": [
+          0,
+          0,
+          0.05
+        ],
+        "release_offset": 0.15,
+        "source": "explicit witness, not CEM output"
+      }
+    },
+    "provided_demo_fixed_parameters": {
+      "all_45_entries_feasible": true,
+      "passed": 45,
+      "seconds": 1.1351638920605183,
+      "program": "begin\n\tPickByName(b_prime)\n\tMoveByName(b_prime, b_prime, b)\n\tMoveByName(b0, b0, b)\n\tMoveByName(b0, b0, b)\n\tReleaseByName(b_prime, 0.15)\nend"
+    }
+  },
+  "per_query_timeout_ms": 2000,
+  "candidate_budget": 10000,
+  "wall_budget_seconds": 300,
+  "skipped_phases": [
+    "CEM",
+    "MuJoCo rollout",
+    "imitation scoring",
+    "unbounded symbolic verification",
+    "motion verification"
+  ],
+  "acceptance_override": "temporary BMC-only scorer in instrumented search.MCMC; production enumeration order unchanged",
+  "timing_scope": "search loop and logging, excluding imports and archive loading"
+}
