@@ -1,11 +1,9 @@
 """Cross-entropy-method optimizer with structured output instead of prints.
 
 This is a deliberate copy of :func:`synthesis.mcmc.cem.cem_optimize`. That version
-prints the full sorted score list plus two ndarrays on every iteration and dumps the
-complete score and mean history at the end, which for a 2000-iteration MCMC search
-is the single largest source of log volume. It is also the most informative signal
-about whether parameter optimization is doing anything, so it is worth turning into
-metrics rather than discarding.
+prints the full sorted score list and parameter arrays on every iteration, which
+can produce substantial logs during a 2000-iteration MCMC search. This version
+records the optimization progress as metrics instead.
 
 The sampling order, the ``f`` call order and therefore the consumption of
 ``numpy.random`` are identical to the original, which is what lets
@@ -75,8 +73,9 @@ def cem_optimize(
 ) -> tuple:
     """Maximize ``f`` by the cross-entropy method.
 
-    Returns ``(best_score, best_mu, stats)``. The first two match the original
-    function's return value exactly.
+    Returns ``(best_score, best_parameters, stats)``, considering both sampled
+    vectors and distribution means. The first two match the original function's
+    return value exactly.
     """
     mu = np.zeros(dim) if init_mu is None else np.array(init_mu, dtype=float)
     sigma = np.ones(dim) * init_std
@@ -86,7 +85,7 @@ def cem_optimize(
     stats.evals += 1
     stats.initial_score = float(initial_score)
 
-    mu_list, score_list = [mu], [initial_score]
+    best_parameters, best_score = mu.copy(), initial_score
 
     if iterations > 0:
         # The pool is only created when there is work for it; the original opened
@@ -101,15 +100,20 @@ def cem_optimize(
                 )
                 stats.evals += len(samples)
 
+                sample_idx = int(np.argmax(scores))
+                if scores[sample_idx] > best_score:
+                    best_parameters = samples[sample_idx].copy()
+                    best_score = scores[sample_idx]
+
                 order = np.argsort(scores)
                 elites = samples[order[-K:]]
                 mu = elites.mean(axis=0)
                 sigma = elites.std(axis=0)
 
-                mu_list.append(mu)
                 iterate_score = f(mu)
                 stats.evals += 1
-                score_list.append(iterate_score)
+                if iterate_score > best_score:
+                    best_parameters, best_score = mu.copy(), iterate_score
 
                 record = {
                     "iteration": iteration,
@@ -123,7 +127,6 @@ def cem_optimize(
                 if on_iteration is not None:
                     on_iteration(iteration, record)
 
-    max_idx = int(np.argmax(score_list))
-    stats.best_score = float(score_list[max_idx])
+    stats.best_score = float(best_score)
     stats.sigma_norm_final = float(np.linalg.norm(sigma))
-    return score_list[max_idx], mu_list[max_idx], stats
+    return best_score, best_parameters, stats

@@ -39,6 +39,12 @@ demand and stops at the candidate budget or the end of this finite space.
 Exhaustion describes the structural search only; stochastic CEM is not a complete
 solver for the float parameters.
 
+CEM returns the best parameter vector it actually evaluated, including sampled
+vectors and distribution means. Averaging elites can leave a feasible region;
+the averaged vector therefore does not replace a better sample. The legacy and
+instrumented standalone optimizers use the same evaluation and sampling order.
+The integrated CFG optimizer also retains its best sampled vector.
+
 ## Integrated CFG search
 
 Numeric search enumerates physical block IDs. Relational search enumerates the

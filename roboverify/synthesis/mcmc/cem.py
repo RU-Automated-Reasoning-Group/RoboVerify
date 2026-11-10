@@ -21,12 +21,12 @@ def cem_optimize(
         num_workers: Number of parallel workers (defaults to os.cpu_count())
 
     Returns:
-        (best_score, best_mu)
+        (best_score, best_parameters), including sampled vectors and means.
     """
     mu = np.zeros(dim) if init_mu is None else np.array(init_mu, dtype=float)
     sigma = np.ones(dim) * init_std
 
-    mu_list, score_list = [mu], [f(mu)]
+    best_parameters, best_score = mu.copy(), f(mu)
 
     # Create pool outside loop for efficiency
     with (
@@ -40,6 +40,10 @@ def cem_optimize(
             scores = list(map(f, samples)) if pool is None else pool.map(f, samples)
 
             scores = np.array(scores)
+            sample_idx = int(np.argmax(scores))
+            if scores[sample_idx] > best_score:
+                best_parameters = samples[sample_idx].copy()
+                best_score = scores[sample_idx]
             print("scores", sorted(scores))
             print("average of best k", np.mean(sorted(scores)[-K:]))
             print("best mu", samples[scores.argsort()[-1]])
@@ -50,12 +54,11 @@ def cem_optimize(
             print("next mu:", mu)
             sigma = elites.std(axis=0)
 
-            mu_list.append(mu)
-            score_list.append(f(mu))
+            mean_score = f(mu)
+            if mean_score > best_score:
+                best_parameters, best_score = mu.copy(), mean_score
 
-    # Pick the best mu seen
-    max_idx = np.argmax(score_list)
-    print(max_idx, score_list[max_idx], mu_list[max_idx])
-    print(score_list)
-    print(mu_list)
-    return score_list[max_idx], mu_list[max_idx]
+    # Elite averaging can leave a feasible region, so retain evaluated samples
+    # as well as distribution means. This does not add objective evaluations.
+    print("best evaluated parameters", best_score, best_parameters)
+    return best_score, best_parameters
