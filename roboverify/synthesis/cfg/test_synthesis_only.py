@@ -138,6 +138,59 @@ class SynthesisOnlyTests(unittest.TestCase):
                 self.assertEqual(saved_cfg["order"], ["v0", "v1", "v2"])
                 self.assertEqual(cfg.order, ["v0.loop"])
 
+    def test_only_accepted_empty_search_results_become_executable_identity(self):
+        for accepted in (True, False):
+            with self.subTest(
+                accepted=accepted
+            ), tempfile.TemporaryDirectory() as directory, patch(
+                "synthesis.entry.synthesize_cfg.load_traces",
+                return_value=[self.trace()],
+            ), patch(
+                "synthesis.entry.synthesize_cfg.straight_line_synthesize",
+                return_value=StraightLineResult(
+                    Program(0, []),
+                    accepted,
+                    "converged" if accepted else "budget_exhausted",
+                    0,
+                    1 if accepted else 0,
+                ),
+            ), contextlib.redirect_stdout(
+                io.StringIO()
+            ):
+                result = main(
+                    [
+                        "--mode",
+                        "synthesize",
+                        "--demos",
+                        "unused.npz",
+                        "--num-blocks",
+                        "2",
+                        "--search-strategy",
+                        "contract",
+                        "--refinements",
+                        "0",
+                        "--output-dir",
+                        directory,
+                    ]
+                )
+                self.assertEqual(result, 0 if accepted else 2)
+                cfg_path = next(Path(directory).glob("cfg/*/artifacts/cfg.json"))
+                artifact = cfg_path.with_name("program.json")
+                cfg = json.loads(cfg_path.read_text())
+                if accepted:
+                    definition = load_program_artifact(artifact, HighLevelContext(), 2)
+                    self.assertEqual(len(definition.program.instructions), 1)
+                    identity = definition.program.instructions[0]
+                    self.assertIsInstance(identity, Skip)
+                    self.assertEqual(identity.skip_steps, 0)
+                    trajectory = ["existing state"]
+                    identity.eval(object(), trajectory)
+                    self.assertEqual(trajectory, ["existing state"])
+                    self.assertTrue(cfg["nodes"]["v0"]["physical"])
+                else:
+                    self.assertFalse(artifact.exists())
+                    self.assertEqual(cfg["nodes"]["v0"]["physical"], [])
+
     def test_failed_block_attempts_retain_exact_parameters_and_entry_bindings(self):
         from types import SimpleNamespace
 

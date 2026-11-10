@@ -7,7 +7,7 @@ import random
 import signal
 from functools import partial
 
-from synthesis.api.instructions import LoopBudgetExceeded, While
+from synthesis.api.instructions import LoopBudgetExceeded, Skip, While
 from synthesis.api.program import Program, generate_random_program
 from synthesis.cfg.artifacts import describe_cfg
 from synthesis.cfg.bindings import (
@@ -511,10 +511,21 @@ def _run(args, logger):
                 - node.available_scope
             )
         )
+        physical = tuple(result.program.instructions)
+        if result.ok and not physical:
+            # Empty physical blocks otherwise denote unresolved search. Keep a
+            # search-accepted identity executable without weakening lowering.
+            physical = (Skip(0),)
+            logger.log_event(
+                "accepted_empty_block_identity",
+                "Represent the accepted zero-action program as Skip(0)",
+                force=True,
+                block_id=node.name,
+            )
         # No unsupported relational summary is invented for arbitrary physical code.
         region = BlockRegion(
             node.region.symbolic if isinstance(node.region, BlockRegion) else None,
-            tuple(result.program.instructions),
+            physical,
             exports,
         )
         if budget.search_strategy == "contract":
