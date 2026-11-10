@@ -3,7 +3,6 @@
 import unittest
 
 import numpy as np
-
 from synthesis.api.instructions import MoveByName, Skip
 from synthesis.api.program import Program
 from synthesis.cfg.demos import DemoSegment, DemoTrace
