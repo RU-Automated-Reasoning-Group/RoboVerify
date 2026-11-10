@@ -720,8 +720,14 @@ class ContractProblem:
                 or np.any(target[:, 2] > cfg.max_height)
             ):
                 return None
+            # An interior demonstration segment may begin with a nonzero
+            # grasp offset. Move translates the payload without snapping its
+            # centre to the gripper; nominal Pick still establishes zero offset.
+            payload = ee.copy()
+            payload[held] = p[self.ix[held], holding[held]]
+            payload_target = payload + target - ee
             if cfg.support_clearance:
-                relative = ee[:, None] - p
+                relative = payload[:, None] - p
                 below = (
                     (abs(relative[:, :, 0]) < 2 * cfg.block_half_extent)
                     & (abs(relative[:, :, 1]) < 2 * cfg.block_half_extent)
@@ -733,7 +739,11 @@ class ContractProblem:
                     return None
             exempt = (np.arange(self.N)[None, :] == holding[:, None]) & held[:, None]
             payload_half = 2 * cfg.block_half_extent - cfg.geometry_tolerance
-            if np.any(swept_hit(ee, target, p, payload_half) & ~exempt & held[:, None]):
+            if np.any(
+                swept_hit(payload, payload_target, p, payload_half)
+                & ~exempt
+                & held[:, None]
+            ):
                 return None
             if cfg.gripper_envelope and np.any(
                 swept_hit(
@@ -743,7 +753,7 @@ class ContractProblem:
             ):
                 return None
             new = p.copy()
-            new[self.ix[held], holding[held]] = target[held]
+            new[self.ix[held], holding[held]] = payload_target[held]
             return NominalState(new, target, tuple(holding))
         if not np.all(held):
             return None
@@ -850,8 +860,11 @@ class ContractProblem:
             )
             | np.any(target[:, :, 2] > cfg.max_height, axis=1)
         )
+        payload = ee.copy()
+        payload[held] = p[self.ix[held], holding[held]]
+        payload_target = payload + target - ee
         if cfg.support_clearance:
-            relative = ee[:, None] - p
+            relative = payload[:, None] - p
             below = (
                 (abs(relative[:, :, 0]) < 2 * cfg.block_half_extent)
                 & (abs(relative[:, :, 1]) < 2 * cfg.block_half_extent)
@@ -881,7 +894,9 @@ class ContractProblem:
             payload_half = 2 * cfg.block_half_extent - cfg.geometry_tolerance
             if np.any(held):
                 invalid[viable] |= np.any(
-                    collision(destinations, ee, payload_half) & ~exempt & held[:, None],
+                    collision(payload_target[viable], payload, payload_half)
+                    & ~exempt
+                    & held[:, None],
                     axis=(1, 2),
                 )
             if cfg.gripper_envelope:
@@ -900,7 +915,7 @@ class ContractProblem:
                 results.append(None)
             else:
                 new = p.copy()
-                new[self.ix[held], holding[held]] = target[i, held]
+                new[self.ix[held], holding[held]] = payload_target[i, held]
                 results.append(NominalState(new, target[i], tuple(holding)))
         return tuple(results)
 

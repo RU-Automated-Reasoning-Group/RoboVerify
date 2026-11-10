@@ -462,7 +462,14 @@ def _encode_move(
     oy: z3.ArithRef,
     oz: z3.ArithRef,
     noise: Optional[NoiseSpec] = None,
+    *,
+    preserve_grasp_offset: bool = False,
 ) -> z3.BoolRef:
+    """Translate a held object, optionally retaining its entry grasp offset.
+
+    The CFG scene screen opts in for observed held entries. Legacy noiseless
+    callers keep their zero-offset abstraction; noise always retains offsets.
+    """
     tx, ty, tz = _move_target(sym, t, ix, iy, iz, ox, oy, oz)
     bounds = []
     if noise is not None:
@@ -476,7 +483,7 @@ def _encode_move(
     ]
     for j, bj in enumerate(sym.block_names):
         bx, by, bz = tx, ty, tz
-        if noise is not None:
+        if noise is not None or preserve_grasp_offset:
             bx += sym.bx[bj][t] - sym.ee_x[t]
             by += sym.by[bj][t] - sym.ee_y[t]
             bz += sym.bz[bj][t] - sym.ee_z[t]

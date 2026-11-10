@@ -87,8 +87,9 @@ def check_scene_feasibility(
 ):
     """Screen a finite scene with instruction-entry coordinate references.
 
-    Reuses the production noiseless Pick/Move/Release transition kernels. All
-    physical scene objects participate, including ones absent from operands.
+    Reuses the production noiseless Pick/Move/Release transition kernels. For
+    recorded held entries, Move preserves the object's observed gripper offset.
+    All physical scene objects participate, including ones absent from operands.
     ``None`` means a known empty hand; ``"unknown"`` leaves it unconstrained.
     ``table_reference`` is an explicit runtime coordinate frame (its Z is the
     table surface minus half a block), not the relational table sentinel.
@@ -205,10 +206,21 @@ def check_scene_feasibility(
                     + offset(instruction.target_offset[axis], axis)
                     for axis in range(3)
                 ]
-                # Rebase expression-valued targets through a real physical
-                # object, preserving the unchanged production Move relation.
+                # Rebase expression-valued targets through a physical object.
+                # Interior held observations may have a nonzero grasp offset;
+                # retain it instead of snapping the payload to the gripper.
                 shifted = [targets[a] - coords[a][first][time] for a in range(3)]
-                solver.add(_encode_move(sym, time, 0, 0, 0, *shifted))
+                solver.add(
+                    _encode_move(
+                        sym,
+                        time,
+                        0,
+                        0,
+                        0,
+                        *shifted,
+                        preserve_grasp_offset=type(initial_holding) is int,
+                    )
+                )
             elif type(instruction) in (Release, ReleaseByName):
                 target = coordinate(operands[0], 2, time) + offset(
                     instruction.target_z_offset, 0

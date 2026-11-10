@@ -106,6 +106,13 @@ formulas, but table coordinate operands require explicit runtime
 `holding_by_index` metadata or observations with open fingers. Full starts
 default to empty unless `initial_holding` is recorded. Raw observations, including
 gripper coordinates, are required; object geometry alone is insufficient.
+At an observed held entry, nominal Move translates the payload while preserving
+its measured offset from the gripper. Payload collision and support clearance
+use the payload's centre. The CFG BMC screen enables the same
+`preserve_grasp_offset` option in the shared Move kernel for these entries;
+legacy noiseless BMC callers and noisy semantics are unchanged. Nominal Pick
+still establishes zero grasp offset, so this does not model controller grasp
+error after a newly synthesized Pick.
 
 Every proposed body passes an entry-specific BMC feasibility check before CEM.
 This screen includes all physical objects and exact scalar-reference semantics;

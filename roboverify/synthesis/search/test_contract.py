@@ -170,6 +170,69 @@ class ContractTests(unittest.TestCase):
                     [state_key(s) for _, s in actual],
                 )
 
+    def test_move_preserves_observed_grasp_offset_in_scalar_and_batch(self):
+        ex = example(held=0)
+        positions = ex.positions.copy()
+        positions[0, 2] += 0.2
+        gripper = positions[0] + [-0.01, 0.005, -0.007]
+        ex = replace(
+            ex,
+            positions=positions,
+            gripper=gripper,
+            positions_path=np.array([positions]),
+            gripper_path=np.array([gripper]),
+        )
+        moves = (
+            Action("Move", ("gripper",) * 3, (0.1, 0, 0)),
+            Action("Move", ("gripper",) * 3, (0, 0, 0.1)),
+        )
+        problem = ContractProblem(
+            [ex],
+            lambda state, index: False,
+            actions=moves,
+            config=ContractConfig(gripper_envelope=False),
+        )
+        expected_offset = positions[0] - gripper
+        batched = dict(problem.successors(problem.initial))
+        for move in moves:
+            state = problem.transition(problem.initial, move)
+            self.assertIsNotNone(state)
+            np.testing.assert_allclose(
+                state.positions[0, 0] - state.gripper[0], expected_offset
+            )
+            np.testing.assert_array_equal(state.positions[0, 1], positions[1])
+            self.assertEqual(state_key(state), state_key(batched[move]))
+
+    def test_held_clearance_and_sweep_use_payload_centre(self):
+        cases = (
+            # The gripper is above the support-clearance band, but its payload
+            # remains on the support and must be lifted before lateral motion.
+            (np.array([[0, 0, 0.475], [0, 0, 0.425]]), 0.028, True),
+            # The gripper passes below an obstacle that intersects the payload.
+            (np.array([[0, 0, 0.5], [0.1, 0, 0.545]]), -0.028, False),
+        )
+        move = Action("Move", ("gripper",) * 3, (0.2, 0, 0))
+        for positions, height_offset, clearance in cases:
+            with self.subTest(clearance=clearance):
+                gripper = positions[0] + [0, 0, height_offset]
+                ex = replace(
+                    example(held=0),
+                    positions=positions,
+                    gripper=gripper,
+                    positions_path=np.array([positions]),
+                    gripper_path=np.array([gripper]),
+                )
+                problem = ContractProblem(
+                    [ex],
+                    lambda state, index: False,
+                    actions=(move,),
+                    config=ContractConfig(
+                        gripper_envelope=False, support_clearance=clearance
+                    ),
+                )
+                self.assertIsNone(problem.transition(problem.initial, move))
+                self.assertEqual(problem.successors(problem.initial), ())
+
     def test_shared_named_program_respects_each_examples_distinct_binding(self):
         first = example()
         second = SearchExample(

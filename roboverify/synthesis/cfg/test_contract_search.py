@@ -147,6 +147,72 @@ class ReferenceBMCIntegrationTests(unittest.TestCase):
         )
         self.assertTrue(result)
 
+    def test_recorded_grasp_offset_survives_move_and_rejects_false_boundary(self):
+        scene = Scene({0: (0, 0, 0.606), 1: (0.2, 0, 0.5)}, {"payload": 0})
+        p = program(
+            MoveByName("gripper", "gripper", "gripper", target_offset=[0, 0, -0.1])
+        )
+
+        def check(goal):
+            return check_scene_feasibility(
+                p,
+                scene,
+                gripper=(0, 0, 0.6),
+                initial_holding=0,
+                fixed_offsets=True,
+                goal=goal,
+            )
+
+        self.assertTrue(check(lambda s, _: s.bz["0"][s.T] == z3.RealVal("0.506")))
+        # A support at .5 is not Higher than the payload at .506, even though
+        # the gripper has reached .5. The previous snapping model accepted it.
+        self.assertEqual(
+            check(
+                lambda s, _: s.bz["1"][s.T] + z3.RealVal("0.001") >= s.bz["0"][s.T]
+            ).status,
+            "unsat",
+        )
+
+    def test_move_kernel_retains_legacy_and_noisy_offset_policies(self):
+        from synthesis.verification_lib.bmc_lib import (
+            NoiseSpec,
+            _encode_move,
+            build_trace_symbols,
+        )
+
+        for noise, preserve, expected in (
+            (None, False, "0.5"),
+            (None, True, "0.506"),
+            (NoiseSpec(0, 0, 0), False, "0.506"),
+        ):
+            with self.subTest(noise=noise, preserve=preserve):
+                s = build_trace_symbols(("0",), 1)
+                solver = z3.Solver()
+                solver.add(
+                    s.bx["0"][0] == 0,
+                    s.by["0"][0] == 0,
+                    s.bz["0"][0] == z3.RealVal("0.606"),
+                    s.ee_x[0] == 0,
+                    s.ee_y[0] == 0,
+                    s.ee_z[0] == z3.RealVal("0.6"),
+                    s.holding[0] == s.block_consts["0"],
+                    _encode_move(
+                        s,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        z3.RealVal("-0.106"),
+                        noise,
+                        preserve_grasp_offset=preserve,
+                    ),
+                )
+                self.assertEqual(solver.check(), z3.sat)
+                solver.add(s.bz["0"][1] != z3.RealVal(expected))
+                self.assertEqual(solver.check(), z3.unsat)
+
     def test_unknown_holding_is_not_silently_set_empty(self):
         p = program(ReleaseByName("a", target_z=0.1))
         self.assertTrue(
