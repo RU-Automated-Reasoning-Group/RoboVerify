@@ -45,9 +45,12 @@ class SearchBudget:
     contract_memoize: bool = True
     contract_diversity: bool = True
     contract_pool_limit: int = 12
+    cem_std: float = 0.05
 
     def __post_init__(self):
         validate_search_strategy(self.search_strategy)
+        if not np.isfinite(self.cem_std) or self.cem_std <= 0:
+            raise ValueError("CEM standard deviation must be positive and finite")
         if self.search_strategy == "contract" and (
             self.contract_beam_width < 1
             or self.contract_max_expansions < 1
@@ -111,6 +114,19 @@ def _features(states, num_blocks):
             dtype=float,
         )
     return np.asarray(states)[:, on.state_comparison_indices(num_blocks)]
+
+
+def _observations(states):
+    """Keep raw per-episode observations for an ordered spatial metric."""
+    if isinstance(states, SegmentRollout):
+        states = states.observations
+    if not len(states):
+        raise ValueError("Arc distance requires nonempty recorded observations")
+    if isinstance(states[0], Scene):
+        if any(s.observation is None for s in states):
+            raise ValueError("Arc distance requires recorded gripper observations")
+        return np.asarray([s.observation for s in states])
+    return np.asarray(states)
 
 
 def segment_rollout(program, segment, env_factory, reset_mode="replay"):
@@ -214,8 +230,18 @@ def straight_line_synthesize(
         raise ValueError("Nonempty segments and valid search budgets required")
     start = perf_counter()
     rng = np.random.default_rng(budget.seed)
-    demos = np.concatenate([_features(s.states, s.trace.num_blocks) for s in segments])
-    distance = make_distance(budget.distance, demos)
+    if budget.distance == "arc":
+        # Different scenes and segment boundaries are separate trajectories.
+        # Concatenating them would invent spatial jumps between demonstrations.
+        distances = [
+            make_distance("arc", _observations(s.states), num_blocks=s.trace.num_blocks)
+            for s in segments
+        ]
+    else:
+        demos = np.concatenate(
+            [_features(s.states, s.trace.num_blocks) for s in segments]
+        )
+        distance = make_distance(budget.distance, demos)
     pool = CandidatePool(budget.epsilon, budget.pool_limit)
 
     def trajectories(candidate):
@@ -239,6 +265,15 @@ def straight_line_synthesize(
 
     def measure(candidate, samples):
         values = trajectories(candidate)
+        if budget.distance == "arc":
+            return float(
+                np.mean(
+                    [
+                        metric(_observations(states), samples=samples)
+                        for metric, states in zip(distances, values)
+                    ]
+                )
+            )
         return distance(
             np.concatenate(
                 [_features(t, s.trace.num_blocks) for t, s in zip(values, segments)]
@@ -254,7 +289,7 @@ def straight_line_synthesize(
 
     def optimize(candidate):
         mean = np.asarray(candidate.register_trainable_parameter(), dtype=float)
-        std = np.full(len(mean), 0.05)
+        std = np.full(len(mean), budget.cem_std)
         best, best_score = deepcopy(candidate), objective(candidate)
         for _ in range(budget.cem_iterations if len(mean) else 0):
             scored = []
