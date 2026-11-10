@@ -242,7 +242,12 @@ def straight_line_synthesize(
             [_features(s.states, s.trace.num_blocks) for s in segments]
         )
         distance = make_distance(budget.distance, demos)
-    pool = CandidatePool(budget.epsilon, budget.pool_limit)
+    pool_key = str
+    if budget.search_strategy == "contract":
+        from synthesis.cfg.program_source import program_fingerprint
+
+        pool_key = program_fingerprint
+    pool = CandidatePool(budget.epsilon, budget.pool_limit, key=pool_key)
 
     def trajectories(candidate):
         if not cache_rollouts:
@@ -291,12 +296,25 @@ def straight_line_synthesize(
         mean = np.asarray(candidate.register_trainable_parameter(), dtype=float)
         std = np.full(len(mean), budget.cem_std)
         best, best_score = deepcopy(candidate), objective(candidate)
+        retain_samples = (
+            budget.search_strategy == "contract"
+            and budget.cem_iterations > 0
+            and len(mean) > 0
+        )
+        if retain_samples:
+            pool.add(candidate, measure(candidate, budget.final_samples))
         for _ in range(budget.cem_iterations if len(mean) else 0):
             scored = []
             for params in rng.normal(mean, std, (budget.cem_samples, len(mean))):
                 trial = deepcopy(candidate)
                 trial.update_trainable_parameter(list(params))
                 score = objective(trial)
+                if retain_samples:
+                    # CEM still fits imitation alone. Preserve its already
+                    # screened parameter trials in the same bounded epsilon
+                    # pool, so later PostScore can select a close trial that
+                    # actually crosses the demonstrated relational boundary.
+                    pool.add(trial, measure(trial, budget.final_samples))
                 scored.append((score, params))
                 if score > best_score:
                     best, best_score = trial, score
@@ -392,11 +410,18 @@ def straight_line_synthesize(
             # Imitation convergence alone is not task success. Fail closed when
             # every close candidate misses a demonstrated postcondition.
             if success == 1.0:
+                selected_distance = last_distance
+                if budget.search_strategy == "contract":
+                    selected_distance = next(
+                        entry.distance
+                        for entry in pool.entries
+                        if pool_key(entry.program) == pool_key(winner)
+                    )
                 return StraightLineResult(
                     winner,
                     True,
                     "converged",
-                    last_distance,
+                    selected_distance,
                     success,
                     perf_counter() - start,
                     ranking_seconds,

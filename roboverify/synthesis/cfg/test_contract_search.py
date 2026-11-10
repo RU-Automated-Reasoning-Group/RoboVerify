@@ -490,7 +490,95 @@ class ContractCFGIntegrationTests(unittest.TestCase):
         self.assertEqual(len(seen), 3)
         self.assertEqual(len(set(seen)), 3)
         self.assertEqual(result.search_stats["rollout_cache_misses"], 3)
-        self.assertEqual(result.search_stats["rollout_cache_hits"], 2)
+        self.assertEqual(result.search_stats["rollout_cache_hits"], 7)
+
+    def test_contract_retains_nearby_cem_trial_for_postscore_only(self):
+        segment = held_segment()
+        candidate = program(
+            MoveByName("support", "support", "support", target_offset=[0, 0, 0])
+        )
+        for strategy, trial_offset, partial_candidate, expected in (
+            ("contract", 0.002, False, True),
+            ("contract", 0.02, False, False),
+            ("contract", 0.002, True, False),
+            ("enumeration", 0.002, False, False),
+        ):
+            candidate._contract_refinement_only = partial_candidate
+            with self.subTest(
+                strategy=strategy, offset=trial_offset, partial=partial_candidate
+            ):
+                rng = Mock()
+                rng.normal.return_value = np.array([[trial_offset, 0, 0]])
+                checked = []
+
+                def feasible(value):
+                    checked.append(value)
+                    return True
+
+                def rollout(value, demo):
+                    self.assertTrue(checked, "BMC must precede every CEM rollout")
+                    return np.array([[value.register_trainable_parameter()[0]]])
+
+                with patch(
+                    "synthesis.cfg.straightline.np.random.default_rng", return_value=rng
+                ), patch(
+                    "synthesis.cfg.straightline._features",
+                    side_effect=lambda states, n: states,
+                ), patch(
+                    "synthesis.cfg.straightline.make_distance",
+                    return_value=lambda states, samples: abs(states[0, 0]),
+                ), patch(
+                    "synthesis.cfg.straightline.postcondition_reached",
+                    side_effect=lambda states, segment, post: states[0, 0] > 0.001,
+                ):
+                    result = straight_line_synthesize(
+                        [segment],
+                        boolean(True),
+                        candidate,
+                        None,
+                        rollout=rollout,
+                        budget=SearchBudget(
+                            search_strategy=strategy,
+                            iterations=0,
+                            cem_iterations=1,
+                            cem_samples=1,
+                            cem_elites=1,
+                            distance="mmd",
+                            epsilon=0.005,
+                            theta=0.03,
+                        ),
+                        candidates=[candidate],
+                        feasible=feasible,
+                        cache_rollouts=True,
+                    )
+                self.assertEqual(result.ok, expected)
+                self.assertEqual(len(checked), 1)
+                if expected:
+                    self.assertEqual(
+                        result.program.register_trainable_parameter()[0], trial_offset
+                    )
+                    self.assertAlmostEqual(result.distance, trial_offset)
+
+    def test_exact_pool_keys_preserve_parameter_variants_and_default_behavior(self):
+        from synthesis.cfg.program_source import program_fingerprint
+        from synthesis.mcmc.search_core import CandidatePool
+
+        first = program(MoveByName("a", "a", "a", target_offset=[0, 0, 0]))
+        second = program(MoveByName("a", "a", "a", target_offset=[0.002, 0, 0]))
+        self.assertEqual(str(first), str(second))
+        for pool, count in (
+            (CandidatePool(epsilon=0.005), 1),
+            (CandidatePool(epsilon=0.005, key=program_fingerprint), 2),
+        ):
+            pool.add(first, 0)
+            pool.add(second, 0.002)
+            self.assertEqual(len(pool.entries), count)
+            second.instructions[0].target_offset[0].val = 0.1
+            if count == 2:
+                self.assertEqual(
+                    pool.entries[1].program.register_trainable_parameter()[0], 0.002
+                )
+            second.instructions[0].target_offset[0].val = 0.002
 
     def test_contract_only_optimizes_generated_candidates_not_initial_seed(self):
         segment = held_segment()
