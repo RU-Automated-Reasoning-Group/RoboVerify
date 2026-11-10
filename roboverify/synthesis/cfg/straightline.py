@@ -1,7 +1,7 @@
-"""Mutation or enumeration with CEM, epsilon pool, then PostScore ranking."""
+"""Structural proposals with CEM, epsilon pool, then PostScore ranking."""
 
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from time import perf_counter
 
 import numpy as np
@@ -37,9 +37,24 @@ class SearchBudget:
     temperature: float = 1.0
     decay: float = 0.95
     search_strategy: str = "mcmc"
+    contract_beam_width: int = 24
+    contract_max_expansions: int = 300
+    contract_seconds: float = 35.0
+    contract_observation_proposals: bool = True
+    contract_memoize: bool = True
+    contract_diversity: bool = True
+    contract_pool_limit: int = 12
 
     def __post_init__(self):
         validate_search_strategy(self.search_strategy)
+        if self.search_strategy == "contract" and (
+            self.contract_beam_width < 1
+            or self.contract_max_expansions < 1
+            or not np.isfinite(self.contract_seconds)
+            or self.contract_seconds <= 0
+            or self.contract_pool_limit < 1
+        ):
+            raise ValueError("Contract proposal budgets must be positive and finite")
 
 
 @dataclass
@@ -54,6 +69,8 @@ class StraightLineResult:
     iterations: int = 0
     candidates_checked: int = 0
     bmc_rejected: int = 0
+    search_stats: dict = field(default_factory=dict)
+    search_reason: str = ""
 
 
 class SegmentRollout(list):
@@ -163,10 +180,19 @@ def straight_line_synthesize(
     feasible=None,
 ):
     budget = budget or SearchBudget()
-    enumeration = budget.search_strategy == "enumeration"
-    if enumeration and (candidates is None or feasible is None):
-        raise ValueError("Enumeration requires a candidate iterator and BMC screening")
-    candidate_iterator = iter(candidates) if enumeration else None
+    candidate_stream = budget.search_strategy in ("enumeration", "contract")
+    if candidate_stream and (candidates is None or feasible is None):
+        raise ValueError(
+            f"{budget.search_strategy.capitalize()} requires a candidate iterator and BMC screening"
+        )
+    candidate_iterator = iter(candidates) if candidate_stream else None
+
+    def proposal_stats():
+        return dict(getattr(candidates, "stats", {}))
+
+    def proposal_reason():
+        return str(getattr(candidates, "reason", ""))
+
     if (
         not segments
         or budget.iterations < 0
@@ -228,16 +254,16 @@ def straight_line_synthesize(
         return float(np.mean(success))
 
     current = deepcopy(initial_program)
-    current_score = -float("inf") if enumeration else objective(current)
+    current_score = -float("inf") if candidate_stream else objective(current)
     last_distance = float("inf")
     checked, rejected = 0, 0
     status, iteration = "budget_exhausted", 0
     for iteration in range(budget.iterations + 1):
-        if enumeration:
+        if candidate_stream:
             try:
                 candidate = (
                     deepcopy(initial_program)
-                    if iteration == 0
+                    if iteration == 0 and budget.search_strategy == "enumeration"
                     else next(candidate_iterator)
                 )
             except StopIteration:
@@ -252,7 +278,7 @@ def straight_line_synthesize(
                         iteration,
                         phase="straightline",
                         block_id=block_id,
-                        search_strategy="enumeration",
+                        search_strategy=budget.search_strategy,
                         bmc_feasible=False,
                         bmc_reason=getattr(check, "reason", "BMC rejected"),
                     )
@@ -284,7 +310,8 @@ def straight_line_synthesize(
                 pool_size=len(pool.entries),
                 cost=current_score,
                 search_strategy=budget.search_strategy,
-                bmc_feasible=True if enumeration else None,
+                bmc_feasible=True if candidate_stream else None,
+                search_stats=proposal_stats(),
             )
             logger.set_progress(
                 iteration,
@@ -307,24 +334,38 @@ def straight_line_synthesize(
                     success,
                     perf_counter() - start,
                     ranking_seconds,
-                    iteration,
+                    checked if budget.search_strategy == "contract" else iteration,
                     checked,
                     rejected,
+                    proposal_stats(),
+                    proposal_reason(),
                 )
-    if enumeration and pool.entries:
+    if candidate_stream and pool.entries:
         current = deepcopy(pool.entries[0].program)
         last_distance = pool.entries[0].distance
-    elif enumeration:
+    elif candidate_stream:
         status = "no_feasible_candidate"
+    if budget.search_strategy == "contract":
+        proposal_status = getattr(candidates, "status", "")
+        if proposal_status == "unsupported":
+            status = "unsupported_contract_input"
+        elif proposal_status == "deadline_exhausted":
+            status = "contract_deadline_exhausted"
     return StraightLineResult(
         current,
         False,
         status,
         last_distance,
         elapsed=perf_counter() - start,
-        iterations=max(0, checked - 1) if enumeration else iteration,
+        iterations=(
+            checked
+            if budget.search_strategy == "contract"
+            else max(0, checked - 1) if candidate_stream else iteration
+        ),
         candidates_checked=checked,
         bmc_rejected=rejected,
+        search_stats=proposal_stats(),
+        search_reason=proposal_reason(),
     )
 
 

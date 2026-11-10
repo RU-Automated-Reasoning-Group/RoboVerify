@@ -327,10 +327,16 @@ Use the environment and module commands above; the full-suite command is below.
 - [CFG workflow](roboverify/synthesis/cfg/VERIFICATION.md): integrated synthesis and verification.
 
 Instrumented MCMC entry point: `uv run python -m synthesis.experiment.mcmc.run`.
-This and `synthesis.entry.synthesize_cfg` accept `--search-strategy mcmc|enumeration`
-(default MCMC). Enumeration uses BMC before CEM; the CFG filter checks existential
+This and `synthesis.entry.synthesize_cfg` accept `--search-strategy mcmc|enumeration|contract`
+(default MCMC). Enumeration and contract proposals use BMC before CEM; the CFG filter checks existential
 trace feasibility at demonstration entries, while the standalone path retains its
-explicit BMC goal. See the [search guide](roboverify/synthesis/mcmc/README.md) for
+explicit BMC goal for MCMC/enumeration. Contract search uses nominal endpoint goals
+and entry-specific BMC feasibility, with the same existing numeric objective.
+Its generic backend is `synthesis/search/`; named CFG proposals include observation
+references, while ID-first/standalone proposals use physical IDs. The separate
+`synthesis/experiment/search_comparison/` runner compares beam and matched
+Metropolis search with shared proposals and fitting budgets; it does not establish
+loop recovery or formal verification. See the [search guide](roboverify/synthesis/mcmc/README.md) for
 length/candidate bounds, scope handling and the distinction from final verification.
 Use `--smoke --task stack --num-blocks 3
 --demos demos/stack/3-blocks-5-trajectories/demonstrations.npz` (on one line)

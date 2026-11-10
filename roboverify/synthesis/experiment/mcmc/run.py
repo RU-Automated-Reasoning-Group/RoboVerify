@@ -47,6 +47,19 @@ def parse_goal_feature(text: str):
     return decision_tree.ON_feature(int(match.group(1)), int(match.group(2)))
 
 
+def contract_goal(task, goal_feature=None):
+    """Preserve standalone numeric ON semantics, including height and self tests."""
+    if goal_feature is None:
+        from synthesis.cfg.tasks import task_spec
+
+        return task_spec(task)[1]
+    from synthesis.util.on import on
+
+    return lambda scene: bool(
+        on(scene.positions[goal_feature.b1], scene.positions[goal_feature.b2])
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run MCMC or enumerative program search into a run directory.",
@@ -89,6 +102,8 @@ def main(argv=None) -> int:
         parser.error(
             "--search-strategy enumeration requires --goal-feature with BMC enabled"
         )
+    if config.search_strategy == "contract" and args.no_bmc:
+        parser.error("--search-strategy contract requires BMC entry feasibility checks")
 
     goal_feature = parse_goal_feature(args.goal_feature) if args.goal_feature else None
     bmc_goal = None
@@ -133,6 +148,32 @@ def main(argv=None) -> int:
 
     available_operands = {"Box": list(range(config.num_blocks))}
     initial_program = program.Program(config.program_slots)
+    candidate_programs = None
+    feasibility_check = None
+    if config.search_strategy == "contract":
+        from functools import partial
+
+        from synthesis.cfg.contract_search import (
+            check_contract_feasibility,
+            make_contract_candidates,
+        )
+        from synthesis.cfg.demos import DemoSegment
+
+        segments = [
+            DemoSegment(i, 0, len(trace.states) - 1, trace, trace.snapshots[0].bindings)
+            for i, trace in enumerate(traces[: config.num_seeds])
+        ]
+        post = contract_goal(config.task, goal_feature)
+        candidate_programs = make_contract_candidates(
+            segments,
+            post,
+            initial_program,
+            (),
+            max_length=config.program_slots,
+            budget=config,
+            id_first=True,
+        )
+        feasibility_check = partial(check_contract_feasibility, segments=segments)
 
     synthesis.set_np_seed(config.rng_seed)
 
@@ -148,6 +189,14 @@ def main(argv=None) -> int:
     config.runtime["initial_states"] = dict(
         source="archive_snapshots", state_index=0, seeds=active_seeds
     )
+    if candidate_programs is not None:
+        config.runtime["contract_search"] = dict(
+            operands="physical IDs",
+            proposal_goal=str(goal_feature) if goal_feature is not None else str(post),
+            bmc="existential feasibility at every archived entry; not a goal proof",
+            numeric_objective="existing standalone MMD/CEM objective",
+        )
+        config.runtime["bmc_enabled"] = True
 
     logger = RunLogger(
         config.run_root,
@@ -177,12 +226,28 @@ def main(argv=None) -> int:
             bmc_initial_constraints=bmc_initial_constraints,
             goal_feature=goal_feature,
             refresh_best_metrics=not args.no_refresh_best_metrics,
+            candidate_programs=candidate_programs,
+            feasibility_check=feasibility_check,
         )
     except BaseException as exc:  # noqa: BLE001 - recorded, then re-raised
         logger.log_exception(exc)
         logger.finish("failed", exit_reason=f"{type(exc).__name__}: {exc}")
         raise
 
+    if candidate_programs is not None:
+        import json
+
+        logger.write_artifact(
+            "contract-search.json",
+            json.dumps(
+                dict(
+                    status=candidate_programs.status,
+                    reason=candidate_programs.reason,
+                    stats=candidate_programs.stats,
+                ),
+                indent=2,
+            ),
+        )
     logger.finish(
         "no_feasible_candidate" if result.best_program is None else "completed",
         search_strategy=config.search_strategy,

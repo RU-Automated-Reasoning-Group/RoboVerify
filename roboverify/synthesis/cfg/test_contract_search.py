@@ -1,0 +1,368 @@
+import unittest
+from functools import partial
+from unittest.mock import Mock, patch
+
+import numpy as np
+import z3
+
+from synthesis.api.instructions import (
+    Assign,
+    Get,
+    MoveByName,
+    PickByName,
+    ReleaseByName,
+)
+from synthesis.api.program import Program
+from synthesis.cfg.bindings import require_closed, require_ids
+from synthesis.cfg.contract_search import (
+    check_contract_feasibility,
+    entry_holding,
+    make_contract_candidates,
+)
+from synthesis.cfg.demos import DemoSegment, DemoTrace
+from synthesis.cfg.search_feasibility import check_scene_feasibility
+from synthesis.cfg.straightline import SearchBudget, straight_line_synthesize
+from synthesis.predicates.scene import Scene
+from synthesis.predicates.term import atom
+from synthesis.predicates.term import block_id as obj_id
+from synthesis.predicates.term import boolean, ref
+from synthesis.util import on
+from synthesis.verification_lib.highlevel_verification_lib import HighLevelContext
+
+
+def program(*instructions):
+    return Program(len(instructions), list(instructions))
+
+
+def observation(positions, gripper, aperture=0.08):
+    obs = np.zeros(10 + 12 * len(positions))
+    obs[:3] = gripper
+    obs[3:5] = aperture / 2
+    for index, position in enumerate(positions):
+        obs[10 + 12 * index : 13 + 12 * index] = position
+    return obs
+
+
+def held_segment():
+    start = observation([(0, 0, 0.425), (0.2, 0, 0.625)], (0.2, 0, 0.625), 0.05)
+    end = observation([(0, 0, 0.425), (0, 0, 0.475)], (0, 0, 0.475), 0.05)
+    trace = DemoTrace(
+        (start, end),
+        num_blocks=2,
+        metadata={"initial_holding": 1},
+    )
+    return DemoSegment(0, 0, 1, trace, {"support": 0, "payload": 1})
+
+
+class ReferenceBMCIntegrationTests(unittest.TestCase):
+    def setUp(self):
+        self.scene = Scene(
+            {0: (0, 0, 0.425), 1: (0.3, 0.1, 0.425), 2: (0.5, -0.2, 0.625)},
+            {"a": 0, "b": 1},
+        )
+
+    def check(self, candidate, expected, **kwargs):
+        return check_scene_feasibility(
+            candidate,
+            self.scene,
+            gripper=(0.2, 0.15, 0.7),
+            fixed_offsets=True,
+            goal=lambda symbols, aliases: z3.And(
+                *[
+                    series[symbols.T] == z3.RealVal(str(value))
+                    for series, value in zip(
+                        (symbols.ee_x, symbols.ee_y, symbols.ee_z), expected
+                    )
+                ]
+            ),
+            **kwargs,
+        )
+
+    def test_extrema_include_objects_absent_from_operands(self):
+        p = program(MoveByName("gripper", "Y_min", "Z_m", target_offset=[0, 0, 0]))
+        self.assertTrue(self.check(p, (0.2, -0.2, 0.625), initial_holding=None))
+        wrong = self.check(p, (0.2, 0.0, 0.425), initial_holding=None)
+        self.assertEqual(wrong.status, "unsat")
+
+    def test_extrema_are_recomputed_at_each_instruction_entry(self):
+        p = program(
+            PickByName("b"),
+            MoveByName("b", "b", "b", target_offset=[0, 0, 0.4]),
+            MoveByName("gripper", "Y_min", "Z_m", target_offset=[0, 0, 0]),
+            ReleaseByName("gripper", target_z=0.1),
+        )
+        self.assertTrue(self.check(p, (0.3, -0.2, 0.925), initial_holding=None))
+        self.assertFalse(self.check(p, (0.3, -0.2, 0.725), initial_holding=None))
+
+    def test_gripper_coordinates_are_frozen_for_the_whole_instruction(self):
+        p = program(
+            MoveByName("gripper", "gripper", "gripper", target_offset=[0.1, 0.2, 0.3])
+        )
+        self.assertTrue(self.check(p, (0.3, 0.35, 1.0), initial_holding=None))
+
+    def test_alias_updates_and_get_prefix_are_preserved(self):
+        context = HighLevelContext()
+        condition = atom("eq", ref("chosen"), obj_id(1))
+        # Get's executable Z3 condition uses a named existing alias; its typed
+        # term is the finite-scene witness criterion used by the adapter.
+        get = Get(
+            "chosen",
+            context.get_consts("chosen") == context.get_consts("b"),
+            [context.get_consts("chosen")],
+            guard_term=condition,
+        )
+        p = program(
+            get,
+            Assign("alias", "chosen"),
+            MoveByName("alias", "alias", "alias", target_offset=[0, 0, 0]),
+        )
+        self.assertTrue(self.check(p, (0.3, 0.1, 0.425), initial_holding=None))
+        self.assertFalse(
+            self.check(
+                program(MoveByName("a", "a", "a", target_offset=[0, 0, 0]), get),
+                (0, 0, 0.425),
+            )
+        )
+
+    def test_table_frame_is_explicit_and_not_a_physical_object(self):
+        scene = Scene(dict(self.scene.positions, tbl=on.TABLE), {"table_alias": "tbl"})
+        p = program(
+            MoveByName(
+                "table_alias", "table_alias", "table_alias", target_offset=[0, 0, 0.05]
+            )
+        )
+        missing = check_scene_feasibility(p, scene, initial_holding=None)
+        self.assertEqual(missing.status, "unsupported")
+        result = check_scene_feasibility(
+            p,
+            scene,
+            initial_holding=None,
+            fixed_offsets=True,
+            table_reference=(1.2, 0.7, 0.375),
+            goal=lambda sym, bindings: z3.And(
+                sym.ee_z[sym.T] == z3.RealVal("0.425"),
+                sym.ee_x[sym.T] == z3.RealVal("1.2"),
+                len(sym.block_names) == 3,
+            ),
+        )
+        self.assertTrue(result)
+
+    def test_unknown_holding_is_not_silently_set_empty(self):
+        p = program(ReleaseByName("a", target_z=0.1))
+        self.assertTrue(
+            check_scene_feasibility(p, self.scene, initial_holding="unknown")
+        )
+        self.assertFalse(check_scene_feasibility(p, self.scene, initial_holding=None))
+
+
+class ContractCFGIntegrationTests(unittest.TestCase):
+    def test_real_backend_finds_named_and_numeric_candidates(self):
+        segment = held_segment()
+        post = atom("ON", obj_id(1), obj_id(0))
+        budget = SearchBudget(
+            search_strategy="contract", contract_seconds=3, cem_iterations=0
+        )
+        for numeric in (False, True):
+            with self.subTest(numeric=numeric):
+                candidates = make_contract_candidates(
+                    [segment],
+                    post,
+                    program(),
+                    segment.bindings,
+                    max_length=1,
+                    budget=budget,
+                    id_first=numeric,
+                )
+                self.assertEqual(candidates.status, "not_started")
+                first = list(candidates)
+                self.assertTrue(first, candidates.reason)
+                self.assertGreater(candidates.stats.get("generated", 0), 0)
+                frozen_stats = dict(candidates.stats)
+                self.assertEqual([str(p) for p in first], [str(p) for p in candidates])
+                self.assertEqual(candidates.stats, frozen_stats)
+                for p in first:
+                    if numeric:
+                        require_ids(p.instructions, 2)
+                    else:
+                        require_closed(p.instructions, segment.bindings)
+                    self.assertTrue(
+                        check_contract_feasibility(p, [segment], fixed_offsets=True)
+                    )
+
+    def test_interior_open_hand_and_explicit_held_metadata(self):
+        s = held_segment()
+        trace = DemoTrace((s.trace.states[0],) * 3, num_blocks=2)
+        interior = DemoSegment(0, 1, 2, trace, s.bindings)
+        with self.assertRaisesRegex(ValueError, "unknown holding"):
+            entry_holding(interior)
+        trace.metadata["holding_by_index"] = {"1": 1}
+        self.assertEqual(entry_holding(interior), 1)
+        trace.metadata.clear()
+        opened = s.trace.states[0].copy()
+        opened[3:5] = 0.04
+        trace.states = (opened,) * 3
+        self.assertIsNone(entry_holding(interior))
+
+    def test_real_backend_preserves_get_prefix_and_new_alias_scope(self):
+        segment = held_segment()
+        context = HighLevelContext()
+        condition = atom("eq", ref("chosen"), obj_id(0))
+        prefix = program(
+            Get(
+                "chosen",
+                context.get_consts("chosen") == context.get_consts("support"),
+                [context.get_consts("chosen")],
+                guard_term=condition,
+            ),
+            Assign("target", "chosen"),
+        )
+        candidates = make_contract_candidates(
+            [segment],
+            atom("ON", ref("payload"), ref("target")),
+            prefix,
+            {"payload"},
+            max_length=1,
+            budget=SearchBudget(search_strategy="contract", contract_seconds=3),
+        )
+        generated = list(candidates)
+        self.assertTrue(generated, candidates.reason)
+        self.assertEqual(
+            set(candidates.problem.examples[0].bindings) & {"chosen", "target"},
+            {"chosen", "target"},
+        )
+        for candidate in generated:
+            self.assertIsInstance(candidate.instructions[0], Get)
+            self.assertIsInstance(candidate.instructions[1], Assign)
+            self.assertEqual(
+                require_closed(candidate.instructions, {"payload"}),
+                {"payload", "chosen", "target"},
+            )
+            self.assertTrue(
+                check_contract_feasibility(candidate, [segment], fixed_offsets=True)
+            )
+
+    def test_preparation_is_included_in_proposal_deadline(self):
+        segment = held_segment()
+        candidates = make_contract_candidates(
+            [segment],
+            boolean(True),
+            program(),
+            segment.bindings,
+            max_length=1,
+            budget=SearchBudget(search_strategy="contract", contract_seconds=1),
+        )
+        with patch(
+            "synthesis.cfg.contract_search.perf_counter", side_effect=[0.0, 2.0]
+        ):
+            self.assertEqual(list(candidates), [])
+        self.assertEqual(candidates.status, "deadline_exhausted")
+        self.assertIn("preparation", candidates.reason)
+
+    def test_proposal_adapter_preserves_the_external_wall_timeout(self):
+        segment = held_segment()
+        candidates = make_contract_candidates(
+            [segment],
+            boolean(True),
+            program(),
+            segment.bindings,
+            max_length=1,
+            budget=SearchBudget(search_strategy="contract"),
+        )
+        with patch.object(
+            candidates, "_prepare", side_effect=TimeoutError("CLI wall budget")
+        ):
+            with self.assertRaisesRegex(TimeoutError, "CLI wall budget"):
+                list(candidates)
+
+    def test_bmc_rejection_precedes_every_rollout_and_cem(self):
+        s = held_segment()
+        rollout = Mock(side_effect=AssertionError("Rejected program must not execute"))
+        rejected = program(PickByName("payload"), PickByName("support"))
+        result = straight_line_synthesize(
+            [s],
+            boolean(True),
+            rejected,
+            None,
+            rollout=rollout,
+            budget=SearchBudget(
+                search_strategy="contract", iterations=1, distance="mmd"
+            ),
+            candidates=[rejected],
+            feasible=partial(check_contract_feasibility, segments=[s]),
+        )
+        self.assertEqual(result.status, "no_feasible_candidate")
+        self.assertEqual((result.candidates_checked, result.bmc_rejected), (1, 1))
+        self.assertFalse(result.ok)
+        rollout.assert_not_called()
+
+    def test_contract_only_optimizes_generated_candidates_not_initial_seed(self):
+        segment = held_segment()
+        initial = program()
+        generated = program(
+            MoveByName("support", "support", "support", target_offset=[0, 0, 0.05])
+        )
+        checked = []
+
+        def feasible(candidate):
+            checked.append(candidate)
+            return check_contract_feasibility(candidate, [segment])
+
+        def rollout(candidate, demo):
+            self.assertEqual(len(candidate.instructions), 1)
+            return demo.states
+
+        result = straight_line_synthesize(
+            [segment],
+            boolean(True),
+            initial,
+            None,
+            rollout=rollout,
+            budget=SearchBudget(
+                search_strategy="contract",
+                iterations=0,
+                cem_iterations=0,
+                distance="mmd",
+            ),
+            candidates=[generated],
+            feasible=feasible,
+        )
+        self.assertTrue(result.ok)
+        self.assertEqual((result.candidates_checked, result.iterations), (1, 1))
+        self.assertEqual(len(checked), 1)
+        self.assertEqual(len(checked[0].instructions), 1)
+
+    def test_contract_requires_bmc_and_keeps_imitation_scale_explicit(self):
+        s = held_segment()
+        with self.assertRaisesRegex(ValueError, "BMC screening"):
+            straight_line_synthesize(
+                [s],
+                boolean(True),
+                program(),
+                None,
+                rollout=lambda p, demo: demo.states,
+                budget=SearchBudget(search_strategy="contract"),
+            )
+        self.assertEqual(SearchBudget(search_strategy="contract").distance, "kl_kde")
+        with self.assertRaisesRegex(ValueError, "Contract proposal budgets"):
+            SearchBudget(search_strategy="contract", contract_seconds=float("inf"))
+
+    def test_unsupported_input_has_explicit_status(self):
+        s = held_segment()
+        s.trace.states = (
+            Scene({0: (0, 0, 0.425), 1: (0.2, 0, 0.625)}, s.bindings),
+        ) * 2
+        candidates = make_contract_candidates(
+            [s],
+            boolean(True),
+            program(),
+            s.bindings,
+            max_length=1,
+            budget=SearchBudget(search_strategy="contract"),
+        )
+        self.assertEqual(list(candidates), [])
+        self.assertEqual(candidates.status, "unsupported")
+        self.assertIn("recorded gripper", candidates.reason)
+
+
+if __name__ == "__main__":
+    unittest.main()

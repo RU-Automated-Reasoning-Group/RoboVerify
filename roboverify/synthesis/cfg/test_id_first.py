@@ -438,13 +438,14 @@ class IDFirstTests(unittest.TestCase):
         )
         self.assertTrue(motion, str(motion))
 
-    def test_cli_calls_named_mcmc_after_quotient_and_bounds_loop_execution(self):
+    def test_cli_routes_search_after_quotient_and_bounds_loop_execution(self):
         from contextlib import redirect_stdout
         from io import StringIO
 
         import numpy as np
 
         from synthesis.api.instructions import LoopBudgetExceeded
+        from synthesis.cfg.contract_search import ContractCandidates
         from synthesis.cfg.straightline import StraightLineResult
         from synthesis.cfg.tasks import task_identity
         from synthesis.cfg.verified_synthesis import VerifiedResult
@@ -455,6 +456,8 @@ class IDFirstTests(unittest.TestCase):
             (True, "mcmc"),
             (False, "enumeration"),
             (True, "enumeration"),
+            (False, "contract"),
+            (True, "contract"),
         ):
             with self.subTest(exhaust_loop=exhaust_loop, strategy=strategy):
                 trace = stacking_trace()
@@ -477,6 +480,20 @@ class IDFirstTests(unittest.TestCase):
                             )
                         else:
                             require_ids(generated.instructions, 4)
+                    elif strategy == "contract":
+                        self.assertTrue(callable(kwargs["feasible"]))
+                        candidates = kwargs["candidates"]
+                        self.assertIsInstance(candidates, ContractCandidates)
+                        self.assertEqual(candidates.segments, tuple(demos))
+                        self.assertIs(candidates.post, post)
+                        self.assertEqual(
+                            candidates.id_first, kwargs["block_id"] != "body0"
+                        )
+                        self.assertEqual(candidates.status, "not_started")
+                        if kwargs["block_id"] == "body0":
+                            self.assertEqual(
+                                candidates.available_scope, {"b0", "b", "b_prime"}
+                            )
                     else:
                         self.assertNotIn("candidates", kwargs)
                     if kwargs["block_id"] != "body0":

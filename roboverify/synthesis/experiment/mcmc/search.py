@@ -272,14 +272,21 @@ def score_candidate_program(
     motion_penalty=None,
     motion_penalty_weight: float = 1.0,
     initial_snapshots: Optional[dict] = None,
+    feasibility_check=None,
 ) -> CandidateResult:
     """Require BMC feasibility if configured, then optimize ``p``'s parameters."""
-    bmc_feasible, bmc_report = check_bmc_candidate(
-        p, bmc_goal, initial_constraints=bmc_initial_constraints
-    )
-    bmc_reason = classify_bmc_report(bmc_report)
+    if feasibility_check is None:
+        bmc_feasible, bmc_report = check_bmc_candidate(
+            p, bmc_goal, initial_constraints=bmc_initial_constraints
+        )
+        bmc_reason = classify_bmc_report(bmc_report)
+    else:
+        feasibility = feasibility_check(p)
+        bmc_feasible = bool(feasibility)
+        bmc_report = feasibility.reason
+        bmc_reason = feasibility.status
 
-    if bmc_goal is not None and not bmc_feasible:
+    if (bmc_goal is not None or feasibility_check is not None) and not bmc_feasible:
         return CandidateResult(
             cost=bmc_failed_cost,
             program=p,
@@ -312,8 +319,12 @@ def score_candidate_program(
     return CandidateResult(
         cost=cost,
         program=p,
-        checks_passed=candidate_checks_passed(
-            bmc_goal=bmc_goal, bmc_passed=bool(bmc_feasible)
+        checks_passed=(
+            bool(bmc_feasible)
+            if feasibility_check is not None
+            else candidate_checks_passed(
+                bmc_goal=bmc_goal, bmc_passed=bool(bmc_feasible)
+            )
         ),
         bmc_feasible=bmc_feasible,
         bmc_reason=bmc_reason,
@@ -344,6 +355,8 @@ def MCMC(
     motion_penalty=None,
     motion_penalty_weight: float = 1.0,
     initial_snapshots: Optional[dict] = None,
+    candidate_programs=None,
+    feasibility_check=None,
 ) -> MCMCResult:
     """Run the selected structural search using the same BMC/CEM scorer.
 
@@ -351,18 +364,28 @@ def MCMC(
     mutation or Metropolis acceptance; every generated structure is screened.
     """
     enumeration = config.search_strategy == "enumeration"
+    contract = config.search_strategy == "contract"
+    streaming = enumeration or contract
+    if contract and (candidate_programs is None or feasibility_check is None):
+        raise ValueError(
+            "Contract search requires its candidate stream and entry BMC checker"
+        )
     if enumeration and bmc_goal is None:
         raise ValueError(
             "Enumeration requires a BMC goal; use --goal-feature and keep BMC enabled"
         )
     candidates = (
-        iter(
-            enumerate_programs(
-                available_operands, available_instructions, config.program_slots
+        iter(candidate_programs)
+        if contract
+        else (
+            iter(
+                enumerate_programs(
+                    available_operands, available_instructions, config.program_slots
+                )
             )
+            if enumeration
+            else None
         )
-        if enumeration
-        else None
     )
     num_seeds = config.num_seeds if config.num_seeds is not None else len(seeds or [])
     result = MCMCResult()
@@ -392,6 +415,7 @@ def MCMC(
             refresh_best_metrics=refresh_best_metrics,
             motion_penalty=motion_penalty,
             motion_penalty_weight=motion_penalty_weight,
+            feasibility_check=feasibility_check if contract else None,
         )
 
     def save_checkpoint(candidate, subdir: str) -> None:
@@ -403,13 +427,26 @@ def MCMC(
     logger.set_status(phase="initial")
     logger.write_artifact("initial/program.txt", str(initial_program))
 
-    initial = score(initial_program)
+    initial = (
+        CandidateResult(
+            cost=config.bmc_failed_cost,
+            program=initial_program,
+            checks_passed=False,
+            bmc_feasible=None,
+            bmc_reason="proposal_seed",
+            bmc_report="Contract search starts from its proposal stream",
+            goal_report="Not scored",
+            scored=False,
+        )
+        if contract
+        else score(initial_program)
+    )
     current_program = initial.program
     current_cost = initial.cost
     current_checks_passed = initial.checks_passed
 
     result.best_program = (
-        current_program if not enumeration or initial.checks_passed else None
+        current_program if not streaming or initial.checks_passed else None
     )
     result.best_cost = current_cost if result.best_program is not None else -math.inf
     result.best_checks_passed = initial.checks_passed
@@ -428,7 +465,7 @@ def MCMC(
         cost=current_cost,
         bmc_reason=initial.bmc_reason,
     )
-    if not enumeration and current_cost <= config.bmc_failed_cost:
+    if not streaming and current_cost <= config.bmc_failed_cost:
         # The chain starting on the BMC floor means every candidate has a positive
         # cost delta and is accepted unconditionally until the first feasible
         # program appears, i.e. the early search is an unguided random walk.
@@ -447,18 +484,22 @@ def MCMC(
     for i in range(config.iters):
         iter_start = time.time()
 
-        if enumeration:
+        if streaming:
             try:
                 new_program = next(candidates)
             except StopIteration:
-                result.termination_reason = "space_exhausted"
+                result.termination_reason = (
+                    getattr(candidate_programs, "status", "space_exhausted")
+                    if contract
+                    else "space_exhausted"
+                )
                 break
             changed, equivalence, evaluated = True, False, True
             mutation_info = {
-                "type": "enumeration",
+                "type": config.search_strategy,
                 "changed": True,
                 "details": [
-                    f"Enumerated structure with {len(new_program.instructions)} instructions"
+                    f"Proposed structure with {len(new_program.instructions)} instructions"
                 ],
             }
         else:
@@ -489,7 +530,7 @@ def MCMC(
 
         accepted = False
         acceptance_ratio: Optional[float] = None
-        if evaluated and enumeration:
+        if evaluated and streaming:
             accepted = candidate.checks_passed
             if accepted:
                 current_program, current_cost = new_program, new_cost
@@ -509,7 +550,7 @@ def MCMC(
         is_new_best = (
             evaluated
             and new_cost > result.best_cost
-            and (not enumeration or candidate.checks_passed)
+            and (not streaming or candidate.checks_passed)
         )
         if is_new_best:
             result.best_cost = new_cost

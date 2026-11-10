@@ -38,7 +38,10 @@ from synthesis.cfg.verified_synthesis import verified_synthesis
 from synthesis.entry.inference_options import add_inference_options
 from synthesis.entry.motion_options import add_motion_options, motion_noise_from_args
 from synthesis.entry.predicate_options import add_predicate_options
-from synthesis.entry.search_options import add_search_options
+from synthesis.entry.search_options import (
+    add_contract_search_options,
+    add_search_options,
+)
 from synthesis.entry.verification_options import (
     add_verification_options,
     wp_options_from_args,
@@ -158,6 +161,13 @@ def _run(args, logger):
         inner_samples=args.inner_samples,
         final_samples=args.final_samples,
         pool_limit=args.pool_limit,
+        contract_beam_width=getattr(args, "contract_beam_width", 24),
+        contract_max_expansions=getattr(args, "contract_max_expansions", 300),
+        contract_seconds=getattr(args, "contract_seconds", 35.0),
+        contract_observation_proposals=not getattr(args, "contract_grid_only", False),
+        contract_memoize=not getattr(args, "contract_no_memo", False),
+        contract_diversity=not getattr(args, "contract_no_diversity", False),
+        contract_pool_limit=getattr(args, "contract_pool_limit", 12),
     )
 
     def env_factory(trace):
@@ -251,6 +261,24 @@ def _run(args, logger):
                 ),
                 "feasible": partial(check_candidate_feasibility, segments=demos),
             }
+        elif budget.search_strategy == "contract":
+            from synthesis.cfg.contract_search import (
+                check_contract_feasibility,
+                make_contract_candidates,
+            )
+
+            search_options = {
+                "candidates": make_contract_candidates(
+                    demos,
+                    post,
+                    initial,
+                    node.available_scope,
+                    max_length=args.slots,
+                    budget=budget,
+                    id_first=id_first,
+                ),
+                "feasible": partial(check_contract_feasibility, segments=demos),
+            }
         result = straight_line_synthesize(
             demos,
             post,
@@ -276,6 +304,8 @@ def _run(args, logger):
             post_score=result.post_score,
             elapsed=result.elapsed,
             postscore_seconds=result.postscore_seconds,
+            search_stats=result.search_stats,
+            search_reason=result.search_reason,
         )
         exports = (
             frozenset()
@@ -470,6 +500,7 @@ def main(argv=None):
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--slots", type=int, default=4)
     add_search_options(parser)
+    add_contract_search_options(parser)
     parser.add_argument("--iterations", type=int, default=20)
     parser.add_argument("--refinements", type=int, default=5)
     parser.add_argument("--cem-iterations", type=int, default=2)
