@@ -119,7 +119,9 @@ def _rename_instruction(instruction, names):
 def _fold(cfg, repetition, language, infer_invariant):
     r = repetition
     carry, rebound = carried_bindings(r.template)
-    if not carry or not rebound:
+    # A loop can rebind its next object while keeping every scoped reference
+    # fixed. Such a template needs neither pointer initialization nor Assign.
+    if not rebound:
         return False
     available = set(graph_scope(cfg)[cfg.order[r.start]])
     occupied = set(available)

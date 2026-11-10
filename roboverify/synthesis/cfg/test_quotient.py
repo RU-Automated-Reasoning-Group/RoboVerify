@@ -118,6 +118,62 @@ if __name__ == "__main__":
 
 
 class FullQuotientTests(unittest.TestCase):
+    def test_fixed_base_repetition_recovers_loop_without_pointer_update(self):
+        from synthesis.cfg.demos import DemoAssignment, DemoSegment, DemoTrace
+        from synthesis.cfg.graph import Edge, Node, RelationalCFG
+        from synthesis.cfg.quotient import quotient
+        from synthesis.cfg.region import BlockRegion
+        from synthesis.predicates.scene import Scene, evaluate
+        from synthesis.predicates.term import block_id, boolean
+
+        states = []
+        for completed in range(4):
+            positions = {
+                b: (
+                    (0.2 * b, 0, 0.425)
+                    if b >= 4 - completed
+                    else (0, 0, 0.425 + 0.05 * b)
+                )
+                for b in range(4)
+            }
+            states.extend([Scene(positions, {"b0": 0})] * 2)
+        trace = DemoTrace(tuple(states), num_blocks=4)
+        names, cuts = ["v0", "v1", "v2"], [0, 2, 4, 7]
+        labels = [atom("Higher", ref("b0"), block_id(b)) for b in (3, 2, 1)]
+        cfg = RelationalCFG(
+            {n: Node(n, BlockRegion(None)) for n in names},
+            [Edge("entry", names[0], boolean(True))]
+            + [
+                Edge(n, names[k + 1] if k < 2 else "exit", labels[k])
+                for k, n in enumerate(names)
+            ],
+            names,
+            DemoAssignment(
+                {
+                    n: [DemoSegment(0, cuts[k], cuts[k + 1], trace, {"b0": 0})]
+                    for k, n in enumerate(names)
+                }
+            ),
+            initial_scope=frozenset({"b0"}),
+            synthesis_approach="id-first",
+        )
+        self.assertTrue(quotient(cfg))
+        loop = cfg.nodes[cfg.order[0]].region
+        self.assertEqual(loop.init, ())
+        self.assertEqual(loop.update, ())
+        self.assertEqual(loop.iteration_counts, (3,))
+        witness = loop.exists_vars[0]
+        bodies = loop.body_demos[0]
+        self.assertEqual([s.bindings[witness] for s in bodies], [3, 2, 1])
+        for segment in bodies:
+            self.assertTrue(
+                evaluate(loop.guard, states[segment.t_start], segment.bindings)
+            )
+        for value in states[-1].positions:
+            self.assertFalse(evaluate(loop.guard, states[-1], {witness: value}))
+        # This establishes structural recovery and observed coverage only.
+        # Unselected continuing-head witnesses remain unlabeled by guard learning.
+
     def test_full_flat_fold_learns_guard_and_lowers_carried_assignment(self):
         import z3
 

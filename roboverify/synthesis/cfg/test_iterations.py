@@ -7,6 +7,64 @@ from synthesis.predicates.term import atom, ref
 
 
 class IterationExtractionTests(unittest.TestCase):
+    def test_rebound_only_loop_ignores_persistent_completed_witnesses(self):
+        states = []
+        for completed in range(4):
+            positions = {
+                b: (
+                    (0.2 * b, 0, 0.425)
+                    if b >= 4 - completed
+                    else (0, 0, 0.425 + 0.05 * b)
+                )
+                for b in range(4)
+            }
+            states.extend([Scene(positions, {"base": 0})] * 2)
+        segment = DemoSegment(0, 0, 7, DemoTrace(tuple(states)), {"base": 0})
+        result = extract_iterations(
+            segment, [atom("Higher", ref("base"), ref("source"))], ("source",), ()
+        )
+        self.assertEqual(
+            [
+                (body[0].t_start, body[0].t_end, body[0].bindings["source"])
+                for body in result.bodies
+            ],
+            [(0, 2, 3), (2, 4, 2), (4, 6, 1)],
+        )
+        self.assertEqual(result.terminal.t_start, 6)
+
+    def test_no_op_carried_update_is_not_progress(self):
+        scene = Scene({0: (0, 0, 0), 1: (0.2, 0, 0)}, {"base": 0})
+        segment = DemoSegment(0, 0, 3, DemoTrace((scene,) * 4), {"base": 0})
+        for updates in ((), (("base", "base"),)):
+            result = extract_iterations(
+                segment,
+                [atom("Higher", ref("base"), ref("source"))],
+                ("source",),
+                updates,
+            )
+            self.assertEqual(result.bodies, [])
+            self.assertEqual(result.terminal.t_start, 0)
+
+    def test_later_milestone_can_supply_progress(self):
+        states = [
+            Scene({0: (0, 0, 0), 1: (0.2, 0, 0.1)}, {"base": 0}),
+            Scene({0: (0, 0, 0), 1: (0.2, 0, 0.1)}, {"base": 0}),
+            Scene({0: (0, 0, 0), 1: (0, 0, 0.05)}, {"base": 0}),
+        ]
+        result = extract_iterations(
+            DemoSegment(0, 0, 2, DemoTrace(tuple(states)), {"base": 0}),
+            [
+                atom("Higher", ref("source"), ref("base")),
+                atom("ON", ref("source"), ref("base")),
+            ],
+            ("source",),
+            (),
+        )
+        self.assertEqual(len(result.bodies), 1)
+        self.assertEqual(
+            [(s.t_start, s.t_end) for s in result.bodies[0]], [(0, 1), (1, 2)]
+        )
+
     def test_extracts_all_iterations_without_a_presegmented_cfg(self):
         # Two recordings contain different numbers of iteration boundaries.
         post = atom("ON", ref("next"), ref("current"))

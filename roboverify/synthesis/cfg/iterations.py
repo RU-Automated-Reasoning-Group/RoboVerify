@@ -20,6 +20,9 @@ def extract_iterations(segment, predicates, rebound, updates):
     The input includes the entire available suffix, not only already split nodes.
     Each returned body is a tuple of per-block segments. Rebound witnesses are
     selected from each recorded scene; demonstration object names are not inputs.
+    An iteration must make progress in its carried bindings or establish a
+    milestone absent at its starting head under the same witness. Persistent
+    already-completed predicates alone cannot create extra iterations.
     """
     if not predicates:
         raise ValueError("A loop template must have at least one milestone")
@@ -28,11 +31,19 @@ def extract_iterations(segment, predicates, rebound, updates):
     bodies = []
     while cursor < segment.t_end:
         found = None
+        head = scene_at(segment, cursor)
         for first in range(cursor + 1, segment.t_end + 1):
             scene = scene_at(segment, first)
             for values in itertools.product(scene.positions, repeat=len(rebound)):
                 local = dict(bindings, **dict(zip(rebound, values)))
                 if not evaluate(predicates[0], scene, local):
+                    continue
+                changed_binding = any(
+                    bindings.get(left) != local[right] for left, right in updates
+                )
+                if not changed_binding and all(
+                    evaluate(predicate, head, local) for predicate in predicates
+                ):
                     continue
                 boundaries = [cursor, first]
                 for predicate in predicates[1:]:
