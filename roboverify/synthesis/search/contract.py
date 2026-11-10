@@ -1063,6 +1063,7 @@ class SearchConfig:
     diversity: bool = True
     pool_limit: int = 12
     deadline: float | None = None
+    partial_pool_limit: int = 0
 
     def __post_init__(self):
         if type(self.max_length) is not int or self.max_length < 0:
@@ -1080,6 +1081,8 @@ class SearchConfig:
                 raise ContractInputError(f"{field_name} must be a positive integer")
         if not math.isfinite(self.seconds) or self.seconds <= 0:
             raise ContractInputError("seconds must be positive and finite")
+        if type(self.partial_pool_limit) is not int or self.partial_pool_limit < 0:
+            raise ContractInputError("partial_pool_limit must be a nonnegative integer")
 
 
 @dataclass
@@ -1087,6 +1090,7 @@ class SearchResult:
     candidates: tuple[Node, ...]
     stats: dict
     status: str
+    partial_candidates: tuple[Node, ...] = ()
 
 
 def beam_search(
@@ -1097,7 +1101,10 @@ def beam_search(
     The optional callback observes each nominal goal candidate. Returning False
     stops search. Callback work counts against the same absolute deadline. A
     timeout returns only fully constructed candidates, never a partial prefix
-    represented as a goal. Candidate existence is not physical acceptance.
+    represented as a goal. With ``partial_pool_limit > 0``, separately labelled
+    non-goal prefixes can support a caller's subsequent CFG refinement. They do
+    not enter the goal callback or goal shortlist. Candidate existence is not
+    physical acceptance.
     """
     cfg = config or SearchConfig()
     began = time.perf_counter()
@@ -1117,6 +1124,7 @@ def beam_search(
     initial = Node(problem.initial, (), problem.vector(problem.initial)[:, None])
     beam = [initial]
     completed, best_by_length, memo = [], {}, {}
+    partials = []
     status = "length_exhausted"
     first_goal = None
     stopped = False
@@ -1154,7 +1162,11 @@ def beam_search(
                     problem.check_deadline(deadline)
                     stats["generated"] += 1
                     goal = problem.goal(state)
-                    if not goal and depth + 1 == cfg.max_length:
+                    if (
+                        not goal
+                        and depth + 1 == cfg.max_length
+                        and not cfg.partial_pool_limit
+                    ):
                         stats["backward_rejected"] += 1
                         continue
                     child = Node(
@@ -1188,6 +1200,13 @@ def beam_search(
                             break
                     else:
                         children.append(child)
+                        if cfg.partial_pool_limit:
+                            partials.append(child)
+                if cfg.partial_pool_limit:
+                    # Keep only a bounded shortlist between expanded parents.
+                    # A deadline in the loop above still retains every fully
+                    # scored prefix, without promoting it to a terminal goal.
+                    partials = list(select_candidates(partials, cfg.partial_pool_limit))
                 if stopped:
                     break
             children.sort(key=lambda n: (n.score, repr(n.actions)))
@@ -1222,6 +1241,11 @@ def beam_search(
     finally:
         problem.transition_limit = previous_limit
     pool = select_candidates(completed, cfg.pool_limit)
+    partial_pool = (
+        select_candidates(partials, cfg.partial_pool_limit)
+        if cfg.partial_pool_limit
+        else ()
+    )
     stats.update(problem.counts - before_counts)
     stats = dict(stats)
     stats.update(
@@ -1233,7 +1257,12 @@ def beam_search(
         shortlist_size=len(pool),
         status=status,
     )
-    return SearchResult(tuple(pool), dict(stats), status)
+    if cfg.partial_pool_limit:
+        stats["partial_shortlist_size"] = len(partial_pool)
+        stats["partial_candidate_lengths"] = sorted(
+            {len(node.actions) for node in partial_pool}
+        )
+    return SearchResult(tuple(pool), dict(stats), status, tuple(partial_pool))
 
 
 def select_candidates(nodes, limit=12):

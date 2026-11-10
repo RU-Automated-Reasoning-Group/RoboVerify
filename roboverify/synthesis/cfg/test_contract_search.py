@@ -293,7 +293,138 @@ class ContractCFGIntegrationTests(unittest.TestCase):
         self.assertEqual(result.status, "no_feasible_candidate")
         self.assertEqual((result.candidates_checked, result.bmc_rejected), (1, 1))
         self.assertFalse(result.ok)
+        self.assertEqual(result.program.instructions, [])
         rollout.assert_not_called()
+
+    def test_partial_adapter_supplies_checked_refinement_attempts(self):
+        segment = held_segment()
+        candidates = make_contract_candidates(
+            [segment],
+            boolean(False),
+            program(),
+            segment.bindings,
+            max_length=1,
+            budget=SearchBudget(search_strategy="contract", contract_seconds=3),
+            refinement_fallback=True,
+        )
+        generated = list(candidates)
+        self.assertTrue(generated, candidates.reason)
+        self.assertEqual(candidates.stats["shortlist_size"], 0)
+        self.assertEqual(candidates.stats["refinement_candidates"], len(generated))
+        for candidate in generated:
+            self.assertTrue(candidate._contract_refinement_only)
+            self.assertTrue(
+                check_contract_feasibility(candidate, [segment], fixed_offsets=True)
+            )
+
+    def test_partial_candidate_cannot_pass_even_with_low_imitation_distance(self):
+        segment = held_segment()
+        generated = program(
+            MoveByName("support", "support", "support", target_offset=[0, 0, 0.05])
+        )
+        generated._contract_refinement_only = True
+        events = []
+
+        def feasible(candidate):
+            events.append("bmc")
+            return check_contract_feasibility(candidate, [segment])
+
+        def rollout(candidate, demo):
+            self.assertTrue(events)
+            self.assertEqual(events[0], "bmc")
+            events.append("rollout")
+            self.assertEqual(len(candidate.instructions), 1)
+            return demo.states
+
+        result = straight_line_synthesize(
+            [segment],
+            boolean(True),
+            program(PickByName("support")),
+            None,
+            rollout=rollout,
+            budget=SearchBudget(
+                search_strategy="contract",
+                iterations=0,
+                cem_iterations=0,
+                distance="mmd",
+                theta=1,
+            ),
+            candidates=[generated],
+            feasible=feasible,
+        )
+        self.assertLess(result.distance, 1)
+        self.assertFalse(result.ok)
+        self.assertEqual(len(result.program.instructions), 1)
+        self.assertIsInstance(result.program.instructions[0], MoveByName)
+        self.assertTrue(result.program._contract_refinement_only)
+        self.assertIn("rollout", events)
+
+    def test_deterministic_cache_reuses_execution_across_distances_and_postscore(self):
+        segment = held_segment()
+        generated = program(
+            MoveByName("support", "support", "support", target_offset=[0, 0, 0.05])
+        )
+        for cached, expected in ((False, 3), (True, 1)):
+            with self.subTest(cache=cached):
+                rollout = Mock(side_effect=lambda candidate, demo: demo.states)
+                result = straight_line_synthesize(
+                    [segment],
+                    boolean(True),
+                    program(),
+                    None,
+                    rollout=rollout,
+                    budget=SearchBudget(
+                        search_strategy="contract",
+                        iterations=0,
+                        cem_iterations=0,
+                        distance="mmd",
+                        theta=1,
+                    ),
+                    candidates=[generated],
+                    feasible=lambda candidate: True,
+                    cache_rollouts=cached,
+                )
+                self.assertTrue(result.ok)
+                self.assertEqual(result.post_score, 1)
+                self.assertEqual(rollout.call_count, expected)
+                if cached:
+                    self.assertEqual(result.search_stats["rollout_cache_hits"], 2)
+
+    def test_deterministic_cache_invalidates_changed_cem_parameters(self):
+        segment = held_segment()
+        generated = program(
+            MoveByName("support", "support", "support", target_offset=[0, 0, 0.05])
+        )
+        seen = []
+
+        def rollout(candidate, demo):
+            seen.append(tuple(candidate.register_trainable_parameter()))
+            return demo.states
+
+        result = straight_line_synthesize(
+            [segment],
+            boolean(True),
+            program(),
+            None,
+            rollout=rollout,
+            budget=SearchBudget(
+                search_strategy="contract",
+                iterations=0,
+                cem_iterations=1,
+                cem_samples=2,
+                cem_elites=1,
+                distance="mmd",
+                theta=1,
+            ),
+            candidates=[generated],
+            feasible=lambda candidate: True,
+            cache_rollouts=True,
+        )
+        self.assertTrue(result.ok)
+        self.assertEqual(len(seen), 3)
+        self.assertEqual(len(set(seen)), 3)
+        self.assertEqual(result.search_stats["rollout_cache_misses"], 3)
+        self.assertEqual(result.search_stats["rollout_cache_hits"], 2)
 
     def test_contract_only_optimizes_generated_candidates_not_initial_seed(self):
         segment = held_segment()

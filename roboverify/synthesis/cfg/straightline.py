@@ -1,5 +1,6 @@
 """Structural proposals with CEM, epsilon pool, then PostScore ranking."""
 
+from collections import OrderedDict
 from copy import deepcopy
 from dataclasses import dataclass, field
 from time import perf_counter
@@ -178,7 +179,14 @@ def straight_line_synthesize(
     penalty_weight=1.0,
     candidates=None,
     feasible=None,
+    cache_rollouts=False,
 ):
+    """Search a block; optional caching requires deterministic ``rollout``.
+
+    The integrated CFG runner restores and seeds every segment execution. It
+    can reuse those physical trajectories while drawing fresh KL estimates.
+    Custom callers retain uncached behavior unless they explicitly opt in.
+    """
     budget = budget or SearchBudget()
     candidate_stream = budget.search_strategy in ("enumeration", "contract")
     if candidate_stream and (candidates is None or feasible is None):
@@ -186,9 +194,14 @@ def straight_line_synthesize(
             f"{budget.search_strategy.capitalize()} requires a candidate iterator and BMC screening"
         )
     candidate_iterator = iter(candidates) if candidate_stream else None
+    rollout_cache = OrderedDict()
+    cache_counts = {"rollout_cache_hits": 0, "rollout_cache_misses": 0}
 
     def proposal_stats():
-        return dict(getattr(candidates, "stats", {}))
+        return {
+            **dict(getattr(candidates, "stats", {})),
+            **(cache_counts if cache_rollouts else {}),
+        }
 
     def proposal_reason():
         return str(getattr(candidates, "reason", ""))
@@ -206,7 +219,23 @@ def straight_line_synthesize(
     pool = CandidatePool(budget.epsilon, budget.pool_limit)
 
     def trajectories(candidate):
-        return [rollout(candidate, s) for s in segments]
+        if not cache_rollouts:
+            return [rollout(candidate, s) for s in segments]
+        from synthesis.cfg.program_source import program_fingerprint
+
+        key = program_fingerprint(candidate)
+        if key in rollout_cache:
+            cache_counts["rollout_cache_hits"] += 1
+            rollout_cache.move_to_end(key)
+            return rollout_cache[key]
+        cache_counts["rollout_cache_misses"] += 1
+        values = [rollout(candidate, s) for s in segments]
+        # Only complete batches enter the cache. Eviction changes work, not
+        # scores; parameters, operands and controller settings enter the key.
+        rollout_cache[key] = values
+        while len(rollout_cache) > max(1, budget.pool_limit):
+            rollout_cache.popitem(last=False)
+        return values
 
     def measure(candidate, samples):
         values = trajectories(candidate)
@@ -319,7 +348,9 @@ def straight_line_synthesize(
                 phase="straightline",
                 block_id=block_id,
             )
-        if last_distance < budget.theta:
+        if last_distance < budget.theta and not getattr(
+            current, "_contract_refinement_only", False
+        ):
             ranking_start = perf_counter()
             winner, success = pool.select(post_score)
             ranking_seconds = perf_counter() - ranking_start
@@ -345,6 +376,10 @@ def straight_line_synthesize(
         last_distance = pool.entries[0].distance
     elif candidate_stream:
         status = "no_feasible_candidate"
+        if budget.search_strategy == "contract":
+            from synthesis.api.program import Program
+
+            current = deepcopy(getattr(candidates, "fallback_program", Program(0, [])))
     if budget.search_strategy == "contract":
         proposal_status = getattr(candidates, "status", "")
         if proposal_status == "unsupported":

@@ -80,6 +80,41 @@ class ContractTests(unittest.TestCase):
             **kwargs,
         )
 
+    def test_partial_prefixes_are_opt_in_and_never_goal_candidates(self):
+        action = Action("Pick", ("source",))
+        called = []
+        ordinary = beam_search(
+            self.problem(actions=(action,)),
+            SearchConfig(max_length=1, seconds=2),
+            on_candidate=called.append,
+        )
+        self.assertEqual(ordinary.candidates, ())
+        self.assertEqual(ordinary.partial_candidates, ())
+        problem = self.problem(actions=(action,))
+        partial = beam_search(
+            problem,
+            SearchConfig(max_length=1, seconds=2, partial_pool_limit=2),
+            on_candidate=called.append,
+        )
+        self.assertEqual(partial.candidates, ())
+        self.assertEqual(len(partial.partial_candidates), 1)
+        self.assertEqual(partial.partial_candidates[0].actions, (action,))
+        self.assertFalse(problem.goal(partial.partial_candidates[0].state))
+        self.assertEqual(called, [])
+
+    def test_budget_preserves_fully_scored_partial_prefix(self):
+        problem = self.problem(actions=(Action("Pick", ("source",)),))
+        result = beam_search(
+            problem,
+            SearchConfig(
+                max_length=3, max_expansions=1, seconds=2, partial_pool_limit=1
+            ),
+        )
+        self.assertEqual(result.status, "expansion_budget_exhausted")
+        self.assertEqual(result.candidates, ())
+        self.assertEqual(len(result.partial_candidates), 1)
+        self.assertTrue(np.isfinite(result.partial_candidates[0].score))
+
     def test_actual_transfer_and_instruction_entry_references(self):
         problem = self.problem(actions=transfer_actions())
         entry = problem.initial.positions.copy()

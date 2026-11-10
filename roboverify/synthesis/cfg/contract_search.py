@@ -11,6 +11,7 @@ from time import perf_counter
 import numpy as np
 
 from synthesis.api.instructions import Assign, Get, Skip
+from synthesis.api.program import Program
 from synthesis.cfg.bindings import require_closed, require_ids
 from synthesis.cfg.refine import scene_at
 from synthesis.cfg.search_feasibility import (
@@ -122,6 +123,7 @@ class ContractCandidates:
         max_length,
         budget,
         id_first=False,
+        refinement_fallback=False,
     ):
         self.segments = tuple(segments)
         self.post = post
@@ -130,11 +132,21 @@ class ContractCandidates:
         self.max_length = max_length
         self.budget = budget
         self.id_first = id_first
+        self.refinement_fallback = refinement_fallback
         self.stats = {}
         self.status = "not_started"
         self.reason = ""
         self._programs = None
         self.problem = None
+        prefix = []
+        if not id_first:
+            for instruction in self.initial_program.instructions:
+                if not isinstance(instruction, (Get, Assign, Skip)):
+                    break
+                prefix.append(instruction)
+        # No unevaluated random physical instruction should become an Exec
+        # negative merely because the contract search exhausted its budget.
+        self.fallback_program = Program(len(prefix), deepcopy(prefix))
 
     def _prepare(self):
         started = perf_counter()
@@ -243,15 +255,23 @@ class ContractCandidates:
                 diversity=self.budget.contract_diversity,
                 pool_limit=self.budget.contract_pool_limit,
                 deadline=deadline,
+                partial_pool_limit=(
+                    self.budget.contract_pool_limit if self.refinement_fallback else 0
+                ),
             ),
         )
         self.stats = dict(result.stats)
         self.stats["preparation_seconds"] = preparation_seconds
         self.stats["proposal_seconds"] = perf_counter() - started
         self.status = result.status
+        refinement_only = self.refinement_fallback and not result.candidates
+        nodes = result.partial_candidates if refinement_only else result.candidates
+        self.stats["refinement_candidates"] = len(nodes) if refinement_only else 0
         programs = []
-        for node in result.candidates:
+        for node in nodes:
             program = node.to_program(named=not self.id_first, prefix=prefix)
+            if refinement_only:
+                program._contract_refinement_only = True
             if self.id_first:
                 require_ids(program.instructions, num_blocks)
             else:
