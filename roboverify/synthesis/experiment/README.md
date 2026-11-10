@@ -27,6 +27,140 @@ checks final physical success after settling. See the
 and [pipeline support matrix](../../../README.md#project-status).
 Execution and collection support do not imply synthesis or formal verification.
 
+## Maintained contract-search comparison
+
+`search_comparison/` separates three questions: whether contract-guided beam
+search finds useful straight-line bodies, whether it improves on local
+Metropolis search given the same information, and whether the selected bodies
+compose in complete supplied loops. The maintained backend is selected with
+`--search-strategy contract`; MCMC remains the production default.
+
+The [completed frozen comparison](../../runs/search-comparison/20261110-matched/report/search-comparison-report.pdf)
+supports using contract-guided beam search for these straight-line proposals:
+
+| Task | Beam: accepted fitting runs | Matched Metropolis: accepted fitting runs | Median beam time to checked candidate |
+| --- | --- | --- | --- |
+| Stack | 10/10 | 0/10 | 41.0 s |
+| Unstack | 10/10 | 0/10 | 36.0 s |
+
+Every accepted fit passed all 15 training scenes. All ten beam repeats selected
+the same body per task, so this is **two distinct learned bodies**, not twenty
+independent discoveries. The matched baseline explored lengths zero through
+eight in every run and usually improved its nominal rank, but found no terminal
+candidate during its 20-second structural allocation. This does not establish
+failure under an unrestricted 48-second structural search or longer budgets.
+
+The two frozen bodies then underwent **90 actual fresh complete-loop executions**:
+
+| Task | 3 blocks | 4 blocks | 5 blocks |
+| --- | --- | --- | --- |
+| Stack | 15/15 | 15/15 | **1/15** |
+| Unstack | 15/15 | 15/15 | **15/15** |
+
+Five-block Stack has a material composition failure: all 15 runs satisfy the
+simulator's weaker goal and all controls converge, but only three satisfy the
+canonical global goal, one stays within the 5 mm frame bound, and twelve pass
+contact checks. Maximum nonmover drift is 13.18 mm. The new search is a useful
+replacement for structural MCMC here; local-transfer acceptance is insufficient
+for accepting its learned programs across block counts. The supplied loop
+scaffold and later formal verification remain separate from these finite tests.
+
+The primary search consumed 300 simulator rollouts and retained the top nominal
+parameter vector unchanged in every accepted fit. No CEM improvement was
+demonstrated under this small budget. At the stricter 1 mm frame diagnostic,
+the selected vectors pass 12/15 Stack and 10/15 Unstack training examples.
+The production CLI continues to use its existing KL/MMD objective; these
+experiment results use the shared physical-failure/arc objective described below.
+
+The corrected legacy reference also has 0/10 accepted runs per task and no
+production convergence: 888 attempted rollouts form 51 complete and nine
+interrupted vector batches, with one mutation per run. An initial reference
+adapter incorrectly rejected unspecified float parameters instead of using their
+runtime zero defaults. All 13 first-version attempts are retained and excluded;
+all twenty reference runs were repeated under a new frozen version with identical
+settings. The forty primary runs do not call that adapter and are unaffected.
+The [amendment](../../runs/search-comparison/20261110-matched/protocol-amendment-legacy-v2.json)
+records the repair and the six focused regression checks.
+
+See the [audited summary](../../runs/search-comparison/20261110-matched/audited-summary.json),
+[primary protocol](../../runs/search-comparison/20261110-matched/protocol.json),
+[corrected reference protocol](../../runs/search-comparison/20261110-matched/legacy-v2-protocol.json),
+and [candidate lineage](../../runs/search-comparison/20261110-matched/frozen-candidates.json).
+All 60 analyzed fitting invocations and all 90 fresh evaluations exited normally;
+the longest fitting process took 49.90 seconds. The implementation passed 91
+focused/regression tests before freezing, followed by six focused checks for the
+reference-adapter repair. These repeats share fixed simulation demonstration pools
+and do not establish human-teleoperation or new-primitive generalization.
+
+The controlled comparison gives both arms the same 15 public training traces
+per task, finite primitive/operand/offset corpus, nominal contracts, prefix rank,
+terminal goal, BMC screen, physical acceptance checks, numeric objective and CEM.
+Neither arm receives teacher commands, primitive labels, a supplied body or a
+warm start. The Metropolis baseline chooses a primitive family uniformly before
+choosing a member, so the many Move offsets do not dilute Pick proposals. Its
+temperature was calibrated on excluded training-only pilots. The two arms differ
+in structural exploration: beam expansion versus insert/delete/replace/swap
+mutations with Metropolis acceptance. This is a matched algorithm comparison,
+not the unchanged production MCMC pipeline.
+
+Each fitting invocation has 48 seconds internally and an outer 55-second limit
+with a two-second kill grace. Proposal construction and preprocessing count in
+the first 20 seconds; structural work is additionally capped at 100,000 nominal
+transitions. Both arms have at most 45 attempted simulator rollouts, with all
+15 examples required to complete a shared-vector evaluation. CEM has one round
+of two samples, but remaining time can prevent another complete batch. Only
+fully evaluated vectors can win; errors and outer timeouts remain failed search
+attempts even if a diagnostic vector was saved. BMC precedes fitting and uses
+existential offsets separately per entry with `goal=True`; it is not a
+shared-parameter, task-goal or physical-safety certificate.
+
+Physical training selection prioritizes primitive convergence, observed grasp
+and lift, successful release, local task success after 50 settling steps,
+substep contact checks, and nonmover displacement at most 5 mm. Within equal
+failure counts, it uses weighted arc-aligned spatial trajectory RMS. This is
+the explicit experiment objective; the integrated CFG backend retains its
+existing KL/MMD objective and acceptance thresholds.
+
+`legacy.py` runs the actual existing `mutate_scoped` and
+`straight_line_synthesize` path as a separate reference, with its KL objective,
+default CEM and eight initially empty Skip slots. It retains repeated evaluations
+and has no CFG BMC prefilter. Under the same wall/rollout cap, initial objective
+and final-distance calls can consume 30 rollouts before the first mutation.
+The reference sets `theta=0` to avoid loose imitation-only early convergence;
+other search/CEM settings are recorded in its protocol. Its independent physical
+audit does not change search scores, and the additional metric audit time is
+recorded and included in its wall budget. The report
+distinguishes production return/convergence from the best completely audited
+vector; neither is inferred from budget exhaustion.
+
+`freeze.freeze_protocol` and `legacy.freeze_protocol` write exclusive protocol
+files containing all input and runtime source hashes. `run` and `legacy` require
+either a matching frozen protocol or explicit `--pilot`. For example, after
+freezing the protocol with the two training roots:
+
+```bash
+uv run python -m synthesis.experiment.search_comparison.run \
+  --task stack --method beam --seed 0 --data PATH_TO_PUBLIC_TRAINING_DATA \
+  --protocol PATH_TO_PROTOCOL_JSON --output NEW_TRIAL_DIRECTORY
+```
+
+The full-loop evaluator receives only frozen candidates and fresh seeds after
+all fitting runs finish. It preserves the supplied initialization, guard and
+pointer updates, with no resets or extra settling between iterations. Success
+requires normal exit, the canonical global task goal, primitive convergence,
+per-transfer contact/frame checks and final settling. Exact duplicate bodies
+are evaluated once and retain search-run aliases. Alias-weighted outcomes must
+be reported alongside actual unique-body physical executions. These experiments
+test composition of learned bodies in supplied loops, not CFG/loop discovery,
+human teleoperation, arbitrary primitive extensions or formal verification.
+
+Inspect the bounded summaries without opening rollout logs:
+
+```bash
+uv run python -m synthesis.experiment.search_comparison.report \
+  --run runs/search-comparison/20261110-matched
+```
+
 ## Independent-controller Stack body experiment
 
 The [2026-11-10 study](../../runs/contract-search/20261110-cd15-study/study-summary.json)

@@ -143,11 +143,17 @@ Both return named programs to inference and verification. See the
 [approach guide](roboverify/synthesis/cfg/VERIFICATION.md#synthesis-approaches).
 
 Both the integrated and standalone search CLIs also accept
-`--search-strategy mcmc|enumeration` (default MCMC). Enumeration visits bounded
+`--search-strategy mcmc|enumeration|contract` (default MCMC). Enumeration visits bounded
 primitive structures in increasing length, checks each with BMC, then tunes its
 float parameters using CEM. It retains the existing scoring and verification
 stages; see the [search guide](roboverify/synthesis/mcmc/README.md) for scope and
 budgets. This adds a search strategy, not a new end-to-end task result.
+Contract search grows prefixes using nominal primitive contracts, observation
+proposals, diversity and exact successor caching. It also screens candidates
+with BMC before the existing CEM stage, while preserving CFG refinement and loop
+inference. The [controlled comparison](roboverify/synthesis/experiment/README.md#maintained-contract-search-comparison)
+separates matched beam/Metropolis search from the unchanged legacy CFG reference
+and tests frozen bodies in complete supplied loops.
 
 Stack reset scatters blocks within **0.70 m horizontally of the robot base**,
 retaining block separation and initial gripper clearance. The shared Stack
