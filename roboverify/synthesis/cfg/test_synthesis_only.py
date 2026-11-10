@@ -110,7 +110,14 @@ class SynthesisOnlyTests(unittest.TestCase):
                 for attempt in (0, 1):
                     _save_block_candidate(logger, result, node, entries, args, attempt)
                 logger.finish("test_completed")
-            paths = list(Path(directory).glob("test/*/artifacts/blocks/*/program.json"))
+            paths = sorted(
+                {
+                    path.resolve()
+                    for path in Path(directory).glob(
+                        "test/*/artifacts/blocks/*/program.json"
+                    )
+                }
+            )
             self.assertEqual(len(paths), 2)
             row = json.loads(paths[0].read_text())
             self.assertEqual(row["initial_bindings"], {"b0": 0})
