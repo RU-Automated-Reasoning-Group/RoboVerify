@@ -1317,7 +1317,7 @@ records all 15 heads, exact holding-state closure, four inductive Z3 checks and
 probes of the implemented nominal transitions. It is not a proof about every
 physical controller or a richer conditional language.
 
-The remaining design choice is to recover phase-consistent boundaries from
+This motivated recovering phase-consistent boundaries from
 observations (for example, placement together with a released hand), or to learn
 a first-transfer prologue, steady-state loop and release epilogue. No supplied
 loop template, hidden teacher phase labels or relaxed primitive preconditions
@@ -1339,6 +1339,32 @@ The original impossibility argument no longer applies to the aligned inputs;
 this later search result is empirical and bounded. Matching a geometric
 milestone must still be distinguished from matching its physical hand/retreat
 state.
+
+The [completed-retreat continuation](roboverify/synthesis/experiment/README.md#completed-retreat-recovers-a-loop-with-remaining-execution-failures)
+then delayed boundaries through an observation-derived upward retreat and
+low-speed plateau. Pick became admissible at all 15 starts. Using the same
+learned CFG, contract search synthesized a five-primitive loop body plus its
+remaining tail, with no supplied body or teacher action labels. All five whole
+training executions passed the immediate goal check; three passed an independent
+50-step settling audit. This resolves the demonstrated structural
+obstruction for these new boundaries, but does not establish a reliable
+generalizing controller: a frozen, CEM-disabled candidate passed fresh task and
+5 mm contact/frame audits in 15/15 three-block, 8/15 four-block and 0/15 five-block
+cases. Placement drift accumulated, sometimes causing premature current-top
+Scattered guard exits; taller towers became unstable. The candidate's 12
+symbolic VCs passed, including unbounded checks with a learned invariant, but
+motion refinement and termination remain unproved. The physical failures must
+not be presented as covered by that abstract proof.
+
+Training-only whole-loop CEM improved combined task/settling/5 mm physical success
+to 15/15, 14/15 and 11/15 on new three-, four- and five-block cases, respectively.
+A separate beam-24 Arc shortlist selected support-referenced descent and reached
+15/15, 15/15 and 3/15 on those same new cases. Both passed all 12 symbolic checks
+without repairs. The five-block physical-success target remains unmet; remaining
+failures include premature current-top guard exits and nonmover displacement.
+The initial baseline used different seeds. Exact candidates and full physical
+audits are preserved in the linked experiment; this is not a production boundary
+policy or a demonstrated motion refinement proof.
 
 The investigation also corrected independent implementation defects: loop exit
 labels are checked at actual heads/exits rather than requiring first truth at

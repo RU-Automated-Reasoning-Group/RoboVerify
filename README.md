@@ -157,12 +157,18 @@ and tests frozen bodies in complete supplied loops.
 The separate [end-to-end experiment](roboverify/synthesis/experiment/README.md#end-to-end-synthesis-from-full-demonstrations)
 uses whole independent-controller demonstrations without a supplied body or loop.
 It synthesized a 17-primitive four-block Stack program that passed 15/15 fresh
-simulations and the 5 mm contact/frame audit. This is a fixed-size program;
-variable-size loop synthesis remains unresolved. Audits found gripper-phase
-and retreat mismatches at geometric milestones. Exact executable JSON and
-candidate traces are saved for later verification. `--mode synthesize` skips
-final proof; neither search acceptance nor these simulations establish a formal
-verification result.
+simulations and the 5 mm contact/frame audit. This is a fixed-size program.
+A [completed-retreat continuation](roboverify/synthesis/experiment/README.md#completed-retreat-recovers-a-loop-with-remaining-execution-failures)
+resolved the geometric milestones' gripper-phase mismatch and synthesized a
+five-primitive shared loop body. Whole-loop CEM on the same training data then
+gave task/settling/5 mm contact-frame success of 15/15 with three blocks, 14/15
+with four and 11/15 with five on fresh scenes. A separate Arc shortlist reached
+15/15, 15/15 and 3/15 on the same scenes. Early guard exits and taller-tower
+nonmover displacement remain; the 90% per-size physical-success target was not
+met. Both candidates passed 12 symbolic checks, including unbounded proofs with
+learned invariants; motion refinement and termination were not proved. Exact
+executable JSON and candidate traces are saved. `--mode synthesize` skips final
+proof; search acceptance and simulation alone are not verification.
 
 Unstack's five-demo attempts synthesized three short segments but stopped at a
 release boundary: geometric height success can occur while the payload remains

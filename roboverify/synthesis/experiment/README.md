@@ -134,7 +134,7 @@ optimizes imitation; the final pool is ranked by PostScore. The latter fixes a
 real sample-discard issue, but did not resolve this release boundary. MCMC and
 enumeration retain their previous pool defaults.
 
-### Why this does not yet recover a reusable loop
+### Why the original milestones prevented loop recovery
 
 With the quotient defects repaired, the repeated Stack labels recover
 `b=b0; while exists b_prime. Scattered(b0,b_prime): ...; b=b_prime`, with
@@ -178,6 +178,110 @@ accepted. This is a bounded beam result, not an impossibility theorem. Entry
 probes additionally show that the first empty-hand sample can still place the
 gripper only about 6 mm above the destination: empty-handedness alone does not
 align the retreat phase.
+
+### Completed retreat recovers a loop, with remaining execution failures
+
+A [follow-up experiment](../../runs/contract-retreat-boundaries/20261110/protocol.json)
+continued the automatically learned CFG using the same five full independent
+demonstrations. It delayed placement boundaries until observed support, an empty
+hand, stable blocks, clearance above the scene and low gripper speed after an
+upward retreat. It used observations and contact-derived holding status, with
+no teacher program, action labels or supplied loop body. All 15 extracted starts
+then admitted the nominal Pick contract; the earlier empty-hand cuts admitted
+only the five first iterations.
+
+Contract search found a five-primitive shared body and an accepted empty tail,
+with initialization `b=b0`, guard `exists b_prime. Scattered(b,b_prime)` and update
+`b=b_prime`. The [exact executable](../../runs/contract-retreat-boundaries/20261110/programs/stack-retreat-loop/program.json)
+passed the immediate goal check on all five whole training executions; a later
+50-step settling audit passed three of five. Its floats were not CEM-optimized.
+The search accepted a body in 29.6 seconds. Strict temporal and centering tests
+used to select demonstration cuts were reported separately from executable
+acceptance, which required the terminal relation, supported placement, empty
+hand, retreat clearance and converged controllers; this distinction was
+[recorded before fresh evaluation](../../runs/contract-retreat-boundaries/20261110/protocol-amendment-endpoint-audit.json).
+
+The frozen loop's [fresh evaluation](../../runs/contract-retreat-boundaries/20261110/evaluation/stack-loop/summary.json)
+and independent [contact/frame audit](../../runs/contract-retreat-boundaries/20261110/evaluation/stack-loop/physical-audit/summary.json)
+gave the following results on seeds 200–214:
+
+| Blocks | Task goal, convergence, 50-step settling and 5 mm physical audit |
+| --- | --- |
+| 3 | 15/15 |
+| 4 | 8/15 |
+| 5 | 0/15 |
+
+All controllers converged, but this was not a reliable larger-tower controller.
+The [diagnosis](../../runs/contract-retreat-boundaries/20261110/evaluation/failure-diagnosis/summary.json)
+identifies accumulated placement error: the learned descent takes its X
+reference from the held payload. Moving the gripper to the payload's current X
+adds the existing payload/gripper offset to the placement error. Local support
+can hold while alignment with the original base fails. In three cases, drift
+also moved the current loop reference close enough to an untouched block that
+the 100 mm Scattered guard became false prematurely. Five-block runs exhibited
+substantial tower instability. These are execution/abstraction problems after
+recovering a loop, distinct from the original mixed-hand obstruction.
+
+The unchanged loop separately passed all 12 symbolic checks, including an
+unbounded proof with a learned invariant and no repairs, in 38.4 seconds.
+[Verification evidence](../../runs/contract-retreat-boundaries/20261110/verification/summary.json)
+records the old-WP/domain assumptions. Motion refinement and termination were
+not proved; the symbolic result does not certify the failed physical runs.
+
+Two training-only follow-ups retained the learned CFG and completed-retreat
+examples. A [whole-loop CEM fit](../../runs/contract-retreat-boundaries/20261110/cem-loop/comparison.json)
+optimized all ten floats with Arc imitation distance in 298.6 seconds: three
+rounds of 12 samples plus evaluated means/initialization, 40 variants total.
+The epsilon pool retained exact numeric variants and ranked them by strict
+whole-training PostScore. Its selected program passed five of five training
+episodes including settling, reducing mean release XY error from 6.82 to
+3.27 mm. This is an Arc metric ablation from the original MMD search.
+
+Separately, a [beam-24 Arc shortlist](../../runs/contract-retreat-boundaries/20261110/arc-shortlist-beam24/result-summary.json)
+evaluated all eight generated bodies on the 15 segments before selecting one.
+It synthesized a complete loop in 123.4 seconds and passed both immediate and
+settled training checks in five of five episodes. The search selected a
+support-referenced descent without manual operand edits. A nominal audit found
+why it could previously be discarded: zero-offset nominal grasps make the
+self-payload and support X references nearly identical, so coarse beam diversity
+pruning can retain only one. No new primitive capability was introduced.
+
+Both follow-ups were frozen before evaluation on the same new seeds 300–314.
+All 90 captures replayed exactly and received the independent physical audit:
+
+| Candidate | 3 blocks: task + 5 mm audit | 4 blocks | 5 blocks |
+| --- | --- | --- | --- |
+| Original learned body, whole-loop CEM | 15/15 | 14/15 | 11/15 |
+| Arc shortlist, CEM disabled | 15/15 | 15/15 | 3/15 |
+
+The CEM candidate's task-only five-block rate is 13/15; two otherwise successful
+runs move nonmovers by 5.80 and 5.49 mm. Its three task failures across four/five
+blocks are premature loop exits. The Arc candidate has more taller-tower motion
+and settling failures. The declared 90% combined-success target at every size
+was **not met**. These are descriptive 15-case results, not a generalization
+guarantee. The initial baseline used different seeds (200–214), so that comparison
+is not a matched ablation. Both follow-ups passed all 12 symbolic checks,
+including unbounded obligations, without repairs; neither has a motion or
+termination proof.
+
+A [read-only guard audit](../../runs/contract-retreat-boundaries/20261110/guard-reference-audit/summary.json)
+finds that `Scattered(b,b_prime)` and `Scattered(b0,b_prime)` both fit all 15
+positive and 20 exit examples, with identical continuing-head witness sets.
+The current learner returns the first exact separator under lexical reference
+ordering and prunes later equivalent truth signatures. Ordering unassigned
+scope roles before reassigned roles makes the existing grammar enumerate the
+fixed-base guard first. This is a possible future stability prior, not an adopted
+guard change or correctness repair; it needs cross-task validation and cannot
+fix nonmover displacement. Frozen candidates were not changed by this audit.
+
+The [portable HTML report](../../runs/contract-retreat-boundaries/20261110/report/completed-retreat-loop.html)
+includes videos and downloadable exact executables. The
+[consolidated evidence](../../runs/contract-retreat-boundaries/20261110/result-summary.json)
+records all three candidates, seeds, hashes, criteria and scope. This is an
+experimental continuation of the learned CFG; the observation-based boundary
+detector has not become a production CLI default. The maintained code change
+normalizes only search-accepted empty blocks to `Skip(0)`; unresolved or failed
+empty blocks still fail closed (31 focused tests passed).
 
 ### Reusing the saved candidate for verification
 

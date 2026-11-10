@@ -353,9 +353,22 @@ found a complete 17-primitive four-block Stack program from five whole independe
 demonstrations, passing 15/15 fresh simulation and 5 mm contact/frame audits.
 It used MMD with CEM disabled and does not generalize across block counts. The
 observed mixed-hand-phase partition blocks a shared loop body under the nominal
-primitive grammar; see discrepancy 43. No formal proof of this candidate has
-been established. Arc distance and its metre-valued thresholds are optional;
-KL and the existing numeric defaults remain unchanged.
+primitive grammar; see discrepancy 43. No formal proof of that fixed-size
+candidate has been established. A completed-retreat continuation of the learned
+CFG now recovers a five-primitive shared loop body from the same demonstrations.
+Its immediate training success was 5/5, but 50-step settled success was 3/5.
+Training-only whole-loop CEM and a separate beam-24 Arc shortlist each reached
+5/5 settled training success. On matched fresh three/four/five-block scenes,
+task/settling/5 mm contact-frame success is 15/15,14/15,11/15 for CEM and
+15/15,15/15,3/15 for the Arc shortlist. The 90% per-size target remains unmet.
+All three candidates passed 12 symbolic checks including unbounded proofs with
+learned invariants; motion refinement and termination were not proved.
+Premature guard exits and taller-tower nonmover displacement remain. The frozen
+executables, captures, HTML videos and diagnosis are under
+`runs/contract-retreat-boundaries/20261110/`. Boundary selection remains an
+experimental continuation, not a production CLI default.
+Arc distance and its metre-valued thresholds are optional; KL and the existing
+numeric defaults remain unchanged.
 
 Unstack's five-demo runs exhausted local search/refinement after 275.6/254.5 s
 within recorded 600 s caps, producing three short first-transfer segments but
