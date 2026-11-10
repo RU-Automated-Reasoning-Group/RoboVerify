@@ -8,7 +8,8 @@ historical reproducibility alone is not a reason to retain a runner.
 
 | Tools | Purpose |
 | --- | --- |
-| `mcmc/`, `config.py` | Instrumented MCMC or enumeration, sharing BMC screening and CEM; see the [search guide](../mcmc/README.md). |
+| `mcmc/`, `config.py` | Instrumented MCMC, enumeration or contract proposals; see the [search guide](../mcmc/README.md). |
+| `search_comparison/` | Frozen-budget beam versus matched Metropolis comparison, separate legacy CFG reference, and fresh full-loop evaluation. |
 | `run_logger.py`, `report.py` | Logging used by the main pipeline and bounded inspection of run artifacts. |
 | `invariant_learning/` | Fixed-program counterexample learning; see its [guide](invariant_learning/README.md). |
 | `ablate_higher.py`, `motion_premise_ablation.py` | Current vocabulary and motion-premise ablations; see the [verification guide](../cfg/VERIFICATION.md#higher-removal-ablation). |
@@ -76,8 +77,9 @@ The [frozen protocol](../../runs/contract-search/20261110-cd15-study/main-protoc
 [metric diagnostics](../../runs/contract-search/20261110-cd15-study/metrics/summary.json),
 [held-out results](../../runs/contract-search/20261110-cd15-study/heldout/summary.json),
 and [source bundle](../../runs/contract-search/20261110-cd15-study/frozen-v2/manifest.json)
-record the inputs, thresholds, exact parameter replay, and limitations. Scripts
-remain experimental artifacts; the production CFG search selector is unchanged.
+record the inputs, thresholds, exact parameter replay, and limitations. Those
+scripts remain experimental artifacts; the later maintained backend is selected
+with `--search-strategy contract` as described in the search guide.
 These are empirical four-block, single-transfer results with supplied CFG
 scaffolding, not new loop recovery, human-teleoperation evidence, exact symbolic
 frame preservation, or an unbounded motion proof.
