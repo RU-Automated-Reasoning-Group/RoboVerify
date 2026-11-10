@@ -3,6 +3,7 @@
 import json
 
 import z3
+
 from synthesis.cfg.collection import record_execution
 from synthesis.cfg.demos import DemoSegment
 from synthesis.cfg.lower import lower_with_locations
@@ -83,6 +84,7 @@ def prepare_candidate(
         source = segment.trace
         bindings = dict(source.snapshots[segment.t_start].bindings)
         bindings.update(segment.bindings)
+        bindings.update(getattr(cfg, "_initial_bindings", {}))
         definition = ProgramDefinition(program, bindings, "candidate")
         trace = record_execution(
             definition,
@@ -116,8 +118,10 @@ def prepare_candidate(
         if hasattr(cfg, "_initial_bindings") and not getattr(
             cfg, "_expert_segments_initialized", False
         ):
-            graph.demos.segments[name] = block_segments(
-                [segment.trace for segment in original], paths
+            graph.demos.segments[name] = (
+                candidate_rows
+                if getattr(cfg, "_candidate_program", False)
+                else block_segments([segment.trace for segment in original], paths)
             )
     cfg._expert_segments_initialized = True
     stores = {}

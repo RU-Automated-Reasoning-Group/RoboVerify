@@ -1,6 +1,7 @@
 """Instrumented CFG synthesis; synthesized candidates still require verification."""
 
 import argparse
+import json
 import random
 import signal
 from functools import partial
@@ -24,6 +25,7 @@ from synthesis.cfg.execute import execute_cfg
 from synthesis.cfg.graph import RelationalCFG
 from synthesis.cfg.lower import lower, lower_region
 from synthesis.cfg.program_adapter import program_to_cfg
+from synthesis.cfg.program_io import load_program_artifact, save_program_artifact
 from synthesis.cfg.program_source import load_program
 from synthesis.cfg.recordings import load_traces
 from synthesis.cfg.region import BlockRegion, LoopRegion
@@ -33,6 +35,7 @@ from synthesis.cfg.straightline import (
     segment_rollout,
     straight_line_synthesize,
 )
+from synthesis.cfg.synthesize import synthesize_cfg
 from synthesis.cfg.tasks import task_identity, task_spec
 from synthesis.cfg.verified_synthesis import verified_synthesis
 from synthesis.entry.inference_options import add_inference_options
@@ -75,6 +78,71 @@ def run(args, logger):
         **wp_options_from_args(args).kwargs()
     ):
         return _run(args, logger)
+
+
+def _synthesize_only(cfg, realize, execute, context, args, logger, quotient):
+    """Run the existing CFG algorithm without proof or invariant bootstrap.
+
+    A reloadable result is a candidate; fresh simulation acceptance is a separate
+    evaluation and no successful synthesis status is promoted to a proof.
+    """
+    from synthesis.cfg.program_source import ProgramDefinition
+
+    result = synthesize_cfg(
+        cfg,
+        realize,
+        execute,
+        quotient=quotient,
+        max_refinements=args.refinements,
+        language=Language(
+            relations=("ON", "ON_star", context.height_predicate, "Scattered", "eq"),
+            timeout_seconds=args.predicate_seconds,
+        ),
+        logger=logger,
+    )
+    logger.write_artifact("cfg.json", json.dumps(describe_cfg(cfg), indent=2))
+    status = "synthesized_unverified" if result else result.status
+    saved = None
+    try:
+        program = lower(cfg, context, physical=True)
+    except ValueError:
+        # A failed attempt may still contain unresolved blocks. Keep its CFG;
+        # do not invent executable code for the missing regions.
+        if result:
+            raise
+    else:
+        initial = dict(cfg._task_demos[0].bindings)
+        initial.update(getattr(cfg, "_initial_bindings", {}))
+        initial.update(getattr(cfg, "_fixed_id_bindings", {}))
+        names = set(cfg.initial_scope) | set(getattr(cfg, "_fixed_id_bindings", {}))
+        bindings = {name: initial[name] for name in names}
+        path = logger.artifact_dir() / "program.json"
+        save_program_artifact(
+            path,
+            ProgramDefinition(program, bindings, "synthesized-candidate"),
+            metadata=dict(
+                task=args.task,
+                synthesis_num_blocks=args.num_blocks,
+                synthesis_status=status,
+                accepted_by_cfg_search=bool(result),
+                formal_verification="not_run",
+                config=vars(args),
+            ),
+        )
+        logger.write_artifact("program.txt", str(program))
+        saved = str(path)
+    logger.finish(
+        status,
+        reason=result.reason,
+        formal_verification="not_run",
+        simulation_evaluation="not_run",
+        search_status=result.status,
+        rounds=result.rounds,
+        failed_block=result.failed_block,
+        task=args.task,
+        program_artifact=saved,
+    )
+    return 0 if result else 2
 
 
 def _run(args, logger):
@@ -133,20 +201,32 @@ def _run(args, logger):
         segments, pre, post, ("b0", "tbl") if context.use_tbl else ("b0",)
     )
     if args.mode == "verify":
-        definition = load_program(
-            args.program,
-            context,
-            args.num_blocks,
-            allow_observation_references=True,
-        )
-        if any(
+        if args.program.endswith(".json"):
+            definition = load_program_artifact(args.program, context, args.num_blocks)
+        else:
+            definition = load_program(
+                args.program,
+                context,
+                args.num_blocks,
+                allow_observation_references=True,
+            )
+        if not getattr(args, "candidate_program", False) and any(
             t.metadata.get("fingerprint") != definition.metadata["fingerprint"]
             for t in traces
         ):
             raise ValueError(
                 "Provided program differs from the demonstration source; recollect demonstrations"
             )
+        if getattr(args, "candidate_program", False):
+            logger.log_event(
+                "candidate_program",
+                "Verify the loaded candidate on the original demonstration starts; "
+                "candidate execution supplies invariant-learning traces",
+                force=True,
+                fingerprint=definition.metadata["fingerprint"],
+            )
         cfg = program_to_cfg(definition, segments, pre, post)
+        cfg._candidate_program = getattr(args, "candidate_program", False)
     cfg.synthesis_approach = args.synthesis_approach
     cfg._task_demos = list(segments)
     budget = SearchBudget(
@@ -276,6 +356,7 @@ def _run(args, logger):
                     max_length=args.slots,
                     budget=budget,
                     id_first=id_first,
+                    refinement_fallback=True,
                 ),
                 "feasible": partial(check_contract_feasibility, segments=demos),
             }
@@ -289,6 +370,7 @@ def _run(args, logger):
             logger=logger,
             block_id=node.name,
             penalty=penalty,
+            cache_rollouts=budget.search_strategy == "contract",
             **search_options,
         )
         logger.log_event(
@@ -379,6 +461,22 @@ def _run(args, logger):
         region, ok = realize(node, demos, post, penalty=penalty)
         return region if ok else None
 
+    if args.mode == "synthesize":
+        return _synthesize_only(
+            cfg,
+            realize,
+            partial(
+                execute_cfg,
+                context=context,
+                env_factory=env_factory,
+                reset_mode=args.reset_mode,
+            ),
+            context,
+            args,
+            logger,
+            quotient_fn,
+        )
+
     result = verified_synthesis(
         cfg,
         realize,
@@ -437,8 +535,6 @@ def _run(args, logger):
         ),
         logger=logger,
     )
-    import json
-
     logger.write_artifact("cfg.json", json.dumps(describe_cfg(cfg), indent=2))
     if result or result.status == "verified_symbolic":
         program = lower(cfg, context, physical=True)
@@ -475,8 +571,20 @@ def main(argv=None):
         type=float,
         help="Total run budget; Unstack defaults to 60 seconds",
     )
-    parser.add_argument("--mode", choices=("full", "verify"), default="full")
-    parser.add_argument("--program", help="DSL factory required by --mode verify")
+    parser.add_argument(
+        "--mode",
+        choices=("full", "verify", "synthesize"),
+        default="full",
+        help="synthesize: CFG search and loop recovery without final verification",
+    )
+    parser.add_argument(
+        "--program", help="DSL factory or saved program.json required by --mode verify"
+    )
+    parser.add_argument(
+        "--candidate-program",
+        action="store_true",
+        help="Verify a candidate differing from the demonstration source; reexecute it for inference",
+    )
     parser.add_argument(
         "--synthesis-approach",
         choices=("relational", "id-first"),
@@ -578,6 +686,8 @@ def main(argv=None):
         parser.error("Reverse currently supports supplied-program verification only")
     if args.loop_invariant and args.mode != "verify":
         parser.error("--loop-invariant requires --mode verify")
+    if args.candidate_program and args.mode != "verify":
+        parser.error("--candidate-program requires --mode verify")
     if args.height_predicate == "EqualHeight" and args.mode != "verify":
         parser.error(
             "EqualHeight currently supports supplied-program verification only"
