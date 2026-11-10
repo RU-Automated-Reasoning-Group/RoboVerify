@@ -36,7 +36,7 @@ class SynthesisOnlyTests(unittest.TestCase):
             return_value=StraightLineResult(
                 Program(1, [Skip(0)]), True, "test_oracle", 0, 1
             ),
-        ), patch(
+        ) as search, patch(
             "synthesis.entry.synthesize_cfg.verified_synthesis"
         ) as verify, patch(
             "synthesis.entry.synthesize_cfg.prepare_candidate"
@@ -56,12 +56,22 @@ class SynthesisOnlyTests(unittest.TestCase):
                         "contract",
                         "--output-dir",
                         directory,
+                        "--distance",
+                        "arc",
+                        "--epsilon",
+                        "0.003",
+                        "--cem-std",
+                        "0.004",
                     ]
                 ),
                 0,
             )
             verify.assert_not_called()
             infer.assert_not_called()
+            budget = search.call_args.kwargs["budget"]
+            self.assertEqual(
+                (budget.distance, budget.epsilon, budget.cem_std), ("arc", 0.003, 0.004)
+            )
             artifact = next(Path(directory).glob("cfg/*/artifacts/program.json"))
             payload = json.loads(artifact.read_text())
             self.assertEqual(payload["metadata"]["formal_verification"], "not_run")

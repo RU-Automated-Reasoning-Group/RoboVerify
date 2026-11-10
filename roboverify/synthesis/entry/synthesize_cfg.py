@@ -291,7 +291,9 @@ def _run(args, logger):
         cem_iterations=args.cem_iterations,
         cem_samples=args.cem_samples,
         cem_elites=args.cem_elites,
+        cem_std=getattr(args, "cem_std", 0.05),
         theta=args.theta,
+        epsilon=getattr(args, "epsilon", 0.1),
         distance=args.distance,
         seed=args.seed,
         inner_samples=args.inner_samples,
@@ -674,12 +676,27 @@ def main(argv=None):
     parser.add_argument("--cem-iterations", type=int, default=2)
     parser.add_argument("--cem-samples", type=int, default=8)
     parser.add_argument("--cem-elites", type=int, default=2)
+    parser.add_argument(
+        "--cem-std",
+        type=float,
+        default=0.05,
+        help="Initial CEM parameter standard deviation in metres",
+    )
     parser.add_argument("--inner-samples", type=int, default=128)
     parser.add_argument("--final-samples", type=int, default=2048)
     parser.add_argument("--pool-limit", type=int, default=10)
     parser.add_argument("--theta", type=float, default=1.0)
     parser.add_argument(
-        "--distance", choices=("kl_kde", "kl_gmm", "mmd"), default="kl_kde"
+        "--epsilon",
+        type=float,
+        default=0.1,
+        help="Near-best pool width in the selected distance metric's units",
+    )
+    parser.add_argument(
+        "--distance",
+        choices=("kl_kde", "kl_gmm", "mmd", "arc"),
+        default="kl_kde",
+        help="Imitation metric; arc is ordered, speed-insensitive spatial RMS in metres",
     )
     parser.add_argument("--reset-mode", choices=("reset", "replay"), default="replay")
     parser.add_argument("--predicate-seconds", type=float, default=5.0)
@@ -797,6 +814,10 @@ def main(argv=None):
         or args.motion_iterations < 0
         or args.verification_timeout_ms <= 0
         or args.invariant_variables < 1
+        or not math.isfinite(args.cem_std)
+        or args.cem_std <= 0
+        or not math.isfinite(args.epsilon)
+        or args.epsilon < 0
     ):
         parser.error("Invalid block, slot, or iteration budget")
 
