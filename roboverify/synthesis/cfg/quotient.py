@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from synthesis.api.instructions import (
     Assign,
+    Get,
     Move,
     MoveByName,
     Pick,
@@ -348,6 +349,7 @@ def _fold(cfg, repetition, language, infer_invariant):
         if len(old_rows) != len(examples):
             return False
         post = trial.outgoing(name)[0].label
+        remaining_rows = []
         for i, (old, it) in enumerate(zip(old_rows, extracted)):
             bindings = dict(old.bindings, **it.terminal.bindings)
             remaining = DemoSegment(
@@ -359,6 +361,50 @@ def _fold(cfg, repetition, language, infer_invariant):
                 old,
                 old.entry_index,
             )
+            remaining_rows.append(remaining)
+        before, after = trial.incoming(name)[0], trial.outgoing(name)[0]
+        old_region = trial.nodes[name].region
+        binding_effects = (
+            before.binds
+            or before.kills
+            or before.binding_condition is not None
+            or after.binds
+            or after.kills
+            or after.binding_condition is not None
+            or isinstance(old_region, LoopRegion)
+            or (
+                isinstance(old_region, BlockRegion)
+                and (
+                    old_region.bindings
+                    or any(
+                        isinstance(instruction, (Assign, Get))
+                        for instruction in (
+                            *old_region.physical,
+                            *(old_region.symbolic or ()),
+                        )
+                    )
+                )
+            )
+        )
+        if (
+            after.target != trial.exit
+            and not binding_effects
+            and all(
+                evaluate(post, scene_at(row, row.t_start)) for row in remaining_rows
+            )
+        ):
+            # The recovered loop consumed this intermediate milestone. Keep
+            # the final tail, which may still contain release/retreat, but do
+            # not manufacture a one-frame segment for an already-true target.
+            edge_index = trial.edges.index(before)
+            trial.edges[edge_index : edge_index + 2] = [
+                Edge(before.source, after.target, before.label)
+            ]
+            trial.order.remove(name)
+            del trial.nodes[name]
+            del trial.demos.segments[name]
+            continue
+        for i, (old, remaining) in enumerate(zip(old_rows, remaining_rows)):
             end = (
                 remaining.t_end
                 if trial.outgoing(name)[0].target == cfg.exit
@@ -379,7 +425,7 @@ def _fold(cfg, repetition, language, infer_invariant):
                     cursors[i],
                     end,
                     old.trace,
-                    bindings,
+                    remaining.bindings,
                     old,
                     old.entry_index,
                 )

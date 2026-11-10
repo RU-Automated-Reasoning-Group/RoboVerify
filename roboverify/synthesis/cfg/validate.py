@@ -53,6 +53,7 @@ def validate_cfg(cfg):
     from collections import Counter
 
     from synthesis.cfg.refine import scene_at
+    from synthesis.cfg.region import LoopRegion
     from synthesis.predicates.scene import evaluate
 
     cfg.validate_structure()
@@ -71,7 +72,12 @@ def validate_cfg(cfg):
                     return False
                 if not evaluate(outgoing.label, scene_at(row, row.t_end)):
                     return False
-                if outgoing.target != cfg.exit:
+                # A loop checks its guard at heads, after its body returns.
+                # Its exit condition may already hold during the final body;
+                # those internal states are not loop-exit boundaries.
+                if outgoing.target != cfg.exit and not isinstance(
+                    cfg.nodes[name].region, LoopRegion
+                ):
                     first = first_true(
                         row, lambda state: evaluate(outgoing.label, state), scene_at
                     )
