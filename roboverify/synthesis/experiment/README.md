@@ -27,6 +27,192 @@ checks final physical success after settling. See the
 and [pipeline support matrix](../../../README.md#project-status).
 Execution and collection support do not imply synthesis or formal verification.
 
+## End-to-end synthesis from full demonstrations
+
+The [2026-11-10 end-to-end study](../../runs/contract-end-to-end/20261110/report/end-to-end-synthesis.html)
+starts from five complete, unsegmented four-block demonstrations per task.
+They were collected with an independent direct-action controller, as a proxy
+for good demonstrations from another source. They are not human teleoperation.
+The learner receives observations, exact reset snapshots, observable holding
+state, and initial `b0`/table bindings. It receives no teacher executable,
+instruction/loop events, transfer roles, waypoints, supplied body or loop scaffold.
+Holding state is derived from restored finger contacts and aperture; unknown
+holding states fail closed. See the [input audit](../../runs/contract-end-to-end/20261110/data/demo-input-audit.json).
+
+Contract-guided beam search replaces the straight-line proposal stage; existing
+BMC screening, numeric scoring, predicate refinement and CFG quotienting remain.
+`--mode synthesize` skips invariant bootstrap and final verification. Search
+acceptance is followed by separate complete-program simulation on fresh starts.
+
+| Experiment | Result | Scope |
+| --- | --- | --- |
+| Stack, five training demonstrations | Complete 17-primitive program, 89 s, three refinements | Four blocks, four CFG segments, no learned loop |
+| Frozen Stack candidate, four blocks | **15/15** fresh seeds 100–114 | Global task goal, every controller converged, 50 final settling steps |
+| Same executions, independent physics audit | **15/15** at 5 mm frame tolerance | Contacts, grasp/lift/release, whole action stream and settling |
+| Same candidate, three blocks | Unsupported on all three attempted starts | Saved physical alias 3 is absent; no execution |
+| Same candidate, five blocks | **0/3** fresh seeds 100–102 | Fifth block remains unfinished |
+| Unstack, five full training demonstrations | No complete program | Three short segments of the first transfer synthesized; release boundary unresolved |
+
+The primary successful Stack run used MMD (`theta=epsilon=0.1`) with **CEM
+disabled**: observation-derived float proposals were sufficient. Its contract
+beam was 12, maximum body length 5, proposal budget 5 s, and three candidates
+could be checked per block. All five demonstrations were used, with exact
+snapshot restoration and single-threaded numerical libraries. The
+[original run](../../runs/contract-end-to-end/20261110/cfg/20261110-212211-4cc93db-stack-independent-mmd-reset/config.json)
+records the full command and source revision `4cc93db`. Subsequent fixes change
+the search trajectory; the frozen executable, rather than a new search run, is
+the object evaluated here. A later CEM-enabled run did not complete and does
+not support a claim that CEM improves end-to-end synthesis.
+
+The recorded runtime used Python 3.10.22, NumPy 1.26.0 and the existing Gym
+0.21 compatibility installation at `/tmp/lus-runtime`. In addition to the
+repository's MuJoCo environment variables, experiment processes set
+`PYTHONPATH=/tmp/lus-runtime:$PWD` and
+`OMP_NUM_THREADS=OPENBLAS_NUM_THREADS=MKL_NUM_THREADS=1`. Use the saved run
+configurations and source manifests when comparing timings or reproducing a
+historical search; the package defaults were not changed for this study.
+The [runtime manifest](../../runs/contract-end-to-end/20261110/runtime.json)
+records the compatibility-source hashes; the
+[study summary](../../runs/contract-end-to-end/20261110/study-summary.json)
+indexes the frozen evidence without treating bounded failures as impossibility
+proofs.
+
+The maximum nonmover drift was **2.757 mm**; only **1/15** passes the stricter
+1 mm diagnostic. Exact action replay reproduced every recorded observation,
+and the independent audit covered 2,536 actions and 50,810 physics/boundary
+samples. This is empirical evidence under the existing simulator/contact model,
+not a motion proof. See the [fresh-run results](../../runs/contract-end-to-end/20261110/evaluation/stack-mmd-unrolled/summary.json)
+and [physical audit](../../runs/contract-end-to-end/20261110/evaluation/stack-mmd-unrolled/physical-audit/summary.json).
+
+The accepted Stack candidate is preserved with exact float/control values,
+initial aliases and executable fingerprint:
+
+- [Executable JSON](../../runs/contract-end-to-end/20261110/programs/stack-four-block/program.json)
+- [Readable program with offsets](../../runs/contract-end-to-end/20261110/programs/stack-four-block/program.txt)
+- [CFG](../../runs/contract-end-to-end/20261110/programs/stack-four-block/cfg.json)
+- [Fifteen complete candidate execution traces](../../runs/contract-end-to-end/20261110/programs/stack-four-block/evaluation-traces.npz)
+- [Provenance](../../runs/contract-end-to-end/20261110/programs/stack-four-block/provenance.json)
+- [Video of the exact synthesized program](../../runs/contract-end-to-end/20261110/report/media/stack-four-block-seed100.mp4)
+
+### Unstack: release boundaries still prevent completion
+
+The main five-demo feasibility run used the documented 600 s allowance. Its
+settings were ID-first contract search, beam 12, maximum body length 6,
+5 s proposal searches, two candidate checks per block, exact snapshot reset,
+and one CEM round with four samples and two elites. Ordered arc distance used
+`theta=0.03`, `epsilon=0.005`, and `cem_std=0.004`, all in metres. These thresholds
+are not comparable to the Stack MMD thresholds. The first run stopped after
+about 276 s; the corrected CEM-retention run stopped after 254.5 s when predicate
+refinement exhausted its local budget. Neither produced a full executable or
+a fresh whole-program simulation result. Partial bodies and exact configurations
+remain under [Unstack diagnostics](../../runs/contract-end-to-end/20261110/unstack-diagnostics/experiment-index.json).
+The [final evidence summary](../../runs/contract-end-to-end/20261110/unstack-diagnostics/unstack-final-summary.json)
+includes the exact run paths, contact observations and 18 labeled partial-body
+artifacts. These fragments are not full Unstack programs.
+
+Three consecutive segments reached their geometric postconditions on all five
+demonstrations. The next `Higher(b0,3)` milestone lies inside release: its recorded
+endpoint is empty-handed. The best Move-only prefix closely matches the segment
+(1.03 mm mean arc distance), but remains holding. Two other CEM trials reach the
+height predicate on all five demonstrations and remain within the near-best
+imitation margin, yet also remain holding. They cannot be substituted for the
+recorded endpoint of the next segment. No refinement-only flag was bypassed.
+
+The nominal Release transition clears heldness without changing block height;
+the simulator lets the released payload settle onto the table. Millimetre-scale
+observed grasp offsets are material to the 1 mm `Higher` threshold. This is a
+remaining boundary/model mismatch, not evidence that all synthesis approaches
+are incapable of Unstack. A continuation needs a release/settling contract or
+phase-aware partition that accounts for the actual terminal hand and payload
+state, followed by complete-program simulation.
+
+The investigation made two general corrections without weakening acceptance:
+observed-held Move/BMC transitions preserve the payload's observed displacement
+from the gripper, and contract search retains CEM's evaluated numeric variants
+in the bounded epsilon pool using their executable fingerprints. CEM still
+optimizes imitation; the final pool is ranked by PostScore. The latter fixes a
+real sample-discard issue, but did not resolve this release boundary. MCMC and
+enumeration retain their previous pool defaults.
+
+### Why this does not yet recover a reusable loop
+
+With the quotient defects repaired, the repeated Stack labels recover
+`b=b0; while exists b_prime. Scattered(b0,b_prime): ...; b=b_prime`, with
+body postcondition `ON(b_prime,b)`. However, the first geometric `ON` state
+occurs while the moved block is still grasped. Across the five demonstrations,
+the resulting 15 body entries contain five empty hands and ten hands holding
+the previous destination. The shared nominal grammar allows Pick only when
+all entries are empty and Release only when all are holding. Move preserves
+heldness and cannot change blocks in the empty entries. Thus neither Pick nor
+Release is available at any depth, while the body goal remains false in those
+five examples. More beam/CEM budget cannot solve this partition.
+
+The [certificate](../../runs/contract-end-to-end/20261110/loop-body-holding-obstruction.json)
+records the extracted states, exact holding-state closure, four inductive Z3
+checks and probes of the implemented scalar/batched transitions. It establishes
+an obstruction for this nominal grammar and partition, not for every physical
+controller or conditional language. The next design needs observable
+phase-consistent milestones (placement and a released hand), or an inferred
+prologue, steady-state loop and release epilogue. See
+[discrepancy 43](../../../PAPER-DISCREPANCIES.md#43-geometric-loop-milestones-can-mix-incompatible-gripper-phases).
+
+An [observable release diagnostic](../../runs/contract-end-to-end/20261110/stack-released-milestone-diagnostic.json)
+keeps the learned `ON` milestone but waits for a known empty hand. It recovers
+three iterations in each demonstration, with all 15 heads and endpoints empty;
+the folded CFG validates and the unchanged guard learner returns
+`Scattered(b,b_prime)`. This removes the mixed-hand obstruction for those
+segments. Segmentation feasibility alone does not establish body synthesis or
+whole-loop success.
+
+Two experimental continuations then searched a shared body from all 15 aligned
+segments, retaining only the automatically learned CFG/guard/bindings. Obsolete
+physical realizations were cleared; no fixed object aliases or supplied body
+entered the grammar. The final [beam-12 run](../../runs/contract-end-to-end/20261110/released-head-continuation-beam12/result-summary.json)
+reached depth 6 in 8.88 s of proposal search (84.3 s total), checked eight
+BMC-feasible prefixes, and found no nominal complete candidate. Four prefixes
+achieved `ON(b_prime,b)` at the final state on all 15 simulations, but all four
+ended with closed fingers; none matched the observed empty-hand endpoint.
+The best MMD was 0.003145. Thus refinement-only status here does not mean the
+geometric relation failed. Neither a complete body nor its remaining tail was
+accepted. This is a bounded beam result, not an impossibility theorem. Entry
+probes additionally show that the first empty-hand sample can still place the
+gripper only about 6 mm above the destination: empty-handedness alone does not
+align the retreat phase.
+
+### Reusing the saved candidate for verification
+
+The JSON loader preserves exact parameters and validates its fingerprint. The
+verification CLI can replay a candidate from the accepted demonstration starts,
+using the candidate's own events rather than requiring teacher identity:
+
+```bash
+uv run python -m synthesis.entry.synthesize_cfg \
+  --mode verify --task stack --num-blocks 4 --candidate-program \
+  --program runs/contract-end-to-end/20261110/programs/stack-four-block/program.json \
+  --demos runs/contract-end-to-end/20261110/data/stack-independent-accepted-5-holding.npz \
+  --verification-level symbolic
+```
+
+This is an entry point for later proof work, not a verified-result command.
+The preserved program is fixed-size; its physical aliases do not justify an
+unbounded proof for arbitrary block counts. The later proof must also respect
+the actual controller assumptions and measured framing tolerance.
+
+A [bounded smoke invocation](../../runs/contract-end-to-end/20261110/verification-smoke/smoke-result.json)
+confirmed successful JSON reload and candidate execution on all 15 saved fresh
+starts. It finished in 33.9 s externally (24.6 s inside the CLI). The old-WP
+unbounded body VC was **invalid**, with a seven-value Box countermodel, and the
+pipeline returned `needs_demonstrations`. No motion check ran. This is consistent
+with the fixed-size limitation; no claim is made that the symbolic countermodel
+was realized physically. A proof scoped to four blocks remains future work.
+
+The final focused regression suite passed **171 tests**, covering search,
+CFG refinement/quotienting, persistence, caching, BMC, the arc metric and MCMC
+parity. The [validation record](../../runs/contract-end-to-end/20261110/validation.json)
+preserves the earlier runs and the final log. The HTML report was also checked
+offline for video playback, all 17 instruction seeks, exact executable download
+and mobile layout.
+
 ## Maintained contract-search comparison
 
 `search_comparison/` separates three questions: whether contract-guided beam

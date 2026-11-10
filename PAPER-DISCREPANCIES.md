@@ -1288,3 +1288,62 @@ Reverse's motion encoding, Restack integration and goal-aware synthesis/
 verification remain open.
 Historical proof evidence retains its recorded executable, premises and workspace
 scope.
+
+## 43. Geometric loop milestones can mix incompatible gripper phases
+
+**Implementation/model limitation, observed in end-to-end synthesis.** The
+paper's Stack illustration folds completed placement fragments using `ON`.
+On dense physical demonstrations, the geometric interpretation of `ON` can
+already hold while the source remains grasped above its destination. Selecting
+the first such state does not establish a completed, released placement.
+
+The 2026-11-10 contract-search experiment synthesized a complete 17-primitive
+four-block Stack program from five full independent-controller demonstrations,
+without a supplied body or loop. It passed 15 fresh four-block executions and
+their contact/frame audits. This fixed-size result does not establish loop
+recovery. Repeated `ON` labels recover a three-iteration loop with initialization
+`b=b0`, update `b=b_prime`, and learned guard `Scattered(b0,b_prime)`, but its
+extracted body examples have incompatible hand phases: the five first iterations
+start empty and the ten later iterations still hold the preceding destination.
+
+Under the current shared nominal primitive contracts, Pick requires every
+example to be empty-handed, Release requires every example to be holding, and
+Move preserves heldness. Neither Pick nor Release is therefore available in
+this batch at any depth. Moves cannot change any block position in the initially
+empty examples, whose `ON(b_prime,b)` body goals are false. This is a structural
+obstruction for this partition, not a beam-width or CEM-budget problem. The
+[certificate](roboverify/runs/contract-end-to-end/20261110/loop-body-holding-obstruction.json)
+records all 15 heads, exact holding-state closure, four inductive Z3 checks and
+probes of the implemented nominal transitions. It is not a proof about every
+physical controller or a richer conditional language.
+
+The remaining design choice is to recover phase-consistent boundaries from
+observations (for example, placement together with a released hand), or to learn
+a first-transfer prologue, steady-state loop and release epilogue. No supplied
+loop template, hidden teacher phase labels or relaxed primitive preconditions
+were used to bypass the obstruction. The paper's synthesis algorithm permits
+failure; this finding does not refute its conditional soundness claims.
+
+A subsequent [observable release diagnostic](roboverify/runs/contract-end-to-end/20261110/stack-released-milestone-diagnostic.json)
+delays each learned placement milestone until its same `ON` formula holds with
+a known empty hand. All five demonstrations retain exactly three iterations;
+all 15 heads and endpoints are empty, and the resulting CFG validates. For
+demo 0 the cuts shift from `0,82,203,342` to `0,103,226,364`, with the remaining
+physical tail retained. The unchanged learner infers `Scattered(b,b_prime)`.
+This establishes segmentation feasibility without teacher phase labels;
+by itself it is not a synthesized body or successful whole-loop execution.
+The [subsequent bounded body search](roboverify/runs/contract-end-to-end/20261110/released-head-continuation-beam12/result-summary.json)
+reached depth 6 but found no complete candidate. Four evaluated prefixes
+achieved `ON` on all 15 examples while ending with closed fingers in every case.
+The original impossibility argument no longer applies to the aligned inputs;
+this later search result is empirical and bounded. Matching a geometric
+milestone must still be distinguished from matching its physical hand/retreat
+state.
+
+The investigation also corrected independent implementation defects: loop exit
+labels are checked at actual heads/exits rather than requiring first truth at
+the last internal state; quotienting removes already-consumed, bind-free
+intermediate milestones while retaining the final physical tail; rebound-only
+loops no longer require a nonempty carried-variable update; and extracted
+iterations require changed bindings or witnessed milestone progress. These
+repairs enable structural recovery but do not solve the mixed-phase body problem.

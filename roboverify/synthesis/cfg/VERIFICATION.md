@@ -1,7 +1,8 @@
 # Synthesis and verification
 
-`synthesis.entry.synthesize_cfg` runs the structured CFG synthesizer and both
-verification stages on the same candidate and task conditions.
+`synthesis.entry.synthesize_cfg` runs structured CFG synthesis and optional
+verification on the same candidate and task conditions. `--mode synthesize`
+stops after search and saves an executable candidate for simulation and later proof.
 
 All seven benchmarks have [symbolic task conditions](TASK-CONDITIONS.md), exposed
 through `symbolic_task_spec`. Goal-task assertions use a separate physical
@@ -35,7 +36,7 @@ output directory gets a numbered suffix, use the printed archive path.
 
 Stack collection holds the reset gripper position for 50 control steps, then
 records the resulting full simulator state as demonstration state zero. The
-preparation is excluded from program actions, loop events, and video. Both
+preparation is excluded from program actions, loop events, and video. All
 pipeline modes restore archived starts for candidates and repairs; standalone
 MCMC uses the same saved starts for CEM/scoring and candidate videos. Seeds
 identify recordings rather than reconstructing their initial state. Restoration
@@ -63,12 +64,40 @@ uv run python -m synthesis.entry.synthesize_cfg --task stack --num-blocks 3 \
 uv run python -m synthesis.experiment.report --run runs/cfg/latest
 ```
 
-`--mode full` performs search and optional flat-loop recovery (`--quotient`).
+`--mode full` performs search and optional flat-loop recovery (`--quotient`),
+then runs the configured verification stages.
+`--mode synthesize` runs the same search/refinement/quotient pipeline without
+invariant bootstrap or final verification. `synthesized_unverified` means the
+search accepted a candidate, not that it passed an independent simulation audit.
+Use `--synthesis-approach id-first` to search concrete operands before relational
+quotienting; this approach enables quotienting automatically.
 `--mode verify` adapts the supplied executable into the same CFG and skips initial
-search. Its fingerprint must match the demonstration source. PickPlace and nested
+search. Its fingerprint must match the demonstration source unless the explicit
+`--candidate-program` option is used. That option checks a different candidate
+on the demonstration starts and learns from its own executed states and events.
+PickPlace and nested
 loops are unsupported in this workflow. `--output-dir` changes the experiment
 results root; `--run-name` adds an optional readable label. `--smoke` is a small
 search budget, not an acceptance criterion.
+
+Synthesis saves the structured CFG and reloadable `artifacts/program.json`,
+including exact float values, control settings, guard syntax, initial aliases,
+the executable fingerprint and resolved configuration. Every completed block
+attempt is retained under `artifacts/blocks/`, including unsuccessful search
+evidence; those partial bodies are not complete task programs. To verify a saved
+complete candidate later, use:
+
+```bash
+uv run python -m synthesis.entry.synthesize_cfg \
+  --mode verify --task stack --num-blocks 4 \
+  --program PATH/TO/artifacts/program.json --candidate-program \
+  --demos PATH/TO/original-demonstrations.npz
+```
+
+The task and block-count checks still apply. A candidate tied to four physical
+aliases does not thereby generalize to other block counts. See the
+[end-to-end experiment record](../experiment/README.md) for actual synthesis and
+simulation outcomes.
 
 The collector and pipeline accept `--higher-tolerance METRES` (default 0.001,
 zero for exact ordering). Runtime guards, inference and geometric verification

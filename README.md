@@ -147,13 +147,27 @@ Both the integrated and standalone search CLIs also accept
 primitive structures in increasing length, checks each with BMC, then tunes its
 float parameters using CEM. It retains the existing scoring and verification
 stages; see the [search guide](roboverify/synthesis/mcmc/README.md) for scope and
-budgets. This adds a search strategy, not a new end-to-end task result.
+budgets.
 Contract search grows prefixes using nominal primitive contracts, observation
 proposals, diversity and exact successor caching. It also screens candidates
 with BMC before the existing CEM stage, while preserving CFG refinement and loop
 inference. The [controlled comparison](roboverify/synthesis/experiment/README.md#maintained-contract-search-comparison)
 separates matched beam/Metropolis search from the unchanged legacy CFG reference
 and tests frozen bodies in complete supplied loops.
+The separate [end-to-end experiment](roboverify/synthesis/experiment/README.md#end-to-end-synthesis-from-full-demonstrations)
+uses whole independent-controller demonstrations without a supplied body or loop.
+It synthesized a 17-primitive four-block Stack program that passed 15/15 fresh
+simulations and the 5 mm contact/frame audit. This is a fixed-size program;
+variable-size loop synthesis remains unresolved. Audits found gripper-phase
+and retreat mismatches at geometric milestones. Exact executable JSON and
+candidate traces are saved for later verification. `--mode synthesize` skips
+final proof; neither search acceptance nor these simulations establish a formal
+verification result.
+
+Unstack's five-demo attempts synthesized three short segments but stopped at a
+release boundary: geometric height success can occur while the payload remains
+grasped, and the nominal Release model omits physical settling. No complete
+Unstack program or fresh success rate is claimed by this study.
 
 Stack reset scatters blocks within **0.70 m horizontally of the robot base**,
 retaining block separation and initial gripper clearance. The shared Stack

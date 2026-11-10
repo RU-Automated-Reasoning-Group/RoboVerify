@@ -343,6 +343,29 @@ Use `--smoke --task stack --num-blocks 3
 for a bounded search with the collection above, or iteration options for
 longer runs. Read the resulting directory through the report tool described below.
 
+`synthesis.entry.synthesize_cfg --mode synthesize` runs CFG refinement and
+optional quotienting without final verification. It saves exact executable JSON,
+per-block attempts and complete unrolled checkpoints before quotienting. A saved
+JSON can be loaded with `--mode verify --program PATH --candidate-program`;
+candidate replay uses its own aliases and events, not teacher events. The
+[end-to-end study](roboverify/synthesis/experiment/README.md#end-to-end-synthesis-from-full-demonstrations)
+found a complete 17-primitive four-block Stack program from five whole independent
+demonstrations, passing 15/15 fresh simulation and 5 mm contact/frame audits.
+It used MMD with CEM disabled and does not generalize across block counts. The
+observed mixed-hand-phase partition blocks a shared loop body under the nominal
+primitive grammar; see discrepancy 43. No formal proof of this candidate has
+been established. Arc distance and its metre-valued thresholds are optional;
+KL and the existing numeric defaults remain unchanged.
+
+Unstack's five-demo runs exhausted local search/refinement after 275.6/254.5 s
+within recorded 600 s caps, producing three short first-transfer segments but
+no complete program. Its unresolved release boundary distinguishes geometric
+height success from a released, settled payload; no settling effect or partial
+acceptance bypass was added. An observable empty-hand Stack alignment repairs
+the mixed-phase partition, but bounded shared-body search still did not produce
+a complete loop. Keep these negative results distinct from supplied-program
+verification and the successful fixed-four-block executable.
+
 ### Validation
 
 From `roboverify/`, with the simulator environment above configured:

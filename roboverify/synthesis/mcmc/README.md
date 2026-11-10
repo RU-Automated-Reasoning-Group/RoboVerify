@@ -119,15 +119,39 @@ This screen includes all physical objects and exact scalar-reference semantics;
 offsets remain existential separately at each entry. It is not a shared-parameter
 goal or physical safety proof. The nominal contracts are proposal filters whose
 physical validity still depends on successful controller execution. CFG keeps
-its selected KL/MMD objective, epsilon/theta scale, PostScore, quotienting,
+its selected imitation objective, epsilon/theta scale, PostScore, quotienting,
 invariant inference and later verification. The internal trajectory rank does
-not replace those acceptance checks. Standalone keeps its MMD/CEM scorer and
+not replace those acceptance checks. Contract search retains CEM's evaluated
+parameter trials in the same bounded near-best imitation pool before PostScore
+ranking, using executable fingerprints so distinct float values remain distinct.
+CEM still optimizes imitation alone; a nearby trial that reaches every
+segment postcondition can therefore survive even when the best imitation trial
+stops just short of a relational boundary. MCMC and enumeration retain their
+existing candidate-pool behavior. Standalone keeps its MMD/CEM scorer and
 uses the task postcondition, or `--goal-feature`, to select nominal candidates.
 
 For example, add `--search-strategy contract --slots 8` to an existing CFG
 invocation, or `--search-strategy contract --program-slots 8` to the standalone
 driver. BMC must remain enabled. Proposal exhaustion, unsupported input and
 deadlines are reported explicitly; none establishes successful verification.
+
+For integrated CFG refinement, a failed contract search can retain non-goal
+prefixes as separate refinement candidates. They still pass BMC and the configured
+numeric stage, but cannot be accepted as synthesized blocks merely because their
+imitation score is small. If nothing was evaluated, refinement receives an empty
+body or binding prefix, rather than an unevaluated random physical seed. Exact
+rollout caching avoids repeating the same deterministic simulation for objective,
+distance and PostScore; it does not cache Monte Carlo distance estimates.
+
+The integrated CLI also supports `--distance arc`. It compares each candidate
+trajectory with its own demonstration after ordered arc-length resampling, then
+averages spatial RMS in metres. Gripper and all block positions contribute;
+moving blocks are inferred from observed displacement, without teacher action or
+source-role labels. Both `--theta` and `--epsilon` are metres in this mode, unlike
+KL or MMD. For example, `--theta 0.03 --epsilon 0.005` means a 3 cm convergence
+threshold and 5 mm near-best pool. `--cem-std 0.004` sets the initial numeric
+proposal standard deviation to 4 mm. These are explicit experiment settings,
+not replacements for the defaults (KL, epsilon 0.1 and CEM std 0.05).
 
 ### Four-block Stack synthesis without verification
 
@@ -157,7 +181,10 @@ uv run python -m synthesis.experiment.mcmc.run \
 This runs standalone straight-line MCMC/CEM imitation search over the archived
 demonstrations. It performs no symbolic or motion verification; `--no-bmc` also
 disables BMC feasibility pruning. It does not recover loops. The integrated
-`synthesis.entry.synthesize_cfg` CLI has no verification-disabled mode.
+`synthesis.entry.synthesize_cfg --mode synthesize` instead runs integrated CFG
+refinement and optional loop recovery without final verification, saving a
+reloadable program candidate. The standalone command above still performs only
+straight-line search.
 The original collection's verification history does not verify a newly
 synthesized candidate.
 

@@ -311,7 +311,7 @@ def straight_line_synthesize(
                 score = objective(trial)
                 if retain_samples:
                     # CEM still fits imitation alone. Preserve its already
-                    # screened parameter trials in the same bounded epsilon
+                    # simulated parameter trials in the same bounded epsilon
                     # pool, so later PostScore can select a close trial that
                     # actually crosses the demonstrated relational boundary.
                     pool.add(trial, measure(trial, budget.final_samples))
