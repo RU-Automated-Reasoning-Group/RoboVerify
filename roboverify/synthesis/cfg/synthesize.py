@@ -29,12 +29,15 @@ def synthesize_cfg(
     max_refinements=10,
     language=None,
     logger=None,
+    checkpoint=None,
 ):
     """realize(node,segments,post) -> (region, ok); execute(cfg) returns negatives.
 
     Failure retains the best attempted physical block so Exec can run the
     realized prefix and stop at the first unresolved block. A successful search
-    is a candidate synthesis result, not a formal verification result.
+    is a candidate synthesis result, not a formal verification result. An optional
+    checkpoint(cfg, round_id) observes the complete numeric candidate immediately
+    before quotienting can replace it with an as-yet unrealized loop body.
     """
     if cfg.synthesis_approach not in ("relational", "id-first"):
         raise ValueError(f"Unknown synthesis approach: {cfg.synthesis_approach}")
@@ -95,6 +98,8 @@ def synthesize_cfg(
                 # are introduced. The public synthesis boundary is named only.
                 from synthesis.cfg.id_first import close_id_candidate
 
+                if quotient is not None and checkpoint is not None:
+                    checkpoint(cfg, round_id)
                 changed = quotient is not None and quotient(cfg)
                 if changed and logger:
                     logger.log_event(

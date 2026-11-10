@@ -82,6 +82,62 @@ class SynthesisOnlyTests(unittest.TestCase):
             loaded = load_program_artifact(artifact, HighLevelContext(), 2)
             self.assertEqual(loaded.initial_bindings, {"b0": 0})
 
+    def test_complete_program_survives_failed_post_quotient_search(self):
+        from types import SimpleNamespace
+
+        from synthesis.cfg.quotient import quotient
+        from synthesis.cfg.region import BlockRegion
+        from synthesis.cfg.test_id_first import ground_cfg
+        from synthesis.entry.synthesize_cfg import _synthesize_only
+        from synthesis.experiment.run_logger import RunLogger
+
+        cfg = ground_cfg()
+        cfg._task_demos = cfg.demos.for_node(cfg.order[0])
+        expected = [
+            str(instruction)
+            for name in cfg.order
+            for instruction in cfg.nodes[name].region.physical
+        ]
+
+        def realize(node, demos, post):
+            if node.synthesis_approach == "id-first":
+                return node.region, True
+            return BlockRegion(None, (Skip(0),)), False
+
+        args = SimpleNamespace(
+            task="stack", num_blocks=4, refinements=0, predicate_seconds=5
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            with RunLogger(directory, "test", {}, slug="checkpoint") as logger:
+                status = _synthesize_only(
+                    cfg,
+                    realize,
+                    lambda candidate: [],
+                    HighLevelContext(),
+                    args,
+                    logger,
+                    quotient,
+                )
+                checkpoint = (
+                    logger.artifact_dir()
+                    / "checkpoints/pre-quotient-round-0000/program.json"
+                )
+                self.assertEqual(status, 2)
+                loaded = load_program_artifact(checkpoint, HighLevelContext(), 4)
+                self.assertEqual(loaded.initial_bindings, {"b0": 0})
+                self.assertEqual(
+                    [str(instruction) for instruction in loaded.program.instructions],
+                    expected,
+                )
+                metadata = json.loads(checkpoint.read_text())["metadata"]
+                self.assertEqual(
+                    metadata["synthesis_status"], "search_complete_unrolled"
+                )
+                self.assertEqual(metadata["formal_verification"], "not_run")
+                saved_cfg = json.loads(checkpoint.with_name("cfg.json").read_text())
+                self.assertEqual(saved_cfg["order"], ["v0", "v1", "v2"])
+                self.assertEqual(cfg.order, ["v0.loop"])
+
     def test_failed_block_attempts_retain_exact_parameters_and_entry_bindings(self):
         from types import SimpleNamespace
 

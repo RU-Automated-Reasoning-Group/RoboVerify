@@ -92,6 +92,40 @@ def _synthesize_only(cfg, realize, execute, context, args, logger, quotient):
     A reloadable result is a candidate; fresh simulation acceptance is a separate
     evaluation and no successful synthesis status is promoted to a proof.
     """
+
+    def checkpoint(candidate, round_id):
+        directory = f"checkpoints/pre-quotient-round-{round_id:04d}"
+        definition = _candidate_definition(candidate, context)
+        payload = describe_program_artifact(
+            definition,
+            metadata=dict(
+                task=args.task,
+                synthesis_num_blocks=args.num_blocks,
+                synthesis_status="search_complete_unrolled",
+                accepted_by_block_search=True,
+                formal_verification="not_run",
+                simulation_evaluation="not_run",
+                round=round_id,
+                config=vars(args),
+            ),
+        )
+        logger.write_artifact(
+            f"{directory}/program.json",
+            json.dumps(payload, indent=2, allow_nan=False) + "\n",
+        )
+        logger.write_artifact(
+            f"{directory}/cfg.json", json.dumps(describe_cfg(candidate), indent=2)
+        )
+        logger.write_artifact(f"{directory}/program.txt", str(definition.program))
+        logger.log_event(
+            "complete_candidate_saved",
+            "Saved the complete unrolled candidate before loop generalization",
+            step=round_id,
+            force=True,
+            artifact=f"{directory}/program.json",
+            formal_verification="not_run",
+        )
+
     result = synthesize_cfg(
         cfg,
         realize,
@@ -103,27 +137,23 @@ def _synthesize_only(cfg, realize, execute, context, args, logger, quotient):
             timeout_seconds=args.predicate_seconds,
         ),
         logger=logger,
+        checkpoint=checkpoint,
     )
     logger.write_artifact("cfg.json", json.dumps(describe_cfg(cfg), indent=2))
     status = "synthesized_unverified" if result else result.status
     saved = None
     try:
-        program = lower(cfg, context, physical=True)
+        definition = _candidate_definition(cfg, context)
     except ValueError:
         # A failed attempt may still contain unresolved blocks. Keep its CFG;
         # do not invent executable code for the missing regions.
         if result:
             raise
     else:
-        initial = dict(cfg._task_demos[0].bindings)
-        initial.update(getattr(cfg, "_initial_bindings", {}))
-        initial.update(getattr(cfg, "_fixed_id_bindings", {}))
-        names = set(cfg.initial_scope) | set(getattr(cfg, "_fixed_id_bindings", {}))
-        bindings = {name: initial[name] for name in names}
         path = logger.artifact_dir() / "program.json"
         save_program_artifact(
             path,
-            ProgramDefinition(program, bindings, "synthesized-candidate"),
+            definition,
             metadata=dict(
                 task=args.task,
                 synthesis_num_blocks=args.num_blocks,
@@ -133,7 +163,7 @@ def _synthesize_only(cfg, realize, execute, context, args, logger, quotient):
                 config=vars(args),
             ),
         )
-        logger.write_artifact("program.txt", str(program))
+        logger.write_artifact("program.txt", str(definition.program))
         saved = str(path)
     logger.finish(
         status,
@@ -147,6 +177,16 @@ def _synthesize_only(cfg, realize, execute, context, args, logger, quotient):
         program_artifact=saved,
     )
     return 0 if result else 2
+
+
+def _candidate_definition(cfg, context):
+    program = lower(cfg, context, physical=True)
+    initial = dict(cfg._task_demos[0].bindings)
+    initial.update(getattr(cfg, "_initial_bindings", {}))
+    initial.update(getattr(cfg, "_fixed_id_bindings", {}))
+    names = set(cfg.initial_scope) | set(getattr(cfg, "_fixed_id_bindings", {}))
+    bindings = {name: initial[name] for name in names}
+    return ProgramDefinition(program, bindings, "synthesized-candidate")
 
 
 def _save_block_candidate(logger, result, node, demos, args, attempt):
