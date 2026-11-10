@@ -82,6 +82,75 @@ These are empirical four-block, single-transfer results with supplied CFG
 scaffolding, not new loop recovery, human-teleoperation evidence, exact symbolic
 frame preservation, or an unbounded motion proof.
 
+## Repeated-loop and Unstack follow-up
+
+The [follow-up report](../../runs/contract-search/20261110-loop-unstack-study/report/loop-body-synthesis-report.pdf)
+extends the local-transfer experiment with 135 complete Stack executions:
+three frozen bodies, three block counts, and 15 matched fresh starts per count.
+The original loop initialization, guard and pointer update are supplied; only
+the physical body changes. There are no resets or extra settling steps between
+iterations. These experiments test body composition, not loop discovery.
+
+| Frozen Stack body | 3 blocks | 4 blocks | 5 blocks |
+| --- | --- | --- | --- |
+| Contract + observations | 15/15 | 15/15 | 4/15 |
+| Contract grid + arc RMS | 15/15 | 0/15 | 0/15 |
+| Contract grid + KL | 15/15 | 12/15 | 0/15 |
+
+Success requires the canonical global goal, normal loop exit, controller
+convergence, contact checks, a 5 mm per-transfer frame bound and final settling.
+The simulator's goal alone is weaker: it accepts all 15 five-block observation
+body runs, while only seven meet the canonical goal and four meet all criteria.
+The grid/arc body accumulates alignment bias even when immediate release-on-target
+checks pass. One five-block KL attempt reaches the iteration cap without final
+settling. These findings limit the earlier isolated-transfer result; they do not
+refute the separately checked supplied-program proof.
+
+A 3/5/10/15-example training-size diagnostic finds five-action Stack bodies in
+every setting, with almost identical local trajectory RMS. Evaluation on the
+original 15-example pool passes throughout. This is a saturated training-pool
+diagnostic, not independent evidence of sample complexity or full-loop success.
+
+Unstack uses 15 training and 15 held-out independent-controller traces, balanced
+across three positions in a four-block loop. All 30 replay exactly and satisfy
+the settled local goal; two exceed the fixed contact classification margins and
+remain explicitly flagged. Contract-progress diversity prevents equivalent
+operand choices from crowding out useful beam states. The resulting six-action
+observation-guided proposal passes all 15 held-out transfers and all 15 fresh
+four-block full loops before numeric refinement. Its initial grid-only comparator
+passes BMC but fails every physical test, exposing a missing support-clearance
+condition in the nominal contract. Exact successor caching preserves the audited
+candidate pool; diversity pruning is a separate heuristic.
+
+The training-derived support-clearance rule also produces a grid-only six-action
+body passing 15/15 held-out transfers and 15/15 full loops (35.73 mm trajectory
+RMS). A tiny one-sample numeric refinement improves the observation body's
+held-out RMS from 21.80 to 21.17 mm, but acceptance drops to 14/15 in each suite.
+Each failure slightly exceeds the fixed 2 mm contact-geometry band during
+intended table deposition; endpoints, controllers and frame checks still pass.
+The training-selected final body is retained without test-driven reselection.
+
+The report records all 12 search runs and 11 numeric trials, including two
+unfinished numeric attempts, adaptive budgets and cumulative costs. Each Unstack
+invocation has an outer 55-second limit; aggregate study time is longer. These
+remain experimental runners with supplied CFG scaffolding, not a new production
+search backend or formal motion result.
+
+Comparison videos show the preselected scenes, including failures:
+
+- [Stack, four blocks](../../runs/contract-search/20261110-loop-unstack-study/videos/stack-4blocks-seed30-comparison.mp4)
+- [Stack, five blocks](../../runs/contract-search/20261110-loop-unstack-study/videos/stack-5blocks-seed30-comparison.mp4)
+- [Unstack transfer: demonstration and initial proposals](../../runs/contract-search/20261110-loop-unstack-study/videos/unstack-transfer-seed15-comparison.mp4)
+- [Unstack full loops with initial proposals](../../runs/contract-search/20261110-loop-unstack-study/videos/unstack-loop-seed30-comparison.mp4)
+- [Unstack full loops with final training-selected bodies](../../runs/contract-search/20261110-loop-unstack-study/videos/unstack-final-loop-seed30-comparison.mp4)
+
+The [Stack results](../../runs/contract-search/20261110-loop-unstack-study/stack-loop/summary.json),
+[Unstack index](../../runs/contract-search/20261110-loop-unstack-study/unstack/experiment-summary.json)
+and [completion audit](../../runs/contract-search/20261110-loop-unstack-study/completion-audit.json)
+retain protocols, program/source hashes, individual outcomes and validation.
+Videos restore saved full states without physics steps; restored observations
+are checked exactly before rendering.
+
 ## Retired investigations
 
 The old controller comparisons, tolerance sweeps, drift diagnosis, path-video
