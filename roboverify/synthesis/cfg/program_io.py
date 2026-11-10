@@ -88,13 +88,13 @@ def _rows(program):
     return enrich(program.instructions, describe_program(program))
 
 
-def save_program_artifact(path, definition, *, metadata=None):
-    """Save exact runtime floats, bindings, control settings and structured guards."""
+def describe_program_artifact(definition, *, metadata=None):
+    """Describe exact runtime floats, bindings, control settings and guards."""
     if not isinstance(definition, ProgramDefinition):
         raise TypeError(
             "A ProgramDefinition with explicit initial bindings is required"
         )
-    payload = dict(
+    return dict(
         format=FORMAT,
         version=VERSION,
         initial_bindings=dict(definition.initial_bindings),
@@ -102,6 +102,11 @@ def save_program_artifact(path, definition, *, metadata=None):
         fingerprint=program_fingerprint(definition.program),
         metadata=dict(metadata or {}),
     )
+
+
+def save_program_artifact(path, definition, *, metadata=None):
+    """Save a portable executable artifact without rounding its parameters."""
+    payload = describe_program_artifact(definition, metadata=metadata)
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, allow_nan=False) + "\n")

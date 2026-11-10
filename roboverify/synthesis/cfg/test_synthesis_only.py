@@ -62,7 +62,7 @@ class SynthesisOnlyTests(unittest.TestCase):
             )
             verify.assert_not_called()
             infer.assert_not_called()
-            artifact = next(Path(directory).rglob("program.json"))
+            artifact = next(Path(directory).glob("cfg/*/artifacts/program.json"))
             payload = json.loads(artifact.read_text())
             self.assertEqual(payload["metadata"]["formal_verification"], "not_run")
             self.assertEqual(
@@ -71,6 +71,57 @@ class SynthesisOnlyTests(unittest.TestCase):
             self.assertTrue(payload["metadata"]["accepted_by_cfg_search"])
             loaded = load_program_artifact(artifact, HighLevelContext(), 2)
             self.assertEqual(loaded.initial_bindings, {"b0": 0})
+
+    def test_failed_block_attempts_retain_exact_parameters_and_entry_bindings(self):
+        from types import SimpleNamespace
+
+        from synthesis.api.instructions import MoveByName
+        from synthesis.entry.synthesize_cfg import _save_block_candidate
+        from synthesis.experiment.run_logger import RunLogger
+
+        trace = self.trace()
+        entries = [
+            DemoSegment(0, 0, 1, trace, {"b0": 0, "source": source})
+            for source in (0, 1)
+        ]
+        result = StraightLineResult(
+            Program(
+                1,
+                [
+                    MoveByName(
+                        "source", "source", "b0", target_offset=[0.123456789, 0, 0.15]
+                    )
+                ],
+            ),
+            False,
+            "budget_exhausted",
+            float("inf"),
+        )
+        args = SimpleNamespace(
+            task="stack", num_blocks=2, search_strategy="contract", demos="original.npz"
+        )
+        node = SimpleNamespace(
+            name="body0",
+            available_scope={"b0", "source"},
+            synthesis_approach="relational",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            with RunLogger(directory, "test", {}, slug="failed-candidate") as logger:
+                for attempt in (0, 1):
+                    _save_block_candidate(logger, result, node, entries, args, attempt)
+                logger.finish("test_completed")
+            paths = list(Path(directory).glob("test/*/artifacts/blocks/*/program.json"))
+            self.assertEqual(len(paths), 2)
+            row = json.loads(paths[0].read_text())
+            self.assertEqual(row["initial_bindings"], {"b0": 0})
+            self.assertEqual(row["metadata"]["entry_bindings_required"], ["source"])
+            self.assertEqual(row["metadata"]["distance"], None)
+            self.assertFalse(row["metadata"]["accepted_by_block_search"])
+            self.assertEqual(
+                [entry["bindings"]["source"] for entry in row["metadata"]["entries"]],
+                [0, 1],
+            )
+            self.assertEqual(row["instructions"][0]["offsets"][0], 0.123456789)
 
     def test_teacher_fingerprint_mismatch_requires_explicit_candidate_opt_in(self):
         with tempfile.TemporaryDirectory() as directory:

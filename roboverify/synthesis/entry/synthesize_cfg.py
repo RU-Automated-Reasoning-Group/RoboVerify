@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import math
 import random
 import signal
 from functools import partial
@@ -25,8 +26,12 @@ from synthesis.cfg.execute import execute_cfg
 from synthesis.cfg.graph import RelationalCFG
 from synthesis.cfg.lower import lower, lower_region
 from synthesis.cfg.program_adapter import program_to_cfg
-from synthesis.cfg.program_io import load_program_artifact, save_program_artifact
-from synthesis.cfg.program_source import load_program
+from synthesis.cfg.program_io import (
+    describe_program_artifact,
+    load_program_artifact,
+    save_program_artifact,
+)
+from synthesis.cfg.program_source import ProgramDefinition, load_program
 from synthesis.cfg.recordings import load_traces
 from synthesis.cfg.region import BlockRegion, LoopRegion
 from synthesis.cfg.straightline import (
@@ -86,8 +91,6 @@ def _synthesize_only(cfg, realize, execute, context, args, logger, quotient):
     A reloadable result is a candidate; fresh simulation acceptance is a separate
     evaluation and no successful synthesis status is promoted to a proof.
     """
-    from synthesis.cfg.program_source import ProgramDefinition
-
     result = synthesize_cfg(
         cfg,
         realize,
@@ -143,6 +146,59 @@ def _synthesize_only(cfg, realize, execute, context, args, logger, quotient):
         program_artifact=saved,
     )
     return 0 if result else 2
+
+
+def _save_block_candidate(logger, result, node, demos, args, attempt):
+    """Keep every attempted body, including unsuccessful refinement evidence."""
+    scope = sorted(node.available_scope)
+    entries = [
+        dict(
+            demo=segment.demo_idx,
+            seed=segment.trace.seed,
+            start=segment.t_start,
+            end=segment.t_end,
+            bindings={
+                name: segment.bindings[name]
+                for name in scope
+                if name in segment.bindings
+            },
+        )
+        for segment in demos
+    ]
+    fixed = {
+        name: entries[0]["bindings"][name]
+        for name in scope
+        if entries
+        and name in entries[0]["bindings"]
+        and all(
+            row["bindings"].get(name) == entries[0]["bindings"][name] for row in entries
+        )
+    }
+    payload = describe_program_artifact(
+        ProgramDefinition(result.program, fixed, "block-search-candidate"),
+        metadata=dict(
+            task=args.task,
+            num_blocks=args.num_blocks,
+            block=node.name,
+            attempt=attempt,
+            status=result.status,
+            accepted_by_block_search=result.ok,
+            formal_verification="not_run",
+            search_strategy=args.search_strategy,
+            synthesis_approach=node.synthesis_approach,
+            distance=result.distance if math.isfinite(result.distance) else None,
+            post_score=result.post_score,
+            candidates_checked=result.candidates_checked,
+            bmc_rejected=result.bmc_rejected,
+            entry_bindings_required=sorted(set(scope) - set(fixed)),
+            demonstration_archive=str(args.demos),
+            entries=entries,
+        ),
+    )
+    logger.write_artifact(
+        f"blocks/attempt-{attempt:04d}-{node.name.replace('/', '_')}/program.json",
+        json.dumps(payload, indent=2, allow_nan=False) + "\n",
+    )
 
 
 def _run(args, logger):
@@ -256,8 +312,10 @@ def _run(args, logger):
     rollout = partial(
         segment_rollout, env_factory=env_factory, reset_mode=args.reset_mode
     )
+    block_attempt = 0
 
     def realize(node, demos, post, penalty=None):
+        nonlocal block_attempt
         if isinstance(node.region, LoopRegion):
             physical = Program(
                 len(lower_region(node.region, context, physical=True)),
@@ -373,6 +431,8 @@ def _run(args, logger):
             cache_rollouts=budget.search_strategy == "contract",
             **search_options,
         )
+        _save_block_candidate(logger, result, node, demos, args, block_attempt)
+        block_attempt += 1
         logger.log_event(
             "block_result",
             f"{node.name}: {result.status}",
