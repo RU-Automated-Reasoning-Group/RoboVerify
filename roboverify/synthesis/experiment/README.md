@@ -26,6 +26,62 @@ checks final physical success after settling. See the
 and [pipeline support matrix](../../../README.md#project-status).
 Execution and collection support do not imply synthesis or formal verification.
 
+## Independent-controller Stack body experiment
+
+The [2026-11-10 study](../../runs/contract-search/20261110-cd15-study/study-summary.json)
+fits one shared straight-line transfer body to **15 independent-controller
+demonstrations**, balanced across three loop positions. Fifteen different seeds
+are held out. CFG boundaries and object-role bindings are supplied; fitting uses
+observations and entry snapshots, without teacher commands, targets, action
+labels, controller inversion, or a supplied body template.
+
+Contract-guided beam search found five-action bodies. The main comparison uses
+four CEM rounds, 24 samples per round, six elites, and all 15 fitting scenes per
+simulated vector. BMC precedes CEM; it checks existential feasibility, not motion
+safety. Numeric selection prioritizes convergence, observed grasp/lift, release,
+stable ON after 50 settling steps, no unintended contacts, and at most 5 mm
+nonmover displacement. The 1 mm result remains a separate diagnostic. Contact
+monitoring checks every 2 ms physics step and distinguishes intentional grasp
+and support contacts from collisions; existing static robot/environment contacts
+are recorded exceptions.
+
+| Structure proposals / numeric score | Optimizer seeds | Held-out spatial RMS |
+| --- | --- | --- |
+| Contract grid / arc-length RMS | 3 | 8.12 mm mean (6.41–10.62) |
+| Contract + raw observations / arc-length RMS | 3 | **5.55 mm**, identical selected body |
+| Contract grid / KL, 128 samples | 3 | 10.21 mm mean (7.82–13.67) |
+| Contract grid / KL, 2,048 samples | 1 | 7.19 mm |
+| Contract grid / DTW | 1 | 7.69 mm |
+| Contract grid / MMD | 1 | 7.69 mm |
+
+All selected programs passed all 15 held-out scenes. Exact duplicate bodies are
+validated once: 12 run labels represent 10 parameter vectors and **150 actual
+held-out rollouts**, not 180 independent trials. DTW and MMD parameters differ
+only at rounding precision and produce identical recorded trajectories. The
+training-selected observation-guided body has maximum held-out nonmover drift
+1.419 mm (12/15 also meet 1 mm). Spatial RMS is a weighted, arc-aligned trajectory
+score, not an endpoint error or formal motion bound.
+
+Exact successor memoization (D) preserves the entire observation-guided candidate
+pool, reducing action trials 24,090 → 15,111 and observed search time
+41.10 → 37.89 seconds. Its identical numeric results are shared, not rerun.
+Across the main comparison, CEM used 15,960 simulator rollouts. Returning the best
+evaluated sample improved on the best evaluated mean in four of the twelve runs;
+both standalone optimizers now retain samples as well as means. The observation
+proposals already supplied the selected vector, so all four CEM rounds produced
+no improvement for those three runs. This does not establish a general stopping
+rule or change production budgets.
+
+The [frozen protocol](../../runs/contract-search/20261110-cd15-study/main-protocol.json),
+[metric diagnostics](../../runs/contract-search/20261110-cd15-study/metrics/summary.json),
+[held-out results](../../runs/contract-search/20261110-cd15-study/heldout/summary.json),
+and [source bundle](../../runs/contract-search/20261110-cd15-study/frozen-v2/manifest.json)
+record the inputs, thresholds, exact parameter replay, and limitations. Scripts
+remain experimental artifacts; the production CFG search selector is unchanged.
+These are empirical four-block, single-transfer results with supplied CFG
+scaffolding, not new loop recovery, human-teleoperation evidence, exact symbolic
+frame preservation, or an unbounded motion proof.
+
 ## Retired investigations
 
 The old controller comparisons, tolerance sweeps, drift diagnosis, path-video
