@@ -1,5 +1,8 @@
 """Reuse successful block searches only while their exact inputs stay unchanged."""
 
+import hashlib
+import pickle
+
 from synthesis.api.program import Program
 from synthesis.cfg.program_source import program_fingerprint
 from synthesis.cfg.region import BlockRegion
@@ -7,6 +10,28 @@ from synthesis.cfg.region import BlockRegion
 
 def _bindings(values):
     return None if values is None else tuple(sorted(values.items()))
+
+
+def _trace_content(segment):
+    trace = segment.trace
+    # DemoTrace is mutable. Hash the actual imitation/frozen-entry/reset inputs
+    # as well as holding/table metadata, so in-place edits invalidate reuse.
+    # Pickle is used only to encode local values for hashing, never to load data.
+    values = (
+        segment.states,
+        trace.states[segment.entry_index],
+        (
+            (trace.snapshots[0], trace.snapshots[segment.t_start])
+            if len(trace.snapshots)
+            else ()
+        ),
+        trace.actions,
+        trace.metadata,
+        trace.seed,
+        trace.task,
+        trace.num_blocks,
+    )
+    return hashlib.blake2b(pickle.dumps(values, protocol=5), digest_size=16).digest()
 
 
 def _signature(node, demos, post):
@@ -18,6 +43,7 @@ def _signature(node, demos, post):
         tuple(
             (
                 id(segment.trace),
+                _trace_content(segment),
                 segment.demo_idx,
                 segment.t_start,
                 segment.t_end,

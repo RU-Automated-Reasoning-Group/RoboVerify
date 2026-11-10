@@ -68,6 +68,29 @@ class SuccessfulRealizationCacheTests(unittest.TestCase):
                 node.region = region
                 self.assertIsNone(cache.get(node, demos, post))
 
+    def test_in_place_observation_snapshot_and_metadata_changes_invalidate(self):
+        changes = {
+            "observation": lambda t: t.states[2].__setitem__(0, 99),
+            "frozen_entry": lambda t: t.states[0].__setitem__(0, 99),
+            "snapshot": lambda t: t.snapshots[1].update(position=99),
+            "initial_snapshot": lambda t: t.snapshots[0].update(position=99),
+            "actions": lambda t: t.actions[0].append(99),
+            "metadata": lambda t: t.metadata["holding_by_index"].update({1: 2}),
+            "seed": lambda t: setattr(t, "seed", 99),
+        }
+        for label, change in changes.items():
+            with self.subTest(label=label):
+                cache, node, demos, post = self.setup_case()
+                trace = demos[0].trace
+                trace.states = tuple([float(i)] for i in range(5))
+                trace.snapshots = tuple({"position": i} for i in range(5))
+                trace.actions = ([0, 1, 2], [0, 1, 2, 3, 3])
+                trace.metadata = {"holding_by_index": {1: None}}
+                cache.remember(node, demos, post, node.region, accepted=True)
+                self.assertIs(cache.get(node, demos, post), node.region)
+                change(trace)
+                self.assertIsNone(cache.get(node, demos, post))
+
     def test_new_penalty_and_replacement_node_invalidate_reuse(self):
         cache, node, demos, post = self.setup_case()
         self.assertIsNone(cache.get(copy.copy(node), demos, post))
