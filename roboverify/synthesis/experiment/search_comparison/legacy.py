@@ -77,7 +77,9 @@ def encode(program):
             dict(
                 kind=kind,
                 operands=operands,
-                offsets=[p.concrete_float("legacy reference") for p in parameters],
+                # Match runtime and CEM initialization: an unset trainable
+                # parameter executes as zero without becoming a fixed value.
+                offsets=[p.numeric_val() for p in parameters],
             )
         )
     return rows

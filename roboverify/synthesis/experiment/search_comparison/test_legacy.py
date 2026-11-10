@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import numpy as np
 
-from synthesis.api.instructions import MoveByName, Skip
+from synthesis.api.instructions import MoveByName, ReleaseByName, Skip
 from synthesis.api.program import Program
 from synthesis.cfg.bindings import mutate_scoped
 from synthesis.cfg.straightline import straight_line_synthesize
@@ -58,6 +58,21 @@ def rollout(env, rows, example, **kwargs):
 
 
 class LegacyReferenceTests(unittest.TestCase):
+    def test_unset_offsets_serialize_like_runtime_without_fixing_parameters(self):
+        move = MoveByName("b", "b_prime", "b")
+        release = ReleaseByName("b")
+        program = Program(2, [move, release])
+        parameters = [*move.target_offset, release.target_z_offset]
+        self.assertTrue(all(parameter.val is None for parameter in parameters))
+        self.assertEqual(program.register_trainable_parameter(), [0.0] * 4)
+        rows = encode(program)
+        self.assertEqual(rows[0]["offsets"], [0.0] * 3)
+        self.assertEqual(rows[1]["offsets"], [0.0])
+        self.assertTrue(all(parameter.val is None for parameter in parameters))
+        program.update_trainable_parameter([0.1, -0.2, 0.3, 0.4])
+        self.assertEqual(encode(program)[0]["offsets"], [0.1, -0.2, 0.3])
+        self.assertEqual(encode(program)[1]["offsets"], [0.4])
+
     def test_unstack_symbolic_post_does_not_assign_geometry_to_table(self):
         from synthesis.predicates.scene import Scene, evaluate
         from synthesis.util.on import TABLE
