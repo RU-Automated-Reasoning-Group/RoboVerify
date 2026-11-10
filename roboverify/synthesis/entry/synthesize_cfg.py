@@ -32,6 +32,7 @@ from synthesis.cfg.program_io import (
     save_program_artifact,
 )
 from synthesis.cfg.program_source import ProgramDefinition, load_program
+from synthesis.cfg.realization_cache import SuccessfulRealizationCache
 from synthesis.cfg.recordings import load_traces
 from synthesis.cfg.region import BlockRegion, LoopRegion
 from synthesis.cfg.straightline import (
@@ -315,9 +316,20 @@ def _run(args, logger):
         segment_rollout, env_factory=env_factory, reset_mode=args.reset_mode
     )
     block_attempt = 0
+    accepted_blocks = SuccessfulRealizationCache()
 
     def realize(node, demos, post, penalty=None):
         nonlocal block_attempt
+        if budget.search_strategy == "contract":
+            cached = accepted_blocks.get(node, demos, post, penalty=penalty)
+            if cached is not None:
+                logger.log_event(
+                    "block_reused",
+                    f"{node.name}: reuse the unchanged accepted physical body",
+                    force=True,
+                    block_id=node.name,
+                )
+                return cached, True
         if isinstance(node.region, LoopRegion):
             physical = Program(
                 len(lower_region(node.region, context, physical=True)),
@@ -460,14 +472,16 @@ def _run(args, logger):
             )
         )
         # No unsupported relational summary is invented for arbitrary physical code.
-        return (
-            BlockRegion(
-                node.region.symbolic if isinstance(node.region, BlockRegion) else None,
-                tuple(result.program.instructions),
-                exports,
-            ),
-            result.ok,
+        region = BlockRegion(
+            node.region.symbolic if isinstance(node.region, BlockRegion) else None,
+            tuple(result.program.instructions),
+            exports,
         )
+        if budget.search_strategy == "contract":
+            accepted_blocks.remember(
+                node, demos, post, region, accepted=result.ok, penalty=penalty
+            )
+        return region, result.ok
 
     quotient_fn = None
     if args.quotient:
