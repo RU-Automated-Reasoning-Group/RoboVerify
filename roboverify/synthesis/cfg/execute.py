@@ -26,12 +26,16 @@ def execute_cfg(cfg, context, env_factory, *, reset_mode="replay"):
     from synthesis.api.instructions import Get, LoopBudgetExceeded
     from synthesis.api.program import Program
     from synthesis.cfg.lower import lower_region
+    from synthesis.cfg.region import BlockRegion
     from synthesis.predicates.term import to_z3
 
     instructions = []
     for name in cfg.order:
         region = cfg.nodes[name].region
-        if region is None:
+        if region is None or (isinstance(region, BlockRegion) and not region.physical):
+            # A failed proposal can retain an empty BlockRegion. Treat that as
+            # the first unresolved physical block, just like region=None; its
+            # reached prefix states still supply refinement negatives.
             break
         edge = cfg.incoming(name)[0]
         if edge.binds:
