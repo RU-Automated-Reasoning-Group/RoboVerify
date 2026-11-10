@@ -168,7 +168,11 @@ class ArcSearchIntegrationTests(unittest.TestCase):
         )
         self.assertTrue(result.ok)
         expected = np.random.default_rng(7).normal([0, 0, 0.05], [0.004] * 3, (2, 3))
-        np.testing.assert_allclose(seen[1:3], expected)
+        # Objective, final-distance and PostScore evaluation may revisit the
+        # same parameters. Check the sampled vectors, not rollout call counts.
+        distinct = list(dict.fromkeys(tuple(values) for values in seen))
+        self.assertEqual(len(distinct), 3)
+        np.testing.assert_allclose(distinct[1:], expected)
         self.assertEqual(SearchBudget().cem_std, 0.05)
         self.assertEqual(SearchBudget().distance, "kl_kde")
         for value in (0, -1, float("nan"), float("inf")):
