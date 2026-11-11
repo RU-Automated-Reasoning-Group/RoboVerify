@@ -284,20 +284,25 @@ def contact_state(env, observation, count):
         "supports": list(supports),
         "aperture": aperture,
         "finger_objects": sorted(finger_objects),
+        "contacts_available": True,
         "nearest_block_center_m": nearest_center,
         "empty_evidence": empty_evidence,
     }
 
 
 class EndpointRecorder:
-    """Cheap read-only instruction and controller-step observations."""
+    """Read-only instruction and controller-step observations.
+
+    ``obligations`` separates pass/fail/unknown evidence for numeric-search
+    diagnostics. Unknown required evidence still adds a rejecting reason.
+    """
 
     def __init__(self, env, segment, first, *, frame_tolerance_m=0.005):
         self.env, self.segment = env, segment
         self.tolerance = float(frame_tolerance_m)
         if not np.isfinite(self.tolerance) or self.tolerance < 0:
             raise ValueError("Frame tolerance must be finite and nonnegative")
-        self.reasons, self.records = [], []
+        self.reasons, self.records, self.obligations = [], [], []
         self.initial_observation = np.array(first, copy=True)
         self.contract_bindings = None
         self.active = None
@@ -311,7 +316,25 @@ class EndpointRecorder:
             return contact_state(self.env, obs, self.segment.trace.num_blocks)
         except (AttributeError, KeyError, ValueError, TypeError) as exc:
             self.reasons.append("contact_observation_unavailable")
-            return {"known": False, "holding": None, "supports": [], "error": str(exc)}
+            return {
+                "known": False,
+                "holding": None,
+                "supports": [],
+                "contacts_available": False,
+                "error": str(exc),
+            }
+
+    def _obligation(self, kind, phase, name, status, **details):
+        self.obligations.append(
+            {
+                "instruction_index": len(self.records),
+                "kind": kind,
+                "phase": phase,
+                "name": name,
+                "status": status,
+                "details": details,
+            }
+        )
 
     def observe(self, obs):
         self.last_observation = np.array(obs, copy=True)
@@ -377,6 +400,29 @@ class EndpointRecorder:
                 self.contract_bindings = dict(self.env.symbolic_name_to_box_id)
             contact = self._contact(observation)
             mover = contact["holding"] if contact["known"] else None
+            kind = type(instruction).__name__
+            if isinstance(instruction, (Release, ReleaseByName)):
+                self._obligation(
+                    kind,
+                    "entry",
+                    "payload_held",
+                    (
+                        "unknown"
+                        if not contact["known"]
+                        else "pass" if mover is not None else "fail"
+                    ),
+                    holding=mover,
+                )
+                if contact["known"] and mover is None:
+                    self.reasons.append("release_entry_not_held")
+            elif isinstance(instruction, (Move, MoveByName)):
+                self._obligation(
+                    kind,
+                    "entry",
+                    "holding_observed",
+                    "pass" if contact["known"] else "unknown",
+                    holding=mover,
+                )
             if isinstance(instruction, (Pick, PickByName)):
                 mover = (
                     instruction.grab_box_id
@@ -403,24 +449,87 @@ class EndpointRecorder:
         self.observe(observation)
         contact = self._contact(observation)
         result = getattr(instruction, "last_control_result", None)
+        kind = self.active["kind"]
+        self._obligation(
+            kind,
+            "exit",
+            "controller_convergence",
+            "unknown" if result is None else "pass" if result.converged else "fail",
+            position_error_m=getattr(result, "position_error", None),
+            controller_phase=getattr(result, "phase", None),
+            controller_steps=getattr(result, "steps", None),
+        )
         if result is None or not result.converged:
             self.reasons.append("primitive_not_converged")
         mover = self.active["mover"]
-        if isinstance(instruction, (Pick, PickByName)) and (
-            not contact["known"] or contact["holding"] != mover
-        ):
-            self.reasons.append("pick_not_observed_held")
+        if isinstance(instruction, (Pick, PickByName)):
+            status = (
+                "unknown"
+                if not contact["known"]
+                else "pass" if contact["holding"] == mover else "fail"
+            )
+            self._obligation(
+                kind,
+                "exit",
+                "payload_held",
+                status,
+                expected=mover,
+                holding=contact["holding"],
+            )
+            if status != "pass":
+                self.reasons.append("pick_not_observed_held")
+        support_mover = None
         if isinstance(instruction, (Release, ReleaseByName)):
-            if not contact["known"] or contact["holding"] is not None:
+            status = (
+                "unknown"
+                if not contact["known"]
+                else "pass" if contact["holding"] is None else "fail"
+            )
+            self._obligation(
+                kind, "exit", "empty_hand", status, holding=contact["holding"]
+            )
+            if status != "pass":
                 self.reasons.append("release_not_observed_empty")
             # Occupancy and opening are distinct obligations: a closed empty
             # hand at reset is valid, but Release must actually open it.
-            if contact.get("aperture", 0.0) <= 0.053:
+            aperture = contact.get("aperture")
+            status = (
+                "unknown"
+                if aperture is None or not np.isfinite(aperture)
+                else "pass" if aperture > 0.053 else "fail"
+            )
+            self._obligation(kind, "exit", "hand_open", status, aperture=aperture)
+            if status != "pass":
                 self.reasons.append("release_not_observed_open")
-            if mover is None or not any(
-                pair[0] == mover for pair in contact["supports"]
-            ):
+            # Occupancy and support are independent observations. A missing
+            # grasp observation does not erase the identity of the designated
+            # mover from this transfer or negate its observed final support.
+            # Entry ownership remains an unresolved, rejecting obligation.
+            support_mover = mover if mover is not None else self.transfer_mover
+            available = contact.get(
+                "contacts_available", "error" not in contact and "supports" in contact
+            )
+            status = (
+                "unknown"
+                if support_mover is None or not available
+                else (
+                    "pass"
+                    if any(pair[0] == support_mover for pair in contact["supports"])
+                    else "fail"
+                )
+            )
+            self._obligation(
+                kind,
+                "exit",
+                "payload_supported",
+                status,
+                mover=support_mover,
+                supports=contact["supports"],
+            )
+            if status == "fail":
                 self.reasons.append("release_not_observed_supported")
+            elif status == "unknown":
+                self.reasons.append("release_support_observation_unknown")
             self.transfer_start = self.transfer_mover = None
         self.records.append(
             {
@@ -428,6 +537,7 @@ class EndpointRecorder:
                 "mover": mover,
                 "converged": bool(result and result.converged),
                 "endpoint": contact,
+                "support_mover": support_mover,
             }
         )
         self.active = None
@@ -437,6 +547,22 @@ class EndpointRecorder:
         return {
             "reasons": sorted(set(self.reasons)),
             "instructions": self.records,
+            "obligations": [
+                *self.obligations,
+                {
+                    "instruction_index": None,
+                    "kind": "transfer",
+                    "phase": "sampled",
+                    "name": "nonmover_frame",
+                    "status": (
+                        "pass" if self.maximum_drift <= self.tolerance else "fail"
+                    ),
+                    "details": {
+                        "max_drift_m": self.maximum_drift,
+                        "tolerance_m": self.tolerance,
+                    },
+                },
+            ],
             "endpoint": endpoint,
             "contract_bindings": self.contract_bindings or dict(self.segment.bindings),
             "max_nonmover_drift_m": self.maximum_drift,

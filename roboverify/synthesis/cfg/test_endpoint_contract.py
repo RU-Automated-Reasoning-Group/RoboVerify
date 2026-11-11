@@ -372,6 +372,93 @@ class EndpointTests(unittest.TestCase):
         self.assertIn("release_not_observed_open", recorder.reasons)
         self.assertNotIn("release_not_observed_empty", recorder.reasons)
 
+    def release_audit(self, entry, endpoint):
+        first = observation([(0, 0, 0.425), (0.2, 0, 0.425)])
+        seg = segment(first, first)
+        recorder = EndpointRecorder(
+            SimpleNamespace(symbolic_name_to_box_id=seg.bindings), seg, first
+        )
+        empty = {"known": True, "holding": None, "supports": [], "aperture": 0.08}
+        held = {"known": True, "holding": 1, "supports": [], "aperture": 0.048}
+        pick, release = Pick(1), Release(0)
+        pick.last_control_result = release.last_control_result = SimpleNamespace(
+            converged=True
+        )
+        with patch.object(
+            recorder, "_contact", side_effect=[empty, held, entry, endpoint, endpoint]
+        ):
+            recorder.instruction(pick, "start", first)
+            recorder.instruction(pick, "end", first)
+            recorder.instruction(release, "start", first)
+            recorder.instruction(release, "end", first)
+            audit = recorder.finish()
+        states = audited_states(seg, [first, first])
+        states.contract_audit = audit
+        result = check_endpoint_contract(
+            Program(2, [pick, release]), seg, states, boolean(True)
+        )
+        statuses = {
+            (row["phase"], row["name"]): row["status"]
+            for row in audit["obligations"]
+            if row["kind"] == "Release"
+        }
+        return audit, result, statuses
+
+    def test_unknown_release_ownership_does_not_negate_observed_support(self):
+        unknown = {"known": False, "holding": None, "supports": [], "aperture": 0.048}
+        supported = {
+            "known": True,
+            "holding": None,
+            "supports": [(1, "tbl")],
+            "aperture": 0.08,
+        }
+        audit, result, statuses = self.release_audit(unknown, supported)
+        self.assertFalse(result)
+        self.assertIn("unknown_instruction_entry_holding", result.reasons)
+        self.assertNotIn("release_not_observed_supported", result.reasons)
+        self.assertEqual(statuses["entry", "payload_held"], "unknown")
+        self.assertEqual(statuses["exit", "payload_supported"], "pass")
+        self.assertIsNone(audit["instructions"][-1]["mover"])
+        self.assertEqual(audit["instructions"][-1]["support_mover"], 1)
+
+    def test_known_empty_release_entry_still_rejects_with_supported_payload(self):
+        empty = {
+            "known": True,
+            "holding": None,
+            "supports": [(1, "tbl")],
+            "aperture": 0.08,
+        }
+        _, result, statuses = self.release_audit(empty, empty)
+        self.assertFalse(result)
+        self.assertIn("release_entry_not_held", result.reasons)
+        self.assertEqual(statuses["entry", "payload_held"], "fail")
+        self.assertEqual(statuses["exit", "payload_supported"], "pass")
+
+    def test_observed_missing_support_is_a_failure(self):
+        held = {"known": True, "holding": 1, "supports": [], "aperture": 0.048}
+        unsupported = {"known": True, "holding": None, "supports": [], "aperture": 0.08}
+        _, result, statuses = self.release_audit(held, unsupported)
+        self.assertFalse(result)
+        self.assertIn("release_not_observed_supported", result.reasons)
+        self.assertEqual(statuses["exit", "payload_supported"], "fail")
+
+    def test_missing_contact_observation_is_unknown_not_support_failure(self):
+        held = {"known": True, "holding": 1, "supports": [], "aperture": 0.048}
+        missing = {
+            "known": False,
+            "holding": None,
+            "supports": [],
+            "contacts_available": False,
+            "error": "unavailable",
+        }
+        _, result, statuses = self.release_audit(held, missing)
+        self.assertFalse(result)
+        self.assertNotIn("release_not_observed_supported", result.reasons)
+        self.assertIn("release_support_observation_unknown", result.reasons)
+        self.assertEqual(statuses["exit", "payload_supported"], "unknown")
+        self.assertEqual(statuses["exit", "empty_hand"], "unknown")
+        self.assertEqual(statuses["exit", "hand_open"], "unknown")
+
     def test_closed_empty_real_reset_allows_move_before_pick(self):
         from synthesis.api.instructions import MoveByName
         from synthesis.cfg.collection import record_execution, validate_trace
