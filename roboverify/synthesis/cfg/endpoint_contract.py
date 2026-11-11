@@ -255,8 +255,25 @@ def contact_state(env, observation, count):
         elif (a == table and b in objects) or (b == table and a in objects):
             supports.add((objects[b] if a == table else objects[a], "tbl"))
     aperture = float(np.sum(np.asarray(observation)[3:5]))
-    if aperture > 0.053 and not finger_objects:
-        known, holding = True, None
+    nearest_center = min(
+        (
+            float(np.linalg.norm(np.asarray(position) - np.asarray(observation)[:3]))
+            for position in positions.values()
+        ),
+        default=float("inf"),
+    )
+    # An initially closed hand can be empty. No contacts alone do not establish
+    # that fact near an object: require an empty neighbourhood as well. The
+    # radius is deliberately larger than the nominal grasp's 3 cm offset bound.
+    empty_evidence = None
+    if not finger_objects and aperture > 0.053:
+        known, holding, empty_evidence = True, None, "open_without_object_contacts"
+    elif not finger_objects and nearest_center > on.BLOCK_LENGTH:
+        known, holding, empty_evidence = (
+            True,
+            None,
+            "no_object_contacts_or_nearby_block",
+        )
     elif len(finger_objects) == 1 and len(next(iter(finger_objects.values()))) >= 2:
         known, holding = True, next(iter(finger_objects))
     else:
@@ -267,6 +284,8 @@ def contact_state(env, observation, count):
         "supports": list(supports),
         "aperture": aperture,
         "finger_objects": sorted(finger_objects),
+        "nearest_block_center_m": nearest_center,
+        "empty_evidence": empty_evidence,
     }
 
 
@@ -394,6 +413,10 @@ class EndpointRecorder:
         if isinstance(instruction, (Release, ReleaseByName)):
             if not contact["known"] or contact["holding"] is not None:
                 self.reasons.append("release_not_observed_empty")
+            # Occupancy and opening are distinct obligations: a closed empty
+            # hand at reset is valid, but Release must actually open it.
+            if contact.get("aperture", 0.0) <= 0.053:
+                self.reasons.append("release_not_observed_open")
             if mover is None or not any(
                 pair[0] == mover for pair in contact["supports"]
             ):

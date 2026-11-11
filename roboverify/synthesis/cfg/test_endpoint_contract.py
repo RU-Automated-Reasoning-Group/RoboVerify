@@ -15,6 +15,7 @@ from synthesis.cfg.endpoint_contract import (
     audit_put_effects,
     check_endpoint_contract,
     check_next_action,
+    contact_state,
     postcondition_at_endpoint,
 )
 from synthesis.cfg.straightline import (
@@ -318,6 +319,98 @@ class EndpointTests(unittest.TestCase):
             definition.program, seg, states, task_spec("stack")[1]
         )
         self.assertTrue(result, result.reasons)
+
+    def test_closed_clear_hand_is_empty_but_near_object_or_one_finger_is_ambiguous(
+        self,
+    ):
+        names = [
+            "object0",
+            "object1",
+            "left_gripper_finger_link",
+            "right_gripper_finger_link",
+            "table0",
+        ]
+        model = SimpleNamespace(
+            ngeom=len(names),
+            geom_name2id=names.index,
+            geom_id2name=lambda index: names[index],
+        )
+        data = SimpleNamespace(contact=[], ncon=0)
+        env = SimpleNamespace(sim=SimpleNamespace(model=model, data=data))
+        obs = observation([(0, 0, 0.425), (0.2, 0, 0.425)])
+        obs[3:5] = 0
+        obs[:3] = (0, 0, 0.6)
+        clear = contact_state(env, obs, 2)
+        self.assertTrue(clear["known"])
+        self.assertIsNone(clear["holding"])
+        self.assertEqual(clear["empty_evidence"], "no_object_contacts_or_nearby_block")
+        obs[:3] = (0, 0, 0.435)
+        self.assertFalse(contact_state(env, obs, 2)["known"])
+        obs[:3] = (0, 0, 0.6)
+        data.contact = [SimpleNamespace(dist=0, geom1=2, geom2=0, frame=(1, 0, 0))]
+        data.ncon = 1
+        self.assertFalse(contact_state(env, obs, 2)["known"])
+
+    def test_release_must_open_even_if_closed_hand_is_known_empty(self):
+        first = observation([(0, 0, 0.425), (0, 0, 0.475)], empty=False)
+        seg = segment(first, first, holding=1)
+        recorder = EndpointRecorder(
+            SimpleNamespace(symbolic_name_to_box_id=seg.bindings), seg, first
+        )
+        instruction = Release(0, target_z=0.1)
+        instruction.last_control_result = SimpleNamespace(converged=True)
+        held = {"known": True, "holding": 1, "supports": [], "aperture": 0.04}
+        closed_empty = {
+            "known": True,
+            "holding": None,
+            "supports": [(1, 0)],
+            "aperture": 0.0,
+        }
+        with patch.object(recorder, "_contact", side_effect=[held, closed_empty]):
+            recorder.instruction(instruction, "start", first)
+            recorder.instruction(instruction, "end", first)
+        self.assertIn("release_not_observed_open", recorder.reasons)
+        self.assertNotIn("release_not_observed_empty", recorder.reasons)
+
+    def test_closed_empty_real_reset_allows_move_before_pick(self):
+        from synthesis.api.instructions import MoveByName
+        from synthesis.cfg.collection import record_execution, validate_trace
+        from synthesis.cfg.program_source import load_program
+        from synthesis.cfg.straightline import segment_rollout
+        from synthesis.cfg.tasks import task_spec
+        from synthesis.mcmc.synthesis import make_roboverify_stack_env
+        from synthesis.verification_lib.highlevel_verification_lib import (
+            HighLevelContext,
+        )
+
+        definition = load_program(
+            "synthesis.examples.stack:build_program", HighLevelContext(), 2
+        )
+        trace = record_execution(
+            definition, seed=38, num_blocks=2, max_loop_iterations=1
+        )
+        self.assertTrue(validate_trace(trace), trace.metadata)
+        self.assertLess(float(np.sum(trace.states[0][3:5])), 0.01)
+        seg = DemoSegment(0, 0, len(trace.states) - 1, trace, {"b0": 0})
+        program = Program(
+            len(definition.program.instructions) + 1,
+            [
+                MoveByName("gripper", "gripper", "Z_m", target_offset=[0, 0, 0.12]),
+                *definition.program.instructions,
+            ],
+        )
+        states = segment_rollout(
+            program,
+            seg,
+            lambda _: make_roboverify_stack_env(num_blocks=2),
+            audit_contract=True,
+        )
+        self.assertFalse(states.contract_audit["reasons"], states.contract_audit)
+        self.assertEqual(states.contract_audit["instructions"][0]["kind"], "MoveByName")
+        self.assertIsNone(states.contract_audit["instructions"][0]["mover"])
+        self.assertTrue(
+            check_endpoint_contract(program, seg, states, task_spec("stack")[1])
+        )
 
     def test_positive_solver_budgets(self):
         for kwargs in (
