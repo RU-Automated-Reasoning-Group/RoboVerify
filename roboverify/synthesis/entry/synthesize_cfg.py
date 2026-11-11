@@ -197,22 +197,50 @@ def _synthesize_only(cfg, realize, execute, context, args, logger, quotient):
 
 def _validate_synthesis_candidate(cfg, context, args, logger, revision=0):
     from synthesis.cfg.candidate_selection import select_validated_candidate
+    from synthesis.cfg.robust_validation import SharedActionBudget
 
     deadline = perf_counter() + getattr(args, "candidate_validation_seconds", 120.0)
+    action_budget = SharedActionBudget(
+        getattr(args, "candidate_max_total_actions", 100000)
+    )
+    failed_starts = set()
 
     def validate(candidate, trial):
         remaining = deadline - perf_counter()
-        if remaining <= 0:
+        if remaining <= 0 or action_budget.used >= action_budget.limit:
             return {
                 "accepted": False,
                 "passed": 0,
                 "total": 0,
                 "selection_budget_exhausted": True,
+                "budget_exhausted": True,
                 "seconds": 0.0,
             }
-        return _validate_one_synthesis_candidate(
-            candidate, context, args, logger, revision, trial, remaining
+        report = _validate_one_synthesis_candidate(
+            candidate,
+            context,
+            args,
+            logger,
+            revision,
+            trial,
+            remaining,
+            first_starts=failed_starts,
+            action_budget=action_budget,
         )
+        failed_starts.update(
+            (row["task"], row["num_blocks"], row["seed"])
+            for row in report.get("demos", ())
+            if not row["accepted"]
+        )
+        if perf_counter() >= deadline:
+            report = {
+                **report,
+                "accepted": False,
+                "selection_budget_exhausted": True,
+                "budget_exhausted": True,
+                "reason": "Outer candidate validation deadline exhausted",
+            }
+        return report
 
     result = select_validated_candidate(
         cfg, validate, limit=getattr(args, "candidate_validation_limit", 8)
@@ -221,11 +249,122 @@ def _validate_synthesis_candidate(cfg, context, args, logger, revision=0):
         f"training-selection-{revision}.json",
         json.dumps(result["candidate_selection"], indent=2),
     )
+    parameter_trials = getattr(args, "candidate_parameter_trials", 0)
+    if not result["accepted"] and parameter_trials and perf_counter() < deadline:
+        from synthesis.cfg.parameter_repair import repair_cfg_parameters
+        from synthesis.search.parameter_refinement import ParameterRefinementBudget
+
+        summaries = []
+
+        def fit_structure(candidate, structure):
+            if perf_counter() >= deadline or action_budget.used >= action_budget.limit:
+                return {
+                    "accepted": False,
+                    "complete": False,
+                    "selection_budget_exhausted": True,
+                }
+            original = _candidate_definition(candidate, context)
+            prefix = f"parameter-refinement-{revision}/structure-{structure:04d}"
+
+            def freeze(program, index, absolute_deadline):
+                save_program_artifact(
+                    logger.artifact_dir() / prefix / f"trial-{index:04d}.json",
+                    ProgramDefinition(
+                        program,
+                        dict(original.initial_bindings),
+                        "parameter-repair-trial",
+                    ),
+                    metadata={"purpose": "unvalidated parameter trial", "trial": index},
+                )
+
+            fitted = repair_cfg_parameters(
+                candidate,
+                context,
+                lambda graph, trial: validate(
+                    graph, f"structure-{structure:04d}-{trial}"
+                ),
+                budget=ParameterRefinementBudget(
+                    step=getattr(args, "candidate_parameter_step", 0.001),
+                    max_trials=parameter_trials,
+                    seconds=max(1e-9, deadline - perf_counter()),
+                    deadline=deadline,
+                ),
+                env_factory=lambda trace: make_roboverify_env(
+                    trace.task, num_blocks=trace.num_blocks
+                ),
+                action_budget=action_budget,
+                on_trial=freeze,
+                endpoint_acceptance=_handoff_acceptance,
+                frame_tolerance_m=getattr(args, "contract_frame_tolerance", 0.005),
+            )
+            summary = {
+                "status": fitted.status,
+                "seconds": fitted.seconds,
+                "original_fingerprint": fitted.original_fingerprint,
+                "history": fitted.history,
+            }
+            logger.write_artifact(
+                f"{prefix}/summary.json", json.dumps(summary, indent=2, allow_nan=False)
+            )
+            summaries.append(
+                {
+                    "structure": structure,
+                    "status": fitted.status,
+                    "seconds": fitted.seconds,
+                    "trials": len(fitted.history),
+                }
+            )
+            if fitted:
+                return {**fitted.report, "parameter_refinement": summaries[-1]}
+            return {
+                "accepted": False,
+                "complete": False,
+                "program_fingerprint": fitted.original_fingerprint,
+                "selection_budget_exhausted": fitted.status
+                in ("deadline_exhausted", "budget_exhausted"),
+            }
+
+        fitted_result = select_validated_candidate(
+            cfg, fit_structure, limit=getattr(args, "candidate_validation_limit", 8)
+        )
+        logger.write_artifact(
+            f"parameter-refinement-{revision}/selection.json",
+            json.dumps(
+                {
+                    "selection": fitted_result["candidate_selection"],
+                    "structures": summaries,
+                    "shared_action_budget": {
+                        "limit": action_budget.limit,
+                        "used": action_budget.used,
+                    },
+                },
+                indent=2,
+            ),
+        )
+        if fitted_result["accepted"]:
+            result = {
+                **fitted_result,
+                "unfitted_candidate_selection": result["candidate_selection"],
+            }
+        else:
+            result["parameter_refinement"] = {
+                "accepted": False,
+                "structures": summaries,
+            }
     return result
 
 
 def _validate_one_synthesis_candidate(
-    cfg, context, args, logger, revision, trial, seconds
+    cfg,
+    context,
+    args,
+    logger,
+    revision,
+    trial,
+    seconds,
+    *,
+    first_starts=(),
+    action_budget=None,
 ):
     from synthesis.cfg.lower import lower_with_locations
     from synthesis.cfg.robust_validation import (
@@ -248,6 +387,11 @@ def _validate_one_synthesis_candidate(
             )
         }.values()
     )
+    # Reordering changes only early-rejection cost. Keep every start, including
+    # distinct archived snapshots sharing a task/size/seed key.
+    traces.sort(
+        key=lambda trace: (trace.task, trace.num_blocks, trace.seed) not in first_starts
+    )
     result = validate_training_program(
         definition,
         traces,
@@ -263,6 +407,8 @@ def _validate_one_synthesis_candidate(
         artifact_dir=logger.artifact_dir()
         / f"training-validation-{revision}-candidate-{trial}",
         block_contracts=contracts,
+        stop_on_failure=True,
+        action_budget=action_budget,
     )
     logger.log_event(
         "training_validation",
@@ -271,6 +417,7 @@ def _validate_one_synthesis_candidate(
         revision=revision,
         candidate=trial,
         accepted=result["accepted"],
+        evaluated=result.get("evaluated", result["total"]),
         seconds=result["seconds"],
     )
     return result
@@ -722,6 +869,10 @@ def _run(args, logger):
             exports,
         )
         if result.ok and budget.contract_endpoint_checks:
+            node._contract_fit_budget = budget
+            node._contract_fit_distance = result.search_stats.get(
+                "imitation_pool_min", result.distance
+            )
             node._contract_alternatives = tuple(
                 BlockRegion(
                     region.symbolic,
@@ -981,7 +1132,15 @@ def main(argv=None):
     group.add_argument("--candidate-settle-steps", type=int, default=50)
     group.add_argument("--candidate-validation-seconds", type=float, default=120.0)
     group.add_argument("--candidate-max-actions", type=int, default=5000)
+    group.add_argument("--candidate-max-total-actions", type=int, default=100000)
     group.add_argument("--candidate-validation-limit", type=int, default=8)
+    group.add_argument(
+        "--candidate-parameter-trials",
+        type=int,
+        default=0,
+        help="Maximum shared-float trials per retained structure after whole-program rejection; zero disables fitting",
+    )
+    group.add_argument("--candidate-parameter-step", type=float, default=0.001)
     group.add_argument(
         "--validation-starts",
         nargs="*",
@@ -1079,6 +1238,15 @@ def main(argv=None):
         parser.error("--validation-starts requires --contract-refinement")
     if args.candidate_validation_limit < 1:
         parser.error("Candidate validation limit must be positive")
+    if args.candidate_parameter_trials < 0 or args.candidate_max_total_actions < 1:
+        parser.error(
+            "Parameter trial count must be nonnegative and shared action budget positive"
+        )
+    if (
+        not math.isfinite(args.candidate_parameter_step)
+        or args.candidate_parameter_step <= 0
+    ):
+        parser.error("Parameter step must be positive and finite")
     body_options = (
         args.loop_body_distance,
         args.loop_body_theta,

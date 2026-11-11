@@ -44,6 +44,25 @@ class InvalidValidationStart(ValueError):
     """An exact restored start violates the current task precondition."""
 
 
+@dataclass
+class SharedActionBudget:
+    """Count simulator action attempts across candidates, starts and settling."""
+
+    limit: int
+    used: int = 0
+
+    def __post_init__(self):
+        if type(self.limit) is not int or self.limit < 1:
+            raise ValueError("Shared action limit must be a positive integer")
+        if type(self.used) is not int or not 0 <= self.used <= self.limit:
+            raise ValueError("Shared action usage must lie inside its limit")
+
+    def consume(self):
+        if self.used >= self.limit:
+            raise ValidationBudgetExceeded("Shared candidate action budget exhausted")
+        self.used += 1
+
+
 @dataclass(frozen=True)
 class ValidationBudget:
     settling_steps: int = 50
@@ -168,6 +187,8 @@ def validate_training_program(
     post=None,
     artifact_dir=None,
     block_contracts=None,
+    stop_on_failure=False,
+    action_budget=None,
 ):
     """Replay a frozen candidate on every complete demonstration's exact start.
 
@@ -177,6 +198,9 @@ def validate_training_program(
     Loop caps affect only a private execution copy. The total wall budget is
     checked between actions/callbacks; any outer CLI alarm propagates unchanged.
     ``env_factory(trace)`` must create the corresponding simulator environment.
+    Optional early rejection stops after a complete rejected start. Unexamined
+    starts remain explicit in the report, and acceptance still requires all
+    requested starts to have been checked successfully.
     """
     from synthesis.api.guard_eval import NoGuardWitness
     from synthesis.mcmc.synthesis import preserved_global_rng, set_np_seed
@@ -455,6 +479,8 @@ def validate_training_program(
                         raise ValidationBudgetExceeded(
                             "Full-program validation action budget exhausted"
                         )
+                    if action_budget is not None:
+                        action_budget.consume()
                     outcome = original_step(action)
                     actions.append(np.array(action, copy=True))
                     # Keep the final completed action even if the next callback
@@ -579,10 +605,23 @@ def validate_training_program(
                 (directory / (stem + ".json")).write_text(
                     json.dumps(row, indent=2, allow_nan=False) + "\n"
                 )
+        if stop_on_failure and not row["accepted"]:
+            break
     result = {
-        "accepted": all(row["accepted"] for row in rows),
+        "accepted": len(rows) == len(traces) and all(row["accepted"] for row in rows),
         "passed": sum(row["accepted"] for row in rows),
-        "total": len(rows),
+        "total": len(traces),
+        "evaluated": len(rows),
+        "unevaluated": [
+            {
+                "demo": index,
+                "seed": trace.seed,
+                "task": trace.task,
+                "num_blocks": trace.num_blocks,
+            }
+            for index, trace in enumerate(traces)
+            if index >= len(rows)
+        ],
         "program_fingerprint": fingerprint,
         "budget": asdict(budget),
         "block_contracts": {
@@ -593,6 +632,8 @@ def validate_training_program(
         "demos": rows,
         "scope": "finite training replay: task/logical goal at every final settling step; primitive contacts/convergence and controller-action sampled transfer frame; no swept collision, unbounded motion, or generalization proof",
     }
+    if action_budget is not None:
+        result["shared_action_budget"] = asdict(action_budget)
     if directory is not None:
         (directory / "summary.json").write_text(
             json.dumps(result, indent=2, allow_nan=False) + "\n"

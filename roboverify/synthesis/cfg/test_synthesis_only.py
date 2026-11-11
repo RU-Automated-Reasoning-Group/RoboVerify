@@ -24,11 +24,116 @@ from synthesis.verification_lib.highlevel_verification_lib import HighLevelConte
 
 
 class SynthesisOnlyTests(unittest.TestCase):
+    def test_late_complete_validation_cannot_override_outer_deadline(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+
+        from synthesis.cfg.graph import Node
+        from synthesis.cfg.region import BlockRegion
+        from synthesis.entry.synthesize_cfg import _validate_synthesis_candidate
+
+        cfg = SimpleNamespace(
+            order=["body"], nodes={"body": Node("body", BlockRegion(None, (Skip(0),)))}
+        )
+        with patch(
+            "synthesis.entry.synthesize_cfg.perf_counter", side_effect=[0.0, 0.0, 2.0]
+        ), patch(
+            "synthesis.entry.synthesize_cfg._validate_one_synthesis_candidate",
+            return_value={"accepted": True, "passed": 1, "total": 1},
+        ):
+            report = _validate_synthesis_candidate(
+                cfg,
+                HighLevelContext(),
+                SimpleNamespace(candidate_validation_seconds=1),
+                Mock(),
+            )
+        self.assertFalse(report["accepted"])
+        self.assertTrue(report["selection_budget_exhausted"])
+
+    def test_parameter_repair_rechecks_local_gate_and_saves_exact_selected_program(
+        self,
+    ):
+        from types import SimpleNamespace
+
+        from synthesis.api.instructions import MoveByName
+
+        original = Program(
+            1, [MoveByName("b0", "b0", "b0", target_offset=[0.0, 0.0, 0.1])]
+        )
+        searched = StraightLineResult(
+            original,
+            True,
+            "test_oracle",
+            0.01,
+            1,
+            search_stats={"imitation_pool_min": 0.008},
+        )
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "synthesis.entry.synthesize_cfg.load_traces", return_value=[self.trace()]
+        ), patch(
+            "synthesis.entry.synthesize_cfg.straight_line_synthesize",
+            return_value=searched,
+        ), patch(
+            "synthesis.cfg.parameter_repair.check_contract_feasibility",
+            return_value=SimpleNamespace(reason="sat"),
+        ), patch(
+            "synthesis.cfg.parameter_repair.straight_line_synthesize",
+            return_value=StraightLineResult(original, True, "converged", 0.009, 1),
+        ) as local_check, patch(
+            "synthesis.cfg.robust_validation.validate_training_program",
+            side_effect=[
+                {"accepted": False, "passed": 0, "total": 1, "seconds": 0.1},
+                {"accepted": True, "passed": 1, "total": 1, "seconds": 0.1},
+            ],
+        ) as complete_check, contextlib.redirect_stdout(
+            io.StringIO()
+        ):
+            code = main(
+                [
+                    "--mode",
+                    "synthesize",
+                    "--demos",
+                    "unused.npz",
+                    "--num-blocks",
+                    "2",
+                    "--search-strategy",
+                    "contract",
+                    "--contract-refinement",
+                    "--candidate-parameter-trials",
+                    "1",
+                    "--output-dir",
+                    directory,
+                ]
+            )
+            self.assertEqual(code, 0)
+            self.assertEqual(complete_check.call_count, 2)
+            local_check.assert_called_once()
+            artifact = next(Path(directory).glob("cfg/*/artifacts/program.json"))
+            loaded = load_program_artifact(artifact, HighLevelContext(), 2)
+            self.assertEqual(
+                loaded.program.register_trainable_parameter(), [0.001, 0.0, 0.1]
+            )
+            self.assertEqual(original.register_trainable_parameter(), [0.0, 0.0, 0.1])
+            frozen = next(
+                artifact.parent.glob(
+                    "parameter-refinement-0/structure-*/trial-0000.json"
+                )
+            )
+            self.assertEqual(
+                load_program_artifact(
+                    frozen, HighLevelContext(), 2
+                ).program.register_trainable_parameter(),
+                [0.001, 0.0, 0.1],
+            )
+            summary = json.loads(frozen.with_name("summary.json").read_text())
+            self.assertEqual(summary["status"], "accepted")
+
     def test_selected_alternative_and_extra_starts_are_reflected_in_saved_program(self):
         from synthesis.cfg.straightline import StraightLineAlternative
 
         training, extra = self.trace(), self.trace()
         extra.num_blocks = 3
+        extra.seed = 7
         result = StraightLineResult(Program(1, [Skip(0)]), True, "test_oracle", 0, 1)
         result.alternatives = (StraightLineAlternative(Program(1, [Skip(1)]), 0, 1),)
         with tempfile.TemporaryDirectory() as directory, patch(
@@ -40,7 +145,15 @@ class SynthesisOnlyTests(unittest.TestCase):
         ) as search, patch(
             "synthesis.cfg.robust_validation.validate_training_program",
             side_effect=[
-                {"accepted": False, "passed": 1, "total": 2, "seconds": 0.1},
+                {
+                    "accepted": False,
+                    "passed": 1,
+                    "total": 2,
+                    "seconds": 0.1,
+                    "demos": [
+                        {"task": "stack", "num_blocks": 3, "seed": 7, "accepted": False}
+                    ],
+                },
                 {"accepted": True, "passed": 2, "total": 2, "seconds": 0.1},
             ],
         ) as validation, contextlib.redirect_stdout(
@@ -67,9 +180,13 @@ class SynthesisOnlyTests(unittest.TestCase):
             self.assertEqual(len(search.call_args.args[0]), 1)
             self.assertIs(search.call_args.args[0][0].trace, training)
             self.assertEqual(validation.call_count, 2)
-            for call in validation.call_args_list:
-                self.assertEqual([t.num_blocks for t in call.args[1]], [2, 3])
-                self.assertIs(call.args[1][1], extra)
+            for call, expected in zip(
+                validation.call_args_list, ([training, extra], [extra, training])
+            ):
+                self.assertEqual(
+                    [id(t) for t in call.args[1]], [id(t) for t in expected]
+                )
+                self.assertTrue(call.kwargs["stop_on_failure"])
             artifact = next(Path(directory).glob("cfg/*/artifacts/program.json"))
             loaded = load_program_artifact(artifact, HighLevelContext(), 2)
             self.assertEqual(str(loaded.program.instructions[0]), str(Skip(1)))

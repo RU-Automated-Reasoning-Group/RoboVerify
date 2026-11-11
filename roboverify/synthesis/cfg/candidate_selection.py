@@ -73,6 +73,7 @@ def select_validated_candidate(cfg, validate, *, limit=8):
                     "accepted": bool(report["accepted"]),
                     "passed": report.get("passed"),
                     "total": report.get("total"),
+                    "evaluated": report.get("evaluated", report.get("total")),
                     "seconds": report.get("seconds"),
                     "program_fingerprint": report.get("program_fingerprint"),
                 }

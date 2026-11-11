@@ -16,7 +16,11 @@ from synthesis.cfg.demos import DemoTrace
 from synthesis.cfg.program_source import ProgramDefinition, program_fingerprint
 from synthesis.cfg.recordings import load_traces
 from synthesis.cfg.reset import capture
-from synthesis.cfg.robust_validation import ValidationBudget, validate_training_program
+from synthesis.cfg.robust_validation import (
+    SharedActionBudget,
+    ValidationBudget,
+    validate_training_program,
+)
 from synthesis.predicates.term import atom, block_id, boolean, ref
 
 
@@ -90,6 +94,82 @@ def contact(env, observation, count):
 
 
 class FullValidationTests(unittest.TestCase):
+    def test_shared_action_budget_covers_separate_candidates_and_settling(self):
+        budget = SharedActionBudget(3)
+        first, second = FakeEnv(), FakeEnv()
+        a = self.validate(
+            first, budget=ValidationBudget(settling_steps=2), action_budget=budget
+        )
+        b = self.validate(
+            second, budget=ValidationBudget(settling_steps=2), action_budget=budget
+        )
+        self.assertTrue(a["accepted"])
+        self.assertFalse(b["accepted"])
+        self.assertEqual((first.steps, second.steps, budget.used), (2, 1, 3))
+        self.assertIn("budget_exhausted", b["demos"][0]["reasons"])
+        self.assertEqual(b["shared_action_budget"], {"limit": 3, "used": 3})
+
+    def test_early_rejection_keeps_unexamined_starts_in_requested_denominator(self):
+        traces = [source_trace(), source_trace()]
+        traces[1].seed = 7
+        calls = []
+        failed = FakeEnv(task_success=lambda env: False)
+
+        def factory(trace):
+            calls.append(trace.seed)
+            if len(calls) > 1:
+                self.fail(
+                    "Rejected candidates must not execute later starts in fast mode"
+                )
+            return failed
+
+        with patch(
+            "synthesis.cfg.endpoint_contract.contact_state", side_effect=contact
+        ):
+            report = validate_training_program(
+                definition(Skip(0)),
+                traces,
+                factory,
+                post=boolean(True),
+                budget=ValidationBudget(settling_steps=0),
+                stop_on_failure=True,
+            )
+        self.assertFalse(report["accepted"])
+        self.assertEqual(
+            (report["passed"], report["evaluated"], report["total"]), (0, 1, 2)
+        )
+        self.assertEqual(report["unevaluated"][0]["seed"], 7)
+        self.assertEqual(calls, [0])
+        self.assertTrue(failed.closed)
+
+    def test_fast_mode_success_still_checks_every_requested_start(self):
+        traces = [source_trace(), source_trace()]
+        calls = []
+
+        def factory(trace):
+            env = FakeEnv()
+            calls.append(env)
+            return env
+
+        with patch(
+            "synthesis.cfg.endpoint_contract.contact_state", side_effect=contact
+        ):
+            report = validate_training_program(
+                definition(Skip(0)),
+                traces,
+                factory,
+                post=boolean(True),
+                budget=ValidationBudget(settling_steps=1),
+                stop_on_failure=True,
+            )
+        self.assertTrue(report["accepted"])
+        self.assertEqual(
+            (report["passed"], report["evaluated"], report["total"]), (2, 2, 2)
+        )
+        self.assertEqual(report["unevaluated"], [])
+        self.assertEqual(len(calls), 2)
+        self.assertTrue(all(env.closed and env.steps == 1 for env in calls))
+
     def validate(self, env, program=None, **options):
         trace = options.pop("trace", None) or source_trace()
         # Isolate acceptance mechanisms with a simple final specification.

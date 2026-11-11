@@ -550,7 +550,11 @@ def straight_line_synthesize(
                 checked if budget.search_strategy == "contract" else iteration,
                 checked,
                 rejected,
-                {**proposal_stats(), "retained_endpoint_candidates": len(alternatives)},
+                {
+                    **proposal_stats(),
+                    "retained_endpoint_candidates": len(alternatives),
+                    "imitation_pool_min": pool.entries[0].distance,
+                },
                 proposal_reason(),
                 alternatives,
             )

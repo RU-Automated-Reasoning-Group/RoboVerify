@@ -101,6 +101,16 @@ also checks its own first action against actual continuing endpoints with the
 next bindings. This is nominal readiness, separate from physically executing the
 complete recovered loop.
 
+Contact observation follows the active MuJoCo constraint and its finite positive
+normal force, using `efc_address` and `mj_contactForce`. It does not require surface
+penetration: MuJoCo's configured margin can create force-bearing contacts at a
+positive geometric gap. Two distinct fingers must still contact the same unique
+object to establish holding; unavailable or nonfinite force data remains unknown.
+See the [MuJoCo contact model](https://mujoco.readthedocs.io/en/2.1.2/computation.html#contact).
+Per-obligation diagnostics distinguish a failed requirement from unknown evidence;
+both reject acceptance when that evidence is required. A release's observed support
+is checked independently from whether holding was observable at its entry.
+
 These are finite empirical rejection checks. Controller-action observations do
 not cover every physics substep. The checks do not prove unbounded collision
 safety, Higher effects, arbitrary relational summaries, termination or all scene
@@ -121,6 +131,14 @@ convergence, observed contact/frame behavior, the final task condition, and the
 learned block contracts with their pre-update roles. An inconclusive contact
 state or exhausted budget cannot produce acceptance.
 
+Selection rejects a candidate after its first failed complete start and tries
+previously failing task/size/seed groups first on later candidates. Reports keep
+requested and evaluated counts separate and list unexamined starts explicitly;
+every requested start must be executed successfully for acceptance. Duplicate
+seeds never merge distinct archived snapshots. `--candidate-max-total-actions`
+(100000) is shared across candidate executions and settling, in addition to the
+per-execution action cap and shared wall deadline.
+
 `--candidate-validation-limit` (8) bounds combinations of locally accepted
 alternatives; `--candidate-validation-seconds` (120) is their shared time budget.
 `--candidate-max-actions` (5000), `--max-loop-iterations`, and
@@ -130,6 +148,24 @@ without adding imitation distances with different units. Rejection or an
 exception restores the original candidate; only a fully accepted alternative is
 committed. In `full` mode validation precedes invariant preparation and repeats
 after physical repair.
+
+Optional `--candidate-parameter-trials N` (default 0) adds bounded float repair
+when the retained complete structures all fail. For each retained structure,
+it probes every registered parameter at `+step`, `-step`, then `+2*step`,
+`-2*step`, in registration order; `--candidate-parameter-step` defaults to 1 mm.
+Each sample is centered on that structure's original vector and changes only
+floats, including all Move coordinates. `N` is a per-structure cap; structure
+count, wall time and action usage retain their shared outer bounds.
+
+Every trial first passes fixed-offset BMC on the original entries. Complete-task
+success then triggers the original local imitation, endpoint and handoff checks
+for changed blocks, using the original metric/theta and original near-best pool's
+minimum distance plus epsilon. Missing local certification, incomplete evidence,
+timeouts and later local rejection cannot promote a candidate. Only a fully
+tested sample is installed; exceptions or failed search restore the original
+graph. Exact pre-execution samples and reports are saved under
+`parameter-refinement-REVISION/structure-INDEX/`. This coordinate search is an
+incomplete repair heuristic, separate from the existing CEM stage.
 
 Optional `--validation-starts PATH ...` supplies additional full-state archives,
 including other block counts. These starts participate in candidate selection;
