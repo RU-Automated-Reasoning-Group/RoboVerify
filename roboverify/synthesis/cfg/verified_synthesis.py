@@ -164,6 +164,7 @@ def verified_synthesis(
     verification_level="both",
     fixed_invariants=False,
     boundary_budget=None,
+    validate_candidate=None,
 ):
     """Both modes share symbolic feedback and motion repair on the same CFG.
 
@@ -190,6 +191,17 @@ def verified_synthesis(
     def prepare_revision():
         nonlocal revision
         try:
+            if validate_candidate is not None:
+                validation = validate_candidate(cfg, revision)
+                event(
+                    "training_validation",
+                    revision=revision,
+                    accepted=validation["accepted"],
+                )
+                if not validation["accepted"]:
+                    result.status = "simulation_rejected"
+                    result.reason = "The candidate failed complete training execution/settling contracts"
+                    return False
             propose_summaries(cfg, context)
             if prepare is not None:
                 stores.clear()

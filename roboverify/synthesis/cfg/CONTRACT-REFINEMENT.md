@@ -17,6 +17,9 @@ Geometric conditions can become true while the gripper still holds a block.
 original milestone. A nonterminal cut must admit a shared next-action proposal
 from the existing primitive grammar, using the **next** segment's bindings.
 Positive explicit `ON` milestones additionally require a known released hand.
+Continuing loop entries must also match the empty/occupied hand phase of their
+demonstration's first iteration. A Move alone can be admissible in both phases;
+that does not imply a shared Pick/Release continuation exists.
 No teacher action labels, prescribed body or retreat detector are used.
 
 Loop extraction refines its demonstration intervals before guard learning and
@@ -83,6 +86,43 @@ separate obligations. Search acceptance is never promoted to a formal proof.
 Guard enumeration can prefer references unchanged by the inferred loop update.
 This selects among training-consistent separators using a stated inductive bias;
 it supplies no uniqueness or generalization guarantee.
+
+## Complete-program acceptance
+
+The opt-in search retains bounded alternatives that pass the same local endpoint,
+handoff and imitation thresholds. It tests complete executables from the original
+archived starts, including every actual block endpoint and 50 final settling
+steps. The gate checks the task precondition at each restored start, primitive
+convergence, observed contact/frame behavior, the final task condition, and the
+learned block contracts with their pre-update roles. An inconclusive contact
+state or exhausted budget cannot produce acceptance.
+
+`--candidate-validation-limit` (8) bounds combinations of locally accepted
+alternatives; `--candidate-validation-seconds` (120) is their shared time budget.
+`--candidate-max-actions` (5000), `--max-loop-iterations`, and
+`--candidate-settle-steps` (50) bound each execution. Alternatives must preserve
+the block's exported bindings. Selection visits combinations by ordinal ranks,
+without adding imitation distances with different units. Rejection or an
+exception restores the original candidate; only a fully accepted alternative is
+committed. In `full` mode validation precedes invariant preparation and repeats
+after physical repair.
+
+Optional `--validation-starts PATH ...` supplies additional full-state archives,
+including other block counts. These starts participate in candidate selection;
+they are never imitation examples or hidden action labels, and must not later be
+reported as held-out evaluation. Environments use each archive's own block count.
+The original training starts remain in the acceptance denominator.
+
+Every tested executable and replay report is saved under
+`training-validation-REVISION-candidate-TRIAL/`; `training-selection-REVISION.json`
+records the bounded selection. Final `cfg.json` and `program.json` describe the
+same selected program. A failed complete execution produces
+`simulation_rejected` and exit code 2, even if all local block searches succeeded.
+Attempted block artifacts also retain the exact target predicate AST, frozen
+entry index, original milestone index and demonstration boundaries.
+
+These are empirical acceptance checks. They do not establish arbitrary-size
+generalization, a complete physics-substep audit, or a formal refinement proof.
 
 ## Metrics and reproduction
 

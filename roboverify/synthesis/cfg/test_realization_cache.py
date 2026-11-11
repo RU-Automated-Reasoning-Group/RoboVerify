@@ -34,6 +34,10 @@ class SuccessfulRealizationCacheTests(unittest.TestCase):
             "start": lambda n, d: setattr(d[0], "t_start", 2),
             "end": lambda n, d: setattr(d[0], "t_end", 4),
             "entry": lambda n, d: setattr(d[0], "entry_index", 1),
+            "milestone": lambda n, d: setattr(d[0], "milestone_index", 2),
+            "handoff": lambda n, d: setattr(
+                n, "_contract_successors", {(0, 0, 1, 3): {"b": 1}}
+            ),
             "demo": lambda n, d: setattr(d[0], "demo_idx", 1),
             "bindings": lambda n, d: d[0].bindings.update(b0=1),
             "final_bindings": lambda n, d: setattr(d[0], "final_bindings", {"b0": 1}),

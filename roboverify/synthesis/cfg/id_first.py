@@ -72,12 +72,13 @@ def close_id_candidate(cfg, *, allow_unresolved=False):
                 for left, right in (*region.init, *region.update):
                     occupied.update((left, right))
             elif isinstance(region, BlockRegion):
-                for instruction in region.physical:
-                    for operand in instruction.get_operand():
-                        if operand["type"] == "Box":
-                            ids.add(operand["val"])
-                        elif operand["type"] == "BoxName":
-                            occupied.add(operand["val"])
+                for option in (region, *getattr(node, "_contract_alternatives", ())):
+                    for instruction in option.physical:
+                        for operand in instruction.get_operand():
+                            if operand["type"] == "Box":
+                                ids.add(operand["val"])
+                            elif operand["type"] == "BoxName":
+                                occupied.add(operand["val"])
             elif not (allow_unresolved and region is None):
                 raise ValueError("Cannot return an unresolved ID-first candidate")
     fixed = dict(getattr(cfg, "_fixed_id_bindings", {}))
@@ -136,9 +137,10 @@ def close_id_candidate(cfg, *, allow_unresolved=False):
             node.synthesis_approach = "relational"
             region = node.region
             if isinstance(region, BlockRegion):
-                region.physical = tuple(
-                    name_operands(i, aliases) for i in region.physical
-                )
+                for option in (region, *getattr(node, "_contract_alternatives", ())):
+                    option.physical = tuple(
+                        name_operands(i, aliases) for i in option.physical
+                    )
             elif isinstance(region, LoopRegion):
                 region.guard = named(region.guard)
                 region.postconditions = tuple(named(t) for t in region.postconditions)
@@ -162,9 +164,13 @@ def close_id_candidate(cfg, *, allow_unresolved=False):
         for name, node in graph.nodes.items():
             node.available_scope = scopes[name]
             if isinstance(node.region, BlockRegion):
-                node.region.bindings = (
-                    require_closed(node.region.physical, scopes[name]) - scopes[name]
-                )
+                for option in (
+                    node.region,
+                    *getattr(node, "_contract_alternatives", ()),
+                ):
+                    option.bindings = (
+                        require_closed(option.physical, scopes[name]) - scopes[name]
+                    )
     return cfg
 
 

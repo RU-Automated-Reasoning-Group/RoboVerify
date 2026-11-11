@@ -13,7 +13,7 @@ from synthesis.cfg.boundaries import (
     truth_window,
 )
 from synthesis.cfg.demos import DemoSegment, DemoTrace
-from synthesis.predicates.term import atom, ref
+from synthesis.predicates.term import atom, boolean, ref
 from synthesis.search.contract import Action, ContractProblem
 
 PICK_NEXT = Action("Pick", ("new",))
@@ -42,6 +42,31 @@ def handoff(*, known=True, aperture=0.08, broken=False, ready_at=2):
 
 
 class BoundaryContractTests(unittest.TestCase):
+    def test_initial_move_does_not_allow_mixed_iteration_hand_phases(self):
+        row, nxt = handoff(ready_at=0)
+        row.trace.metadata["holding_by_index"].update({"1": 2, "2": 2})
+        for index in (1, 2):
+            row.trace.states[index][34:37] = row.trace.states[index][:3]
+        move = Action("Move", ("gripper", "gripper", "gripper"), (0, 0, 0.1))
+        with patch.object(ContractProblem, "_make_actions", return_value=[move]):
+            vectors, _ = propose_handoffs(
+                [row],
+                [nxt],
+                boolean(True),
+                prototypes=[point(nxt, 0)],
+                initial_required=True,
+            )
+            self.assertEqual(vectors, [(1,)])
+            vectors, _ = propose_handoffs(
+                [row],
+                [nxt],
+                boolean(True),
+                prototypes=[point(nxt, 0)],
+                initial_required=True,
+                phase_templates=[point(nxt, 0)],
+            )
+            self.assertEqual(vectors, [(3,)])
+
     def proposals(self, row, nxt, *, budget=None):
         # Restrict only the finite grammar in this test. Entry-state feasibility
         # and all envelope/holding checks use the production transition code.

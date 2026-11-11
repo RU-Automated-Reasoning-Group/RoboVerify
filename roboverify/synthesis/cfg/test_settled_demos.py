@@ -163,7 +163,12 @@ class SettledDemoTests(unittest.TestCase):
         for trace in traces:
             self.assertTrue(validate_trace(trace))
         result = SimpleNamespace(
-            best_cost=0, best_iter=0, iters_completed=0, best_program="Skip"
+            best_cost=0,
+            best_iter=0,
+            iters_completed=0,
+            best_program="Skip",
+            termination_reason="iteration_budget",
+            best_checks_passed=True,
         )
         with tempfile.TemporaryDirectory() as directory:
             archive = Path(directory) / "demonstrations.npz"

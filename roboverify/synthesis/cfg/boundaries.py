@@ -130,6 +130,7 @@ def propose_handoffs(
     prototypes=None,
     operands=None,
     initial_required=False,
+    phase_templates=None,
 ):
     """Propose endpoint vectors; None successors are terminal loop iterations.
 
@@ -158,10 +159,17 @@ def propose_handoffs(
     budget = budget or BoundaryBudget()
     if not rows or len(rows) != len(successors):
         raise ValueError("Every milestone needs its corresponding successor")
+    if phase_templates is not None and len(phase_templates) != len(rows):
+        raise ValueError("Every handoff needs a phase template")
     started = perf_counter()
     deadline = started + budget.seconds
     stats = {"status": "no_proposal", "actions_examined": 0, "proposals": []}
     try:
+        expected_phases = (
+            [entry_holding(template) is None for template in phase_templates]
+            if phase_templates is not None
+            else None
+        )
         windows = [
             truth_window(
                 row,
@@ -251,6 +259,14 @@ def propose_handoffs(
                         raise DeadlineExceeded("Boundary proposal deadline reached")
                     if not completed(row, index):
                         continue
+                    if expected_phases is not None:
+                        try:
+                            if (
+                                entry_holding(point(nxt, index)) is None
+                            ) != expected_phases[i]:
+                                continue
+                        except (ValueError, KeyError, TypeError):
+                            continue
                     key = (i, index)
                     if key not in cache:
                         try:
@@ -297,10 +313,11 @@ def refine_iterations(extracted, predicates, *, budget=None, choice=0):
     evidence = []
     for slot, predicate in enumerate(predicates):
         next_slot = (slot + 1) % len(predicates)
-        rows, successors = [], []
+        rows, successors, phase_templates = [], [], []
         for group in groups:
             for i, body in enumerate(group):
                 rows.append(body[slot])
+                phase_templates.append(group[0][next_slot])
                 successors.append(
                     body[next_slot]
                     if next_slot
@@ -314,10 +331,12 @@ def refine_iterations(extracted, predicates, *, budget=None, choice=0):
             budget=budget,
             prototypes=prototypes,
             initial_required=next_slot == 0,
+            phase_templates=phase_templates,
         )
         evidence.append(report)
         if not vectors:
-            return extracted, evidence
+            return (extracted if choice == 0 else None), evidence
+        report["selected_choice"] = choice
         if choice >= len(vectors):
             return None, evidence
         cuts = iter(vectors[choice])

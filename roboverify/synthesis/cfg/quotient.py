@@ -62,6 +62,8 @@ def _partition_copy(cfg):
         for rows in [*graph.demos.segments.values(), getattr(graph, "_task_demos", ())]:
             for row in rows:
                 memo[id(row.trace)] = row.trace
+        for trace in getattr(graph, "_validation_traces", ()):
+            memo[id(trace)] = trace
         pending.extend(
             node.region.body_cfg
             for node in graph.nodes.values()

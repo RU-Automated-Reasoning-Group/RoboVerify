@@ -39,6 +39,12 @@ def _signature(node, demos, post):
         node.name,
         node.synthesis_approach,
         tuple(sorted(node.available_scope)),
+        tuple(
+            sorted(
+                (key, _bindings(bindings))
+                for key, bindings in getattr(node, "_contract_successors", {}).items()
+            )
+        ),
         post.sexpr() if hasattr(post, "sexpr") else repr(post),
         tuple(
             (
@@ -48,6 +54,7 @@ def _signature(node, demos, post):
                 segment.t_start,
                 segment.t_end,
                 segment.entry_index,
+                segment.milestone_index,
                 _bindings(segment.bindings),
                 _bindings(segment.final_bindings),
                 _bindings(segment.goal_bindings),

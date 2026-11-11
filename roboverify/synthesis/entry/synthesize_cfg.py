@@ -5,8 +5,9 @@ import json
 import math
 import random
 import signal
-from dataclasses import replace
+from dataclasses import asdict, replace
 from functools import partial
+from time import perf_counter
 
 from synthesis.api.instructions import LoopBudgetExceeded, Skip, While
 from synthesis.api.program import Program, generate_random_program
@@ -141,8 +142,13 @@ def _synthesize_only(cfg, realize, execute, context, args, logger, quotient):
         checkpoint=checkpoint,
         boundary_budget=_boundary_budget(args),
     )
-    logger.write_artifact("cfg.json", json.dumps(describe_cfg(cfg), indent=2))
     status = "synthesized_unverified" if result else result.status
+    validation = None
+    if result and getattr(args, "contract_refinement", False):
+        validation = _validate_synthesis_candidate(cfg, context, args, logger)
+        if not validation["accepted"]:
+            status = "simulation_rejected"
+    logger.write_artifact("cfg.json", json.dumps(describe_cfg(cfg), indent=2))
     saved = None
     try:
         definition = _candidate_definition(cfg, context)
@@ -161,6 +167,9 @@ def _synthesize_only(cfg, realize, execute, context, args, logger, quotient):
                 synthesis_num_blocks=args.num_blocks,
                 synthesis_status=status,
                 accepted_by_cfg_search=bool(result),
+                training_simulation_passed=(
+                    None if validation is None else validation["accepted"]
+                ),
                 formal_verification="not_run",
                 config=vars(args),
             ),
@@ -171,14 +180,100 @@ def _synthesize_only(cfg, realize, execute, context, args, logger, quotient):
         status,
         reason=result.reason,
         formal_verification="not_run",
-        simulation_evaluation="not_run",
+        simulation_evaluation=(
+            "not_run"
+            if validation is None
+            else "training_passed" if validation["accepted"] else "training_rejected"
+        ),
+        training_validation=validation,
         search_status=result.status,
         rounds=result.rounds,
         failed_block=result.failed_block,
         task=args.task,
         program_artifact=saved,
     )
-    return 0 if result else 2
+    return 0 if result and (validation is None or validation["accepted"]) else 2
+
+
+def _validate_synthesis_candidate(cfg, context, args, logger, revision=0):
+    from synthesis.cfg.candidate_selection import select_validated_candidate
+
+    deadline = perf_counter() + getattr(args, "candidate_validation_seconds", 120.0)
+
+    def validate(candidate, trial):
+        remaining = deadline - perf_counter()
+        if remaining <= 0:
+            return {
+                "accepted": False,
+                "passed": 0,
+                "total": 0,
+                "selection_budget_exhausted": True,
+                "seconds": 0.0,
+            }
+        return _validate_one_synthesis_candidate(
+            candidate, context, args, logger, revision, trial, remaining
+        )
+
+    result = select_validated_candidate(
+        cfg, validate, limit=getattr(args, "candidate_validation_limit", 8)
+    )
+    logger.write_artifact(
+        f"training-selection-{revision}.json",
+        json.dumps(result["candidate_selection"], indent=2),
+    )
+    return result
+
+
+def _validate_one_synthesis_candidate(
+    cfg, context, args, logger, revision, trial, seconds
+):
+    from synthesis.cfg.lower import lower_with_locations
+    from synthesis.cfg.robust_validation import (
+        ValidationBudget,
+        validate_training_program,
+    )
+
+    definition = _candidate_definition(cfg, context)
+    _, locations = lower_with_locations(cfg, context, physical=True)
+    contracts = {
+        path: {"paths": paths, "post": graph.outgoing(name)[0].label}
+        for path, (graph, name, paths) in locations["blocks"].items()
+    }
+    traces = list(
+        {
+            id(trace): trace
+            for trace in (
+                *(row.trace for row in cfg._task_demos),
+                *getattr(cfg, "_validation_traces", ()),
+            )
+        }.values()
+    )
+    result = validate_training_program(
+        definition,
+        traces,
+        lambda trace: make_roboverify_env(trace.task, num_blocks=trace.num_blocks),
+        budget=ValidationBudget(
+            settling_steps=getattr(args, "candidate_settle_steps", 50),
+            max_actions=getattr(args, "candidate_max_actions", 5000),
+            max_loop_iterations=getattr(args, "max_loop_iterations", 100),
+            seconds=seconds,
+            frame_tolerance_m=getattr(args, "contract_frame_tolerance", 0.005),
+        ),
+        post=cfg.postcondition,
+        artifact_dir=logger.artifact_dir()
+        / f"training-validation-{revision}-candidate-{trial}",
+        block_contracts=contracts,
+    )
+    logger.log_event(
+        "training_validation",
+        f"{result['passed']}/{result['total']} complete executions accepted",
+        force=True,
+        revision=revision,
+        candidate=trial,
+        accepted=result["accepted"],
+        seconds=result["seconds"],
+    )
+    return result
 
 
 def _boundary_budget(args):
@@ -225,7 +320,7 @@ def _candidate_definition(cfg, context):
     return ProgramDefinition(program, bindings, "synthesized-candidate")
 
 
-def _save_block_candidate(logger, result, node, demos, args, attempt):
+def _save_block_candidate(logger, result, node, demos, args, attempt, post):
     """Keep every attempted body, including unsuccessful refinement evidence."""
     scope = sorted(node.available_scope)
     entries = [
@@ -234,6 +329,8 @@ def _save_block_candidate(logger, result, node, demos, args, attempt):
             seed=segment.trace.seed,
             start=segment.t_start,
             end=segment.t_end,
+            entry_index=segment.entry_index,
+            milestone_index=segment.milestone_index,
             bindings={
                 name: segment.bindings[name]
                 for name in scope
@@ -269,6 +366,8 @@ def _save_block_candidate(logger, result, node, demos, args, attempt):
             bmc_rejected=result.bmc_rejected,
             entry_bindings_required=sorted(set(scope) - set(fixed)),
             demonstration_archive=str(args.demos),
+            target_postcondition=str(post),
+            target_postcondition_ast=asdict(post),
             entries=entries,
         ),
     )
@@ -362,6 +461,12 @@ def _run(args, logger):
         cfg._candidate_program = getattr(args, "candidate_program", False)
     cfg.synthesis_approach = args.synthesis_approach
     cfg._task_demos = list(segments)
+    cfg._validation_traces = []
+    for path in getattr(args, "validation_starts", ()):
+        extra = load_traces(path)
+        if any(trace.task != args.task or trace.num_blocks < 1 for trace in extra):
+            raise ValueError("Additional validation starts must use the requested task")
+        cfg._validation_traces.extend(extra)
     budget = SearchBudget(
         search_strategy=getattr(args, "search_strategy", "mcmc"),
         iterations=args.iterations,
@@ -426,6 +531,9 @@ def _run(args, logger):
                     block_id=node.name,
                 )
                 return cached, True
+        # A new search may use changed demonstrations, handoffs or penalties.
+        # Alternatives accepted by an earlier search are no longer certified.
+        node._contract_alternatives = ()
         if isinstance(node.region, LoopRegion):
             physical = Program(
                 len(lower_region(node.region, context, physical=True)),
@@ -552,7 +660,7 @@ def _run(args, logger):
             ),
             **search_options,
         )
-        _save_block_candidate(logger, result, node, demos, args, block_attempt)
+        _save_block_candidate(logger, result, node, demos, args, block_attempt, post)
         block_attempt += 1
         logger.log_event(
             "block_result",
@@ -595,6 +703,24 @@ def _run(args, logger):
             physical,
             exports,
         )
+        if result.ok and budget.contract_endpoint_checks:
+            node._contract_alternatives = tuple(
+                BlockRegion(
+                    region.symbolic,
+                    tuple(alternative.program.instructions) or (Skip(0),),
+                    (
+                        frozenset()
+                        if id_first
+                        else (
+                            require_closed(
+                                alternative.program.instructions, node.available_scope
+                            )
+                            - node.available_scope
+                        )
+                    ),
+                )
+                for alternative in getattr(result, "alternatives", ())
+            )
         if budget.search_strategy == "contract":
             accepted_blocks.remember(
                 node, demos, post, region, accepted=result.ok, penalty=penalty
@@ -686,6 +812,15 @@ def _run(args, logger):
         quotient=quotient_fn,
         boundary_budget=_boundary_budget(args),
         initial_candidate=args.mode == "verify",
+        validate_candidate=(
+            (
+                lambda candidate, revision: _validate_synthesis_candidate(
+                    candidate, context, args, logger, revision
+                )
+            )
+            if getattr(args, "contract_refinement", False)
+            else None
+        ),
         verification_level=getattr(args, "verification_level", "both"),
         fixed_invariants=invariant_factory is not None,
         prepare=lambda candidate, revision: prepare_candidate(
@@ -820,6 +955,16 @@ def main(argv=None):
     group.add_argument("--contract-solver-attempts", type=int, default=24)
     group.add_argument("--contract-offset-radius", type=float, default=0.02)
     group.add_argument("--contract-frame-tolerance", type=float, default=0.005)
+    group.add_argument("--candidate-settle-steps", type=int, default=50)
+    group.add_argument("--candidate-validation-seconds", type=float, default=120.0)
+    group.add_argument("--candidate-max-actions", type=int, default=5000)
+    group.add_argument("--candidate-validation-limit", type=int, default=8)
+    group.add_argument(
+        "--validation-starts",
+        nargs="*",
+        default=[],
+        help="Additional exact-start archives for complete-candidate selection; may use other block counts; never used as imitation labels",
+    )
     group.add_argument(
         "--loop-body-distance", choices=("kl_kde", "kl_gmm", "mmd", "arc")
     )
@@ -907,6 +1052,10 @@ def main(argv=None):
     )
     parser.add_argument("--smoke", action="store_true")
     args = parser.parse_args(argv)
+    if args.validation_starts and not args.contract_refinement:
+        parser.error("--validation-starts requires --contract-refinement")
+    if args.candidate_validation_limit < 1:
+        parser.error("Candidate validation limit must be positive")
     body_options = (
         args.loop_body_distance,
         args.loop_body_theta,
@@ -926,6 +1075,14 @@ def main(argv=None):
             )
         try:
             _boundary_budget(args)
+            from synthesis.cfg.robust_validation import ValidationBudget
+
+            ValidationBudget(
+                settling_steps=args.candidate_settle_steps,
+                seconds=args.candidate_validation_seconds,
+                max_actions=args.candidate_max_actions,
+                frame_tolerance_m=args.contract_frame_tolerance,
+            )
             SearchBudget(
                 contract_solver_timeout_ms=args.contract_solver_timeout_ms,
                 contract_solver_attempts=args.contract_solver_attempts,

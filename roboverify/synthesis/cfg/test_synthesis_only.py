@@ -19,10 +19,113 @@ from synthesis.cfg.tasks import task_identity, task_spec
 from synthesis.cfg.test_collection import example_trace
 from synthesis.cfg.verified_synthesis import VerifiedResult
 from synthesis.entry.synthesize_cfg import main
+from synthesis.predicates.term import atom, ref
 from synthesis.verification_lib.highlevel_verification_lib import HighLevelContext
 
 
 class SynthesisOnlyTests(unittest.TestCase):
+    def test_selected_alternative_and_extra_starts_are_reflected_in_saved_program(self):
+        from synthesis.cfg.straightline import StraightLineAlternative
+
+        training, extra = self.trace(), self.trace()
+        extra.num_blocks = 3
+        result = StraightLineResult(Program(1, [Skip(0)]), True, "test_oracle", 0, 1)
+        result.alternatives = (StraightLineAlternative(Program(1, [Skip(1)]), 0, 1),)
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "synthesis.entry.synthesize_cfg.load_traces",
+            side_effect=[[training], [extra]],
+        ), patch(
+            "synthesis.entry.synthesize_cfg.straight_line_synthesize",
+            return_value=result,
+        ) as search, patch(
+            "synthesis.cfg.robust_validation.validate_training_program",
+            side_effect=[
+                {"accepted": False, "passed": 1, "total": 2, "seconds": 0.1},
+                {"accepted": True, "passed": 2, "total": 2, "seconds": 0.1},
+            ],
+        ) as validation, contextlib.redirect_stdout(
+            io.StringIO()
+        ):
+            code = main(
+                [
+                    "--mode",
+                    "synthesize",
+                    "--demos",
+                    "training.npz",
+                    "--num-blocks",
+                    "2",
+                    "--search-strategy",
+                    "contract",
+                    "--contract-refinement",
+                    "--validation-starts",
+                    "extra.npz",
+                    "--output-dir",
+                    directory,
+                ]
+            )
+            self.assertEqual(code, 0)
+            self.assertEqual(len(search.call_args.args[0]), 1)
+            self.assertIs(search.call_args.args[0][0].trace, training)
+            self.assertEqual(validation.call_count, 2)
+            for call in validation.call_args_list:
+                self.assertEqual([t.num_blocks for t in call.args[1]], [2, 3])
+                self.assertIs(call.args[1][1], extra)
+            artifact = next(Path(directory).glob("cfg/*/artifacts/program.json"))
+            loaded = load_program_artifact(artifact, HighLevelContext(), 2)
+            self.assertEqual(str(loaded.program.instructions[0]), str(Skip(1)))
+            cfg = json.loads(artifact.with_name("cfg.json").read_text())
+            self.assertEqual(cfg["nodes"]["v0"]["physical"], [str(Skip(1))])
+            report = json.loads(
+                artifact.with_name("training-selection-0.json").read_text()
+            )
+            self.assertEqual(report["selected_ranks"], [1])
+
+    def test_local_search_success_does_not_override_failed_complete_validation(self):
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "synthesis.entry.synthesize_cfg.load_traces", return_value=[self.trace()]
+        ), patch(
+            "synthesis.entry.synthesize_cfg.straight_line_synthesize",
+            return_value=StraightLineResult(
+                Program(1, [Skip(0)]), True, "test_oracle", 0, 1
+            ),
+        ), patch(
+            "synthesis.entry.synthesize_cfg._validate_synthesis_candidate",
+            return_value={
+                "accepted": False,
+                "passed": 0,
+                "total": 1,
+                "demos": [{"reasons": ["settling_goal"]}],
+            },
+        ) as validation, contextlib.redirect_stdout(
+            io.StringIO()
+        ):
+            code = main(
+                [
+                    "--mode",
+                    "synthesize",
+                    "--demos",
+                    "unused.npz",
+                    "--num-blocks",
+                    "2",
+                    "--search-strategy",
+                    "contract",
+                    "--contract-refinement",
+                    "--output-dir",
+                    directory,
+                ]
+            )
+            self.assertEqual(code, 2)
+            validation.assert_called_once()
+            artifact = next(Path(directory).glob("cfg/*/artifacts/program.json"))
+            metadata = json.loads(artifact.read_text())["metadata"]
+            self.assertEqual(metadata["synthesis_status"], "simulation_rejected")
+            self.assertTrue(metadata["accepted_by_cfg_search"])
+            self.assertFalse(metadata["training_simulation_passed"])
+            result = json.loads(
+                artifact.parent.parent.joinpath("result.json").read_text()
+            )
+            self.assertEqual(result["simulation_evaluation"], "training_rejected")
+
     def test_contract_refinement_requires_search_and_explicit_metric_scales(self):
         for flags in (
             ["--contract-refinement"],
@@ -252,8 +355,11 @@ class SynthesisOnlyTests(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory() as directory:
             with RunLogger(directory, "test", {}, slug="failed-candidate") as logger:
+                post = atom("ON", ref("source"), ref("b0"))
                 for attempt in (0, 1):
-                    _save_block_candidate(logger, result, node, entries, args, attempt)
+                    _save_block_candidate(
+                        logger, result, node, entries, args, attempt, post
+                    )
                 logger.finish("test_completed")
             paths = sorted(
                 {
@@ -269,6 +375,10 @@ class SynthesisOnlyTests(unittest.TestCase):
             self.assertEqual(row["metadata"]["entry_bindings_required"], ["source"])
             self.assertEqual(row["metadata"]["distance"], None)
             self.assertFalse(row["metadata"]["accepted_by_block_search"])
+            self.assertEqual(row["metadata"]["target_postcondition"], str(post))
+            self.assertEqual(row["metadata"]["target_postcondition_ast"]["op"], "ON")
+            self.assertEqual(row["metadata"]["entries"][0]["entry_index"], 0)
+            self.assertIsNone(row["metadata"]["entries"][0]["milestone_index"])
             self.assertEqual(
                 [entry["bindings"]["source"] for entry in row["metadata"]["entries"]],
                 [0, 1],
