@@ -737,13 +737,21 @@ def check_next_action(candidate, segment, states, next_bindings):
             table_reference=table_reference_at(segment),
         )
         named = any(isinstance(value, str) for value in operands)
+        # Relational tbl can be in scope without geometric table coordinates.
+        # Match the proposal adapter: unused table aliases are not primitive
+        # operands, while an action actually using one remains unsupported.
+        available_operands = tuple(
+            sorted(
+                name
+                for name, value in bindings.items()
+                if value != "tbl" or example.table_reference is not None
+            )
+        )
         problem = ContractProblem(
             [example],
             lambda state, index: False,
             allowed_operands=(
-                tuple(sorted(bindings))
-                if named
-                else tuple(range(segment.trace.num_blocks))
+                available_operands if named else tuple(range(segment.trace.num_blocks))
             ),
             config=ContractConfig(observation_references=named),
             actions=[action],

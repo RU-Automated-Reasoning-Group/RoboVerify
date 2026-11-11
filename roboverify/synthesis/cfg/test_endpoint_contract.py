@@ -52,7 +52,12 @@ def audited_states(
     states = SegmentRollout()
     states.observations = list(observations)
     states.extend(
-        scene_from_obs(obs, seg.trace.num_blocks, bindings or seg.bindings)
+        scene_from_obs(
+            obs,
+            seg.trace.num_blocks,
+            bindings or seg.bindings,
+            include_table="tbl" in (bindings or seg.bindings),
+        )
         for obs in observations
     )
     states.contract_audit = {
@@ -280,6 +285,32 @@ class EndpointTests(unittest.TestCase):
         bad = audited_states(seg, [obs, low])
         self.assertFalse(check_next_action(candidate, seg, bad, {"new": 1, "old": 0}))
         self.assertTrue(check_next_action(candidate, seg, bad, None))
+
+    def test_handoff_relational_table_without_frame_does_not_block_physical_pick(self):
+        from synthesis.api.instructions import MoveByName, PickByName
+
+        obs = observation([(0, 0, 0.425), (0.2, 0, 0.425)])
+        obs[:3] = (0, 0, 0.6)
+        bindings = {"old": 0, "new": 1, "tbl": "tbl", "table_alias": "tbl"}
+        seg = segment(obs, obs, bindings=bindings)
+        states = audited_states(seg, [obs, obs])
+        result = check_next_action(
+            Program(1, [PickByName("new")]), seg, states, bindings
+        )
+        self.assertTrue(result, result.details)
+        for table in ("tbl", "table_alias"):
+            with self.subTest(table=table):
+                result = check_next_action(
+                    Program(
+                        1,
+                        [MoveByName(table, table, table, target_offset=[0, 0, 0.2])],
+                    ),
+                    seg,
+                    states,
+                    bindings,
+                )
+                self.assertFalse(result)
+                self.assertEqual(result.reasons, ("unsupported_handoff",))
 
     def test_audited_simulator_rollout_preserves_trace_and_observes_nested_primitives(
         self,
