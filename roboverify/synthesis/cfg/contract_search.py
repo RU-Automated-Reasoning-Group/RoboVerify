@@ -281,12 +281,36 @@ class ContractCandidates:
                 ),
             ),
         )
+        goal_nodes = result.candidates
+        neighborhood = None
+        if goal_nodes and getattr(self.budget, "contract_operand_neighborhood", False):
+            from synthesis.search.operand_neighborhood import (
+                OperandNeighborhoodConfig,
+                expand_operand_neighborhood,
+                select_reference_diverse,
+            )
+
+            neighborhood = expand_operand_neighborhood(
+                self.problem,
+                goal_nodes,
+                OperandNeighborhoodConfig(pool_limit=self.budget.contract_pool_limit),
+            )
+            if neighborhood.candidates:
+                # Beam goals were already checked. An interrupted optional
+                # expansion cannot erase originals it had no time to replay.
+                goal_nodes = select_reference_diverse(
+                    (*goal_nodes, *neighborhood.candidates),
+                    limit=self.budget.contract_pool_limit,
+                )
         self.stats = dict(result.stats)
+        if neighborhood is not None:
+            self.stats["operand_neighborhood"] = neighborhood.stats
+            self.stats["shortlist_size"] = len(goal_nodes)
         self.stats["preparation_seconds"] = preparation_seconds
         self.stats["proposal_seconds"] = perf_counter() - started
         self.status = result.status
-        refinement_only = self.refinement_fallback and not result.candidates
-        nodes = result.partial_candidates if refinement_only else result.candidates
+        refinement_only = self.refinement_fallback and not goal_nodes
+        nodes = result.partial_candidates if refinement_only else goal_nodes
         self.stats["refinement_candidates"] = len(nodes) if refinement_only else 0
         programs = []
         for node in nodes:

@@ -48,6 +48,7 @@ class SearchBudget:
     cem_std: float = 0.05
     contract_endpoint_checks: bool = False
     contract_solve_offsets: bool = False
+    contract_operand_neighborhood: bool = False
     contract_solver_timeout_ms: int = 250
     contract_solver_attempts: int = 24
     contract_offset_radius: float = 0.02

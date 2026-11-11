@@ -55,6 +55,43 @@ def held_segment():
 
 
 class ReferenceBMCIntegrationTests(unittest.TestCase):
+    def test_optional_operand_expansion_preserves_goals_on_its_deadline(self):
+        from synthesis.search.contract import SearchResult
+
+        for enabled in (False, True):
+            with self.subTest(enabled=enabled), patch(
+                "synthesis.search.operand_neighborhood.expand_operand_neighborhood",
+                return_value=SearchResult(
+                    (), {"status": "deadline_exhausted"}, "deadline_exhausted"
+                ),
+            ) as expand:
+                segment = held_segment()
+                candidates = make_contract_candidates(
+                    [segment],
+                    atom("ON", ref("payload"), ref("support")),
+                    program(),
+                    segment.bindings,
+                    max_length=1,
+                    budget=SearchBudget(
+                        search_strategy="contract",
+                        contract_seconds=3,
+                        contract_operand_neighborhood=enabled,
+                    ),
+                )
+                generated = list(candidates)
+                self.assertTrue(generated, candidates.reason)
+                self.assertEqual(expand.call_count, int(enabled))
+                self.assertTrue(
+                    check_contract_feasibility(
+                        generated[0], [segment], fixed_offsets=True
+                    )
+                )
+                if enabled:
+                    self.assertEqual(
+                        candidates.stats["operand_neighborhood"]["status"],
+                        "deadline_exhausted",
+                    )
+
     def setUp(self):
         self.scene = Scene(
             {0: (0, 0, 0.425), 1: (0.3, 0.1, 0.425), 2: (0.5, -0.2, 0.625)},

@@ -490,6 +490,10 @@ def _run(args, logger):
         contract_pool_limit=getattr(args, "contract_pool_limit", 12),
         contract_endpoint_checks=getattr(args, "contract_refinement", False),
         contract_solve_offsets=getattr(args, "contract_refinement", False),
+        contract_operand_neighborhood=(
+            getattr(args, "contract_refinement", False)
+            and not getattr(args, "contract_no_operand_neighborhood", False)
+        ),
         contract_solver_timeout_ms=getattr(args, "contract_solver_timeout_ms", 250),
         contract_solver_attempts=getattr(args, "contract_solver_attempts", 24),
         contract_offset_radius=getattr(args, "contract_offset_radius", 0.02),
@@ -954,6 +958,11 @@ def main(argv=None):
     group.add_argument("--contract-solver-timeout-ms", type=int, default=250)
     group.add_argument("--contract-solver-attempts", type=int, default=24)
     group.add_argument("--contract-offset-radius", type=float, default=0.02)
+    group.add_argument(
+        "--contract-no-operand-neighborhood",
+        action="store_true",
+        help="Disable bounded operand-reference alternatives in contract refinement",
+    )
     group.add_argument("--contract-frame-tolerance", type=float, default=0.005)
     group.add_argument("--candidate-settle-steps", type=int, default=50)
     group.add_argument("--candidate-validation-seconds", type=float, default=120.0)

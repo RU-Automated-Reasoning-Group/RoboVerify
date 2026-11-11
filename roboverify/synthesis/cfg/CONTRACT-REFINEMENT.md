@@ -58,6 +58,21 @@ extension is incomplete: it repairs generated terminal pairs, rather than
 solving all parameters of arbitrary-length programs. Existing BMC screening
 still precedes optional CEM and physical candidate execution.
 
+After nominal goals are found, the opt-in mode explores single-primitive operand
+substitutions while keeping their kinds, lengths and numeric offsets fixed.
+Every alternative is replayed against the same nominal transitions and goal.
+A small pool preserves different shared XY references at each Move site among
+programs within 1% of the best nominal imitation score, then fills by rank.
+No particular task, block name or supplied program is preferred. This addresses
+the loss of distinct reference choices when nominally similar endpoints compete
+for a beam slot; it remains an incomplete proposal heuristic.
+
+The neighborhood has a 5-second, 4096-candidate and 100000-transition cap within
+the existing proposal deadline. An exhausted optional expansion retains already
+checked beam goals. `--contract-no-operand-neighborhood` disables this stage for
+comparison; ordinary search defaults are unchanged. Physical imitation,
+BMC and all endpoint acceptance conditions still apply afterward.
+
 ## Endpoint acceptance and proof scope
 
 The learned postcondition must hold at the actual body endpoint. An earlier
