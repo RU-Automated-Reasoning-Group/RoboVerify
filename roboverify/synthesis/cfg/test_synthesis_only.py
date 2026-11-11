@@ -79,6 +79,14 @@ class SynthesisOnlyTests(unittest.TestCase):
                 artifact.with_name("training-selection-0.json").read_text()
             )
             self.assertEqual(report["selected_ranks"], [1])
+            alternative = next(
+                artifact.parent.glob("blocks/*/alternatives/candidate-0000.json")
+            )
+            saved = load_program_artifact(alternative, HighLevelContext(), 2)
+            self.assertEqual(str(saved.program.instructions[0]), str(Skip(1)))
+            self.assertEqual(
+                json.loads(alternative.read_text())["metadata"]["alternative_rank"], 0
+            )
 
     def test_local_search_success_does_not_override_failed_complete_validation(self):
         with tempfile.TemporaryDirectory() as directory, patch(

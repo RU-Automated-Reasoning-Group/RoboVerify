@@ -375,6 +375,20 @@ def _save_block_candidate(logger, result, node, demos, args, attempt, post):
         f"blocks/attempt-{attempt:04d}-{node.name.replace('/', '_')}/program.json",
         json.dumps(payload, indent=2, allow_nan=False) + "\n",
     )
+    for rank, alternative in enumerate(getattr(result, "alternatives", ())):
+        alternate = describe_program_artifact(
+            ProgramDefinition(alternative.program, fixed, "block-search-alternative"),
+            metadata={
+                **payload["metadata"],
+                "alternative_rank": rank,
+                "distance": alternative.distance,
+                "post_score": alternative.post_score,
+            },
+        )
+        logger.write_artifact(
+            f"blocks/attempt-{attempt:04d}-{node.name.replace('/', '_')}/alternatives/candidate-{rank:04d}.json",
+            json.dumps(alternate, indent=2, allow_nan=False) + "\n",
+        )
 
 
 def _run(args, logger):

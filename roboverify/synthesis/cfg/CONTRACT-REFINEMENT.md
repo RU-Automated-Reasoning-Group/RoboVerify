@@ -135,6 +135,9 @@ same selected program. A failed complete execution produces
 `simulation_rejected` and exit code 2, even if all local block searches succeeded.
 Attempted block artifacts also retain the exact target predicate AST, frozen
 entry index, original milestone index and demonstration boundaries.
+Every locally accepted alternative is saved under that block attempt's
+`alternatives/candidate-RANK.json`, including its exact operands, float values
+and physical imitation score, before complete-program selection begins.
 
 These are empirical acceptance checks. They do not establish arbitrary-size
 generalization, a complete physics-substep audit, or a formal refinement proof.
