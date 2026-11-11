@@ -564,13 +564,31 @@ class ContractProblem:
             return self.table_reference
         return state.positions[self.ix, self._physical_ids(operand)]
 
-    def _make_actions(self):
-        cfg = self.config
+    def operand_references(self, kind):
+        """Allowed coordinate references, shared by grid and local proposals."""
+        if kind == "Pick":
+            physical = []
+            for operand in self.operands:
+                try:
+                    self._physical_ids(operand)
+                except ContractInputError:
+                    continue
+                physical.append(operand)
+            return (tuple(physical),)
         axis_refs = [list(self.operands) for _ in range(3)]
-        if cfg.observation_references:
+        if self.config.observation_references:
             axis_refs[0] += ["gripper"]
             axis_refs[1] += ["Y_min", "gripper"]
             axis_refs[2] += ["Z_m", "gripper"]
+        if kind == "Move":
+            return tuple(tuple(refs) for refs in axis_refs)
+        if kind == "Release":
+            return (tuple(axis_refs[2]),)
+        raise ContractInputError(f"Unsupported primitive {kind}")
+
+    def _make_actions(self):
+        cfg = self.config
+        axis_refs = self.operand_references("Move")
         actions, seen = [], set()
 
         def add(kind, refs, offsets=(), origin="grid"):
