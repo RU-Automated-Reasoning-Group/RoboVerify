@@ -8,7 +8,14 @@ from synthesis.predicates.term import free_names
 
 
 def loop_guard_synthesis(
-    positive, exits, variables, scope, *, language=None, candidates=()
+    positive,
+    exits,
+    variables,
+    scope,
+    *,
+    language=None,
+    candidates=(),
+    updated_names=None
 ):
     """Demonstrated bindings are positive; unselected bindings are unlabeled.
 
@@ -49,9 +56,22 @@ def loop_guard_synthesis(
             evaluate(candidate, scene) == label for scene, label in examples
         ):
             return SearchResult("found", candidate, examined=1)
+    constants = tuple(sorted(set(scope) | set(variables)))
+    if updated_names is not None:
+        # This is an explicit inductive bias among consistent separators, not a
+        # semantic safety claim. Prefer roles unchanged by the learned update.
+        constants = tuple(
+            sorted(
+                constants,
+                key=lambda name: (
+                    2 if name in variables else int(name in updated_names),
+                    name,
+                ),
+            )
+        )
     return enumerate_separator(
         examples,
-        tuple(sorted(set(scope) | set(variables))),
+        constants,
         mode="guard",
         language=language,
     )

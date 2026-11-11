@@ -38,6 +38,7 @@ def describe_cfg(cfg):
     return dict(
         synthesis_approach=cfg.synthesis_approach,
         fixed_id_bindings=getattr(cfg, "_fixed_id_bindings", {}),
+        boundary_reports=getattr(cfg, "_boundary_reports", []),
         order=list(cfg.order),
         nodes={name: describe_region(node.region) for name, node in cfg.nodes.items()},
         edges=[
@@ -51,7 +52,13 @@ def describe_cfg(cfg):
         ],
         segments={
             name: [
-                dict(demo=s.demo_idx, start=s.t_start, end=s.t_end, bindings=s.bindings)
+                dict(
+                    demo=s.demo_idx,
+                    start=s.t_start,
+                    end=s.t_end,
+                    bindings=s.bindings,
+                    milestone_index=s.milestone_index,
+                )
                 for s in rows
             ]
             for name, rows in cfg.demos.segments.items()

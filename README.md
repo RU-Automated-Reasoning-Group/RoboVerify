@@ -149,7 +149,13 @@ float parameters using CEM. It retains the existing scoring and verification
 stages; see the [search guide](roboverify/synthesis/mcmc/README.md) for scope and
 budgets.
 Contract search grows prefixes using nominal primitive contracts, observation
-proposals, diversity and exact successor caching. It also screens candidates
+proposals, diversity and exact successor caching. The integrated CLI also exposes
+opt-in [`--contract-refinement`](roboverify/synthesis/cfg/CONTRACT-REFINEMENT.md):
+persistent milestone cuts, shared offset solving, actual endpoint contracts and
+early search of recovered loop bodies. This is under end-to-end robustness
+evaluation; component tests do not establish reliable Stack/Unstack synthesis or
+a physical refinement proof. Existing defaults are unchanged.
+Contract search also screens candidates
 with BMC before the existing CEM stage, while preserving CFG refinement and loop
 inference. The [controlled comparison](roboverify/synthesis/experiment/README.md#maintained-contract-search-comparison)
 separates matched beam/Metropolis search from the unchanged legacy CFG reference

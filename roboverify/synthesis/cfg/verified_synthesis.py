@@ -5,6 +5,7 @@ from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 
 import z3
+
 from synthesis.api.instructions import While
 from synthesis.cfg.demo_validation import validate_demonstrations
 from synthesis.cfg.graph import RelationalCFG
@@ -162,6 +163,7 @@ def verified_synthesis(
     prepare=None,
     verification_level="both",
     fixed_invariants=False,
+    boundary_budget=None,
 ):
     """Both modes share symbolic feedback and motion repair on the same CFG.
 
@@ -217,6 +219,7 @@ def verified_synthesis(
             language=language,
             max_refinements=max_refinements,
             logger=logger,
+            boundary_budget=boundary_budget,
         )
         event("synthesis", status=attempt.status)
         if not attempt:

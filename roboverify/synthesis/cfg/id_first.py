@@ -43,7 +43,7 @@ def _ids(term):
         yield from _ids(child)
 
 
-def close_id_candidate(cfg):
+def close_id_candidate(cfg, *, allow_unresolved=False):
     """Resolve all residual IDs before a successful synthesis result is returned.
 
     Entry bindings and their equality/distinctness facts preserve identity when
@@ -78,7 +78,7 @@ def close_id_candidate(cfg):
                             ids.add(operand["val"])
                         elif operand["type"] == "BoxName":
                             occupied.add(operand["val"])
-            else:
+            elif not (allow_unresolved and region is None):
                 raise ValueError("Cannot return an unresolved ID-first candidate")
     fixed = dict(getattr(cfg, "_fixed_id_bindings", {}))
     known = dict(fixed)
@@ -139,7 +139,7 @@ def close_id_candidate(cfg):
                 region.physical = tuple(
                     name_operands(i, aliases) for i in region.physical
                 )
-            else:
+            elif isinstance(region, LoopRegion):
                 region.guard = named(region.guard)
                 region.postconditions = tuple(named(t) for t in region.postconditions)
                 region.body = tuple(

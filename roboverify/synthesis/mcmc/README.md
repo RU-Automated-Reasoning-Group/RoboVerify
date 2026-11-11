@@ -80,6 +80,13 @@ initial search and uses the selected strategy only if resynthesis is requested.
 
 ### Contract-guided proposals
 
+The integrated CLI additionally offers opt-in `--contract-refinement` for
+contract-guided milestone cuts, shared numeric endpoint proposals and hard
+physical endpoint acceptance. It retains the learned `ON` milestone through the
+completed body, and can search recovered loops before finishing an incompatible
+unrolled controller. See the [implementation and scope](../cfg/CONTRACT-REFINEMENT.md).
+This option is separate from the existing standalone strategy switch.
+
 `--search-strategy contract` uses the maintained `synthesis.search.contract`
 backend. It grows straight-line prefixes using nominal Pick/Move/Release
 preconditions, effects, nonmover framing, support clearance and supported release.

@@ -81,7 +81,14 @@ def validate_cfg(cfg):
                     first = first_true(
                         row, lambda state: evaluate(outgoing.label, state), scene_at
                     )
-                    if first != row.t_end or row.t_end <= row.t_start:
+                    origin = getattr(row, "milestone_index", None)
+                    expected = row.t_end if origin is None else origin
+                    if first != expected or row.t_end <= row.t_start:
+                        return False
+                    if origin is not None and not all(
+                        evaluate(outgoing.label, scene_at(row, t))
+                        for t in range(origin, row.t_end + 1)
+                    ):
                         return False
             except (KeyError, ValueError):
                 return False
@@ -91,6 +98,24 @@ def validate_cfg(cfg):
             starts = Counter((id(r.trace), r.demo_idx, r.t_start) for r in following)
             if ends != starts:
                 return False
+    if getattr(cfg, "_task_demos", None):
+        expected_starts = Counter(
+            (id(row.trace), row.demo_idx, row.t_start) for row in cfg._task_demos
+        )
+        expected_ends = Counter(
+            (id(row.trace), row.demo_idx, len(row.trace.states) - 1)
+            for row in cfg._task_demos
+        )
+        starts = Counter(
+            (id(row.trace), row.demo_idx, row.t_start)
+            for row in cfg.demos.for_node(cfg.order[0])
+        )
+        ends = Counter(
+            (id(row.trace), row.demo_idx, row.t_end)
+            for row in cfg.demos.for_node(cfg.order[-1])
+        )
+        if starts != expected_starts or ends != expected_ends:
+            return False
     return True
 
 

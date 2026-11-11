@@ -30,6 +30,7 @@ def synthesize_cfg(
     language=None,
     logger=None,
     checkpoint=None,
+    boundary_budget=None,
 ):
     """realize(node,segments,post) -> (region, ok); execute(cfg) returns negatives.
 
@@ -43,8 +44,17 @@ def synthesize_cfg(
         raise ValueError(f"Unknown synthesis approach: {cfg.synthesis_approach}")
     id_first = cfg.synthesis_approach == "id-first"
     for round_id in range(max_refinements + 1):
-        if quotient is not None and not id_first:
+        if quotient is not None and (not id_first or boundary_budget is not None):
             changed = quotient(cfg)
+            if changed and id_first and boundary_budget is not None:
+                # Contract-guided body search can complete an unrealized
+                # repetition. Do not require a mixed-phase unrolled controller
+                # before trying the recovered shared body.
+                from synthesis.cfg.id_first import close_id_candidate
+
+                close_id_candidate(cfg, allow_unresolved=True)
+                cfg.synthesis_approach = "relational"
+                id_first = False
             if changed and logger:
                 logger.log_event(
                     "quotient_loop_found",
@@ -53,6 +63,7 @@ def synthesize_cfg(
                     force=True,
                 )
         failed = None
+        retry_boundaries = False
         for name in cfg.order:
             node = cfg.nodes[name]
             if isinstance(node.region, LoopRegion) and node.region.body_cfg is not None:
@@ -63,8 +74,15 @@ def synthesize_cfg(
                     max_refinements=max_refinements,
                     language=language,
                     logger=logger,
+                    boundary_budget=boundary_budget,
                 )
                 if not nested:
+                    if boundary_budget is not None and round_id < max_refinements:
+                        from synthesis.cfg.quotient import retry_boundary_fold
+
+                        if retry_boundary_fold(cfg, name):
+                            retry_boundaries = True
+                            break
                     return SynthesisResult(
                         cfg,
                         nested.status,
@@ -92,6 +110,8 @@ def synthesize_cfg(
             if not ok:
                 failed = name
                 break
+        if retry_boundaries:
+            continue
         if failed is None:
             if id_first:
                 # Numeric search/refinement finishes before any loop variables
@@ -131,6 +151,7 @@ def synthesize_cfg(
                         max_refinements=max_refinements,
                         language=language,
                         logger=logger,
+                        boundary_budget=boundary_budget,
                     )
                     cfg.__dict__.update(named.__dict__)
                     cfg.synthesis_approach = "id-first"
@@ -150,6 +171,31 @@ def synthesize_cfg(
             return SynthesisResult(cfg, "synthesized", round_id)
         if round_id == max_refinements:
             return SynthesisResult(cfg, "budget_exhausted", round_id, failed)
+        if boundary_budget is not None:
+            from synthesis.cfg.boundaries import refine_failed_handoff
+            from synthesis.cfg.quotient import retry_boundary_fold
+
+            if retry_boundary_fold(cfg, failed):
+                continue
+
+            # Retry an outgoing cut too: the failed block may need to include
+            # release/retreat before its following block can be realized.
+            targets = [failed]
+            position = cfg.order.index(failed)
+            if position + 1 < len(cfg.order):
+                targets.append(cfg.order[position + 1])
+            if any(
+                refine_failed_handoff(cfg, name, budget=boundary_budget)
+                for name in targets
+            ):
+                if logger:
+                    logger.log_event(
+                        "boundary_refined",
+                        f"{failed}: retry persistent milestone handoff",
+                        step=round_id,
+                        force=True,
+                    )
+                continue
         if isinstance(cfg.nodes[failed].region, LoopRegion):
             return SynthesisResult(
                 cfg,

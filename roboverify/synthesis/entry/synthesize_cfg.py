@@ -5,6 +5,7 @@ import json
 import math
 import random
 import signal
+from dataclasses import replace
 from functools import partial
 
 from synthesis.api.instructions import LoopBudgetExceeded, Skip, While
@@ -138,6 +139,7 @@ def _synthesize_only(cfg, realize, execute, context, args, logger, quotient):
         ),
         logger=logger,
         checkpoint=checkpoint,
+        boundary_budget=_boundary_budget(args),
     )
     logger.write_artifact("cfg.json", json.dumps(describe_cfg(cfg), indent=2))
     status = "synthesized_unverified" if result else result.status
@@ -177,6 +179,40 @@ def _synthesize_only(cfg, realize, execute, context, args, logger, quotient):
         program_artifact=saved,
     )
     return 0 if result else 2
+
+
+def _boundary_budget(args):
+    if not getattr(args, "contract_refinement", False):
+        return None
+    from synthesis.cfg.boundaries import BoundaryBudget
+
+    return BoundaryBudget(
+        max_shift_steps=getattr(args, "boundary_max_shift", 80),
+        max_first_actions=getattr(args, "boundary_first_actions", 32),
+        max_proposals=getattr(args, "boundary_proposals", 3),
+        seconds=getattr(args, "boundary_seconds", 15.0),
+    )
+
+
+def _handoff_acceptance(node):
+    successors = getattr(node, "_contract_successors", None)
+    if successors is None:
+        return None
+
+    def accept(candidate, segment, states, post):
+        from synthesis.cfg.endpoint_contract import EndpointResult, check_next_action
+
+        key = (id(segment.trace), segment.demo_idx, segment.t_start, segment.t_end)
+        if key not in successors:
+            return EndpointResult(False, ("missing_handoff_bindings",))
+        bindings = successors[key]
+        return (
+            EndpointResult(True)
+            if bindings is None
+            else check_next_action(candidate, segment, states, bindings)
+        )
+
+    return accept
 
 
 def _candidate_definition(cfg, context):
@@ -347,19 +383,39 @@ def _run(args, logger):
         contract_memoize=not getattr(args, "contract_no_memo", False),
         contract_diversity=not getattr(args, "contract_no_diversity", False),
         contract_pool_limit=getattr(args, "contract_pool_limit", 12),
+        contract_endpoint_checks=getattr(args, "contract_refinement", False),
+        contract_solve_offsets=getattr(args, "contract_refinement", False),
+        contract_solver_timeout_ms=getattr(args, "contract_solver_timeout_ms", 250),
+        contract_solver_attempts=getattr(args, "contract_solver_attempts", 24),
+        contract_offset_radius=getattr(args, "contract_offset_radius", 0.02),
     )
 
     def env_factory(trace):
         return make_roboverify_env(trace.task, num_blocks=trace.num_blocks)
 
     rollout = partial(
-        segment_rollout, env_factory=env_factory, reset_mode=args.reset_mode
+        segment_rollout,
+        env_factory=env_factory,
+        reset_mode=args.reset_mode,
+        audit_contract=budget.contract_endpoint_checks,
+        frame_tolerance_m=getattr(args, "contract_frame_tolerance", 0.005),
     )
     block_attempt = 0
     accepted_blocks = SuccessfulRealizationCache()
+    base_budget = budget
 
     def realize(node, demos, post, penalty=None):
         nonlocal block_attempt
+        budget = base_budget
+        if getattr(node, "_inferred_loop_body", False) and getattr(
+            args, "loop_body_distance", None
+        ):
+            budget = replace(
+                budget,
+                distance=args.loop_body_distance,
+                theta=args.loop_body_theta,
+                epsilon=args.loop_body_epsilon,
+            )
         if budget.search_strategy == "contract":
             cached = accepted_blocks.get(node, demos, post, penalty=penalty)
             if cached is not None:
@@ -395,9 +451,17 @@ def _run(args, logger):
             try:
                 for segment in demos:
                     with execution_deadline(args.trajectory_timeout_seconds):
-                        ok = postcondition_reached(
-                            rollout(physical, segment), segment, post
-                        )
+                        states = rollout(physical, segment)
+                        if budget.contract_endpoint_checks:
+                            from synthesis.cfg.endpoint_contract import (
+                                check_endpoint_contract,
+                            )
+
+                            ok = bool(
+                                check_endpoint_contract(physical, segment, states, post)
+                            )
+                        else:
+                            ok = postcondition_reached(states, segment, post)
                     if not ok:
                         break
             except LoopBudgetExceeded:
@@ -483,6 +547,9 @@ def _run(args, logger):
             block_id=node.name,
             penalty=penalty,
             cache_rollouts=budget.search_strategy == "contract",
+            endpoint_acceptance=(
+                _handoff_acceptance(node) if budget.contract_endpoint_checks else None
+            ),
             **search_options,
         )
         _save_block_candidate(logger, result, node, demos, args, block_attempt)
@@ -540,6 +607,8 @@ def _run(args, logger):
 
         quotient_fn = partial(
             quotient,
+            boundary_budget=_boundary_budget(args),
+            stable_guards=getattr(args, "contract_refinement", False),
             language=Language(
                 relations=(
                     "ON",
@@ -615,6 +684,7 @@ def _run(args, logger):
         ),
         context,
         quotient=quotient_fn,
+        boundary_budget=_boundary_budget(args),
         initial_candidate=args.mode == "verify",
         verification_level=getattr(args, "verification_level", "both"),
         fixed_invariants=invariant_factory is not None,
@@ -736,6 +806,25 @@ def main(argv=None):
     parser.add_argument("--slots", type=int, default=4)
     add_search_options(parser)
     add_contract_search_options(parser)
+    group = parser.add_argument_group("contract-guided CFG refinement")
+    group.add_argument(
+        "--contract-refinement",
+        action="store_true",
+        help="Refine milestone cuts, solve shared offsets, require physical endpoint contracts, and prefer stable guard references",
+    )
+    group.add_argument("--boundary-max-shift", type=int, default=80)
+    group.add_argument("--boundary-first-actions", type=int, default=32)
+    group.add_argument("--boundary-proposals", type=int, default=3)
+    group.add_argument("--boundary-seconds", type=float, default=15.0)
+    group.add_argument("--contract-solver-timeout-ms", type=int, default=250)
+    group.add_argument("--contract-solver-attempts", type=int, default=24)
+    group.add_argument("--contract-offset-radius", type=float, default=0.02)
+    group.add_argument("--contract-frame-tolerance", type=float, default=0.005)
+    group.add_argument(
+        "--loop-body-distance", choices=("kl_kde", "kl_gmm", "mmd", "arc")
+    )
+    group.add_argument("--loop-body-theta", type=float)
+    group.add_argument("--loop-body-epsilon", type=float)
     parser.add_argument("--iterations", type=int, default=20)
     parser.add_argument("--refinements", type=int, default=5)
     parser.add_argument("--cem-iterations", type=int, default=2)
@@ -818,6 +907,37 @@ def main(argv=None):
     )
     parser.add_argument("--smoke", action="store_true")
     args = parser.parse_args(argv)
+    body_options = (
+        args.loop_body_distance,
+        args.loop_body_theta,
+        args.loop_body_epsilon,
+    )
+    if any(value is not None for value in body_options):
+        if not all(value is not None for value in body_options):
+            parser.error(
+                "Loop-body distance requires explicit theta and epsilon in that metric's units"
+            )
+        if not all(math.isfinite(value) and value >= 0 for value in body_options[1:]):
+            parser.error("Loop-body thresholds must be nonnegative and finite")
+    if args.contract_refinement:
+        if args.search_strategy != "contract" or args.mode == "verify":
+            parser.error(
+                "--contract-refinement requires contract search in synthesize/full mode"
+            )
+        try:
+            _boundary_budget(args)
+            SearchBudget(
+                contract_solver_timeout_ms=args.contract_solver_timeout_ms,
+                contract_solver_attempts=args.contract_solver_attempts,
+                contract_offset_radius=args.contract_offset_radius,
+            )
+            if (
+                not math.isfinite(args.contract_frame_tolerance)
+                or args.contract_frame_tolerance < 0
+            ):
+                raise ValueError("Frame tolerance must be nonnegative and finite")
+        except ValueError as exc:
+            parser.error(str(exc))
     try:
         wp_options_from_args(args)
         if args.wp_system != "old" and args.height_predicate != "Higher":

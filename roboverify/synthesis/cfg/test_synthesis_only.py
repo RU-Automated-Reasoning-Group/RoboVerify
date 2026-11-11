@@ -23,6 +23,32 @@ from synthesis.verification_lib.highlevel_verification_lib import HighLevelConte
 
 
 class SynthesisOnlyTests(unittest.TestCase):
+    def test_contract_refinement_requires_search_and_explicit_metric_scales(self):
+        for flags in (
+            ["--contract-refinement"],
+            ["--loop-body-distance", "arc"],
+            [
+                "--loop-body-distance",
+                "arc",
+                "--loop-body-theta",
+                "nan",
+                "--loop-body-epsilon",
+                ".003",
+            ],
+            [
+                "--search-strategy",
+                "contract",
+                "--contract-refinement",
+                "--boundary-max-shift",
+                "0",
+            ],
+        ):
+            with self.subTest(flags=flags), contextlib.redirect_stderr(
+                io.StringIO()
+            ), self.assertRaises(SystemExit) as error:
+                main(["--mode", "synthesize", "--demos", "unused.npz", *flags])
+            self.assertEqual(error.exception.code, 2)
+
     def trace(self):
         trace = example_trace()
         trace.metadata.update(task_spec=task_identity("stack"), fingerprint="teacher")
