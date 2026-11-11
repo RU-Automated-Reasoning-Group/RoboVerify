@@ -445,6 +445,8 @@ class ContractProblem:
         self.actions = tuple(actions) if actions is not None else self._make_actions()
         for action in self.actions:
             self._validate_action(action)
+        self._pick_actions = tuple(a for a in self.actions if a.kind == "Pick")
+        self._pick_readiness_cache = {}
         self.setup_seconds = time.perf_counter() - self.started
 
     def check_deadline(self, deadline=None):
@@ -1104,7 +1106,34 @@ class ContractProblem:
         node.score = self.rank(node)
         return node
 
-    def diversity_key(self, state):
+    def pick_readiness(self, state, deadline=None):
+        """Enabled generated Picks distinguish useful empty-hand approaches.
+
+        Query the existing transition contract, including every demonstration;
+        no goal role or additional safety assumption enters this feature. Each
+        uncached probe consumes the same transition/time budgets as expansion.
+        The bounded cache changes repeated work only.
+        """
+        self.check_deadline(deadline)
+        if not self._pick_actions or any(held >= 0 for held in state.holding):
+            return ()
+        key = state_key(state)
+        if key in self._pick_readiness_cache:
+            self.counts["readiness_cache_hits"] += 1
+            return self._pick_readiness_cache[key]
+        enabled = []
+        for action in self._pick_actions:
+            self.check_deadline(deadline)
+            successor = self.transition(state, action)
+            self.counts["readiness_probes"] += 1
+            enabled.append(successor is not None)
+        value = tuple(enabled)
+        if len(self._pick_readiness_cache) >= 4096:
+            self._pick_readiness_cache.clear()
+        self._pick_readiness_cache[key] = value
+        return value
+
+    def diversity_key(self, state, deadline=None):
         # Coarse progress observations are heuristics, not a dominance theorem.
         source = state.positions[self.ix, self.dominant]
         initial = self.initial.positions[self.ix, self.dominant]
@@ -1116,6 +1145,7 @@ class ContractProblem:
             bool(np.all(np.min(separated, axis=1) >= 0.1 - 1e-7)),
             bool(np.all(abs(source[:, 2] - self.table_centres) <= 0.001)),
             int(np.sum(self.goal_mask(state))),
+            self.pick_readiness(state, deadline),
         )
 
 
@@ -1314,7 +1344,7 @@ def beam_search(
                         stats["diversity_duplicate_pruned"] += 1
                         continue
                     seen.add(exact)
-                    key = problem.diversity_key(node.state)
+                    key = problem.diversity_key(node.state, deadline)
                     cap = max(1, cfg.beam_width // 8)
                 if len(groups[key]) < cap:
                     groups[key].append(node)
