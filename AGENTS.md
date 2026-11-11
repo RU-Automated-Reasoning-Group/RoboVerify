@@ -339,9 +339,14 @@ hard physical endpoint checks and complete-program validation; see the
 [implementation guide](roboverify/synthesis/cfg/CONTRACT-REFINEMENT.md).
 A full CLI run recovered a Stack loop; a generic operand continuation selected
 on development starts passed 45/45 untouched three/four/five-block physical
-audits. Three development Scattered failures remain; this is not automatic
-training-only selection or a motion refinement proof. Complete Unstack synthesis
-remains unresolved. See the [integrated study](roboverify/synthesis/experiment/README.md#integrated-contract-refinement-and-final-stack-simulation).
+audits. Three development Scattered failures remain for that candidate. A fresh
+full CLI run with multi-size validation and bounded float repair now recovers a
+different Stack loop in 368.3 seconds and passes all 35 training/development
+starts. Independent fresh evaluation is separate; these selection starts do not
+establish a held-out success rate or a motion refinement proof. Complete Unstack
+synthesis remains unresolved. The contact observer now recognizes force-bearing
+MuJoCo margin contacts; its historical distance cutoff caused false unknown
+holding reports. See the [integrated study](roboverify/synthesis/experiment/README.md#integrated-contract-refinement-and-final-stack-simulation).
 Existing search defaults remain unchanged. Named proposals use observation
 references, while ID-first/standalone proposals use physical IDs. The separate
 `synthesis/experiment/search_comparison/` runner compares beam and matched

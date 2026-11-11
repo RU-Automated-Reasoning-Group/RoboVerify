@@ -1411,5 +1411,13 @@ to each demonstration's first iteration. It recovers a Stack loop from complete
 traces and permits shared Unstack Move→Pick prefixes. Full-program gates now
 reject observed contract/settling failures. The [integrated results](roboverify/synthesis/experiment/README.md#integrated-contract-refinement-and-final-stack-simulation)
 distinguish automatic training-only selection from a generated operand alternative
-selected on development starts. The latter passes 45/45 final physical audits;
-automatic selection and complete Unstack synthesis remain unresolved.
+selected on development starts. The latter passes 45/45 final physical audits.
+A subsequent full CLI run with additional validation starts and bounded float
+repair automatically recovers a different Stack loop and passes all 35
+training/development starts; these selection results do not establish its
+independent fresh success rate. Complete Unstack synthesis remains unresolved.
+The investigation also identified two implementation defects: the holding
+observer discarded active MuJoCo margin contacts, and fresh relational nodes
+were seeded with numeric operands that introduced aliases absent from later
+demonstration segments. Their corrections preserve the physical controllers,
+contact/endpoint acceptance requirements and existing loop inference.

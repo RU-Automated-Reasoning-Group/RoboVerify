@@ -156,9 +156,13 @@ actual endpoint contracts and complete-program validation. A full CLI run
 recovered a Stack loop from five whole demonstrations; a generated operand
 alternative selected on development data passed 45/45 untouched three/four/five
 block simulations and independent physical audits. This continuation result is
-distinct from automatic training-only selection. Three development Scattered
-counterexamples remain, and complete Unstack synthesis and a physical refinement
-proof remain unresolved. See the [evidence and scope](roboverify/synthesis/experiment/README.md#integrated-contract-refinement-and-final-stack-simulation).
+distinct from automatic training-only selection; its three development Scattered
+counterexamples remain. A subsequent full CLI run with additional validation
+starts and bounded float repair automatically recovers a different Stack loop
+in 368.3 seconds and passes all 35 training/development starts, including the
+checked endpoint effects. Its independent fresh evaluation is separate.
+Complete Unstack synthesis and a physical refinement proof remain unresolved.
+See the [evidence and scope](roboverify/synthesis/experiment/README.md#integrated-contract-refinement-and-final-stack-simulation).
 Existing defaults are unchanged.
 Contract search also screens candidates
 with BMC before the existing CEM stage, while preserving CFG refinement and loop

@@ -151,8 +151,9 @@ after physical repair.
 
 Optional `--candidate-parameter-trials N` (default 0) adds bounded float repair
 when the retained complete structures all fail. For each retained structure,
-it probes every registered parameter at `+step`, `-step`, then `+2*step`,
-`-2*step`, in registration order; `--candidate-parameter-step` defaults to 1 mm.
+it visits every registered parameter at `+step` and `-step`, then visits all
+parameters again at `+2*step` and `-2*step`, in registration order;
+`--candidate-parameter-step` defaults to 1 mm.
 Each sample is centered on that structure's original vector and changes only
 floats, including all Move coordinates. `N` is a per-structure cap; structure
 count, wall time and action usage retain their shared outer bounds.
@@ -202,15 +203,25 @@ simulator environment configured as in [AGENTS.md](../../../AGENTS.md):
 uv run python -m synthesis.entry.synthesize_cfg \
   --task stack --num-blocks 4 --mode synthesize \
   --demos runs/contract-end-to-end/20261110/data/stack-independent-accepted-5-holding.npz \
-  --synthesis-approach id-first --search-strategy contract --contract-refinement \
-  --slots 6 --refinements 20 --cem-iterations 0 \
+  --synthesis-approach id-first --search-strategy contract --contract-refinement --quotient \
+  --slots 6 --iterations 7 --refinements 20 --cem-iterations 0 \
   --distance mmd --theta .1 --epsilon .1 \
+  --inner-samples 64 --final-samples 256 --reset-mode reset --seed 0 \
   --loop-body-distance arc --loop-body-theta .03 --loop-body-epsilon .003 \
   --contract-beam-width 12 --contract-pool-limit 8 --contract-seconds 60 \
-  --wall-timeout-seconds 600
+  --contract-max-expansions 100000 --predicate-seconds 5 \
+  --validation-starts runs/contract-integrated/20261110/data/stack-all-development-starts.npz \
+  --candidate-validation-limit 8 --candidate-validation-seconds 900 \
+  --candidate-parameter-trials 40 --candidate-parameter-step .001 \
+  --candidate-max-total-actions 300000 --wall-timeout-seconds 1200
 ```
 
-This is an experimental invocation, not a claim that this budget succeeds.
+The [recorded invocation and frozen source](../../runs/contract-integrated/20261110/invocations/stack-full-multisize-float-repair/command.json)
+at commit `76cc044` recovered a loop and accepted a candidate on all 35 original
+and development starts in 368.3 pipeline seconds. It tested seven structures
+and 54 coordinate vectors; independent fresh evaluation is recorded separately
+in the [experiment guide](../experiment/README.md#integrated-contract-refinement-and-final-stack-simulation).
+Additional starts are selection data, not imitation data or held-out evaluation.
 Run directories retain CFG cuts and boundary proposals, exact executable JSON
 when available, endpoint rejection counts, solver statuses and bounded-search
 termination reasons. Frozen programs must be evaluated independently on fresh

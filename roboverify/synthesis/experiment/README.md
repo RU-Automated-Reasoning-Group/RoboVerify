@@ -530,6 +530,28 @@ an independent final evaluation. The production implementation now supports
 bounded coordinate repair of each retained structure, with a shared validation
 time/action budget and renewed BMC, local imitation, endpoint and handoff gates.
 
+The [fresh full CLI run with that repair stage](../../runs/contract-integrated/20261110/invocations/stack-full-multisize-float-repair/concise-summary.json)
+now recovers and accepts a Stack loop automatically in 368.3 pipeline seconds
+(376.8 process seconds), from the original five whole demonstrations. No CFG,
+guard or body was supplied. All seven locally accepted structures first fail
+complete validation. The first exhausts 40 numeric trials; the second passes on
+its 14th, changing only its final Move X offset from zero to -1 mm. The resulting
+[exact executable](../../runs/contract-integrated/20261110/cfg/20261111-023005-76cc044-stack-full-multisize-float-repair/artifacts/program.json)
+and [readable program](../../runs/contract-integrated/20261110/invocations/stack-full-multisize-float-repair/program-readable.txt)
+are preserved. Its SHA-256 is
+`907f8717a43c9e17115d7e2b326b5b3e1077fa3eeba6f35328d0004f952bbe6b`.
+
+All 35 requested starts pass complete execution, including 1785 task/settling
+checkpoints, 105 ON transfers and 35 tail contracts. The repaired body's Arc
+distance is 0.01955493 against the original pool minimum 0.01954694, retaining
+the 0.03 threshold and 0.003 near-best radius; all 15 original local entries
+pass BMC, endpoint and handoff checks. Maximum controller-action sampled frame
+drift is 4.934 mm, only 0.066 mm below the 5 mm limit. This is a distinct body
+from the earlier reference-diverse continuation. Independent fresh-seed
+evaluation and the finer physics-substep audit are separate checks; neither
+the 35 selection starts nor the prior candidate's 45/45 result establish this
+new executable's held-out success rate.
+
 [Validation records](../../runs/contract-integrated/20261110/validation/summary.json)
 retain a broad 747-test run (seven optional skips and one outdated low-gripper
 fixture failure), the fixture correction, and a subsequent passing 216-test
