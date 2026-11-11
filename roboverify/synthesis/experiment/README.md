@@ -283,6 +283,115 @@ detector has not become a production CLI default. The maintained code change
 normalizes only search-accepted empty blocks to `Skip(0)`; unresolved or failed
 empty blocks still fail closed (31 focused tests passed).
 
+### Contract-guided boundary refinement experiments
+
+The [2026-11-10 follow-up](../../runs/contract-boundary-refinement/20261110/result-summary.json)
+tests automatic boundary proposals, mandatory logical endpoints, and competing
+guards. It continues the previously learned CFG from the same five independent
+demonstrations per task. It supplies no body or teacher action labels and makes
+no production default changes. All scripts, budgets, candidates and failures
+are retained under `runs/contract-boundary-refinement/20261110/`.
+
+The shared boundary engine searches bounded truth windows around the original
+learned milestone. Existing primitive transitions propose admissible handoffs;
+Stack ranks first-action hypotheses by the maintained imitation score. Complete
+bodies are then searched, BMC-screened and executed. Stack acceptance requires
+terminal `ON(b_prime,b)` with pre-update bindings, actual support contact,
+contact-derived empty hand and converged controllers. The ten continuing
+endpoints additionally receive a nominal check of the generated body's own
+first action under the next demonstrated binding; this is not a physical or
+universal successor-execution proof. Final iterations have no next-action
+requirement. Prefixes, all demonstration transitions and tails are retained.
+
+The [matched comparison](../../runs/contract-boundary-refinement/20261110/stack/comparison.json)
+uses beam 12, maximum length 6, a 60-second proposal budget, pool 8, Arc distance,
+CEM disabled and a 180-second case cap:
+
+| Boundary policy | Pick admissible | Complete shared body | Immediate training | 50-step settled training |
+| --- | --- | --- | --- | --- |
+| Original geometric cut | 5/15 | No | — | — |
+| First empty hand | 5/15 | No | — | — |
+| Earlier manual retreat detector | 15/15 | Yes | 5/5 | 3/5 |
+| Automatic contract-guided cuts | 15/15 | Yes | 5/5 | 5/5 |
+
+Automatic cut proposals took 3.46 seconds and complete synthesis 62.2 seconds.
+No predefined upward retreat, low-speed plateau or clearance threshold beyond
+existing primitive contracts enters that policy. Its bounded search uses an
+80-frame shift window, at most 32 first-action hypotheses and three cut vectors;
+the first ranked vector succeeded. Demo 0's first continuing cut is frame 120,
+versus 128 for the earlier manual detector. The two failed controls reached
+depth six with zero nominal goals, without proposal timeout. Four released-only
+partial bodies achieved terminal ON on all 15 examples but ended holding the
+payload, illustrating why logical placement alone is insufficient.
+
+The frozen [automatic executable](../../runs/contract-boundary-refinement/20261110/programs/stack-automatic-boundary/program.json)
+uses five physical body primitives and only initial binding `b0`. Fresh seeds
+500–514 give task/convergence/50-step-stability success of 15/15, 14/15 and 8/15
+at three/four/five blocks. Including the independent 5 mm contact/frame audit
+gives **15/15, 14/15 and 4/15**. All controllers converged, actual designated
+support contacts persisted and there were no unintended contacts. Nine
+five-block cases exceed the nonmover-frame limit during the final interval;
+five completed loops lose the goal during settling. Release's `Z_m` operand is
+a retreat reference; audit support is resolved separately from the saved learned
+`ON(b_prime,b)` contract. The program passes all 12 symbolic checks, including
+unbounded obligations with a learned invariant, in 27.2 seconds. No motion or
+termination proof is established.
+
+A [finite production-effect audit](../../runs/contract-boundary-refinement/20261110/stack/predicate-effect-audit/summary.json)
+evaluates existing `put_effect`, enabling and ON*/Scattered domain formulas
+without assuming their truth. All 132 actual transfers satisfy direct ON and
+finite Put enabling. At Release return, ON* effects match 132/132 but Scattered
+effects only 129/132. At interval end, including final settling, these counts
+are 127/132 and 129/132. Eight effect mismatches arise from heads satisfying the
+checked input axioms and enabling conditions. One immediate placement retains
+ON while crossing Scattered's 100 mm boundary; five delayed cases lose numeric
+ON* transitivity when top/base displacement exceeds 25 mm. Higher and full
+motion refinement are outside this audit. These are refinement/domain gaps,
+not counterexamples to conditional symbolic WP soundness.
+
+The [endpoint acceptance ablation](../../runs/contract-boundary-refinement/20261110/endpoint-acceptance/summary.json)
+reanalyzes all 40 earlier CEM variants on five starts: 196/200 executions pass a
+per-transfer sometime-ON gate, 186 pass terminal ON, 180 pass terminal
+phase/convergence checks, and 121 pass the settled whole-task gate. The latter
+include only 120 sampled-frame passes; sampled observations are weaker than a
+physics-substep audit. Three representative reexecutions exactly reproduce a
+transient-ON failure, a settling failure and a success. This retrospective
+corpus is not 200 independent scenes and does not show a changed selected winner.
+
+For [Unstack](../../runs/contract-boundary-refinement/20261110/unstack/result-summary.json),
+the same truth-window/contract mechanism preserves the actual learned
+`Higher(b0,3)` milestone, all five traces and coverage. Moving the failed region's
+cut 16 frames later makes outgoing Pick admissible in 5/5 cases instead of 0/5.
+Original and two automatic variants still find zero nominal goal candidates
+through length six. A separately recorded
+[numeric-proposal addendum](../../runs/contract-boundary-refinement/20261110/unstack/offset-proposal-addendum/interpretation.json)
+solves a shared Move-Z offset of -1.181713 mm for an existing generated
+Move→Release pair under unchanged contracts. After freezing, fixed-offset BMC,
+terminal Higher/released table support, convergence and nominal next-action
+readiness pass 5/5; Higher persists through 50 extra steps. This additional
+offset mechanism resolves a local fragment, not complete Unstack synthesis or
+loop recovery. There is no exhaustive substep contact/frame audit or universal
+motion proof for that fragment.
+
+The [competing-guard experiment](../../runs/contract-boundary-refinement/20261110/competing-guards/summary.json)
+uses the earlier CEM body, separately from the new automatic-boundary body.
+Both consistent guard candidates remain in the existing grammar. A declared
+preference for unchanged reference roles selects the fixed-base guard using
+training data only; six variable-renaming checks preserve that choice. On
+45 matched fresh starts (seeds 400–414 at three/four/five blocks), both guards
+pass all physical criteria with exactly identical actions and observations.
+There is no observed fresh success-rate gain. A separate, selected historical
+three-case diagnostic repairs all known early exits with the same initial states
+and unchanged physical body; it establishes the mechanism, not a rate estimate.
+The stable-reference variant also passes all 12 symbolic checks.
+
+The [portable HTML report](../../runs/contract-boundary-refinement/20261110/report/boundary-refinement-experiments.html)
+includes exact-execution videos and downloadable programs/evidence. The data
+supports automatic cuts plus mandatory logical endpoints, while exposing the
+need for shared numeric proposals and complete symbolic-effect/domain checks.
+It does not establish a fully integrated robust Stack/Unstack synthesizer or
+arbitrary-action/teleoperation generalization.
+
 ### Reusing the saved candidate for verification
 
 The JSON loader preserves exact parameters and validates its fingerprint. The

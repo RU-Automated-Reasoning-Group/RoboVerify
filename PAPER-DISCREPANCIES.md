@@ -792,6 +792,17 @@ not bound attachment error. If revisited, assess block feedback and justified
 placement margins; changing Scattered's threshold changes its contract and needs
 separate justification. No predicate or sampler change is currently requested.
 
+The 2026-11-10 automatic-boundary experiment supplies a direct endpoint example:
+`ON(1,0)` holds while block 3 is 100.370 mm from base 0 and 99.978 mm from the
+placed block along Y. Scattered therefore disagrees with the production Put
+copy effect despite valid finite enabling and the checked input axioms. Across
+132 transfers, three Scattered effects fail immediately. Five additional
+post-settling cases violate numeric ON* transitivity while direct ON remains
+true. The [finite effect audit](roboverify/runs/contract-boundary-refinement/20261110/stack/predicate-effect-audit/summary.json)
+does not assume axioms during evaluation, so these are not vacuous successes.
+Higher/full motion refinement remains unchecked; no predicate semantics or
+scene assumptions were changed to remove the counterexamples.
+
 ## 34. Section 6.2 does not explain how induction countermodels become initial environments
 
 **Standalone Stack experiment implemented; paper clarification remains.**
@@ -1365,6 +1376,18 @@ failures include premature current-top guard exits and nonmover displacement.
 The initial baseline used different seeds. Exact candidates and full physical
 audits are preserved in the linked experiment; this is not a production boundary
 policy or a demonstrated motion refinement proof.
+
+A [matched automatic-boundary study](roboverify/synthesis/experiment/README.md#contract-guided-boundary-refinement-experiments)
+then replaced the manual retreat detector with bounded milestone truth windows
+and existing first-action contracts. Original/released-only cuts still produce
+no complete body; both manual and automatic cuts recover one under identical
+search budgets. Automatic cuts preserve all 15 ON endpoints, all five traces
+and their tails, with 5/5 settled training success. Its frozen loop has fresh
+combined task/settling/5 mm success of 15/15, 14/15 and 4/15 at three/four/five
+blocks. Unstack cut refinement similarly repairs a 0/5→5/5 handoff, but a separate
+shared-offset proposal is needed to synthesize the local released Higher region.
+No full Unstack program is recovered. See entry 33 for the observed reason that
+local ON cannot by itself justify the full symbolic abstraction.
 
 The investigation also corrected independent implementation defects: loop exit
 labels are checked at actual heads/exits rather than requiring first truth at

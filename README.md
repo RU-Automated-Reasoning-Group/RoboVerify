@@ -170,6 +170,19 @@ learned invariants; motion refinement and termination were not proved. Exact
 executable JSON and candidate traces are saved. `--mode synthesize` skips final
 proof; search acceptance and simulation alone are not verification.
 
+The subsequent [automatic-boundary study](roboverify/synthesis/experiment/README.md#contract-guided-boundary-refinement-experiments)
+replaces the manual retreat detector with existing primitive-contract checks
+while preserving learned ON milestones. It recovers a complete Stack loop in
+62.2 seconds after 3.46 seconds of cut proposals, passing 5/5 settled training
+episodes. Fresh combined task/settling/5 mm success is 15/15, 14/15 and 4/15 at
+three/four/five blocks. All 12 symbolic checks pass, but finite physical traces
+show that local ON can hold while Put's Scattered effects or ON* domain assumptions
+fail. A separate guard comparison repairs selected known early exits but finds
+no improvement on 45 matched fresh starts. Unstack gains a locally successful
+released Higher fragment only after an additional shared-offset solve; no full
+Unstack program is established. These are experimental continuations, not new
+production defaults or motion-refinement proofs.
+
 Unstack's five-demo attempts synthesized three short segments but stopped at a
 release boundary: geometric height success can occur while the payload remains
 grasped, and the nominal Release model omits physical settling. No complete

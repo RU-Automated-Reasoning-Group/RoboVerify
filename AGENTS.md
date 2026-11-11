@@ -367,6 +367,22 @@ Premature guard exits and taller-tower nonmover displacement remain. The frozen
 executables, captures, HTML videos and diagnosis are under
 `runs/contract-retreat-boundaries/20261110/`. Boundary selection remains an
 experimental continuation, not a production CLI default.
+The follow-up `runs/contract-boundary-refinement/20261110/` replaces the manual
+cut detector with bounded milestone truth windows and existing primitive
+contracts, preserving all learned ON endpoints and trace coverage. Matched
+original/released-only controls find no body; automatic cuts recover a loop in
+62.2 s after 3.46 s of cut proposals and pass 5/5 settled training episodes.
+Fresh task/settling/5 mm success is 15/15,14/15,4/15 at three/four/five blocks;
+all 12 symbolic checks pass. Finite production-effect audit shows direct ON on
+132/132 transfers but ON*/Scattered effects matching only 129/132 at Release
+and 124/132 after transfer intervals/settling. No Higher or full motion proof is
+claimed. A separate stable-reference guard experiment on the earlier CEM body
+has identical 45/45 fresh successes for both guards, while repairing three
+selected historical early exits. Unstack contract-based cuts improve next-Pick
+readiness from 0/5 to 5/5; an additional solved shared offset makes the local
+Higher fragment pass 5/5. This is not complete Unstack synthesis. The HTML report,
+exact programs, protocols and all failures are saved; no production defaults
+changed. See the experiment guide for the different bodies, seeds and scopes.
 Arc distance and its metre-valued thresholds are optional; KL and the existing
 numeric defaults remain unchanged.
 
@@ -374,9 +390,9 @@ Unstack's five-demo runs exhausted local search/refinement after 275.6/254.5 s
 within recorded 600 s caps, producing three short first-transfer segments but
 no complete program. Its unresolved release boundary distinguishes geometric
 height success from a released, settled payload; no settling effect or partial
-acceptance bypass was added. An observable empty-hand Stack alignment repairs
-the mixed-phase partition, but bounded shared-body search still did not produce
-a complete loop. Keep these negative results distinct from supplied-program
+acceptance bypass was added. Empty-hand-only Stack alignment repairs the
+mixed-phase partition, but that boundary policy's bounded body search still
+does not produce a complete loop. Keep these negative controls distinct from supplied-program
 verification and the successful fixed-four-block executable.
 
 ### Validation
