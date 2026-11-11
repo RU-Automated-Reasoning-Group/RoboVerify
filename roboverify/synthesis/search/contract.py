@@ -137,6 +137,10 @@ class ContractConfig:
     grid_axis_offsets: tuple[float, ...] = (-0.15, -0.1, -0.05, 0.05, 0.1, 0.15)
     release_heights: tuple[float, ...] = (0.05, 0.1, 0.15, 0.2)
     rounding_digits: int = 4
+    solve_offsets: bool = False
+    solver_timeout_ms: int = 250
+    solver_attempts: int = 24
+    offset_radius: float = 0.02
 
     def __post_init__(self):
         if not 0 < self.geometry_tolerance < self.block_half_extent:
@@ -166,6 +170,17 @@ class ContractConfig:
                 raise ContractInputError("Proposal grids must be finite and nonempty")
         if not 0 <= self.rounding_digits <= 12:
             raise ContractInputError("rounding_digits must be between zero and twelve")
+        if (
+            type(self.solver_timeout_ms) is not int
+            or self.solver_timeout_ms <= 0
+            or type(self.solver_attempts) is not int
+            or self.solver_attempts <= 0
+            or not math.isfinite(self.offset_radius)
+            or self.offset_radius <= 0
+        ):
+            raise ContractInputError(
+                "Offset solver budgets and radius must be positive"
+            )
 
 
 @dataclass(frozen=True)
@@ -339,6 +354,7 @@ class ContractProblem:
         config=None,
         deadline=None,
         actions=None,
+        symbolic_goal=None,
     ):
         self.started = time.perf_counter()
         self.deadline = deadline
@@ -352,6 +368,8 @@ class ContractProblem:
         if goal is None and batch_goal is None:
             raise ContractInputError("A postcondition callback is required")
         self.goal_callback, self.batch_goal_callback = goal, batch_goal
+        self.symbolic_goal = symbolic_goal
+        self._offset_attempted = set()
         self.E, self.N = len(self.examples), len(self.examples[0].positions)
         if any(len(e.positions) != self.N for e in self.examples):
             raise ContractInputError(
@@ -1173,6 +1191,32 @@ def beam_search(
                     if cfg.memoize:
                         memo[key] = successors
                 pending, terminal = [], []
+                if problem.config.solve_offsets:
+                    from synthesis.search.offset_solver import terminal_proposals
+
+                    for proposal in terminal_proposals(
+                        problem,
+                        node,
+                        successors,
+                        remaining_length=cfg.max_length - len(node.actions),
+                    ):
+                        path = node.path
+                        before = node.state
+                        for action, state in zip(proposal.actions, proposal.states):
+                            path = np.concatenate(
+                                [path, problem.action_path(before, action, state)],
+                                axis=1,
+                            )
+                            before = state
+                        pending.append(
+                            Node(
+                                proposal.states[-1],
+                                node.actions + proposal.actions,
+                                path,
+                            )
+                        )
+                        terminal.append(True)
+                        stats["generated"] += 1
                 for action, state in successors:
                     problem.check_deadline(deadline)
                     stats["generated"] += 1

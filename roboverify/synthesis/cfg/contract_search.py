@@ -239,9 +239,30 @@ class ContractCandidates:
             observation_proposals=self.budget.contract_observation_proposals,
             observation_references=not self.id_first,
             require_empty_hand=all(terminal_empty),
+            solve_offsets=getattr(self.budget, "contract_solve_offsets", False),
+            solver_timeout_ms=getattr(self.budget, "contract_solver_timeout_ms", 250),
+            solver_attempts=getattr(self.budget, "contract_solver_attempts", 24),
+            offset_radius=getattr(self.budget, "contract_offset_radius", 0.02),
         )
+
+        def symbolic_goal(positions, index):
+            from synthesis.search.offset_solver import compile_endpoint
+
+            return compile_endpoint(
+                self.post,
+                positions,
+                bindings[index],
+                entries[index].entry_positions,
+                check_deadline=check_deadline,
+            )
+
         self.problem = ContractProblem(
-            examples, goal, allowed_operands=operands, config=config, deadline=deadline
+            examples,
+            goal,
+            allowed_operands=operands,
+            config=config,
+            deadline=deadline,
+            symbolic_goal=None if callable(self.post) else symbolic_goal,
         )
         preparation_seconds = perf_counter() - started
         result = beam_search(

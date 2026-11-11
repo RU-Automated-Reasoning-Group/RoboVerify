@@ -222,6 +222,56 @@ class ReferenceBMCIntegrationTests(unittest.TestCase):
 
 
 class ContractCFGIntegrationTests(unittest.TestCase):
+    def test_shared_solver_proposals_pass_fixed_offset_bmc_on_all_entries(self):
+        segments = []
+        for index, error in enumerate((-0.00044, 0.001803, 0.00025)):
+            start = observation(
+                [(0, 0, 0.425), (0.2, 0, 0.6)], (0.2, 0, 0.6 - error), 0.05
+            )
+            end = observation([(0, 0, 0.425), (0.2, 0, 0.425)], (0.2, 0, 0.575))
+            trace = DemoTrace(
+                (start, end), num_blocks=2, metadata={"initial_holding": 1}
+            )
+            segments.append(DemoSegment(index, 0, 1, trace, {"base": 0, "payload": 1}))
+        candidates = make_contract_candidates(
+            segments,
+            atom("Higher", ref("base"), ref("payload")),
+            program(),
+            {"base", "payload"},
+            max_length=2,
+            budget=SearchBudget(
+                search_strategy="contract",
+                contract_seconds=5,
+                contract_solve_offsets=True,
+                cem_iterations=0,
+                contract_observation_proposals=False,
+            ),
+        )
+        proposals = list(candidates)
+        self.assertTrue(proposals, candidates.stats)
+        self.assertGreater(candidates.stats.get("offset_solver_sat", 0), 0)
+        for candidate in proposals:
+            self.assertTrue(
+                check_contract_feasibility(candidate, segments, fixed_offsets=True)
+            )
+            for segment in segments:
+                first = segment.trace.states[0]
+                result = check_scene_feasibility(
+                    candidate,
+                    Scene(
+                        {i: on.get_block_pos(first, i) for i in range(2)},
+                        segment.bindings,
+                    ),
+                    gripper=first[:3],
+                    initial_holding=1,
+                    fixed_offsets=True,
+                    goal=lambda s, _: z3.And(
+                        on.higher_z3(s.bz["0"][s.T], s.bz["1"][s.T]),
+                        s.holding[s.T] == s.NONE,
+                    ),
+                )
+                self.assertTrue(result, result.reason)
+
     def test_real_backend_finds_named_and_numeric_candidates(self):
         segment = held_segment()
         post = atom("ON", obj_id(1), obj_id(0))
