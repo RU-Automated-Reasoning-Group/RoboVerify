@@ -568,6 +568,13 @@ nonmover frame limit, reaching 7.886 and 5.599 mm. Seed 2012 instead violates a
 Scattered effect on its third transfer and a domain axiom at the next head.
 All 135 direct ON and ON* effect checks pass. These failures are retained;
 task success alone does not establish the primitive refinement contracts.
+The [seed-2012 geometry diagnosis](../../runs/contract-integrated/20261110/final-evaluation/stack-automatic-multisize-float-repair-seeds2000/diagnostics/n5-seed2012-scattered.txt)
+shows why: the support is 101.953 mm from a loose block along X before the
+transfer. After placement, the support remains beyond the 100 mm Scattered
+cutoff, but the moved block is only 97.744 mm away. It still satisfies ON and
+support contact, and nonmover drift is only 1.243 mm. The permitted ON placement
+offset therefore does not imply exact inheritance of a sharp Scattered relation.
+Final task success does not repair that intermediate abstraction mismatch.
 
 The independent audit now recognizes positive-force contacts inside MuJoCo's
 margin and explicitly requires actual support at Release and interval end.
