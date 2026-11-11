@@ -219,8 +219,24 @@ def audit_put_effects(before, after, source, target):
     )
 
 
+def _contact_wrench(sim, index):
+    from mujoco_py import functions
+
+    wrench = np.zeros(6)
+    functions.mj_contactForce(sim.model, sim.data, index, wrench)
+    return wrench
+
+
 def contact_state(env, observation, count):
-    """Read physical hand occupancy and oriented support contacts, without stepping."""
+    """Read force-bearing hand/support contacts without stepping the simulator.
+
+    MuJoCo permits active contacts at positive surface distance inside its
+    configured margin. ``efc_address >= 0`` identifies an included constraint;
+    ``mj_contactForce`` expresses its wrench in the contact frame, with normal
+    force first. Require positive normal force, not geometric penetration.
+    See https://mujoco.readthedocs.io/en/2.1.2/APIreference.html#mjcontact
+    and https://mujoco.readthedocs.io/en/2.1.2/computation.html#contact.
+    """
     from synthesis.cfg.reset import inner_env
 
     sim = inner_env(env).sim
@@ -235,8 +251,13 @@ def contact_state(env, observation, count):
     finger_objects = {}
     supports = set()
     positions = {i: on.get_block_pos(observation, i) for i in range(count)}
-    for contact in data.contact[: data.ncon]:
-        if contact.dist > 1e-6:
+    for index, contact in enumerate(data.contact[: data.ncon]):
+        if contact.efc_address < 0:
+            continue
+        wrench = np.asarray(_contact_wrench(sim, index), dtype=float)
+        if wrench.shape != (6,) or not np.all(np.isfinite(wrench)):
+            raise ValueError("Contact wrench is unavailable or nonfinite")
+        if wrench[0] <= 0:
             continue
         a, b = int(contact.geom1), int(contact.geom2)
         for finger, obj in ((a, b), (b, a)):
@@ -285,6 +306,7 @@ def contact_state(env, observation, count):
         "aperture": aperture,
         "finger_objects": sorted(finger_objects),
         "contacts_available": True,
+        "contact_evidence": "included_constraint_positive_normal_force",
         "nearest_block_center_m": nearest_center,
         "empty_evidence": empty_evidence,
     }

@@ -347,9 +347,15 @@ class EndpointTests(unittest.TestCase):
         obs[:3] = (0, 0, 0.435)
         self.assertFalse(contact_state(env, obs, 2)["known"])
         obs[:3] = (0, 0, 0.6)
-        data.contact = [SimpleNamespace(dist=0, geom1=2, geom2=0, frame=(1, 0, 0))]
+        data.contact = [
+            SimpleNamespace(dist=0, geom1=2, geom2=0, frame=(1, 0, 0), efc_address=0)
+        ]
         data.ncon = 1
-        self.assertFalse(contact_state(env, obs, 2)["known"])
+        with patch(
+            "synthesis.cfg.endpoint_contract._contact_wrench",
+            return_value=[1, 0, 0, 0, 0, 0],
+        ):
+            self.assertFalse(contact_state(env, obs, 2)["known"])
 
     def test_release_must_open_even_if_closed_hand_is_known_empty(self):
         first = observation([(0, 0, 0.425), (0, 0, 0.475)], empty=False)
