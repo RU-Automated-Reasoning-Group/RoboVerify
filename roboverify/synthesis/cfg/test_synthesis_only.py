@@ -16,6 +16,7 @@ from synthesis.cfg.program_io import load_program_artifact, save_program_artifac
 from synthesis.cfg.program_source import ProgramDefinition
 from synthesis.cfg.straightline import StraightLineResult
 from synthesis.cfg.tasks import task_identity, task_spec
+from synthesis.cfg.test_candidate_selection import complete_report
 from synthesis.cfg.test_collection import example_trace
 from synthesis.cfg.verified_synthesis import VerifiedResult
 from synthesis.entry.synthesize_cfg import main
@@ -83,7 +84,7 @@ class SynthesisOnlyTests(unittest.TestCase):
             "synthesis.cfg.robust_validation.validate_training_program",
             side_effect=[
                 {"accepted": False, "passed": 0, "total": 1, "seconds": 0.1},
-                {"accepted": True, "passed": 1, "total": 1, "seconds": 0.1},
+                {**complete_report(0.002), "seconds": 0.1},
             ],
         ) as complete_check, contextlib.redirect_stdout(
             io.StringIO()
@@ -101,6 +102,8 @@ class SynthesisOnlyTests(unittest.TestCase):
                     "--contract-refinement",
                     "--candidate-parameter-trials",
                     "1",
+                    "--candidate-selection",
+                    "frame-margin",
                     "--output-dir",
                     directory,
                 ]
@@ -127,6 +130,71 @@ class SynthesisOnlyTests(unittest.TestCase):
             )
             summary = json.loads(frozen.with_name("summary.json").read_text())
             self.assertEqual(summary["status"], "accepted")
+            selected = json.loads(
+                (artifact.parent / "parameter-refinement-0/selection.json").read_text()
+            )["selection"]
+            self.assertEqual(selected["policy"], "frame-margin")
+            self.assertEqual(selected["selected_max_nonmover_drift_m"], 0.002)
+
+    def test_cli_frame_selection_ranks_complete_alternatives_and_first_stays_default(
+        self,
+    ):
+        from synthesis.cfg.straightline import StraightLineAlternative
+
+        for policy, expected, calls in ((None, 0, 1), ("frame-margin", 1, 2)):
+            with self.subTest(policy=policy):
+                searched = StraightLineResult(
+                    Program(1, [Skip(0)]), True, "test_oracle", 0, 1
+                )
+                searched.alternatives = (
+                    StraightLineAlternative(Program(1, [Skip(1)]), 0, 1),
+                )
+                with tempfile.TemporaryDirectory() as directory, patch(
+                    "synthesis.entry.synthesize_cfg.load_traces",
+                    return_value=[self.trace()],
+                ), patch(
+                    "synthesis.entry.synthesize_cfg.straight_line_synthesize",
+                    return_value=searched,
+                ), patch(
+                    "synthesis.cfg.robust_validation.validate_training_program",
+                    side_effect=[
+                        {**complete_report(0.004), "seconds": 0.1},
+                        {**complete_report(0.001), "seconds": 0.1},
+                    ],
+                ) as validate, contextlib.redirect_stdout(
+                    io.StringIO()
+                ):
+                    flags = [] if policy is None else ["--candidate-selection", policy]
+                    status = main(
+                        [
+                            "--mode",
+                            "synthesize",
+                            "--demos",
+                            "unused.npz",
+                            "--num-blocks",
+                            "2",
+                            "--search-strategy",
+                            "contract",
+                            "--contract-refinement",
+                            "--output-dir",
+                            directory,
+                            *flags,
+                        ]
+                    )
+                    self.assertEqual(status, 0)
+                    self.assertEqual(validate.call_count, calls)
+                    artifact = next(
+                        Path(directory).glob("cfg/*/artifacts/program.json")
+                    )
+                    loaded = load_program_artifact(artifact, HighLevelContext(), 2)
+                    self.assertEqual(
+                        loaded.program.instructions[0].skip_steps, expected
+                    )
+                    report = json.loads(
+                        artifact.with_name("training-selection-0.json").read_text()
+                    )
+                    self.assertEqual(report["policy"], policy or "first")
+                    self.assertEqual(report["selected_ranks"], [expected])
 
     def test_selected_alternative_and_extra_starts_are_reflected_in_saved_program(self):
         from synthesis.cfg.straightline import StraightLineAlternative
@@ -254,6 +322,7 @@ class SynthesisOnlyTests(unittest.TestCase):
     def test_contract_refinement_requires_search_and_explicit_metric_scales(self):
         for flags in (
             ["--contract-refinement"],
+            ["--candidate-selection", "frame-margin"],
             ["--loop-body-distance", "arc"],
             [
                 "--loop-body-distance",

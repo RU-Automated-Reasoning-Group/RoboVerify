@@ -243,7 +243,10 @@ def _validate_synthesis_candidate(cfg, context, args, logger, revision=0):
         return report
 
     result = select_validated_candidate(
-        cfg, validate, limit=getattr(args, "candidate_validation_limit", 8)
+        cfg,
+        validate,
+        limit=getattr(args, "candidate_validation_limit", 8),
+        policy=getattr(args, "candidate_selection", "first"),
     )
     logger.write_artifact(
         f"training-selection-{revision}.json",
@@ -325,7 +328,10 @@ def _validate_synthesis_candidate(cfg, context, args, logger, revision=0):
             }
 
         fitted_result = select_validated_candidate(
-            cfg, fit_structure, limit=getattr(args, "candidate_validation_limit", 8)
+            cfg,
+            fit_structure,
+            limit=getattr(args, "candidate_validation_limit", 8),
+            policy=getattr(args, "candidate_selection", "first"),
         )
         logger.write_artifact(
             f"parameter-refinement-{revision}/selection.json",
@@ -1128,6 +1134,12 @@ def main(argv=None):
     group.add_argument("--candidate-max-total-actions", type=int, default=100000)
     group.add_argument("--candidate-validation-limit", type=int, default=8)
     group.add_argument(
+        "--candidate-selection",
+        choices=("first", "frame-margin"),
+        default="first",
+        help="first: stop at first fully accepted candidate; frame-margin: rank complete accepted batches by worst sampled nonmover drift within the same budgets",
+    )
+    group.add_argument(
         "--candidate-parameter-trials",
         type=int,
         default=0,
@@ -1229,6 +1241,10 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.validation_starts and not args.contract_refinement:
         parser.error("--validation-starts requires --contract-refinement")
+    if args.candidate_selection != "first" and not args.contract_refinement:
+        parser.error(
+            "--candidate-selection frame-margin requires --contract-refinement"
+        )
     if args.candidate_validation_limit < 1:
         parser.error("Candidate validation limit must be positive")
     if args.candidate_parameter_trials < 0 or args.candidate_max_total_actions < 1:

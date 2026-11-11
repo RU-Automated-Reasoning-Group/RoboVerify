@@ -20,6 +20,19 @@ def graph(*nodes):
     )
 
 
+def complete_report(*drifts):
+    return {
+        "accepted": True,
+        "complete": True,
+        "passed": len(drifts),
+        "total": len(drifts),
+        "evaluated": len(drifts),
+        "demos": [
+            {"accepted": True, "max_nonmover_drift_m": drift} for drift in drifts
+        ],
+    }
+
+
 class CandidateSelectionTests(unittest.TestCase):
     def nested(self):
         node = Node("body", block(0))
@@ -40,11 +53,177 @@ class CandidateSelectionTests(unittest.TestCase):
 
         report = select_validated_candidate(cfg, validate)
         self.assertTrue(report["accepted"])
-        self.assertIs(node.region, alternatives[1])
+        self.assertEqual(str(node.region.physical[0]), str(alternatives[1].physical[0]))
         self.assertIs(loop.body[0], node.region)
         self.assertEqual(len(observed), 2)
         self.assertEqual(report["candidate_selection"]["block_option_counts"], [3])
         self.assertEqual(report["candidate_selection"]["selected_ranks"], [1])
+
+    def test_default_first_keeps_early_return_and_does_not_require_frame_schema(self):
+        cfg, node, _ = self.nested()
+        seen = []
+
+        def validate(candidate, index):
+            seen.append(index)
+            return {"accepted": True}
+
+        report = select_validated_candidate(cfg, validate)
+        self.assertEqual(seen, [0])
+        self.assertTrue(report["accepted"])
+        self.assertEqual(report["candidate_selection"]["policy"], "first")
+        self.assertEqual(report["candidate_selection"]["stop_reason"], "first_accepted")
+        self.assertEqual(node.region.physical[0].skip_steps, 0)
+
+    def test_frame_ranks_worst_case_not_mean_and_retains_complete_snapshot(self):
+        cfg, node, loop = self.nested()
+        singleton = Node("singleton", block(9))
+        cfg.nodes[singleton.name] = singleton
+        cfg.order.append(singleton.name)
+        originals = node.region, singleton.region
+        observed = []
+        reports = [complete_report(0.0001, 0.004), complete_report(0.002, 0.002)]
+
+        def validate(candidate, index):
+            self.assertEqual(node.region.physical[0].skip_steps, index)
+            self.assertEqual(singleton.region.physical[0].skip_steps, 9)
+            self.assertIs(loop.body[0], node.region)
+            # Simulate numeric fitting that changes a singleton and mutates a
+            # selected body in place. Later trials must start from fresh values.
+            node.region.physical[0].skip_steps += 100
+            singleton.region.physical[0].skip_steps = 10 + index
+            observed.append((node.region, singleton.region))
+            return reports[index] if index < 2 else {"accepted": False}
+
+        report = select_validated_candidate(cfg, validate, policy="frame-margin")
+        self.assertTrue(report["accepted"])
+        self.assertEqual(node.region.physical[0].skip_steps, 101)
+        self.assertEqual(singleton.region.physical[0].skip_steps, 11)
+        self.assertIs(loop.body[0], node.region)
+        self.assertEqual(originals[0].physical[0].skip_steps, 0)
+        self.assertEqual(originals[1].physical[0].skip_steps, 9)
+        observed[1][0].physical[0].skip_steps = 999
+        reports[1]["demos"][0]["max_nonmover_drift_m"] = 999
+        self.assertEqual(node.region.physical[0].skip_steps, 101)
+        self.assertEqual(report["demos"][0]["max_nonmover_drift_m"], 0.002)
+        selection = report["candidate_selection"]
+        self.assertEqual(selection["selected_ranks"], [1])
+        self.assertEqual(selection["selected_max_nonmover_drift_m"], 0.002)
+        self.assertEqual(selection["attempted"], 3)
+
+    def test_reported_budget_exhaustion_keeps_prior_validated_incumbent(self):
+        cfg, node, loop = self.nested()
+        singleton = Node("singleton", block(9))
+        cfg.nodes[singleton.name] = singleton
+        cfg.order.append(singleton.name)
+
+        def validate(candidate, index):
+            singleton.region = block(40 + index)
+            if index == 0:
+                return complete_report(0.003)
+            node.region = block(999)
+            return {"accepted": False, "selection_budget_exhausted": True}
+
+        report = select_validated_candidate(cfg, validate, policy="frame-margin")
+        self.assertTrue(report["accepted"])
+        self.assertEqual(node.region.physical[0].skip_steps, 0)
+        self.assertEqual(singleton.region.physical[0].skip_steps, 40)
+        self.assertIs(loop.body[0], node.region)
+        self.assertEqual(report["candidate_selection"]["attempted"], 2)
+        self.assertEqual(
+            report["candidate_selection"]["stop_reason"], "budget_exhausted"
+        )
+
+    def test_late_accepted_report_cannot_replace_incumbent(self):
+        cfg, node, _ = self.nested()
+
+        def validate(candidate, index):
+            report = complete_report(0.003 if index == 0 else 0.0001)
+            if index:
+                report["budget_exhausted"] = True
+            return report
+
+        report = select_validated_candidate(cfg, validate, policy="frame-margin")
+        self.assertTrue(report["accepted"])
+        self.assertEqual(node.region.physical[0].skip_steps, 0)
+        self.assertFalse(report["candidate_selection"]["trials"][1]["accepted"])
+
+    def test_incomplete_or_missing_frame_evidence_never_promotes(self):
+        variants = []
+        for value in (None, float("nan"), float("inf"), -0.001, True):
+            variants.append(complete_report(value))
+        for fields in (
+            {"complete": False},
+            {"complete": "yes"},
+            {"passed": 0},
+            {"evaluated": 0},
+            {"total": 2},
+            {"unevaluated": [{"seed": 2}]},
+            {"demos": [{"accepted": False, "max_nonmover_drift_m": 0.001}]},
+            {"demos": [{"accepted": True}]},
+        ):
+            variants.append({**complete_report(0.001), **fields})
+        variants.append({"accepted": True})
+        for report in variants:
+            with self.subTest(report=report):
+                cfg, node, _ = self.nested()
+                original = node.region
+                result = select_validated_candidate(
+                    cfg, lambda *args: report, policy="frame-margin", limit=1
+                )
+                self.assertFalse(result["accepted"])
+                self.assertIs(node.region, original)
+                self.assertIsNone(result["candidate_selection"]["selected_ranks"])
+
+    def test_complete_rejection_cannot_win_for_having_less_drift(self):
+        cfg, node, _ = self.nested()
+        reports = [complete_report(0.003), {**complete_report(0.0), "accepted": False}]
+        result = select_validated_candidate(
+            cfg, lambda candidate, index: reports[index], policy="frame-margin", limit=2
+        )
+        self.assertTrue(result["accepted"])
+        self.assertEqual(node.region.physical[0].skip_steps, 0)
+
+    def test_frame_ties_keep_earlier_and_candidate_limit_is_honored(self):
+        cfg, node, _ = self.nested()
+        seen = []
+
+        def validate(candidate, index):
+            seen.append(index)
+            return complete_report(0.001)
+
+        result = select_validated_candidate(
+            cfg, validate, policy="frame-margin", limit=2
+        )
+        self.assertEqual(seen, [0, 1])
+        self.assertEqual(node.region.physical[0].skip_steps, 0)
+        self.assertEqual(
+            result["candidate_selection"]["stop_reason"], "candidate_limit"
+        )
+
+    def test_exception_after_incumbent_restores_all_entry_regions(self):
+        cfg, node, loop = self.nested()
+        singleton = Node("singleton", block(9))
+        cfg.nodes[singleton.name] = singleton
+        cfg.order.append(singleton.name)
+        originals = node.region, singleton.region
+
+        def validate(candidate, index):
+            singleton.region.physical[0].skip_steps = 99
+            if index:
+                raise TimeoutError("external deadline")
+            return complete_report(0.001)
+
+        with self.assertRaisesRegex(TimeoutError, "external deadline"):
+            select_validated_candidate(cfg, validate, policy="frame-margin")
+        self.assertIs(node.region, originals[0])
+        self.assertIs(singleton.region, originals[1])
+        self.assertEqual(singleton.region.physical[0].skip_steps, 9)
+        self.assertIs(loop.body[0], originals[0])
+
+    def test_invalid_policy_is_rejected_before_any_validation(self):
+        cfg, _, _ = self.nested()
+        with self.assertRaises(ValueError):
+            select_validated_candidate(cfg, lambda *args: self.fail(), policy="unknown")
 
     def test_rejection_restores_original_and_reports_its_fingerprint(self):
         cfg, node, loop = self.nested()
