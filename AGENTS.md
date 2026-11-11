@@ -342,9 +342,12 @@ on development starts passed 45/45 untouched three/four/five-block physical
 audits. Three development Scattered failures remain for that candidate. A fresh
 full CLI run with multi-size validation and bounded float repair now recovers a
 different Stack loop in 368.3 seconds and passes all 35 training/development
-starts. Independent fresh evaluation is separate; these selection starts do not
-establish a held-out success rate or a motion refinement proof. Complete Unstack
-synthesis remains unresolved. The contact observer now recognizes force-bearing
+starts. Independent evaluation passes 45/45 task/settling checks, 43/45 physical
+audits and 44/45 finite relational audits (42/45 combined). The same executable
+passes all 12 symbolic VCs with learned invariants, including unbounded validity
+under the existing abstract action contracts. Physical failures remain; this is
+not a motion refinement proof. Complete Unstack synthesis remains unresolved.
+The contact observer now recognizes force-bearing
 MuJoCo margin contacts; its historical distance cutoff caused false unknown
 holding reports. See the [integrated study](roboverify/synthesis/experiment/README.md#integrated-contract-refinement-and-final-stack-simulation).
 Existing search defaults remain unchanged. Named proposals use observation

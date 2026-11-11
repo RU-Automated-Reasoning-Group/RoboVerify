@@ -552,6 +552,44 @@ evaluation and the finer physics-substep audit are separate checks; neither
 the 35 selection starts nor the prior candidate's 45/45 result establish this
 new executable's held-out success rate.
 
+The [fixed fresh evaluation on seeds 2000–2014](../../runs/contract-integrated/20261110/final-evaluation/stack-automatic-multisize-float-repair-seeds2000/summary.json)
+then tests this exact executable once at each of three/four/five blocks, without
+tuning on those cases:
+
+| Automatically synthesized executable | Three blocks | Four blocks | Five blocks | Total |
+| --- | --- | --- | --- | --- |
+| Task, controller convergence and 50-step settling | 15/15 | 15/15 | 15/15 | 45/45 |
+| Independent 2 ms physical/contact/support/frame audit | 15/15 | 15/15 | 13/15 | 43/45 |
+| Finite Put effects and domain checks | 15/15 | 15/15 | 14/15 | 44/45 |
+| Both stricter audit gates | 15/15 | 15/15 | 12/15 | 42/45 |
+
+All 45 captures replay exactly. Five-block seeds 2001 and 2008 exceed the 5 mm
+nonmover frame limit, reaching 7.886 and 5.599 mm. Seed 2012 instead violates a
+Scattered effect on its third transfer and a domain axiom at the next head.
+All 135 direct ON and ON* effect checks pass. These failures are retained;
+task success alone does not establish the primitive refinement contracts.
+
+The independent audit now recognizes positive-force contacts inside MuJoCo's
+margin and explicitly requires actual support at Release and interval end.
+It retains all prior near/penetrating contact collision checks and also checks
+active margin contacts. Seven focused checks and an exact historical capture
+replay precede the new evaluation. The earlier 45-case evaluation recorded true
+support booleans for all 135 transfers, although those booleans were omitted
+from its final acceptance conjunction; that omission did not alter its old
+total under the original observations. Historical results are not silently
+reclassified as passing the strengthened force-based audit.
+
+Separately, [symbolic verification of the same executable](../../runs/contract-integrated/20261110/invocations/stack-auto-symbolic-120s/concise-summary.json)
+passes all 12 checks in 24.8 pipeline seconds. Candidate replay provides 15
+continuing heads and five normal exits from the original five starts. The
+existing partition-based learner with PyEDA supplies the invariant; no invariant
+was supplied and no executable or invariant refinement was needed. Establish,
+preserve and exit VCs pass at sizes 2–4 and over the unbounded domain, each with
+UNSAT counterexample queries and SAT premises. This is partial correctness of
+the symbolic abstraction under the old WP rules, relational domain axioms,
+task precondition and abstract action contracts. It establishes no motion
+refinement or termination result; the physical audit failures remain relevant.
+
 [Validation records](../../runs/contract-integrated/20261110/validation/summary.json)
 retain a broad 747-test run (seven optional skips and one outdated low-gripper
 fixture failure), the fixture correction, and a subsequent passing 216-test

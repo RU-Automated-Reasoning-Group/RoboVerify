@@ -1414,8 +1414,11 @@ distinguish automatic training-only selection from a generated operand alternati
 selected on development starts. The latter passes 45/45 final physical audits.
 A subsequent full CLI run with additional validation starts and bounded float
 repair automatically recovers a different Stack loop and passes all 35
-training/development starts; these selection results do not establish its
-independent fresh success rate. Complete Unstack synthesis remains unresolved.
+training/development starts. Its separate fresh evaluation passes 45/45 task
+checks, 43/45 physical audits and 44/45 finite relational audits. The same
+executable passes all 12 symbolic VCs with learned invariants; the physical
+counterexamples remain and prevent a motion-refinement conclusion. Complete
+Unstack synthesis remains unresolved.
 The investigation also identified two implementation defects: the holding
 observer discarded active MuJoCo margin contacts, and fresh relational nodes
 were seeded with numeric operands that introduced aliases absent from later

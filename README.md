@@ -160,7 +160,10 @@ distinct from automatic training-only selection; its three development Scattered
 counterexamples remain. A subsequent full CLI run with additional validation
 starts and bounded float repair automatically recovers a different Stack loop
 in 368.3 seconds and passes all 35 training/development starts, including the
-checked endpoint effects. Its independent fresh evaluation is separate.
+checked endpoint effects. On 45 untouched starts it passes all task/settling
+checks, 43 physical audits and 44 finite relational audits (42 pass both).
+The same executable also passes all 12 symbolic checks with learned invariants,
+including the unbounded proof under the existing abstract action contracts.
 Complete Unstack synthesis and a physical refinement proof remain unresolved.
 See the [evidence and scope](roboverify/synthesis/experiment/README.md#integrated-contract-refinement-and-final-stack-simulation).
 Existing defaults are unchanged.
