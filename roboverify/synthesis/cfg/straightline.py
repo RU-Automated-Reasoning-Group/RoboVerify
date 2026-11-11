@@ -78,6 +78,15 @@ class SearchBudget:
 
 
 @dataclass
+class StraightLineAlternative:
+    """A final epsilon-pool candidate passing every measured endpoint contract."""
+
+    program: object
+    distance: float
+    post_score: float = 1.0
+
+
+@dataclass
 class StraightLineResult:
     program: object
     ok: bool
@@ -91,6 +100,7 @@ class StraightLineResult:
     bmc_rejected: int = 0
     search_stats: dict = field(default_factory=dict)
     search_reason: str = ""
+    alternatives: tuple[StraightLineAlternative, ...] = ()
 
 
 class SegmentRollout(list):
@@ -245,6 +255,8 @@ def straight_line_synthesize(
     The integrated CFG runner restores and seeds every segment execution. It
     can reuse those physical trajectories while drawing fresh KL estimates.
     Custom callers retain uncached behavior unless they explicitly opt in.
+    Hard endpoint mode consumes the bounded search before ranking and retains
+    all passing final epsilon-pool alternatives, with the selected winner first.
     """
     budget = budget or SearchBudget()
     candidate_stream = budget.search_strategy in ("enumeration", "contract")
@@ -254,6 +266,7 @@ def straight_line_synthesize(
         )
     candidate_iterator = iter(candidates) if candidate_stream else None
     rollout_cache = OrderedDict()
+    retained_rollouts = {}
     cache_counts = {"rollout_cache_hits": 0, "rollout_cache_misses": 0}
     endpoint_counts = {}
 
@@ -292,11 +305,25 @@ def straight_line_synthesize(
         )
         distance = make_distance(budget.distance, demos)
     pool_key = str
-    if budget.search_strategy == "contract":
+    if budget.search_strategy == "contract" or budget.contract_endpoint_checks:
         from synthesis.cfg.program_source import program_fingerprint
 
         pool_key = program_fingerprint
     pool = CandidatePool(budget.epsilon, budget.pool_limit, key=pool_key)
+
+    def retain(candidate, candidate_distance):
+        pool.add(candidate, candidate_distance)
+        if budget.contract_endpoint_checks and cache_rollouts:
+            # Keep trajectories of the bounded epsilon pool alive even when
+            # later, inferior trials evict them from the ordinary LRU cache.
+            # Ranking these alternatives must not repeat physical executions.
+            available = {**rollout_cache, **retained_rollouts}
+            retained_rollouts.clear()
+            retained_rollouts.update(
+                (key, available[key])
+                for entry in pool.entries
+                if (key := pool_key(entry.program)) in available
+            )
 
     def trajectories(candidate):
         if not cache_rollouts:
@@ -304,6 +331,9 @@ def straight_line_synthesize(
         from synthesis.cfg.program_source import program_fingerprint
 
         key = program_fingerprint(candidate)
+        if key in retained_rollouts:
+            cache_counts["rollout_cache_hits"] += 1
+            return retained_rollouts[key]
         if key in rollout_cache:
             cache_counts["rollout_cache_hits"] += 1
             rollout_cache.move_to_end(key)
@@ -351,7 +381,7 @@ def straight_line_synthesize(
             and len(mean) > 0
         )
         if retain_samples:
-            pool.add(candidate, measure(candidate, budget.final_samples))
+            retain(candidate, measure(candidate, budget.final_samples))
         for _ in range(budget.cem_iterations if len(mean) else 0):
             scored = []
             for params in rng.normal(mean, std, (budget.cem_samples, len(mean))):
@@ -363,7 +393,7 @@ def straight_line_synthesize(
                     # simulated parameter trials in the same bounded epsilon
                     # pool, so later PostScore can select a close trial that
                     # actually crosses the demonstrated relational boundary.
-                    pool.add(trial, measure(trial, budget.final_samples))
+                    retain(trial, measure(trial, budget.final_samples))
                 scored.append((score, params))
                 if score > best_score:
                     best, best_score = trial, score
@@ -445,7 +475,7 @@ def straight_line_synthesize(
             ):
                 current, current_score = candidate, score
         last_distance = measure(current, budget.final_samples)
-        pool.add(current, last_distance)
+        retain(current, last_distance)
         if logger:
             logger.log_metrics(
                 iteration,
@@ -464,8 +494,10 @@ def straight_line_synthesize(
                 phase="straightline",
                 block_id=block_id,
             )
-        if last_distance < budget.theta and not getattr(
-            current, "_contract_refinement_only", False
+        if (
+            not budget.contract_endpoint_checks
+            and last_distance < budget.theta
+            and not getattr(current, "_contract_refinement_only", False)
         ):
             ranking_start = perf_counter()
             winner, success = pool.select(post_score)
@@ -494,6 +526,33 @@ def straight_line_synthesize(
                     proposal_stats(),
                     proposal_reason(),
                 )
+    if budget.contract_endpoint_checks:
+        ranking_start = perf_counter()
+        alternatives = tuple(
+            StraightLineAlternative(deepcopy(entry.program), entry.distance)
+            for entry in pool.entries
+            if entry.distance < budget.theta
+            and not getattr(entry.program, "_contract_refinement_only", False)
+            and post_score(entry.program) == 1.0
+        )
+        ranking_seconds = perf_counter() - ranking_start
+        if alternatives:
+            winner = alternatives[0]
+            return StraightLineResult(
+                deepcopy(winner.program),
+                True,
+                "converged",
+                winner.distance,
+                winner.post_score,
+                perf_counter() - start,
+                ranking_seconds,
+                checked if budget.search_strategy == "contract" else iteration,
+                checked,
+                rejected,
+                {**proposal_stats(), "retained_endpoint_candidates": len(alternatives)},
+                proposal_reason(),
+                alternatives,
+            )
     if candidate_stream and pool.entries:
         current = deepcopy(pool.entries[0].program)
         last_distance = pool.entries[0].distance
@@ -515,6 +574,7 @@ def straight_line_synthesize(
         status,
         last_distance,
         elapsed=perf_counter() - start,
+        postscore_seconds=ranking_seconds if budget.contract_endpoint_checks else 0.0,
         iterations=(
             checked
             if budget.search_strategy == "contract"
@@ -522,7 +582,14 @@ def straight_line_synthesize(
         ),
         candidates_checked=checked,
         bmc_rejected=rejected,
-        search_stats=proposal_stats(),
+        search_stats={
+            **proposal_stats(),
+            **(
+                {"retained_endpoint_candidates": 0}
+                if budget.contract_endpoint_checks
+                else {}
+            ),
+        },
         search_reason=proposal_reason(),
     )
 
