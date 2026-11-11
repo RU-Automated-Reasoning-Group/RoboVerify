@@ -73,6 +73,15 @@ checked beam goals. `--contract-no-operand-neighborhood` disables this stage for
 comparison; ordinary search defaults are unchanged. Physical imitation,
 BMC and all endpoint acceptance conditions still apply afterward.
 
+Beam diversity also distinguishes empty-hand states by which generated Picks
+their existing transition contracts enable across all examples. This prevents
+a low, unusable approach from removing a useful clear approach solely because
+their block poses and hand occupancy agree. Readiness probes consume the same
+transition and wall-clock budgets; caching is bounded. Pick's nominal and BMC
+contracts require source clearance for lateral approach and retain direct grasps
+from already aligned entries. This is a necessary enabling check, not a complete
+swept-collision or physical-grasp guarantee.
+
 ## Endpoint acceptance and proof scope
 
 The learned postcondition must hold at the actual body endpoint. An earlier

@@ -392,6 +392,115 @@ need for shared numeric proposals and complete symbolic-effect/domain checks.
 It does not establish a fully integrated robust Stack/Unstack synthesizer or
 arbitrary-action/teleoperation generalization.
 
+### Integrated contract refinement and final Stack simulation
+
+The opt-in [production integration](../cfg/CONTRACT-REFINEMENT.md) combines
+bounded persistent-milestone cuts, phase-compatible loop entries, shared offset
+proposals, mandatory endpoint contracts and complete-program validation. The
+initial full CLI run recovered a five-primitive Stack loop from five complete
+independent-controller traces in 100.1 pipeline seconds (107.9 process seconds).
+No CFG, guard or body was supplied. It used MMD for outer refinement, Arc for the
+shared body, and no CEM. All five training starts and all 15 actual transfer
+contracts passed, including 50 final settling steps. Its original frozen program
+still accumulated drift on five-block development scenes.
+
+A generic bounded operand-neighborhood continuation then explored alternative
+references around the learned bodies. It replayed 2130 operand combinations;
+561 met the unchanged nominal goals across all 15 segments. An eight-candidate
+pool preserved close-scoring shared XY references at each Move site. This
+retained a body whose final Move takes XY from the fixed loop-entry reference
+and Z from the current support. Neither role name nor task was hardcoded in
+the selector. The exact five-action structure and float offsets were preserved;
+the candidate passed the same BMC, physical imitation, endpoint and training
+gates. Development seeds 900–909 at three/four/five blocks informed selection.
+
+The [frozen executable](../../runs/contract-integrated/20261110/final-evaluation/stack-operand-neighborhood/program.json)
+was then evaluated once on untouched seeds 1000–1014 at each size, with no tuning
+or reselection afterward. The [comparison](../../runs/contract-integrated/20261110/stack-robustness-comparison.json)
+retains every outcome, exact full-state capture, program hash and audit source:
+
+| Frozen program / evaluation | Three blocks | Four blocks | Five blocks |
+| --- | --- | --- | --- |
+| Original full-CLI loop, development: task + settling + contact/support + 5 mm frame | 10/10 | 10/10 | 1/10 |
+| Operand alternative, development: same physical criteria | 10/10 | 10/10 | 10/10 |
+| Operand alternative, final untouched starts: same physical criteria | 15/15 | 15/15 | 15/15 |
+| Operand alternative, final starts: all checked endpoint effects/domain obligations | 15/15 | 15/15 | 15/15 |
+
+All 45 final episodes converged, retained task success for 50 settling steps and
+replayed exactly. Independent audits inspect physics substeps at 2 ms, separately
+from the production gate's controller-action sampling. Maximum nonmover drift
+was 0.592/1.383/3.724 mm for three/four/five blocks. All 135 transfers retained
+direct ON and matched the finite production Put ON*/Scattered effects and
+checked domain axioms at Release and subsequent transfer/settling endpoints.
+
+The development set still contains three Scattered failures, one at each size
+for seed 908. A support-to-loose-block separation of 100.873 mm lies just outside
+the 100 mm cutoff, while a roughly 1.70 mm payload placement bias crosses it.
+Direct ON, support and physical stability remain true. These failures are retained
+and reject acceptance on the full development-start contract gate; the final
+successes do not erase them. Higher effects, unbounded motion refinement,
+termination and universal scene/teleoperation generalization remain unproved.
+
+This final candidate is a generated continuation of the learned CFG selected on
+development data. Its 45/45 result must not be attributed to a fresh full-CLI run
+of the new neighborhood stage or to automatic selection from training data alone.
+The original full-CLI recovery and this continuation have distinct artifacts.
+The [matched rerun of the integrated implementation](../../runs/contract-integrated/20261110/invocations/stack-reference-neighborhood-full/concise-summary.json)
+also recovered a five-primitive loop automatically, in 207.7 pipeline seconds
+(216.5 process seconds), after two refinements. Seven bodies passed the local
+gates; complete training replay accepted the first, with 5/5 successes and 255/255
+task/settling checkpoints. Its exact selected executable is preserved; that
+frozen CLI recorded the other alternatives' count but did not save their
+executables. Subsequent code now archives every retained body before selection.
+
+This newly selected executable differs from the development-selected candidate.
+On all 30 declared development starts, [independent evaluation](../../runs/contract-integrated/20261110/autonomous-versus-selected-stack.json)
+found task/convergence/settling success of 10/10, 10/10 and 8/10 at three/four/five
+blocks. Adding the 5 mm physical frame checks gives 10/10, 10/10 and 2/10;
+including all audited relational effects/domain checks gives 9/10, 7/10 and 1/10.
+All 90 direct ON endpoints held, but five-block nonmover drift reached 9.14 mm.
+No untouched final seeds were reused. Training-only selection therefore still
+fails to reliably select the physically stronger body available to the search.
+The [all-development-start archive](../../runs/contract-integrated/20261110/data/stack-all-development-starts.npz)
+contains all 30 unfiltered exact starts for subsequent production selection;
+these are not additional imitation demonstrations or held-out evaluation.
+
+Unstack phase-compatible cuts remove the previous mixed-hand obstruction:
+all 15 learned entries become known empty, and 145 shared Move→Pick prefixes
+exist where the earlier partition had none. This has not yet yielded a complete
+accepted Unstack program. A diagnosed first-transfer tower collapse also led to
+a generic nominal/BMC Pick condition: lateral approach must clear the source,
+while an already XY-aligned grasp remains allowed. Physical controller code is
+unchanged. Generated high-approach alternatives remove the observed initial
+collapse, but later payload slip/contact uncertainty still prevents the strict
+endpoint gate from accepting those local candidates.
+A full post-Pick-correction/neighborhood attempt exhausted its search after
+379.6 pipeline seconds (386.7 process seconds), with no complete program;
+[its command and frozen source](../../runs/contract-integrated/20261110/invocations/unstack-source-clearance-neighborhood/command.json)
+record the original five traces, Arc metric, CEM disabled and 600-second cap.
+
+The next matched local probe identified a second pruning issue: all empty-hand
+Move states shared a diversity bucket even when only some enabled a legal Pick.
+Adding the existing generated-Pick enablement vector to that key changes zero
+complete nominal bodies into 25 at the same beam/length/budget, in 5.27 seconds;
+the optional neighborhood then retains eight alternatives. Readiness probes are
+charged to the existing transition/time limits. All eight pass BMC and 10/15
+physical endpoint audits; the five first-transfer entries have uncertain
+holding immediately before Release. No observer threshold was weakened.
+
+The [final integrated Unstack attempt](../../runs/contract-integrated/20261110/invocations/unstack-action-readiness/diagnosis.json)
+exhausts its search in 236.4 pipeline seconds (243.2 process seconds). Its saved
+six-primitive candidate has Arc distance 0.03151 against the unchanged 0.03 limit
+and matches the locally audited candidate's fingerprint. CFG acceptance fails,
+so complete-program validation, fresh-scene evaluation and formal verification
+do not run. This is structural search progress, not successful Unstack synthesis.
+
+[Validation records](../../runs/contract-integrated/20261110/validation/summary.json)
+retain a broad 747-test run (seven optional skips and one outdated low-gripper
+fixture failure), the fixture correction, and a subsequent passing 216-test
+focused run covering the final search, BMC, CFG and artifact changes. The entire
+broad suite was not rerun after that fixture-only correction.
+
 ### Reusing the saved candidate for verification
 
 The JSON loader preserves exact parameters and validates its fingerprint. The

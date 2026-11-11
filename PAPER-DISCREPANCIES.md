@@ -803,6 +803,14 @@ does not assume axioms during evaluation, so these are not vacuous successes.
 Higher/full motion refinement remains unchecked; no predicate semantics or
 scene assumptions were changed to remove the counterexamples.
 
+The later integrated operand-reference continuation improves physical robustness
+without removing this issue. Its three development failures (seed 908 at each
+of three/four/five blocks) have a 100.873 mm support-to-loose-block separation;
+about 1.70 mm payload placement bias crosses Scattered's 100 mm cutoff while
+ON/support and task stability remain true. All 45 untouched final episodes pass
+the finite effect checks, but those successes do not erase the development
+counterexamples. See the [integrated study](roboverify/synthesis/experiment/README.md#integrated-contract-refinement-and-final-stack-simulation).
+
 ## 34. Section 6.2 does not explain how induction countermodels become initial environments
 
 **Standalone Stack experiment implemented; paper clarification remains.**
@@ -1396,3 +1404,12 @@ intermediate milestones while retaining the final physical tail; rebound-only
 loops no longer require a nonempty carried-variable update; and extracted
 iterations require changed bindings or witnessed milestone progress. These
 repairs enable structural recovery but do not solve the mixed-phase body problem.
+
+The later opt-in [contract refinement implementation](roboverify/synthesis/cfg/CONTRACT-REFINEMENT.md)
+searches persistent milestone windows and matches continuing entries' hand phase
+to each demonstration's first iteration. It recovers a Stack loop from complete
+traces and permits shared Unstack Move→Pick prefixes. Full-program gates now
+reject observed contract/settling failures. The [integrated results](roboverify/synthesis/experiment/README.md#integrated-contract-refinement-and-final-stack-simulation)
+distinguish automatic training-only selection from a generated operand alternative
+selected on development starts. The latter passes 45/45 final physical audits;
+automatic selection and complete Unstack synthesis remain unresolved.

@@ -151,10 +151,15 @@ budgets.
 Contract search grows prefixes using nominal primitive contracts, observation
 proposals, diversity and exact successor caching. The integrated CLI also exposes
 opt-in [`--contract-refinement`](roboverify/synthesis/cfg/CONTRACT-REFINEMENT.md):
-persistent milestone cuts, shared offset solving, actual endpoint contracts and
-early search of recovered loop bodies. This is under end-to-end robustness
-evaluation; component tests do not establish reliable Stack/Unstack synthesis or
-a physical refinement proof. Existing defaults are unchanged.
+persistent milestone cuts, shared offset solving, reference-diverse proposals,
+actual endpoint contracts and complete-program validation. A full CLI run
+recovered a Stack loop from five whole demonstrations; a generated operand
+alternative selected on development data passed 45/45 untouched three/four/five
+block simulations and independent physical audits. This continuation result is
+distinct from automatic training-only selection. Three development Scattered
+counterexamples remain, and complete Unstack synthesis and a physical refinement
+proof remain unresolved. See the [evidence and scope](roboverify/synthesis/experiment/README.md#integrated-contract-refinement-and-final-stack-simulation).
+Existing defaults are unchanged.
 Contract search also screens candidates
 with BMC before the existing CEM stage, while preserving CFG refinement and loop
 inference. The [controlled comparison](roboverify/synthesis/experiment/README.md#maintained-contract-search-comparison)

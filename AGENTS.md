@@ -334,10 +334,15 @@ explicit BMC goal for MCMC/enumeration. Contract search uses nominal endpoint go
 and entry-specific BMC feasibility, with the same existing numeric objective.
 Its generic backend is `synthesis/search/`. The integrated opt-in
 `--contract-refinement` adds persistent
-milestone cuts, shared numeric endpoint solving, hard physical endpoint checks
-and early loop-body search; see the [implementation guide](roboverify/synthesis/cfg/CONTRACT-REFINEMENT.md).
-End-to-end robustness is still under evaluation; component tests do not establish
-whole-task success. Existing search defaults remain unchanged. Named proposals use observation
+milestone cuts, shared numeric endpoint solving, reference-diverse proposals,
+hard physical endpoint checks and complete-program validation; see the
+[implementation guide](roboverify/synthesis/cfg/CONTRACT-REFINEMENT.md).
+A full CLI run recovered a Stack loop; a generic operand continuation selected
+on development starts passed 45/45 untouched three/four/five-block physical
+audits. Three development Scattered failures remain; this is not automatic
+training-only selection or a motion refinement proof. Complete Unstack synthesis
+remains unresolved. See the [integrated study](roboverify/synthesis/experiment/README.md#integrated-contract-refinement-and-final-stack-simulation).
+Existing search defaults remain unchanged. Named proposals use observation
 references, while ID-first/standalone proposals use physical IDs. The separate
 `synthesis/experiment/search_comparison/` runner compares beam and matched
 Metropolis search with shared proposals and fitting budgets; it does not establish
