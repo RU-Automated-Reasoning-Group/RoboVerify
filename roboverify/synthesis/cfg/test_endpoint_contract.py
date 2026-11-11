@@ -412,6 +412,23 @@ class EndpointTests(unittest.TestCase):
             check_endpoint_contract(program, seg, states, task_spec("stack")[1])
         )
 
+    def test_refined_milestone_does_not_invalidate_terminal_holding_query(self):
+        before = observation([(0, 0, 0.425), (0.2, 0, 0.425)])
+        after = observation([(0, 0, 0.425), (0, 0, 0.475)])
+        trace = DemoTrace(
+            (before, after, after),
+            num_blocks=2,
+            metadata={"holding_by_index": {2: None}},
+        )
+        seg = DemoSegment(0, 0, 2, trace, {"new": 1, "old": 0}, milestone_index=1)
+        states = audited_states(
+            seg, [before, after], instructions=[{"kind": "Release", "mover": 1}]
+        )
+        result = check_endpoint_contract(
+            Program(0, []), seg, states, atom("ON", ref("new"), ref("old"))
+        )
+        self.assertTrue(result, result.reasons)
+
     def test_positive_solver_budgets(self):
         for kwargs in (
             {"contract_solver_timeout_ms": 0},

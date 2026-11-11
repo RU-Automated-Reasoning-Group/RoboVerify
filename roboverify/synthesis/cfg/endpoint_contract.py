@@ -469,7 +469,9 @@ def check_endpoint_contract(candidate, segment, states, post):
         reasons.append("postcondition_not_at_endpoint")
     contact = audit["endpoint"]
     try:
-        expected_holding = entry_holding(replace(segment, t_start=segment.t_end))
+        expected_holding = entry_holding(
+            replace(segment, t_start=segment.t_end, milestone_index=None)
+        )
     except (ValueError, KeyError, TypeError):
         reasons.append("unknown_demonstrated_endpoint_holding")
     else:
