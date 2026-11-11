@@ -46,9 +46,25 @@ class SearchBudget:
     contract_diversity: bool = True
     contract_pool_limit: int = 12
     cem_std: float = 0.05
+    contract_endpoint_checks: bool = False
+    contract_solve_offsets: bool = False
+    contract_solver_timeout_ms: int = 250
+    contract_solver_attempts: int = 24
+    contract_offset_radius: float = 0.02
 
     def __post_init__(self):
         validate_search_strategy(self.search_strategy)
+        if (
+            type(self.contract_solver_timeout_ms) is not int
+            or self.contract_solver_timeout_ms < 1
+            or type(self.contract_solver_attempts) is not int
+            or self.contract_solver_attempts < 1
+            or not np.isfinite(self.contract_offset_radius)
+            or self.contract_offset_radius <= 0
+        ):
+            raise ValueError(
+                "Contract solver budgets and offset radius must be positive"
+            )
         if not np.isfinite(self.cem_std) or self.cem_std <= 0:
             raise ValueError("CEM standard deviation must be positive and finite")
         if self.search_strategy == "contract" and (
@@ -87,6 +103,7 @@ class SegmentRollout(list):
     def __init__(self):
         super().__init__()
         self.observations = []
+        self.contract_audit = None
 
 
 def _features(states, num_blocks):
@@ -129,7 +146,15 @@ def _observations(states):
     return np.asarray(states)
 
 
-def segment_rollout(program, segment, env_factory, reset_mode="replay"):
+def segment_rollout(
+    program,
+    segment,
+    env_factory,
+    reset_mode="replay",
+    *,
+    audit_contract=False,
+    frame_tolerance_m=0.005,
+):
     from synthesis.mcmc.synthesis import preserved_global_rng, set_np_seed
 
     with preserved_global_rng():
@@ -138,9 +163,18 @@ def segment_rollout(program, segment, env_factory, reset_mode="replay"):
         try:
             first = reset_segment(env, segment, mode=reset_mode)
             scenes = SegmentRollout()
+            recorder = None
+            if audit_contract:
+                from synthesis.cfg.endpoint_contract import EndpointRecorder
+
+                recorder = EndpointRecorder(
+                    env, segment, first, frame_tolerance_m=frame_tolerance_m
+                )
             entry = scene_at(segment, segment.entry_index).entry_positions
 
             def record(obs, bindings):
+                if recorder is not None:
+                    recorder.observe(obs)
                 scene = scene_from_obs(
                     obs,
                     segment.trace.num_blocks,
@@ -152,8 +186,16 @@ def segment_rollout(program, segment, env_factory, reset_mode="replay"):
                 )
 
             scenes.observations = list(
-                execute_current(program, env, first, on_state=record)
+                execute_current(
+                    program,
+                    env,
+                    first,
+                    on_state=record,
+                    on_instruction=None if recorder is None else recorder.instruction,
+                )
             )
+            if recorder is not None:
+                scenes.contract_audit = recorder.finish()
             return scenes
         finally:
             env.close()
@@ -196,6 +238,7 @@ def straight_line_synthesize(
     candidates=None,
     feasible=None,
     cache_rollouts=False,
+    endpoint_acceptance=None,
 ):
     """Search a block; optional caching requires deterministic ``rollout``.
 
@@ -212,11 +255,17 @@ def straight_line_synthesize(
     candidate_iterator = iter(candidates) if candidate_stream else None
     rollout_cache = OrderedDict()
     cache_counts = {"rollout_cache_hits": 0, "rollout_cache_misses": 0}
+    endpoint_counts = {}
 
     def proposal_stats():
         return {
             **dict(getattr(candidates, "stats", {})),
             **(cache_counts if cache_rollouts else {}),
+            **(
+                {"endpoint_rejections": dict(endpoint_counts)}
+                if endpoint_counts
+                else {}
+            ),
         }
 
     def proposal_reason():
@@ -332,7 +381,21 @@ def straight_line_synthesize(
     def post_score(candidate):
         success = []
         for states, segment in zip(trajectories(candidate), segments):
-            success.append(postcondition_reached(states, segment, post))
+            if budget.contract_endpoint_checks:
+                from synthesis.cfg.endpoint_contract import check_endpoint_contract
+
+                result = check_endpoint_contract(candidate, segment, states, post)
+                if result and endpoint_acceptance is not None:
+                    result = endpoint_acceptance(candidate, segment, states, post)
+                for reason in getattr(result, "reasons", ()):
+                    endpoint_counts[reason] = endpoint_counts.get(reason, 0) + 1
+                success.append(bool(result))
+            elif endpoint_acceptance is not None:
+                success.append(
+                    bool(endpoint_acceptance(candidate, segment, states, post))
+                )
+            else:
+                success.append(postcondition_reached(states, segment, post))
         return float(np.mean(success))
 
     current = deepcopy(initial_program)
