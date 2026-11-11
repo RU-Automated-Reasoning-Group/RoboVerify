@@ -40,6 +40,10 @@ class ValidationBudgetExceeded(TimeoutError):
     """This validation's cooperative wall/action limit, not an enclosing alarm."""
 
 
+class InvalidValidationStart(ValueError):
+    """An exact restored start violates the current task precondition."""
+
+
 @dataclass(frozen=True)
 class ValidationBudget:
     settling_steps: int = 50
@@ -229,7 +233,8 @@ def validate_training_program(
                 )
             if trace.task not in ("stack", "unstack", "reverse", "restack"):
                 raise ValueError("Full-program validation supports tower tasks only")
-            task_post = task_spec(trace.task)[1] if post is None else post
+            task_pre, default_post = task_spec(trace.task)
+            task_post = default_post if post is None else post
             with preserved_global_rng():
                 set_np_seed(trace.seed)
                 env = env_factory(trace)
@@ -256,6 +261,21 @@ def validate_training_program(
                 row["restore_max_error"] = float(
                     np.max(np.abs(first - np.asarray(trace.states[0])))
                 )
+                observations.append(np.array(first, copy=True))
+                snapshots.append(capture(env))
+                action_indices.append(0)
+                entry_scene = scene_from_obs(
+                    first,
+                    trace.num_blocks,
+                    aliases,
+                    include_table="tbl" in aliases,
+                    entry_obs=first,
+                )
+                row["initial_precondition"] = bool(evaluate(task_pre, entry_scene))
+                if not row["initial_precondition"]:
+                    raise InvalidValidationStart(
+                        "Exact start violates the task precondition"
+                    )
                 recorder = EndpointRecorder(
                     env, segment, first, frame_tolerance_m=budget.frame_tolerance_m
                 )
@@ -510,9 +530,13 @@ def validate_training_program(
         ) as exc:
             row["error"] = f"{type(exc).__name__}: {exc}"
             row["reasons"].append(
-                "budget_exhausted"
-                if isinstance(exc, (ValidationBudgetExceeded, LoopBudgetExceeded))
-                else "execution_failed"
+                "initial_task_precondition_failed"
+                if isinstance(exc, InvalidValidationStart)
+                else (
+                    "budget_exhausted"
+                    if isinstance(exc, (ValidationBudgetExceeded, LoopBudgetExceeded))
+                    else "execution_failed"
+                )
             )
         finally:
             if env is not None:

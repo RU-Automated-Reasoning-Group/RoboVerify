@@ -17,7 +17,7 @@ from synthesis.cfg.program_source import ProgramDefinition, program_fingerprint
 from synthesis.cfg.recordings import load_traces
 from synthesis.cfg.reset import capture
 from synthesis.cfg.robust_validation import ValidationBudget, validate_training_program
-from synthesis.predicates.term import atom, ref
+from synthesis.predicates.term import atom, block_id, boolean, ref
 
 
 class FakeEnv:
@@ -26,7 +26,7 @@ class FakeEnv:
         self.observation[:3] = (0, 0, 0.7)
         self.observation[3:5] = 0.04
         self.observation[10:13] = (0, 0, 0.425)
-        self.observation[22:25] = (0, 0, 0.475)
+        self.observation[22:25] = (0.2, 0, 0.425)
         self.symbolic_name_to_box_id = {"b0": 0, "teacher_only": 1}
         self.sim = SimpleNamespace(data=SimpleNamespace(), forward=lambda: None)
         self.action_space = SimpleNamespace(shape=(4,))
@@ -92,6 +92,9 @@ def contact(env, observation, count):
 class FullValidationTests(unittest.TestCase):
     def validate(self, env, program=None, **options):
         trace = options.pop("trace", None) or source_trace()
+        # Isolate acceptance mechanisms with a simple final specification.
+        # The canonical task precondition is still checked in every test.
+        options.setdefault("post", boolean(True))
         with patch(
             "synthesis.cfg.endpoint_contract.contact_state", side_effect=contact
         ):
@@ -154,7 +157,7 @@ class FullValidationTests(unittest.TestCase):
         contract = {
             "identity": {
                 "paths": ("0",),
-                "post": atom("Higher", ref("b0"), ref("upper")),
+                "post": atom("ON", ref("upper"), ref("b0")),
             }
         }
         candidate = ProgramDefinition(
@@ -196,10 +199,12 @@ class FullValidationTests(unittest.TestCase):
 
     def test_transient_logical_failure_during_settling_rejects_later_recovery(self):
         def drift(env):
-            env.observation[22] = 0.1 if env.steps == 3 else 0
+            env.observation[24] = 0.525 if env.steps == 3 else 0.425
 
         result = self.validate(
-            FakeEnv(on_step=drift), budget=ValidationBudget(settling_steps=5)
+            FakeEnv(on_step=drift),
+            budget=ValidationBudget(settling_steps=5),
+            post=atom("Higher", ref("b0"), block_id(1)),
         )
         row = result["demos"][0]
         self.assertFalse(result["accepted"])
@@ -362,6 +367,26 @@ class FullValidationTests(unittest.TestCase):
         self.assertEqual(result["passed"], 0)
         self.assertEqual(result["total"], 2)
         factory.assert_not_called()
+
+    def test_invalid_exact_start_is_rejected_without_skipping_the_denominator(self):
+        invalid = source_trace()
+        invalid.states[0][22:25] = (0, 0, 0.475)
+        invalid.snapshots[0].gt_state[22:25] = (0, 0, 0.475)
+        with patch(
+            "synthesis.cfg.endpoint_contract.contact_state", side_effect=contact
+        ):
+            result = validate_training_program(
+                definition(Skip(0)),
+                [source_trace(), invalid],
+                lambda trace: FakeEnv(),
+                post=boolean(True),
+                budget=ValidationBudget(settling_steps=0),
+            )
+        self.assertEqual(result["total"], 2)
+        self.assertEqual(result["passed"], 1)
+        self.assertFalse(result["accepted"])
+        self.assertEqual(result["demos"][1]["actions"], 0)
+        self.assertIn("initial_task_precondition_failed", result["demos"][1]["reasons"])
 
 
 if __name__ == "__main__":
