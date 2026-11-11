@@ -316,6 +316,41 @@ class FullValidationTests(unittest.TestCase):
             self.validate(env)
         self.assertTrue(env.closed)
 
+    def test_mismatched_reported_state_is_rejected_before_archiving_a_false_snapshot(
+        self,
+    ):
+        def stale_state(program, env, initial, on_state, **kwargs):
+            wrong = initial.copy()
+            wrong[10] += 0.01
+            on_state(wrong, env.symbolic_name_to_box_id)
+            return [wrong]
+
+        with patch(
+            "synthesis.cfg.robust_validation.execute_current", side_effect=stale_state
+        ):
+            result = self.validate(FakeEnv(), budget=ValidationBudget(settling_steps=0))
+        self.assertFalse(result["accepted"])
+        self.assertIn(
+            "disagrees with its simulator snapshot", result["demos"][0]["error"]
+        )
+
+    def test_final_goal_check_cannot_overrun_wall_budget_and_still_accept(self):
+        clock = [0.0]
+
+        def slow_goal(env):
+            clock[0] = 2.0
+            return True
+
+        with patch(
+            "synthesis.cfg.robust_validation.perf_counter", side_effect=lambda: clock[0]
+        ):
+            result = self.validate(
+                FakeEnv(task_success=slow_goal),
+                budget=ValidationBudget(seconds=1, settling_steps=0),
+            )
+        self.assertFalse(result["accepted"])
+        self.assertIn("budget_exhausted", result["demos"][0]["reasons"])
+
     def test_expired_budget_marks_all_examples_unaccepted_without_running(self):
         factory = unittest.mock.Mock()
         result = validate_training_program(

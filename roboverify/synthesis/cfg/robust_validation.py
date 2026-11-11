@@ -294,6 +294,13 @@ def validate_training_program(
                     observation = np.asarray(observation)
                     if not np.isfinite(observation).all():
                         raise ValueError("Nonfinite candidate observation")
+                    actual = inner.flatten_observation(inner._get_obs())
+                    if observation.shape != np.asarray(actual).shape or not np.allclose(
+                        observation, actual, atol=1e-8, rtol=0
+                    ):
+                        raise ValueError(
+                            "Candidate observation disagrees with its simulator snapshot"
+                        )
                     transfer.observe(observation, len(actions))
                     for block in active_blocks.values():
                         block["recorder"].observe(observation)
@@ -488,6 +495,7 @@ def validate_training_program(
                     row["reasons"].append("final_hand_not_observed_empty")
                 if transfer.failures:
                     row["reasons"].append("sampled_transfer_frame")
+                check_deadline()
                 row["accepted"] = not row["reasons"]
         except (
             ValidationBudgetExceeded,
