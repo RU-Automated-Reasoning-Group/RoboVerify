@@ -345,8 +345,11 @@ different Stack loop in 368.3 seconds and passes all 35 training/development
 starts. Independent evaluation passes 45/45 task/settling checks, 43/45 physical
 audits and 44/45 finite relational audits (42/45 combined). The same executable
 passes all 12 symbolic VCs with learned invariants, including unbounded validity
-under the existing abstract action contracts. Physical failures remain; this is
-not a motion refinement proof. Complete Unstack synthesis remains unresolved.
+under the existing abstract action contracts. Those failures remain archived.
+The subsequent automatic frame-margin selection run finishes in 680.1 seconds;
+its exact program passes all 45 new task, physical and finite relational audits
+at three/four/five blocks and all 12 symbolic VCs. Neither result is an unbounded
+motion refinement proof. Complete Unstack synthesis remains unresolved.
 The contact observer now recognizes force-bearing
 MuJoCo margin contacts; its historical distance cutoff caused false unknown
 holding reports. See the [integrated study](roboverify/synthesis/experiment/README.md#integrated-contract-refinement-and-final-stack-simulation).

@@ -1417,7 +1417,11 @@ repair automatically recovers a different Stack loop and passes all 35
 training/development starts. Its separate fresh evaluation passes 45/45 task
 checks, 43/45 physical audits and 44/45 finite relational audits. The same
 executable passes all 12 symbolic VCs with learned invariants; the physical
-counterexamples remain and prevent a motion-refinement conclusion. Complete
+counterexamples remain and prevent a motion-refinement conclusion. A subsequent
+full run selecting by complete-execution frame margin passes all 45 new task,
+physical and finite relational audits with a different automatically recovered
+program, and all 12 symbolic VCs. This remains finite simulation evidence plus
+conditional abstract correctness, not universal motion refinement. Complete
 Unstack synthesis remains unresolved.
 The investigation also identified two implementation defects: the holding
 observer discarded active MuJoCo margin contacts, and fresh relational nodes

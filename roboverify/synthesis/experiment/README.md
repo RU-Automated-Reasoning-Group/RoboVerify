@@ -597,13 +597,48 @@ the symbolic abstraction under the old WP rules, relational domain axioms,
 task precondition and abstract action contracts. It establishes no motion
 refinement or termination result; the physical audit failures remain relevant.
 
+The [next full automatic run](../../runs/contract-integrated/20261110/invocations/stack-full-multisize-frame-margin/concise-summary.json)
+uses `--candidate-selection frame-margin` on the same original 35 selection
+starts. It finishes in 680.1 pipeline seconds (687.4 process seconds), comparing
+seven structures and 170 coordinate vectors. Five repaired structures pass all
+gates. The selected body's final Move takes XY from `b0` and Z from `b`, with its
+X offset fitted from zero to -1 mm. All 35 complete starts, 15 original local
+entries, 1785 goal/settling checkpoints and 140 block contracts pass. Its maximum
+sampled nonmover drift is 1.713 mm, compared with 4.934 mm for the prior
+first-passing selection. No threshold or controller changed, and no final seeds
+entered selection.
+
+The [exact new program](../../runs/contract-integrated/20261110/cfg/20261111-025848-nogit-stack-full-multisize-frame-margin/artifacts/program.json)
+has SHA-256 `3b5ccd81c7b818c93870557c2e2c6d627cf3c8f158e7ebf7d5fd7bb81fd3d09c`.
+The source also includes the fresh relational-node seeding correction, replacing
+two unused terminal Get bindings with a zero-step Skip; this comparison does not
+isolate ranking as its only code change. [Separate symbolic verification](../../runs/contract-integrated/20261110/invocations/stack-frame-margin-symbolic-120s/concise-summary.json)
+of this exact candidate learns its invariant afresh and passes all 12 nonvacuous
+checks, including the unbounded obligations, in 22.2 pipeline seconds. Its scope
+remains abstract partial correctness under the old WP model. The earlier
+candidate's fresh simulation results do not transfer to this executable.
+
+Its [separate frozen evaluation on seeds 3000–3014](../../runs/contract-integrated/20261110/final-evaluation/stack-automatic-frame-margin-seeds3000/summary.json)
+passes **45/45 cases**, 15 each at three/four/five blocks, for task completion,
+controller convergence, 50-step settling, the strengthened independent physical
+audit and every finite Put/domain obligation. All 135 transfers satisfy direct
+ON, ON*/Scattered effects and the checked enabling/domain conditions. All 45
+captures replay exactly. Maximum nonmover displacement at 2 ms resolution is
+0.593/1.615/3.973 mm for three/four/five blocks, below the unchanged 5 mm limit.
+No tuning or reselection used these starts. The prior seed-2000 failures remain
+preserved; different seeds, executables and the seeding correction prevent
+treating this as an isolated ranking ablation. These finite results still do not
+establish motion refinement on arbitrary scenes or human teleoperation data.
+
 [Validation records](../../runs/contract-integrated/20261110/validation/summary.json)
 retain a broad 747-test run (seven optional skips and one outdated low-gripper
 fixture failure), the fixture correction, and a subsequent passing 216-test
 focused run covering the final search, BMC, CFG and artifact changes. The entire
 broad suite was not rerun after that fixture-only correction. A later 151-test
 run passes the active-contact observer, bounded parameter repair, candidate
-selection, contract search, BMC and noise regressions together.
+selection, contract search, BMC and noise regressions together. A subsequent
+190-test integration run also passes frame-margin selection, partial-CEM policy,
+persistent deadlines, scoped seeding and shared collection regressions.
 
 ### Reusing the saved candidate for verification
 

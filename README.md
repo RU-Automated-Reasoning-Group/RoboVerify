@@ -164,6 +164,9 @@ checked endpoint effects. On 45 untouched starts it passes all task/settling
 checks, 43 physical audits and 44 finite relational audits (42 pass both).
 The same executable also passes all 12 symbolic checks with learned invariants,
 including the unbounded proof under the existing abstract action contracts.
+The subsequent automatic frame-margin selection run finishes in 680.1 seconds;
+its exact program passes all 45 new task, physical and finite relational audits
+at three/four/five blocks, and independently passes all 12 symbolic VCs.
 Complete Unstack synthesis and a physical refinement proof remain unresolved.
 See the [evidence and scope](roboverify/synthesis/experiment/README.md#integrated-contract-refinement-and-final-stack-simulation).
 Existing defaults are unchanged.

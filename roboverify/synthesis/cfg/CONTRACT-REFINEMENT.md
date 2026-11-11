@@ -58,6 +58,14 @@ extension is incomplete: it repairs generated terminal pairs, rather than
 solving all parameters of arbitrary-length programs. Existing BMC screening
 still precedes optional CEM and physical candidate execution.
 
+`--contract-cem-complete-only` optionally reserves CEM for nominally complete
+contract candidates. Partial proposals still pass BMC and receive an unoptimized
+imitation evaluation to guide CFG refinement, but skip float fitting. Complete
+proposals retain the configured CEM budget and every physical acceptance check.
+The default retains CEM on partial proposals too. Reports count skipped partial
+fits as `cem_skipped_partial_candidates`; this option saves work on incomplete
+fragments but may miss a partial structure that fitting would have repaired.
+
 After nominal goals are found, the opt-in mode explores single-primitive operand
 substitutions while keeping their kinds, lengths and numeric offsets fixed.
 Every alternative is replayed against the same nominal transitions and goal.
@@ -223,17 +231,28 @@ uv run python -m synthesis.entry.synthesize_cfg \
   --contract-max-expansions 100000 --predicate-seconds 5 \
   --validation-starts runs/contract-integrated/20261110/data/stack-all-development-starts.npz \
   --candidate-validation-limit 8 --candidate-validation-seconds 900 \
+  --candidate-selection frame-margin \
   --candidate-parameter-trials 40 --candidate-parameter-step .001 \
   --candidate-max-total-actions 300000 --wall-timeout-seconds 1200
 ```
 
-The [recorded invocation and frozen source](../../runs/contract-integrated/20261110/invocations/stack-full-multisize-float-repair/command.json)
-at commit `76cc044` recovered a loop and accepted a candidate on all 35 original
-and development starts in 368.3 pipeline seconds. It tested seven structures
-and 54 coordinate vectors; independent fresh evaluation is recorded separately
-in the [experiment guide](../experiment/README.md#integrated-contract-refinement-and-final-stack-simulation).
+The [recorded invocation and frozen source](../../runs/contract-integrated/20261110/invocations/stack-full-multisize-frame-margin/command.json)
+at commit `0faa92d` recovered a loop and selected a candidate on all 35 original
+and development starts in 680.1 pipeline seconds. It tested seven structures
+and 170 coordinate vectors. Its exact executable passes a separate 45-case
+fresh simulation/audit evaluation and all 12 symbolic VCs; see the
+[experiment guide](../experiment/README.md#integrated-contract-refinement-and-final-stack-simulation)
+for the earlier first-passing selection, conditions and proof scope.
 Additional starts are selection data, not imitation data or held-out evaluation.
 Run directories retain CFG cuts and boundary proposals, exact executable JSON
 when available, endpoint rejection counts, solver statuses and bounded-search
 termination reasons. Frozen programs must be evaluated independently on fresh
 starts before reporting a simulation success rate.
+
+Wall budgets use both process alarms and monotonic checks after environment
+construction, at search/rollout boundaries and before successful completion.
+The additional checks address a diagnosed MuJoCo/NumPy native callback that
+ignored the one-shot timeout exception. Nested trajectory budgets preserve the
+shorter enclosing deadline. A native call can still delay returning to Python;
+recorded experiments retain a separate external process cap and report any
+such termination as an unsuccessful timeout.
