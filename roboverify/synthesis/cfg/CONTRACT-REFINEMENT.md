@@ -128,8 +128,8 @@ handoff and imitation thresholds. It tests complete executables from the origina
 archived starts, including every actual block endpoint and 50 final settling
 steps. The gate checks the task precondition at each restored start, primitive
 convergence, observed contact/frame behavior, the final task condition, and the
-learned block contracts with their pre-update roles. An inconclusive contact
-state or exhausted budget cannot produce acceptance.
+learned block contracts with their pre-update roles. A candidate with inconclusive
+contact evidence or an execution cut short by its budget cannot be accepted.
 
 Selection rejects a candidate after its first failed complete start and tries
 previously failing task/size/seed groups first on later candidates. Reports keep
@@ -148,6 +148,17 @@ without adding imitation distances with different units. Rejection or an
 exception restores the original candidate; only a fully accepted alternative is
 committed. In `full` mode validation precedes invariant preparation and repeats
 after physical repair.
+
+`--candidate-selection first|frame-margin` defaults to `first`, which accepts the
+first complete passing candidate. `frame-margin` continues through the bounded
+structure pool and selects the fully passing candidate with the smallest worst
+observed nonmover drift across all requested starts. It adds no acceptance
+threshold and never ranks partial executions. Missing, incomplete or nonfinite
+frame evidence prevents selection. The exact best passing program is retained
+if later candidates fail or the shared exploration budget expires; an incomplete
+late result cannot replace it. External exceptions restore the entry graph.
+Numeric repair still returns its first fully passing vector for each structure;
+the optional ranking compares those complete results across structures.
 
 Optional `--candidate-parameter-trials N` (default 0) adds bounded float repair
 when the retained complete structures all fail. For each retained structure,
