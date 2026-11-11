@@ -630,6 +630,14 @@ class ContractCFGIntegrationTests(unittest.TestCase):
                 self.assertEqual(len(set(parameters)), expected)
                 self.assertEqual(result.ok, not partial)
                 self.assertEqual(
+                    result.search_stats.get("cem_nominal_goal_candidates", 0),
+                    int(not partial),
+                )
+                self.assertEqual(
+                    result.search_stats.get("cem_fitted_candidates", 0),
+                    int(not (enabled and partial)),
+                )
+                self.assertEqual(
                     result.search_stats.get("cem_skipped_partial_candidates", 0),
                     int(enabled and partial),
                 )

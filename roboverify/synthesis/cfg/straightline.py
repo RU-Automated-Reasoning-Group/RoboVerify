@@ -384,6 +384,12 @@ def straight_line_synthesize(
 
     def optimize(candidate):
         cem_iterations = budget.cem_iterations
+        if budget.search_strategy == "contract" and not getattr(
+            candidate, "_contract_refinement_only", False
+        ):
+            fitting_counts["cem_nominal_goal_candidates"] = (
+                fitting_counts.get("cem_nominal_goal_candidates", 0) + 1
+            )
         if (
             budget.search_strategy == "contract"
             and budget.contract_cem_complete_only
@@ -394,6 +400,10 @@ def straight_line_synthesize(
                 fitting_counts.get("cem_skipped_partial_candidates", 0) + 1
             )
         mean = np.asarray(candidate.register_trainable_parameter(), dtype=float)
+        if budget.search_strategy == "contract" and cem_iterations and len(mean):
+            fitting_counts["cem_fitted_candidates"] = (
+                fitting_counts.get("cem_fitted_candidates", 0) + 1
+            )
         std = np.full(len(mean), budget.cem_std)
         best, best_score = deepcopy(candidate), objective(candidate)
         retain_samples = (
