@@ -22,6 +22,11 @@ from typing import Callable, Mapping
 
 import numpy as np
 
+from synthesis.util.primitive_geometry import (
+    PICK_APPROACH_CLEARANCE,
+    PICK_APPROACH_XY_TOLERANCE,
+)
+
 
 class ContractInputError(ValueError):
     """The finite nominal model cannot represent the supplied search input."""
@@ -711,6 +716,17 @@ class ContractProblem:
             approach = ee.copy()
             approach[:, :2] = target[:, :2]
             if cfg.gripper_envelope:
+                # The source is a valid contact only during the intended
+                # grasp descent. A horizontal approach at source height can
+                # knock down its tower even though all other blocks are clear.
+                lateral = (
+                    np.linalg.norm(ee[:, :2] - target[:, :2], axis=1)
+                    > PICK_APPROACH_XY_TOLERANCE
+                )
+                if np.any(
+                    lateral & (ee[:, 2] < target[:, 2] + PICK_APPROACH_CLEARANCE)
+                ):
+                    return None
                 exempt = np.arange(self.N)[None, :] == source[:, None]
                 for start, end in ((ee, approach), (approach, target)):
                     if np.any(

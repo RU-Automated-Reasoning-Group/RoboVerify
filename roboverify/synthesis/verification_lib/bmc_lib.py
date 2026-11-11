@@ -90,6 +90,10 @@ from synthesis.api.instructions import (
     Seq,
 )
 from synthesis.util.on import BLOCK_LENGTH, z3_on
+from synthesis.util.primitive_geometry import (
+    PICK_APPROACH_CLEARANCE,
+    PICK_APPROACH_XY_TOLERANCE,
+)
 from synthesis.util.symbols import fresh_const
 
 ProgramPart = Union[Instruction, Seq]
@@ -410,6 +414,9 @@ def _encode_pick(
     """
     Move the EE to the target block's ``(x, y, z)`` and close the gripper.
     Block positions are unchanged; only ``holding`` and EE coordinates update.
+    A lateral approach requires source clearance before the intended descent.
+    Already aligned entries may grasp directly. This necessary enabling check
+    does not add a swept collision model or establish physical grasp success.
     """
     if not 0 <= box_id < len(sym.block_names):
         raise IndexError(
@@ -423,6 +430,11 @@ def _encode_pick(
         target = tuple(p + e for p, e in zip(target, eta))
     return z3.And(
         sym.holding[t] == sym.NONE,
+        z3.Or(
+            (sym.ee_x[t] - sym.bx[name][t]) ** 2 + (sym.ee_y[t] - sym.by[name][t]) ** 2
+            <= z3.RealVal(str(PICK_APPROACH_XY_TOLERANCE**2)),
+            sym.ee_z[t] >= sym.bz[name][t] + z3.RealVal(str(PICK_APPROACH_CLEARANCE)),
+        ),
         sym.holding[t + 1] == sym.block_consts[name],
         sym.ee_x[t + 1] == target[0],
         sym.ee_y[t + 1] == target[1],
