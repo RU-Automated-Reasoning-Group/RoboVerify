@@ -7,6 +7,7 @@ from time import perf_counter
 
 import numpy as np
 
+from synthesis.cfg.collection import check_execution_deadline
 from synthesis.cfg.execute import execute_current
 from synthesis.cfg.refine import scene_at
 from synthesis.cfg.reset import reset_segment
@@ -170,9 +171,11 @@ def segment_rollout(
     from synthesis.mcmc.synthesis import preserved_global_rng, set_np_seed
 
     with preserved_global_rng():
+        check_execution_deadline()
         set_np_seed(segment.trace.seed)
         env = env_factory(segment.trace)
         try:
+            check_execution_deadline()
             first = reset_segment(env, segment, mode=reset_mode)
             scenes = SegmentRollout()
             recorder = None
@@ -185,6 +188,7 @@ def segment_rollout(
             entry = scene_at(segment, segment.entry_index).entry_positions
 
             def record(obs, bindings):
+                check_execution_deadline()
                 if recorder is not None:
                     recorder.observe(obs)
                 scene = scene_from_obs(
@@ -208,6 +212,7 @@ def segment_rollout(
             )
             if recorder is not None:
                 scenes.contract_audit = recorder.finish()
+            check_execution_deadline()
             return scenes
         finally:
             env.close()
@@ -330,6 +335,7 @@ def straight_line_synthesize(
             )
 
     def trajectories(candidate):
+        check_execution_deadline()
         if not cache_rollouts:
             return [rollout(candidate, s) for s in segments]
         from synthesis.cfg.program_source import program_fingerprint
@@ -353,6 +359,7 @@ def straight_line_synthesize(
 
     def measure(candidate, samples):
         values = trajectories(candidate)
+        check_execution_deadline()
         if budget.distance == "arc":
             return float(
                 np.mean(
@@ -440,6 +447,7 @@ def straight_line_synthesize(
                 )
             else:
                 success.append(postcondition_reached(states, segment, post))
+        check_execution_deadline()
         return float(np.mean(success))
 
     current = deepcopy(initial_program)
@@ -448,6 +456,7 @@ def straight_line_synthesize(
     checked, rejected = 0, 0
     status, iteration = "budget_exhausted", 0
     for iteration in range(budget.iterations + 1):
+        check_execution_deadline()
         if candidate_stream:
             try:
                 candidate = (

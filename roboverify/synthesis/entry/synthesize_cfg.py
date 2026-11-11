@@ -4,7 +4,6 @@ import argparse
 import json
 import math
 import random
-import signal
 from dataclasses import asdict, replace
 from functools import partial
 from time import perf_counter
@@ -22,7 +21,7 @@ from synthesis.cfg.bindings import (
     seed_for_node,
 )
 from synthesis.cfg.candidate_traces import prepare_candidate
-from synthesis.cfg.collection import execution_deadline
+from synthesis.cfg.collection import check_execution_deadline, execution_deadline
 from synthesis.cfg.demos import DemoSegment
 from synthesis.cfg.execute import execute_cfg
 from synthesis.cfg.graph import RelationalCFG
@@ -148,6 +147,7 @@ def _synthesize_only(cfg, realize, execute, context, args, logger, quotient):
         validation = _validate_synthesis_candidate(cfg, context, args, logger)
         if not validation["accepted"]:
             status = "simulation_rejected"
+    check_execution_deadline()
     logger.write_artifact("cfg.json", json.dumps(describe_cfg(cfg), indent=2))
     saved = None
     try:
@@ -176,6 +176,7 @@ def _synthesize_only(cfg, realize, execute, context, args, logger, quotient):
         )
         logger.write_artifact("program.txt", str(definition.program))
         saved = str(path)
+    check_execution_deadline()
     logger.finish(
         status,
         reason=result.reason,
@@ -416,6 +417,7 @@ def _validate_one_synthesis_candidate(
         stop_on_failure=True,
         action_budget=action_budget,
     )
+    check_execution_deadline()
     logger.log_event(
         "training_validation",
         f"{result['passed']}/{result['total']} complete executions accepted",
@@ -584,6 +586,7 @@ def _run(args, logger):
     from synthesis.cfg.demo_validation import validate_demonstrations
 
     validation = validate_demonstrations(segments, pre, post)
+    check_execution_deadline()
     demo_checks = validation.as_dict()
     logger.log_event(
         "demo_validation", f"Task predicate checks: {demo_checks}", force=True
@@ -825,6 +828,7 @@ def _run(args, logger):
             ),
             **search_options,
         )
+        check_execution_deadline()
         _save_block_candidate(logger, result, node, demos, args, block_attempt, post)
         block_attempt += 1
         logger.log_event(
@@ -1036,6 +1040,7 @@ def _run(args, logger):
         ),
         logger=logger,
     )
+    check_execution_deadline()
     logger.write_artifact("cfg.json", json.dumps(describe_cfg(cfg), indent=2))
     if result or result.status == "verified_symbolic":
         program = lower(cfg, context, physical=True)
@@ -1369,12 +1374,6 @@ def main(argv=None):
     ):
         parser.error("Invalid block, slot, or iteration budget")
 
-    def deadline(signum, frame):
-        raise TimeoutError(
-            f"End-to-end {args.wall_timeout_seconds:g}-second budget exhausted"
-        )
-
-    previous = signal.signal(signal.SIGALRM, deadline)
     with RunLogger(
         args.output_dir,
         "cfg",
@@ -1382,10 +1381,16 @@ def main(argv=None):
         slug=args.run_name or f"{args.task}-{args.mode}",
     ) as logger:
         logger.progress_line(f"CFG run: {logger.run_dir}")
-        if args.wall_timeout_seconds is not None:
-            signal.setitimer(signal.ITIMER_REAL, args.wall_timeout_seconds)
         try:
-            code = run(args, logger)
+            with execution_deadline(
+                args.wall_timeout_seconds,
+                message=(
+                    None
+                    if args.wall_timeout_seconds is None
+                    else f"End-to-end {args.wall_timeout_seconds:g}-second budget exhausted"
+                ),
+            ):
+                code = run(args, logger)
         except TimeoutError as exc:
             logger.finish("budget_exhausted", reason=str(exc))
             code = 2
@@ -1393,9 +1398,6 @@ def main(argv=None):
             logger.log_exception(exc)
             logger.finish("failed", reason=str(exc))
             raise
-        finally:
-            signal.setitimer(signal.ITIMER_REAL, 0)
-            signal.signal(signal.SIGALRM, previous)
     print(f"Read: uv run python -m synthesis.experiment.report --run {logger.run_dir}")
     return code
 

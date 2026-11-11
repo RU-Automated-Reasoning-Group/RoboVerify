@@ -226,6 +226,9 @@ def validate_training_program(
         )
 
     def check_deadline():
+        from synthesis.cfg.collection import check_execution_deadline
+
+        check_execution_deadline()
         if perf_counter() >= deadline:
             raise ValidationBudgetExceeded(
                 "Full-program validation wall budget exhausted"
@@ -607,6 +610,9 @@ def validate_training_program(
                 )
         if stop_on_failure and not row["accepted"]:
             break
+    from synthesis.cfg.collection import check_execution_deadline
+
+    check_execution_deadline()
     result = {
         "accepted": len(rows) == len(traces) and all(row["accepted"] for row in rows),
         "passed": sum(row["accepted"] for row in rows),
