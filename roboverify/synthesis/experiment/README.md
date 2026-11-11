@@ -472,8 +472,9 @@ accepted Unstack program. A diagnosed first-transfer tower collapse also led to
 a generic nominal/BMC Pick condition: lateral approach must clear the source,
 while an already XY-aligned grasp remains allowed. Physical controller code is
 unchanged. Generated high-approach alternatives remove the observed initial
-collapse, but later payload slip/contact uncertainty still prevents the strict
-endpoint gate from accepting those local candidates.
+collapse, but the then-current contact observer still rejected the later
+holding evidence. The follow-up below identifies false negatives in that
+observer; those rejections did not establish payload slip.
 A full post-Pick-correction/neighborhood attempt exhausted its search after
 379.6 pipeline seconds (386.7 process seconds), with no complete program;
 [its command and frozen source](../../runs/contract-integrated/20261110/invocations/unstack-source-clearance-neighborhood/command.json)
@@ -486,7 +487,8 @@ complete nominal bodies into 25 at the same beam/length/budget, in 5.27 seconds;
 the optional neighborhood then retains eight alternatives. Readiness probes are
 charged to the existing transition/time limits. All eight pass BMC and 10/15
 physical endpoint audits; the five first-transfer entries have uncertain
-holding immediately before Release. No observer threshold was weakened.
+holding immediately before Release under the historical observer. The active
+contact correction below resolves those five observation failures.
 
 The [final integrated Unstack attempt](../../runs/contract-integrated/20261110/invocations/unstack-action-readiness/diagnosis.json)
 exhausts its search in 236.4 pipeline seconds (243.2 process seconds). Its saved
@@ -495,11 +497,46 @@ and matches the locally audited candidate's fingerprint. CFG acceptance fails,
 so complete-program validation, fresh-scene evaluation and formal verification
 do not run. This is structural search progress, not successful Unstack synthesis.
 
+#### Active-contact correction and bounded float repair
+
+Raw MuJoCo contact inspection found that the historical holding observer
+discarded finger contacts with positive geometric separation above 1 micrometre.
+The configured contact margin is 1 mm, and the inspected contacts were active
+with positive normal forces despite separations of 0.037–0.334 mm. This is
+consistent with [MuJoCo's contact model](https://mujoco.readthedocs.io/en/2.1.2/computation.html#contact).
+The observer now requires an active constraint (`efc_address >= 0`) and finite
+positive normal force from `mj_contactForce`. Two distinct fingers must contact
+the same unique object. Missing or nonfinite force evidence remains unknown and
+rejects acceptance; controllers and demonstrations are unchanged.
+
+The [corrected local rechecks](../../runs/contract-integrated/20261110/unstack-active-contact/comparison.json)
+pass all 15 endpoint audits for the original six-action Unstack body, the CEM
+fits and a generated seven-action waypoint body. The original body's Arc
+distance remains 0.03151, above the unchanged 0.03 threshold; the imitation-CEM
+fit has distance 0.02789 and passes all 15 endpoint audits. Contact-derived
+archive labels agree with the corrected observer on all 115 sampled snapshots.
+These are local body results, not an accepted full Unstack program or a proof
+that contact forces guarantee a stable grasp throughout arbitrary motion.
+
+The [Stack float-refinement comparison](../../runs/contract-integrated/20261110/float-refinement/comparison.json)
+uses the five original training starts and all 30 development starts. A bounded
+coordinate search on the reference-diverse body changes its last Move X offset
+by -1 mm and passes all 35 complete-start checks, all 15 original local endpoint
+and handoff checks, fixed-offset BMC and the unchanged imitation threshold
+(Arc 0.01956). The separately recovered CLI body needs two coordinate changes
+in a diagnostic continuation to pass the same checks; its maximum sampled
+nonmover displacement is 4.941 mm, close to the 5 mm limit. Neither result is
+an independent final evaluation. The production implementation now supports
+bounded coordinate repair of each retained structure, with a shared validation
+time/action budget and renewed BMC, local imitation, endpoint and handoff gates.
+
 [Validation records](../../runs/contract-integrated/20261110/validation/summary.json)
 retain a broad 747-test run (seven optional skips and one outdated low-gripper
 fixture failure), the fixture correction, and a subsequent passing 216-test
 focused run covering the final search, BMC, CFG and artifact changes. The entire
-broad suite was not rerun after that fixture-only correction.
+broad suite was not rerun after that fixture-only correction. A later 151-test
+run passes the active-contact observer, bounded parameter repair, candidate
+selection, contract search, BMC and noise regressions together.
 
 ### Reusing the saved candidate for verification
 
