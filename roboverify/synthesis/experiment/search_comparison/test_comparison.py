@@ -164,10 +164,14 @@ class MatchedTests(unittest.TestCase):
 class NumericBudgetTests(unittest.TestCase):
     def test_bmc_preserves_relational_table_without_inventing_coordinates(self):
         rows = [dict(kind="Pick", operands=["b_prime"], offsets=[])]
+        observations = np.zeros((1, 34))
+        # Establish a clear Pick approach independently of the table-binding
+        # property under test; an all-zero gripper would be below the blocks.
+        observations[0, :3] = [0.0, -0.2, 0.65]
         example = dict(
             initial_positions={0: [0.0, 0.0, 0.425], 1: [0.2, 0.0, 0.425]},
             bindings={"b0": 0, "b_prime": 1, "tbl": "tbl"},
-            observations=np.zeros((1, 34)),
+            observations=observations,
         )
         result = bmc_screen(rows, [example], deadline=perf_counter() + 10)
         self.assertTrue(result["feasible"], result)
