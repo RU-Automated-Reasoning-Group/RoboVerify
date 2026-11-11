@@ -10,7 +10,7 @@ from functools import partial
 from time import perf_counter
 
 from synthesis.api.instructions import LoopBudgetExceeded, Skip, While
-from synthesis.api.program import Program, generate_random_program
+from synthesis.api.program import Program
 from synthesis.cfg.artifacts import describe_cfg
 from synthesis.cfg.bindings import (
     close_objects,
@@ -19,7 +19,7 @@ from synthesis.cfg.bindings import (
     mutate_scoped,
     require_closed,
     require_ids,
-    seed_from_scope,
+    seed_for_node,
 )
 from synthesis.cfg.candidate_traces import prepare_candidate
 from synthesis.cfg.collection import execution_deadline
@@ -741,16 +741,9 @@ def _run(args, logger):
                 ok = False
             return node.region, ok
         id_first = node.synthesis_approach == "id-first"
-        if isinstance(node.region, BlockRegion) and node.region.physical:
-            initial = Program(len(node.region.physical), list(node.region.physical))
-        elif not id_first and isinstance(node.region, BlockRegion):
-            initial = seed_from_scope(
-                args.slots, node.available_scope, random.Random(args.seed)
-            )
-        else:
-            initial = generate_random_program(
-                args.slots, range(args.num_blocks), random.Random(args.seed)
-            )
+        initial = seed_for_node(
+            node, args.slots, args.num_blocks, random.Random(args.seed)
+        )
 
         def propose(candidate, rng):
             with preserved_global_rng():

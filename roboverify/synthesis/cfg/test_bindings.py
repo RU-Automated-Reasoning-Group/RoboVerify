@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 import numpy as np
+
 from synthesis.api.instructions import (
     Assign,
     Get,
@@ -16,10 +17,12 @@ from synthesis.cfg.bindings import (
     close_objects,
     mutate_scoped,
     require_closed,
+    require_ids,
+    seed_for_node,
     seed_from_scope,
 )
 from synthesis.cfg.demos import DemoSegment, DemoTrace
-from synthesis.cfg.graph import RelationalCFG
+from synthesis.cfg.graph import Node, RelationalCFG
 from synthesis.cfg.region import BlockRegion
 from synthesis.cfg.scope import scope
 from synthesis.cfg.straightline import _features, postcondition_reached, segment_rollout
@@ -95,6 +98,58 @@ class BindingTests(unittest.TestCase):
         require_closed(first.instructions, available)
         with self.assertRaisesRegex(ValueError, "in-scope"):
             seed_from_scope(1, {"tbl"}, random.Random(7))
+
+    def test_refined_unrealized_relational_node_does_not_export_seed_gets(self):
+        import random
+
+        available = frozenset({"b0", "selected", "tbl"})
+        node = Node("body0.0", region=None, available_scope=available)
+        demos = [self.demo(), self.demo()]
+        for selected, demo in enumerate(demos):
+            demo.bindings = {"b0": 0, "selected": selected, "tbl": "tbl"}
+        initial = seed_for_node(node, 30, 4, random.Random(0))
+        closed = close_objects(
+            initial, demos, available, HighLevelContext(use_tbl=True)
+        )
+        self.assertFalse(any(isinstance(i, Get) for i in closed.instructions))
+        self.assertEqual(require_closed(closed.instructions, available), available)
+        self.assertTrue(
+            all(
+                operand["type"] == "BoxName" and operand["val"] in available
+                for i in closed.instructions
+                for operand in i.get_operand()
+            )
+        )
+        # No phantom export appears in the following block's scope: all names
+        # remain available in the actual demonstration assignments.
+        for demo in demos:
+            self.assertLessEqual(
+                require_closed(closed.instructions, available), demo.bindings.keys()
+            )
+
+    def test_refined_id_first_node_keeps_numeric_seed(self):
+        import random
+
+        node = Node("body0.0", region=None, synthesis_approach="id-first")
+        program = seed_for_node(node, 30, 4, random.Random(0))
+        require_ids(program.instructions, 4)
+        self.assertEqual(len(program.instructions), 30)
+
+    def test_existing_physical_seed_is_preserved_in_either_phase(self):
+        import random
+
+        for approach, instruction in (
+            ("relational", PickByName("selected")),
+            ("id-first", Pick(1)),
+        ):
+            with self.subTest(approach=approach):
+                node = Node(
+                    "body0.0",
+                    region=BlockRegion(None, (instruction,)),
+                    synthesis_approach=approach,
+                )
+                program = seed_for_node(node, 30, 4, random.Random(0))
+                self.assertEqual(program.instructions, [instruction])
 
     def test_rollout_scores_bindings_after_assignment(self):
         obs = np.zeros(43)

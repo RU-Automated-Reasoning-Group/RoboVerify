@@ -118,6 +118,25 @@ def seed_from_scope(length, available, rng=None):
     return Program(length, [name_operands(i, aliases) for i in sampled.instructions])
 
 
+def seed_for_node(node, length, num_blocks, rng=None):
+    """Preserve an existing body; seed every new body in its synthesis domain.
+
+    Refinement creates nodes with ``region=None``. In the relational phase these
+    need scoped names just like an empty BlockRegion, otherwise closing a random
+    ID seed introduces unrelated Get bindings absent from later demo segments.
+    """
+    from synthesis.api.program import generate_random_program
+    from synthesis.cfg.region import BlockRegion
+
+    if isinstance(node.region, BlockRegion) and node.region.physical:
+        return Program(len(node.region.physical), list(node.region.physical))
+    if node.synthesis_approach == "relational":
+        return seed_from_scope(length, node.available_scope, rng)
+    if node.synthesis_approach == "id-first":
+        return generate_random_program(length, range(num_blocks), rng)
+    raise ValueError(f"Unknown synthesis approach: {node.synthesis_approach}")
+
+
 def mutate_scoped(program, available):
     """Freeze Get prefixes; structural search may mutate only the physical body."""
     from synthesis.mcmc.synthesis import mutate_program
