@@ -579,6 +579,64 @@ class ContractCFGIntegrationTests(unittest.TestCase):
         self.assertEqual(result.search_stats["rollout_cache_misses"], 3)
         self.assertEqual(result.search_stats["rollout_cache_hits"], 7)
 
+    def test_complete_only_cem_preserves_bmc_and_unoptimized_refinement(self):
+        segment = held_segment()
+        for enabled, partial, expected in (
+            (False, True, 3),
+            (True, True, 1),
+            (False, False, 3),
+            (True, False, 3),
+        ):
+            with self.subTest(enabled=enabled, partial=partial):
+                candidate = program(
+                    MoveByName(
+                        "support", "support", "support", target_offset=[0, 0, 0.05]
+                    )
+                )
+                candidate._contract_refinement_only = partial
+                events, parameters = [], []
+
+                def feasible(value):
+                    events.append("bmc")
+                    return True
+
+                def rollout(value, demo):
+                    self.assertEqual(events[0], "bmc")
+                    events.append("rollout")
+                    parameters.append(tuple(value.register_trainable_parameter()))
+                    return demo.states
+
+                result = straight_line_synthesize(
+                    [segment],
+                    boolean(True),
+                    program(),
+                    None,
+                    rollout=rollout,
+                    budget=SearchBudget(
+                        search_strategy="contract",
+                        iterations=0,
+                        cem_iterations=1,
+                        cem_samples=2,
+                        cem_elites=1,
+                        contract_cem_complete_only=enabled,
+                        distance="mmd",
+                        theta=1,
+                    ),
+                    candidates=[candidate],
+                    feasible=feasible,
+                    cache_rollouts=True,
+                )
+                self.assertEqual(len(parameters), expected)
+                self.assertEqual(len(set(parameters)), expected)
+                self.assertEqual(result.ok, not partial)
+                self.assertEqual(
+                    result.search_stats.get("cem_skipped_partial_candidates", 0),
+                    int(enabled and partial),
+                )
+                if enabled and partial:
+                    self.assertEqual(parameters, [(0.0, 0.0, 0.05)])
+                    self.assertTrue(result.program._contract_refinement_only)
+
     def test_contract_retains_nearby_cem_trial_for_postscore_only(self):
         segment = held_segment()
         candidate = program(

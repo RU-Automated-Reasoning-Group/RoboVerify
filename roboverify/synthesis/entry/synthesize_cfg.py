@@ -656,6 +656,7 @@ def _run(args, logger):
         contract_diversity=not getattr(args, "contract_no_diversity", False),
         contract_pool_limit=getattr(args, "contract_pool_limit", 12),
         contract_endpoint_checks=getattr(args, "contract_refinement", False),
+        contract_cem_complete_only=getattr(args, "contract_cem_complete_only", False),
         contract_solve_offsets=getattr(args, "contract_refinement", False),
         contract_operand_neighborhood=(
             getattr(args, "contract_refinement", False)
@@ -1122,6 +1123,11 @@ def main(argv=None):
     group.add_argument("--contract-solver-timeout-ms", type=int, default=250)
     group.add_argument("--contract-solver-attempts", type=int, default=24)
     group.add_argument("--contract-offset-radius", type=float, default=0.02)
+    group.add_argument(
+        "--contract-cem-complete-only",
+        action="store_true",
+        help="Fit floats only for nominal goal candidates; keep partial proposals unoptimized for CFG refinement",
+    )
     group.add_argument(
         "--contract-no-operand-neighborhood",
         action="store_true",

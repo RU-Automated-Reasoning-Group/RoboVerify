@@ -49,6 +49,7 @@ class SearchBudget:
     contract_endpoint_checks: bool = False
     contract_solve_offsets: bool = False
     contract_operand_neighborhood: bool = False
+    contract_cem_complete_only: bool = False
     contract_solver_timeout_ms: int = 250
     contract_solver_attempts: int = 24
     contract_offset_radius: float = 0.02
@@ -270,11 +271,13 @@ def straight_line_synthesize(
     retained_rollouts = {}
     cache_counts = {"rollout_cache_hits": 0, "rollout_cache_misses": 0}
     endpoint_counts = {}
+    fitting_counts = {}
 
     def proposal_stats():
         return {
             **dict(getattr(candidates, "stats", {})),
             **(cache_counts if cache_rollouts else {}),
+            **fitting_counts,
             **(
                 {"endpoint_rejections": dict(endpoint_counts)}
                 if endpoint_counts
@@ -373,17 +376,27 @@ def straight_line_synthesize(
         )
 
     def optimize(candidate):
+        cem_iterations = budget.cem_iterations
+        if (
+            budget.search_strategy == "contract"
+            and budget.contract_cem_complete_only
+            and getattr(candidate, "_contract_refinement_only", False)
+        ):
+            cem_iterations = 0
+            fitting_counts["cem_skipped_partial_candidates"] = (
+                fitting_counts.get("cem_skipped_partial_candidates", 0) + 1
+            )
         mean = np.asarray(candidate.register_trainable_parameter(), dtype=float)
         std = np.full(len(mean), budget.cem_std)
         best, best_score = deepcopy(candidate), objective(candidate)
         retain_samples = (
             budget.search_strategy == "contract"
-            and budget.cem_iterations > 0
+            and cem_iterations > 0
             and len(mean) > 0
         )
         if retain_samples:
             retain(candidate, measure(candidate, budget.final_samples))
-        for _ in range(budget.cem_iterations if len(mean) else 0):
+        for _ in range(cem_iterations if len(mean) else 0):
             scored = []
             for params in rng.normal(mean, std, (budget.cem_samples, len(mean))):
                 trial = deepcopy(candidate)
