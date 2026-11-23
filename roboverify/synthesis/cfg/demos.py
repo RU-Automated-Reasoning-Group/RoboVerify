@@ -26,6 +26,7 @@ class DemoSegment:
     entry_index: int = None
     final_bindings: object = None
     goal_bindings: dict | None = None
+    milestone_index: int | None = None
 
     def __post_init__(self):
         if not 0 <= self.t_start <= self.t_end < len(self.trace.states):
@@ -34,6 +35,10 @@ class DemoSegment:
             self.entry_index = self.t_start
         if not 0 <= self.entry_index <= self.t_start:
             raise ValueError("Entry geometry must precede the segment")
+        if self.milestone_index is not None and not (
+            self.t_start <= self.milestone_index <= self.t_end
+        ):
+            raise ValueError("Refined milestone must be inside the segment")
         self.bindings = dict(self.bindings)
         if self.goal_bindings is not None:
             self.goal_bindings = dict(self.goal_bindings)
@@ -66,6 +71,11 @@ class DemoSegment:
                 self.entry_index,
                 self.final_bindings,
                 self.goal_bindings,
+                (
+                    None
+                    if self.milestone_index is None
+                    else max(absolute_index, self.milestone_index)
+                ),
             ),
         )
 

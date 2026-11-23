@@ -28,10 +28,11 @@ class PoolEntry:
 
 
 class CandidatePool:
-    def __init__(self, epsilon=0.05, limit=10):
+    def __init__(self, epsilon=0.05, limit=10, *, key=str):
         if epsilon < 0 or limit < 1:
             raise ValueError("Invalid pool bounds")
         self.epsilon, self.limit, self.entries = epsilon, limit, []
+        self.key = key
         self.best = math.inf
 
     def add(self, program, distance):
@@ -40,10 +41,11 @@ class CandidatePool:
         self.best = min(self.best, distance)
         items = self.entries + [PoolEntry(deepcopy(program), float(distance))]
         items = [entry for entry in items if entry.distance <= self.best + self.epsilon]
-        # Stable repr is sufficient for candidate de-duplication, not proof equality.
+        # Callers retaining numeric variants need a key including parameters.
+        # The historical display-string policy remains the default.
         unique = {}
         for entry in items:
-            key = str(entry.program)
+            key = self.key(entry.program)
             if key not in unique or entry.distance < unique[key].distance:
                 unique[key] = entry
         self.entries = sorted(unique.values(), key=lambda entry: entry.distance)[

@@ -1,15 +1,20 @@
 import itertools
+import logging
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import sympy
-import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
 import z3
+
+import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
 from synthesis.inference_lib import quant_enum_merge
 from synthesis.inference_lib.minimization import espresso_form, get_invariant_minimizer
 from synthesis.util import on
 from synthesis.util.symbols import fresh_const
+from synthesis.verification_lib.solver_options import finite_sat_witness
+
+_log = logging.getLogger(__name__)
 
 
 class InferenceDataError(Exception):
@@ -100,6 +105,12 @@ def add_all_pairs(vocabulary, r, all_vars):
                 # Keep equality vocabulary non-trivial.
                 if str(v1) != str(v2):
                     vocabulary.append(v1 == v2)
+            elif str(r) == "EqualHeight":
+                # A symmetric pair has one feature. Including both directions
+                # lets the partition learner predict each from its duplicate,
+                # producing only symmetry tautologies instead of state facts.
+                if str(v1) < str(v2):
+                    vocabulary.append(r(v1, v2))
             elif str(r) == "Higher":
                 if str(v1) != str(v2):
                     vocabulary.append(r(v1, v2))
@@ -245,9 +256,9 @@ def forall_exists_compute_dataset(
                 }
                 var_mapping = {**universal_var_mapping, **existential_var_mapping}
                 d = compute_data(state_zero, state, omega_k, var_mapping, mapping)
-                print("var_mapping", var_mapping)
-                print("omega_k", omega_k)
-                print("data", d)
+                _log.debug("var_mapping %s", var_mapping)
+                _log.debug("omega_k %s", omega_k)
+                _log.debug("data %s", d)
                 dataset.add(d)
 
         all_datasets.append(dataset)
@@ -283,9 +294,9 @@ def compute_dataset(
                 var_mapping,
                 mapping,
             )
-            print("var_mapping", var_mapping)
-            print("omega_k", omega_k)
-            print("data", d)
+            _log.debug("var_mapping %s", var_mapping)
+            _log.debug("omega_k %s", omega_k)
+            _log.debug("data %s", d)
             dataset.add(d)
     return dataset
 
@@ -330,9 +341,9 @@ def compute_dataset_with_function(
                 functions_evaluation_cache,
                 mark_lookup,
             )
-            print("var_mapping", var_mapping)
-            print("omega_k", omega_k)
-            print("data", d)
+            _log.debug("var_mapping %s", var_mapping)
+            _log.debug("omega_k %s", omega_k)
+            _log.debug("data %s", d)
             dataset.add(d)
     return dataset
 
@@ -346,7 +357,7 @@ def compute_data(
 ) -> Tuple:
     data = []
     for predicate in omega_k:
-        print("predicate:", predicate)
+        _log.debug("predicate: %s", predicate)
         if str(predicate).startswith("ON_star") and not str(predicate).startswith(
             "ON_star_zero"
         ):
@@ -383,7 +394,7 @@ def compute_data(
                     state_zero[block2_name],
                 )
             )
-        elif str(predicate).startswith("Higher"):
+        elif str(predicate).startswith(("Higher", "EqualHeight")):
             arg0, arg1 = predicate.arg(0), predicate.arg(1)
             block1_name = (
                 var_mapping[arg0] if arg0 in var_mapping else constants_mapping[arg0]
@@ -397,7 +408,11 @@ def compute_data(
                     f"got {block1_name!r} and {block2_name!r}"
                 )
             data.append(
-                on.higher_implementation(
+                (
+                    on.equal_height_implementation
+                    if str(predicate.decl()) == "EqualHeight"
+                    else on.higher_implementation
+                )(
                     state[block1_name],
                     state[block2_name],
                 )
@@ -490,7 +505,7 @@ def compute_data_with_function(
 
     data = []
     for predicate in omega_k:
-        print("predicate:", predicate)
+        _log.debug("predicate: %s", predicate)
         if str(predicate).startswith("Mark"):
             arg0 = predicate.arg(0)
             block1_name = _resolve_term_to_object_name(arg0)
@@ -546,7 +561,7 @@ def compute_data_with_function(
                     state_zero[block2_name],
                 )
             )
-        elif str(predicate).startswith("Higher"):
+        elif str(predicate).startswith(("Higher", "EqualHeight")):
             arg0, arg1 = predicate.arg(0), predicate.arg(1)
             block1_name = _resolve_term_to_object_name(arg0)
             block2_name = _resolve_term_to_object_name(arg1)
@@ -556,7 +571,11 @@ def compute_data_with_function(
                     f"got {block1_name!r} and {block2_name!r}"
                 )
             data.append(
-                on.higher_implementation(
+                (
+                    on.equal_height_implementation
+                    if str(predicate.decl()) == "EqualHeight"
+                    else on.higher_implementation
+                )(
                     state[block1_name],
                     state[block2_name],
                 )
@@ -872,20 +891,14 @@ def check_tautology(
     hard quantified query can hang, which in a counterexample-guided loop means
     the whole run wedges with no diagnosis.
     """
-    solver = z3.Solver()
-    solver.set("timeout", timeout_ms)
-
-    # add all axioms
     active_context = _ensure_context(context)
-    if active_context.verification_mode == "goals":
-        active_context.add_axiom_goal_nested(solver)
-    else:
-        active_context.add_axiom(solver)
-        active_context.add_axiom_on_star_zero(solver)
-        active_context.add_axiom_higher(solver)
-        active_context.add_axiom_scattered(solver)
+    solver = active_context.new_solver(timeout_ms)
 
     solver.add(z3.Not(clause))
+    if active_context.exists_top and finite_sat_witness(
+        solver, active_context, restore_timeout_ms=timeout_ms
+    ):
+        return False
     result = solver.check()
     if result == z3.unsat:
         # can be derived from axioms
@@ -1586,14 +1599,10 @@ def loop_inference(
     print("final result", final_result)
 
     print("checking equivalent with ground truth")
-    solver = z3.Solver()
+    solver = active_context.new_solver()
     solver.set(unsat_core=True)
     solver.set("smt.core.minimize", True)
 
-    active_context.add_axiom(solver)
-    active_context.add_axiom_on_star_zero(solver)
-    active_context.add_axiom_higher(solver)
-    active_context.add_axiom_scattered(solver)
     # (b0,) = constants
     x, y, z = z3.Consts("x y z", active_context.BoxSort)
 
@@ -1791,28 +1800,43 @@ def loop_inference(
 
 
 def check_redundancy(
-    candidates: List, context: highlevel_verification_lib.HighLevelContext
+    candidates: List,
+    context: highlevel_verification_lib.HighLevelContext,
+    *,
+    timeout_ms: int = TAUTOLOGY_CHECK_TIMEOUT_MS,
 ) -> List:
+    """Remove only proved redundancy; keep clauses on timeout/unknown.
+
+    Redundancy filtering must not prevent an otherwise learned formula from
+    reaching verification. Exact duplicate syntax needs no solver query.
+    """
+    if timeout_ms <= 0:
+        raise ValueError("Redundancy query budget must be positive")
     print("======= starting check redundancy =======")
     active_context = _ensure_context(context)
     filtered_invariants: List = []
+    seen = set()
     for candidate in candidates:
         cand_expr = candidate.expr if hasattr(candidate, "expr") else candidate
-        solver = z3.Solver()
-        if active_context.verification_mode == "goals":
-            active_context.add_axiom_goal_nested(solver)
-        else:
-            active_context.add_axiom(solver)
-            active_context.add_axiom_on_star_zero(solver)
-            active_context.add_axiom_higher(solver)
-            active_context.add_axiom_scattered(solver)
+        key = cand_expr.sexpr()
+        if key in seen:
+            continue
+        seen.add(key)
+        solver = active_context.new_solver(timeout_ms)
 
         for existing in filtered_invariants:
             ex_expr = existing.expr if hasattr(existing, "expr") else existing
             solver.add(ex_expr)
         solver.add(z3.Not(cand_expr))
 
-        result = solver.check()
+        result = (
+            z3.sat
+            if active_context.exists_top
+            and finite_sat_witness(
+                solver, active_context, restore_timeout_ms=timeout_ms
+            )
+            else solver.check()
+        )
         if result == z3.sat:
             # not redundant
             filtered_invariants.append(candidate)

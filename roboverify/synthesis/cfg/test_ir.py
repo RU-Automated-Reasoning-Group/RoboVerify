@@ -1,7 +1,6 @@
 import unittest
 
 import z3
-
 from synthesis.api.guard_eval import evaluate_z3
 from synthesis.api.instructions import Assign, Get, Put, While
 from synthesis.api.program import Program
@@ -87,7 +86,12 @@ class IRTests(unittest.TestCase):
             actual.VC_gen(z3.BoolVal(True), z3.BoolVal(True), ctx),
             expected.VC_gen(z3.BoolVal(True), z3.BoolVal(True), ctx),
         ):
-            self.assertTrue(a.expr.eq(b.expr))
+            # Independently generated VCs have fresh bound names, including
+            # Put's clear-source witness. Compare their logical meaning.
+            solver = z3.Solver()
+            solver.set(timeout=1000)
+            solver.add(a.expr != b.expr)
+            self.assertEqual(solver.check(), z3.unsat)
 
     def test_loop_budget_exhaustion_is_not_normal_exit(self):
         from types import SimpleNamespace

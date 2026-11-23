@@ -48,6 +48,9 @@ def loop_learning_data(rows, scope, *, relations=None, variables=2):
 
 def infer_loop_invariant(rows, guard, scope, *, context, relations=None, variables=2):
     store, vocabulary = loop_learning_data(
-        rows, scope, relations=relations, variables=variables
+        rows,
+        scope,
+        relations=relations or (*context.mutable_relations, "equality"),
+        variables=variables,
     )
     return InvInference(store, "loop", vocabulary, context)[0]

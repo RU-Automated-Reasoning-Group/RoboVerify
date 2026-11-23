@@ -138,6 +138,7 @@ inductive Command (α ν : Type) where
   | skip : Command α ν
   | act : Action α ν → Command α ν
   | seq : Command α ν → Command α ν → Command α ν
+  | branch : Assertion α ν → Command α ν → Command α ν → Command α ν
   | loop : Assertion α ν → Assertion α ν → Command α ν → Command α ν
 
 namespace Command
@@ -148,6 +149,9 @@ def wp (c : Command α ν) (q : Assertion α ν) : Assertion α ν :=
   | .skip => q
   | .act a => a.wp q
   | .seq c d => c.wp (d.wp q)
+  | .branch g c d => fun η =>
+      .conj (Formula.imp (g η) (c.wp q η))
+        (Formula.imp (.neg (g η)) (d.wp q η))
   | .loop _ inv _ => inv
 
 /-- VCs quantify over all well-formed model states and valuations. -/
@@ -156,6 +160,7 @@ def VC (c : Command α ν) (q : Assertion α ν) : Prop :=
   | .skip => True
   | .act _ => True
   | .seq c d => c.VC (d.wp q) ∧ d.VC q
+  | .branch _ c d => c.VC q ∧ d.VC q
   | .loop guard inv body =>
     body.VC inv ∧
     (∀ s : State α ν, s.WellFormed → s.satisfies inv → s.satisfies guard →
@@ -167,6 +172,8 @@ inductive Exec : Command α ν → State α ν → State α ν → Prop where
   | skip (s) : Exec .skip s s
   | act {a s t} : a.Step s t → Exec (.act a) s t
   | seq {c d s u t} : Exec c s u → Exec d u t → Exec (.seq c d) s t
+  | yes {g c d s t} : s.satisfies g → Exec c s t → Exec (.branch g c d) s t
+  | no {g c d s t} : ¬s.satisfies g → Exec d s t → Exec (.branch g c d) s t
   | done {g i b s} : ¬s.satisfies g → Exec (.loop g i b) s s
   | more {g i b s u t} : s.satisfies g → Exec b s u →
       Exec (.loop g i b) u t → Exec (.loop g i b) s t
@@ -177,6 +184,8 @@ theorem exec_wellFormed {c : Command α ν} {s t : State α ν}
   | skip => exact wf
   | act h => exact Action.step_wellFormed wf h
   | seq _ _ ihc ihd => exact ihd (ihc wf)
+  | yes _ _ ih => exact ih wf
+  | no _ _ ih => exact ih wf
   | done => exact wf
   | more _ _ _ ihb ihloop => exact ihloop (ihb wf)
 
@@ -189,6 +198,12 @@ theorem vc_sound {c : Command α ν} {s t : State α ν} {q : Assertion α ν}
   | act h => exact ((Action.wp_exact _ _ _ wf).mp pre).2 _ h
   | seq hc hd ihc ihd =>
     exact ihd (exec_wellFormed hc wf) vc.2 (ihc wf vc.1 pre)
+  | yes hg _ ih =>
+    simp only [wp, State.satisfies, Formula.eval, Formula.eval_imp] at pre
+    exact ih wf vc.1 (pre.1 hg)
+  | no hg _ ih =>
+    simp only [wp, State.satisfies, Formula.eval, Formula.eval_imp] at pre
+    exact ih wf vc.2 (pre.2 hg)
   | done hg => exact vc.2.2 _ wf pre hg
   | more hg hb hl ihb ihl =>
     have inv := ihb wf vc.1 (vc.2.1 _ wf pre hg)
@@ -200,6 +215,8 @@ inductive Fault : Command α ν → State α ν → Prop where
   | act {a s} : (¬∃ t, a.Step s t) → Fault (.act a) s
   | seqLeft {c d s} : Fault c s → Fault (.seq c d) s
   | seqRight {c d s u} : Exec c s u → Fault d u → Fault (.seq c d) s
+  | yes {g c d s} : s.satisfies g → Fault c s → Fault (.branch g c d) s
+  | no {g c d s} : ¬s.satisfies g → Fault d s → Fault (.branch g c d) s
   | loopBody {g i b s} : s.satisfies g → Fault b s → Fault (.loop g i b) s
   | loopLater {g i b s u} : s.satisfies g → Exec b s u →
       Fault (.loop g i b) u → Fault (.loop g i b) s
@@ -213,6 +230,12 @@ theorem vc_no_fault {c : Command α ν} {s : State α ν} {q : Assertion α ν}
   | seqLeft _ ih => exact ih wf vc.1 pre
   | seqRight run _ ih =>
     exact ih (exec_wellFormed run wf) vc.2 (vc_sound run wf vc.1 pre)
+  | yes hg _ ih =>
+    simp only [wp, State.satisfies, Formula.eval, Formula.eval_imp] at pre
+    exact ih wf vc.1 (pre.1 hg)
+  | no hg _ ih =>
+    simp only [wp, State.satisfies, Formula.eval, Formula.eval_imp] at pre
+    exact ih wf vc.2 (pre.2 hg)
   | loopBody hg _ ih => exact ih wf vc.1 (vc.2.1 _ wf pre hg)
   | loopLater hg run _ ih =>
     exact ih (exec_wellFormed run wf) vc
@@ -236,6 +259,7 @@ def LoopFree (c : Command α ν) : Prop :=
   match c with
   | .skip | .act _ => True
   | .seq c d => c.LoopFree ∧ d.LoopFree
+  | .branch _ c d => c.LoopFree ∧ d.LoopFree
   | .loop _ _ _ => False
 
 omit [DecidableEq α] in
@@ -245,6 +269,7 @@ theorem loopFree_vc {c : Command α ν} (lf : c.LoopFree) (q : Assertion α ν) 
   | skip => trivial
   | act => trivial
   | seq c d hc hd => exact ⟨hc lf.1 _, hd lf.2 _⟩
+  | branch g c d hc hd => exact ⟨hc lf.1 _, hd lf.2 _⟩
   | loop => contradiction
 
 theorem loopFree_wp_complete {c : Command α ν} (lf : c.LoopFree)
@@ -269,6 +294,15 @@ theorem loopFree_wp_complete {c : Command α ν} (lf : c.LoopFree)
       apply hd lf.2 (exec_wellFormed run wf) q
       · intro h; exact safe (.seqRight run h)
       · intro t tail; exact post t (.seq run tail)
+  | branch g c d hc hd =>
+    simp only [wp, State.satisfies, Formula.eval, Formula.eval_imp]
+    constructor
+    · intro hg
+      exact hc lf.1 wf q (fun h => safe (.yes hg h))
+        (fun t h => post t (.yes hg h))
+    · intro hg
+      exact hd lf.2 wf q (fun h => safe (.no hg h))
+        (fun t h => post t (.no hg h))
   | loop => contradiction
 
 /-- For loop-free programs the calculation is weakest for fault-free,
@@ -297,6 +331,14 @@ theorem loopFree_terminates {c : Command α ν} (lf : c.LoopFree)
     have mid := vc_sound run wf (loopFree_vc lf.1 _) pre
     obtain ⟨t, tail⟩ := hd lf.2 (exec_wellFormed run wf) q mid
     exact ⟨t, .seq run tail⟩
+  | branch g c d hc hd =>
+    classical
+    simp only [wp, State.satisfies, Formula.eval, Formula.eval_imp] at pre
+    by_cases hg : s.satisfies g
+    · obtain ⟨t, ht⟩ := hc lf.1 wf q (pre.1 hg)
+      exact ⟨t, .yes hg ht⟩
+    · obtain ⟨t, ht⟩ := hd lf.2 wf q (pre.2 hg)
+      exact ⟨t, .no hg ht⟩
   | loop => contradiction
 
 /-- An existential guard is implemented by testing existence and then Get.
@@ -304,6 +346,27 @@ Binding stability is the precise obligation often expressed in prose as
 "the invariant does not mention the local witness name". -/
 def existsGuard (n : ν) (g : Assertion α ν) : Assertion α ν :=
   fun η => .ex fun v => g (fun m => if m = n then v else η m)
+
+/-- Test whether any witness exists, then nondeterministically select a witness only
+in the then branch. The else branch uses the original name valuation. -/
+def chooseIf (n : ν) (g : Assertion α ν) (yes no : Command α ν) : Command α ν :=
+  .branch (existsGuard n g) (.seq (.act (.get n g)) yes) no
+
+omit [DecidableEq α] in
+theorem chooseIf_wp (n : ν) (g q : Assertion α ν) (yes no : Command α ν)
+    (s : State α ν) :
+    s.satisfies ((chooseIf n g yes no).wp q) ↔
+      (∀ v, (s.bind n v).satisfies g → (s.bind n v).satisfies (yes.wp q)) ∧
+      ((∀ v, ¬(s.bind n v).satisfies g) → s.satisfies (no.wp q)) := by
+  classical
+  simp only [chooseIf, wp, Action.wp, existsGuard, State.satisfies,
+    State.bind, Formula.eval, Formula.eval_imp]
+  constructor
+  · rintro ⟨hy, hn⟩
+    exact ⟨fun v hv => (hy ⟨v, hv⟩).2 v hv,
+      fun hg => hn (fun ⟨v, hv⟩ => hg v hv)⟩
+  · rintro ⟨hy, hn⟩
+    exact ⟨fun hg => ⟨hg, hy⟩, fun hg => hn (fun v hv => hg ⟨v, hv⟩)⟩
 
 def chooseLoop (n : ν) (g inv : Assertion α ν) (body : Command α ν) :
     Command α ν :=

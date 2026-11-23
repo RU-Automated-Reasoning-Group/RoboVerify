@@ -3,7 +3,6 @@
 import unittest
 
 import z3
-
 from synthesis.api.instructions import MarkGoal, MoveDown, MoveRight, Put
 from synthesis.api.program import wp
 from synthesis.inference_lib.quant_enum_merge import (
@@ -35,6 +34,10 @@ class QuantifierHygieneTests(unittest.TestCase):
         solver = z3.Solver()
         for name, value in zip(names, high.enum_blocks):
             solver.add(objects[name] == value)
+        x = z3.FreshConst(high.BoxSort)
+        solver.add(
+            z3.ForAll([x], z3.Implies(high.ON_star(x, objects["a"]), x == objects["a"]))
+        )
         for left in names:
             for right in names:
                 relation = (

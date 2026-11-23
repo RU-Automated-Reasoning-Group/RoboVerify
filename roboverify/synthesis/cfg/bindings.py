@@ -2,6 +2,8 @@
 
 from copy import deepcopy
 
+from z3.z3util import get_vars
+
 from synthesis.api.instructions import (
     Assign,
     Get,
@@ -12,8 +14,8 @@ from synthesis.api.instructions import (
 )
 from synthesis.api.program import Program
 from synthesis.cfg.physical import name_operands
+from synthesis.environment.motion_reference import OBSERVATION_REFERENCE_NAMES
 from synthesis.predicates.term import atom, boolean, free_names, negate, ref, to_z3
-from z3.z3util import get_vars
 
 
 def require_closed(instructions, available):
@@ -35,7 +37,12 @@ def require_closed(instructions, available):
             operands = instruction.get_operand()
             if any(o["type"] == "Box" for o in operands):
                 raise ValueError("Numeric object IDs must be closed before export")
-            used = {o["val"] for o in operands if o["type"] == "BoxName"}
+            used = {
+                o["val"]
+                for o in operands
+                if o["type"] == "BoxName"
+                and o["val"] not in OBSERVATION_REFERENCE_NAMES
+            }
             defined = set()
         missing = used - names
         if missing:
@@ -111,6 +118,25 @@ def seed_from_scope(length, available, rng=None):
     return Program(length, [name_operands(i, aliases) for i in sampled.instructions])
 
 
+def seed_for_node(node, length, num_blocks, rng=None):
+    """Preserve an existing body; seed every new body in its synthesis domain.
+
+    Refinement creates nodes with ``region=None``. In the relational phase these
+    need scoped names just like an empty BlockRegion, otherwise closing a random
+    ID seed introduces unrelated Get bindings absent from later demo segments.
+    """
+    from synthesis.api.program import generate_random_program
+    from synthesis.cfg.region import BlockRegion
+
+    if isinstance(node.region, BlockRegion) and node.region.physical:
+        return Program(len(node.region.physical), list(node.region.physical))
+    if node.synthesis_approach == "relational":
+        return seed_from_scope(length, node.available_scope, rng)
+    if node.synthesis_approach == "id-first":
+        return generate_random_program(length, range(num_blocks), rng)
+    raise ValueError(f"Unknown synthesis approach: {node.synthesis_approach}")
+
+
 def mutate_scoped(program, available):
     """Freeze Get prefixes; structural search may mutate only the physical body."""
     from synthesis.mcmc.synthesis import mutate_program
@@ -163,3 +189,21 @@ def mutate_ids(program, num_blocks):
     )
     require_ids(result.instructions, num_blocks)
     return result
+
+
+def enumerate_scoped(program, available, max_length):
+    """Freeze the existing Get prefix and enumerate its in-scope physical body."""
+    from synthesis.mcmc.enumeration import enumerate_programs
+
+    prefix = []
+    for instruction in program.instructions:
+        if not isinstance(instruction, Get):
+            break
+        prefix.append(instruction)
+    names = sorted(require_closed(prefix, available) - {"tbl"})
+    return enumerate_programs(
+        {"BoxName": names},
+        [PickByName, MoveByName, ReleaseByName],
+        max_length,
+        prefix=prefix,
+    )

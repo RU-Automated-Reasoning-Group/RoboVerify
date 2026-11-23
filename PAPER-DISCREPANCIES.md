@@ -24,10 +24,11 @@ Implementation fixes listed below are already complete unless marked open.
 | §5.5 / motion claims | State waypoint geometry, intentional Pick/Release contact, Release support, input alignment, and checked geometric loop invariants. Bound the claim to that model; controller refinement is unproved. | 4, 12, 18, 26, 27 |
 | §6.2 | Explain bounded initial-state witness search, replay of solver guard choices, physical reproduction of the selected VC failure, normal-exit sampling, and separate counts for verification attempts, executions and learner updates. | 34 |
 
-**Formal claims need correction or additional proof.** Theorem 5.2's
-no-new-quantifiers argument does not establish AFR closure; reconcile the AFR
-definitions and prove the applicable fragment or qualify the Higher case
-(1, 14, 16). Reconcile strict/non-strict Higher and direct-on definitions, and
+**Formal claims need correction or additional proof.** Exact Put WP is now
+proved not to preserve the adopted CAV AF^R fragment, with a finite legal-scene
+counterexample to every proposed AF^R rewrite. Replace Theorem 5.2 with the
+checked AER-closure and exact EPR-reduction result (1, 14, 16).
+Reconcile strict/non-strict Higher and direct-on definitions, and
 limit finite-instantiation claims to the supported equisatisfiability argument
 (14). Theorem 5.7 should state partial correctness unless a separate termination
 argument is supplied (15).
@@ -61,6 +62,39 @@ Corrected code removes rule 2's existential but retains fresh universal
 auxiliaries (16); their effect depends on surrounding formula and polarity.
 Revise the closure/decidability claim and proof or qualify Higher. Do not change
 valid code merely to force the original theorem.
+
+The [Lean development](roboverify/proofs/wp_soundness/README.md#restricted-aerepr-vc-theorem)
+now checks a restricted replacement theorem: AF specifications/invariants,
+QF selection matrices, and certified AER action transformers produce VCs with
+EPR negations. Uniform AFR action preservation implies the required AER
+closure on a fixed nonempty domain. The restricted generator also has an
+execution/no-fault soundness proof. A shared-height-witness Put WP is separately
+proved exact under the complete-tower model; its individual atom replacements
+are QF. This does not certify current Python VCs, quantified guards, or non-EPR
+background axioms. The concrete placement-to-AER connection is now checked for
+both block and table placement,
+including value-based aliases and all predicate replacements; its transformer
+is proved exact against the existing Lean `Action.put` semantics. The concrete
+block language now instantiates the program theorem with these Put rules and
+assignment, discharging action and immutable-table binding preservation.
+An exact small-model theorem and executable finite decision procedure now
+establish validity of these VCs over the stated complete current/frozen block
+model in both directions: EPR counterexamples need at most `k*(k+1)` physical
+blocks for `k` declared names plus existential variables. This is a proved
+formula-dependent bound, not finite-instance verification promoted to an
+unbounded result. AFR preservation is now disproved even under the CAV paper's
+broader Boolean-combination definition, adopted by the user. The existential
+postcondition `exists x. x!=a and Higher(a,x) and Higher(x,a) and ON*_zero(x,d)`
+has no equivalent AF^R exact WP for Put. `AFPreservation.finite_counterexample`
+provides a finite well-formed scene with an enabled Put refuting each proposed
+AF^R rewrite, and `no_exact_af_wp` relates this directly to operational WP.
+This is semantic nondefinability, not merely syntactic quantifier growth.
+The concrete alternative construction establishes AER closure. Arbitrary extra
+environment axioms and production Python correspondence remain separate from this model-relative
+decision theorem. `GroundEPR.generated_vc_reduction` additionally constructs a
+closed EPR query with exact SAT/counterexample and UNSAT/validity correspondence.
+It uses formula-dependent finite scene diagrams and quantifier expansion; this
+is a decidability reduction, not a compact axiomatization or a performance claim.
 
 ## 2. Rollouts from segment-initial states are required but never addressed
 
@@ -207,8 +241,106 @@ This is a bounded noiseless waypoint result, not physical refinement or a proof
 for the actual reset heights. Neither the executable nor the production motion
 semantics was changed. See the [configuration and artifacts](roboverify/synthesis/cfg/VERIFICATION.md#verification-of-the-current-unstack-revision).
 
-Keep end-to-end Unstack invocations within **60 seconds**; exhausted budgets and
-inconclusive proofs are unsuccessful results.
+**Shared-pipeline inference and symbolic verification, 2026-10-23.** The current
+provided program now uses `Put(b_prime,tbl)` in the shared verifier. Learning
+from all 60 heads/exits of the 15 four-block starts passes all 12 symbolic checks,
+including unbounded establishment, preservation and exit. The 68-second run
+includes about 41 seconds of learning/coverage and 16 seconds of symbolic checks.
+That run's motion encoding rejected the observation-relative coordinates;
+it did not extend the historical bounded motion claim. The user suspended
+the earlier 60-second cap for this feasibility investigation; commands now use
+an explicit 600-second budget. Timeouts and UNKNOWN remain unsuccessful results.
+
+**Independent extrema witnesses, 2026-10-23.** Shared motion encoding now handles
+`Y_min`, `Z_m` and instruction-entry gripper coordinates, keeping extrema witnesses
+independent of collision witness `sym`. It admits additional motions when those
+witnesses are not the true global extremizers. No primitive controller changed.
+Unstack still passes 12 symbolic checks. With the existing supported-tower
+premises, every collision check passes, but the overall result is
+`motion_unverified`: release/placement and three geometric preservation checks
+are refuted, and arm/column entry checks time out. The release countermodel allows
+only one physical object, so `b_prime` aliases `b0`; lifting then moves the height
+reference too. Symbolic correctness alone did not require excluding this loop
+head. The global geometric preservation obligations also exceed the arbitrary-
+obstacle collision test and may expose the extrema overapproximation. These are
+model counterexamples, not reproduced simulator failures. The complete motion
+VCs retain quantifiers; their treatment remains a separate investigation.
+See the [current results and reproduction commands](roboverify/synthesis/cfg/VERIFICATION.md#independent-extrema-witness-recheck).
+
+**Explicit base exclusion, 2026-10-23.** The supplied Unstack program now conjoins
+`b_prime != b0` with its previous guard. This is the adopted groundtruth used by
+default collection and supplied-program verification, not an optional variant.
+The previous condition did exclude the
+base after other blocks were placed elsewhere, but admitted it when only one
+physical block existed in the entire scene. The motion verifier already included
+the guard; the correction is to the executable condition. The collector now
+accepts one-block Unstack, with zero iterations and no actions. All 60 fresh
+demonstrations (15 seeds each for 1–4 blocks) passed validation, exact replay and
+50 extra settling steps. All 15 four-block action/observation traces match the
+previous program exactly.
+
+The shared pipeline relearned from all 60 four-block states and passed all 12
+symbolic checks. Under the existing supported-tower premises, the corrected guard
+eliminates the release-support and table-placement failures: all transfer-body
+checks pass. Three globally quantified geometric preservation checks remain SAT,
+including arm clearance with a different countermodel now that release is
+supported. Extrema witnesses can still omit an unnamed block relevant to those
+global checks. Two geometric entry checks return UNKNOWN at 10 seconds. These
+remaining model/quantifier issues are separate from the guard correction;
+no controller or motion-premise change was made. See the
+[strengthened-guard results](roboverify/synthesis/cfg/VERIFICATION.md#strengthened-unstack-guard).
+
+**Remaining motion VCs, 2026-10-23.** A shared-pipeline rerun with 120-second
+motion-query budgets returns SAT for both previously UNKNOWN entry checks;
+all five remaining geometric checks are now refuted, with 29 motion checks and
+all 12 symbolic checks valid. Independent small scenes satisfy the original
+quantified VCs with explicit coordinate/domain restrictions. At entry, the fixed
+gripper height is not above every allowed tower, and a permitted 10 mm column
+offset violates the requested exact XY invariant. For preservation, all extrema
+witnesses may alias the base while an unnamed block remains higher than the
+represented maximum or occupies the represented minimum-Y destination. These
+are failures of the stated geometric obligations/abstraction, not reproduced
+controller failures. They do not invalidate the strengthened guard or establish
+that the actual global-extrema execution collides. The program, controllers,
+premises and quantifier treatment were not changed for this diagnosis. See the
+[SAT scenes, timings and scope](roboverify/synthesis/cfg/VERIFICATION.md#unstack-motion-counterexamples-and-longer-timeouts).
+
+**Unstack column-invariant removal, 2026-10-23.** Exact XY column alignment was
+an auxiliary invariant inherited from the Stack proof, not the ordinary ON*
+interpretation or an Unstack task requirement. At the user's request, the
+integrated Unstack verifier now removes both its entry/preservation checks and
+its assumptions at fresh body/exit states. Stack retains them. The three other
+geometric counterexamples remain possible; removing an unnecessary invariant
+does not resolve the extrema abstraction or establish a full motion proof. See
+[the current configuration and results](roboverify/synthesis/cfg/VERIFICATION.md#unstack-without-exact-column-alignment).
+
+**Global-extrema encoding, 2026-10-23.** The former finite-candidate extrema
+admitted lower retreats and occupied destinations that the runtime global
+minimum/maximum would not select. Each reference now has a physical extremizer
+bounded universally against every physical object's instruction-entry coordinate.
+The unbounded arm-clearance and tower-height preservation violations now return
+UNSAT. Scalar extrema are exact; tied-object choice and the idealized waypoint
+model retain their documented scope. Initial arm clearance remains refutable,
+and solver UNKNOWNs still prevent full motion verification. See
+[the VC formulas and results](roboverify/synthesis/cfg/VERIFICATION.md#global-extrema-motion-vcs).
+
+The subsequent descent-collision investigation establishes the missing unbounded
+proof from Y separation alone. Ground instances of the existing universal
+premises suffice; dropping the other quantified conjuncts produces a weaker query
+that is UNSAT in 0.020 s, with no domain closure or added geometric assumption.
+The shared checker now tries this sufficient proof route and proves the descent
+in 0.081 s. Initial arm clearance is still refuted, and the full motion result
+remains unverified. See the
+[proof and integrated results](roboverify/synthesis/cfg/VERIFICATION.md#unstack-descent-proof-from-universal-instances).
+
+Figure 14's supplied invariant refers to an undefined b. The separately named
+`unstack_paper_base` interpretation substitutes b0, but the final checker finds
+an unbounded preservation countermodel consisting only of tbl with b0=tbl.
+The precondition excludes that state; the printed invariant does not retain the
+type fact needed at a general loop head. Explicitly adding `b0 != tbl` in
+`unstack_paper_physical_base` passes all 12 checks. This is a supplied control,
+not the learned formula, and supersedes the earlier successful control observation.
+See the [current commands, controls and artifacts](roboverify/synthesis/cfg/VERIFICATION.md#provided-unstack-and-reverse-verification).
 
 ## 11. Corrected plan/code restriction: loop guards may have multiple witnesses
 
@@ -263,9 +395,14 @@ separate; motion checks already prove the complete abstract effects.
 
 ## 14. AFR and predicate definitions are inconsistent across the paper
 
-**Paper formalization open.** §5.1 calls an existential followed by a universal
-AFR, unlike Definition 5.1's single block. Its universal-only learner description
-also conflicts with existential classifiers (§3.2.1) and guards (§3.3).
+**AF choice settled; paper definitions need correction.** The user adopted the
+CAV paper's AF^R: Boolean combinations of QF formulas and single universal or
+existential blocks. `Fragments.AF` implements that definition. It permits
+`(forall x. P(x)) and (exists y. Q(y))`, while dependent nested alternation
+requires an expressible equivalent to qualify. §5.1 calls an existential
+followed by a universal AFR, unlike Definition 5.1's single block. Its
+universal-only learner description also conflicts with existential classifiers
+(§3.2.1) and guards (§3.3).
 
 Higher is non-strict in §2.2/Appendix A but strict in Definition 5.4. Direct-on
 vertical bands differ across §2.2, Definition 5.4 and Figure 12. Code uses
@@ -354,6 +491,12 @@ empty gripper, cube payloads, and checks against other objects. Release proves
 support or fails and permits an arbitrary falling position; simulation opens
 before arm retreat. Remove the grasp-noise argument and avoid claims about
 settling or controller refinement (4).
+
+The 2026-10-23 Unstack integration corrected the named primitive verifier's
+Release operand interpretation: the operand gives retreat Z and need not name
+the payload. The model now captures gripper XY and reference Z before opening,
+matching the existing controller, including `Release(Z_m)`. This does not add
+settling dynamics, payload feedback or a controller-refinement proof.
 
 ## 19. Recorded and candidate CFG trajectories used different imitation features
 
@@ -541,24 +684,32 @@ fixtures are not injected into production learning.
 
 ## 30. Stack invariant vocabulary and attachment semantics
 
-**Default bootstrap passes; attachment/replay model limit remains.** A larger
+**Public Put relocation corrected, 2026-10-23.** A larger
 vocabulary need not strengthen the partition learner's minimum separating
 features. ON*/Scattered/equality can admit a second tower.
 
-For a singleton a=b=b0 and c=b_prime above d in another tower, attachment WP
+Historically, for a singleton a=b=b0 and c=b_prime above d in another tower, attachment WP
 adds c above a while retaining c above d:
 `ON_new(x,y) = ON_old(x,y) or (ON_old(x,c) and ON_old(b,y))`.
 After b:=c, `ON*(b,x) => ON*(x,b0)` fails for d. Geometric replay detaches c
 from d instead, so it cannot provide that failing successor for enlargement.
-The resulting no-progress diagnosis is not successful refinement. This mismatch
-outside source-singleton states remains unresolved.
+The resulting no-progress diagnosis was not successful refinement.
 
 The agreed public Put contract requires both operands to be distinct, clear
 physical blocks before execution. The [Lean formalization](roboverify/proofs/wp_soundness/README.md)
 proves the guarded general-relocation WP and its deletion/attachment
 decomposition under that contract, and checks a counterexample to using the
-additive rule on a supported source. The production dispatcher is unchanged;
-implementing and establishing correspondence to the proved rule remains open.
+additive rule on a supported source. The production dispatcher now composes
+source deletion with attachment for ON*, rather than retaining the source's old
+support edges. It requires a clear physical source and, for a block destination,
+a distinct clear support. A table destination needs only the source condition.
+Dispatch follows the destination's value, so Reverse's `b <- tbl` selects the
+table WP before later iterations select the block WP. Frozen ON*_zero is unchanged.
+Motion checking proves enabling conditions separately from predicate effects;
+an unavailable action does not make every successor atom false. Regression tests
+cover supported-source relocation, both table spellings, frozen relations and
+occupied operands. These checks do not mechanically certify the Python translator
+against Lean or establish physical controller refinement.
 
 **Higher-removal ablation, 2026-10-01.** On the five current four-block
 demonstrations, ON*/Scattered/equality learned the clear-top, root and
@@ -573,7 +724,9 @@ premises remained; removing those too refuted transport collision and arm-cleara
 checks. Higher is therefore not indispensable for this Stack proof, but the current
 learner did not recover the necessary replacement in that vocabulary. The structural
 control is explicitly supplied, not a new learner or production fallback; the
-attachment rule remains unchanged. See the [ablation results and reproduction](roboverify/synthesis/cfg/VERIFICATION.md#higher-removal-ablation).
+attachment rule was still additive in that historical ablation. Those results
+have not been rerun with the corrected relocation rule. See the
+[ablation results and reproduction](roboverify/synthesis/cfg/VERIFICATION.md#higher-removal-ablation).
 
 ON*/equality alone can learn a one-tower invariant and pass symbolic verification,
 but lacks motion separation facts. Under exact height comparison, the full
@@ -638,6 +791,25 @@ columns in the noiseless proof exclude them. Tighter gripper stopping alone does
 not bound attachment error. If revisited, assess block feedback and justified
 placement margins; changing Scattered's threshold changes its contract and needs
 separate justification. No predicate or sampler change is currently requested.
+
+The 2026-11-10 automatic-boundary experiment supplies a direct endpoint example:
+`ON(1,0)` holds while block 3 is 100.370 mm from base 0 and 99.978 mm from the
+placed block along Y. Scattered therefore disagrees with the production Put
+copy effect despite valid finite enabling and the checked input axioms. Across
+132 transfers, three Scattered effects fail immediately. Five additional
+post-settling cases violate numeric ON* transitivity while direct ON remains
+true. The [finite effect audit](roboverify/runs/contract-boundary-refinement/20261110/stack/predicate-effect-audit/summary.json)
+does not assume axioms during evaluation, so these are not vacuous successes.
+Higher/full motion refinement remains unchecked; no predicate semantics or
+scene assumptions were changed to remove the counterexamples.
+
+The later integrated operand-reference continuation improves physical robustness
+without removing this issue. Its three development failures (seed 908 at each
+of three/four/five blocks) have a 100.873 mm support-to-loose-block separation;
+about 1.70 mm payload placement bias crosses Scattered's 100 mm cutoff while
+ON/support and task stability remain true. All 45 untouched final episodes pass
+the finite effect checks, but those successes do not erase the development
+counterexamples. See the [integrated study](roboverify/synthesis/experiment/README.md#integrated-contract-refinement-and-final-stack-simulation).
 
 ## 34. Section 6.2 does not explain how induction countermodels become initial environments
 
@@ -790,7 +962,11 @@ Ordinary Move parameters choose the destination relative to the physical table
 frame; the groundtruth supplies (+0.45, -0.15) m XY offsets, exposed for later
 optimization. The physical table reference uses Z = surface minus half a block,
 so one +0.05 m placement offset works for both table and block supports.
-This controller reference does not change the isolated relational tbl marker.
+Since 2026-10-28, approach, lift and retreat use observed `Z_m + 0.10`;
+lateral transport retains the gripper height. The resulting executable has a
+new fingerprint, and the historical symbolic/motion results below have not
+been rerun for it. This controller reference does not change the isolated
+relational tbl marker.
 Missing table geometry fails explicitly, and the motion verifier reports these
 new table-coordinate operands as unsupported. The existing 50-step budgets and
 2 mm tolerances remain.
@@ -803,10 +979,28 @@ final-state validation. All 54 focused controller, task execution, collection,
 replay and motion tests passed. Table-relative semantics enter fingerprints for
 programs using table references; earlier first-block-outside-loop archives remain
 historical artifacts.
-This is empirical evidence, not a symbolic/motion proof or controller refinement.
-Connecting the correct Reverse abstraction, invariant learning and motion
-contracts to a verifier remains open. See the
+That collection evidence alone was not a symbolic/motion proof or controller refinement.
+The subsequent shared-pipeline run now learns from all 75 heads/exits of 15
+four-block executions and passes all 12 symbolic checks, including the unbounded
+proof, for `Put(b_prime,b); b <- b_prime`. Both b=tbl and b!=tbl WP branches are
+checked. The learned run requesting both proof levels takes 164.9 s and reports
+`motion_unverified`: table coordinates and tower-root selection remain unsupported.
+Its extra refuted motion checks arise under an incomplete translation and do not
+establish a simulator collision. No stronger primitive was introduced. See the
 [program, collection and evidence](roboverify/synthesis/inference_lib/README.md#collect-reverse-demonstrations).
+
+**Figure 15 invariant/guard discrepancy.** The literal formula contains `tbk`;
+`reverse_paper_table` explicitly interprets it as tbl. Even after that correction,
+clause 6, `ON*(b,u) => not ON*(u,b0)`, excludes b=b0 by reflexivity. The current
+program transfers the original base last and exits with b=b0, so preservation
+fails and the exit premises are inconsistent. Changing only that clause to
+`ON*(b,u) => (b=b0 or not ON*(u,b0))` yields the separately named
+`reverse_paper_final` control, which passes all 12 checks. The printed guard
+also matches Unstack's stopping condition rather than this all-block Reverse
+loop. These are candidate paper corrections, not evidence that the literal
+printed program/invariant was proved. Literal formulas remain available and
+supplied controls never trigger inference repair. See the
+[verification controls](roboverify/synthesis/cfg/VERIFICATION.md#paper-invariant-controls).
 
 ## 40. Grid and Pyramid execution and verification have separate support
 
@@ -956,9 +1150,15 @@ the row-head-only nested axioms; this illustration mismatch is unresolved.
 row quantifies `g` but writes `reach(h0,x)`; its Grid/Pyramid Scattered clauses
 omit the distinct-block restriction. The displayed `reach` definition omits
 closure stars: immediate-successor composition cannot describe all visited
-goals. Specify closure-inclusive row traversal, including h0. Verification also
-needs a sufficient-block premise; otherwise the inner guard can stop with goals
-unfilled. The existing partial-correctness VCs alone do not establish termination
+goals. Specify closure-inclusive row traversal, including h0. The shared
+[goal-task specification](roboverify/synthesis/cfg/TASK-CONDITIONS.md)
+now supplies the distinct-block Scattered restriction, empty-goal entry condition,
+physical occupancy postcondition and an equal-count resource premise matching the
+benchmark factories. This addresses the specification gap without encoding row
+shapes or traversal into the task contract. Sound traversal/action rules and
+program proof integration remain separate work; without enough physical blocks,
+the inner guard can stop with goals unfilled. The existing partial-correctness
+VCs alone do not establish termination
 (15). No synthesis or formal verification result is claimed for these executions.
 
 ## 41. Restack needs a terminating first loop and an executable lateral layout
@@ -996,9 +1196,10 @@ For the requested geometry, first-phase placement uses
 previous placement Y advances a separated temporary row, and table Z supplies
 the resting height. The first p is tbl. The last temporary placement is b0 and
 becomes the new tower base. Stack placement uses b0 for XY and b for support Z.
-The paper's dynamic Xm/Zm references are replaced with these ordinary reference
-operands and fixed table-relative clearance `N*0.05 + 0.10` m above its support
-reference. The table-placement +0.05 m follows the existing support convention;
+The current program uses observed `Z_m + 0.10` for approach, lift and retreat,
+and holds the gripper height during lateral transport. Earlier collection and
+verification evidence used fixed table-relative clearance and a different
+fingerprint. The table-placement +0.05 m follows the existing support convention;
 the paper's zero offset would put the target below the surface under that
 convention. These are explicit waypoint adaptations, not a literal transcription.
 All parameters remain trainable. Controllers, tolerances and instruction budgets
@@ -1054,8 +1255,9 @@ references. A Move freezes its target before its servo loop; this preserves the
 original horizontal transfer. Two- and four-block seed-0 executions were compared
 against saved pre-migration executions: every action and observation was identical.
 No payload-feedback skill, tolerance change or relaxed step limit was introduced.
-The reference semantics enter fingerprints. Collection explicitly opts in, while
-the normal synthesis/verification loader rejects these unencoded references.
+The reference semantics enter fingerprints. Collection explicitly opts in.
+The later supplied-program verification path also opts in for execution and
+inference; ordinary search/loading still rejects the unencoded references.
 
 `collect_demos --task TASK` now selects a provided groundtruth for all six tasks.
 The old `unstack_lateral` runner, monkey-patched controllers and compatibility
@@ -1098,10 +1300,13 @@ The 82 focused tests passed across reference semantics, archive auditing,
 collection/replay, controllers, task removal, inference entry points, goal
 layouts, Pyramid seed 12, Restack and Reverse. These are execution results and
 regressions. No new symbolic or motion verification result, and no full synthesis
-run, is claimed by this audit. The integrated CLI still exposes Stack/Unstack;
-current Unstack runtime references, Reverse/Restack integration and goal-aware
-synthesis/verification remain open. Historical proof evidence retains its
-recorded executable, premises and workspace scope.
+run, is claimed by this audit. Subsequent Unstack/Reverse shared-pipeline symbolic
+proofs are recorded separately in entries 10 and 39. Unstack's observation
+operands are now encoded, with remaining motion obligations in entry 10;
+Reverse's motion encoding, Restack integration and goal-aware synthesis/
+verification remain open.
+Historical proof evidence retains its recorded executable, premises and workspace
+scope.
 
 ## 43. Final-state task success ignores settling; Unstack and Reverse skipped initial settling
 
@@ -1147,3 +1352,124 @@ had stopped at the earlier success criterion, so the v2 results of chains that
 ended on a lost success are lower bounds. See the
 [plan and implementation notes](roboverify/synthesis/cfg/docs/settled_postcondition.md#5-implementation-2026-10-26).
 These are execution results; symbolic and motion verification are unaffected.
+
+## 44. Geometric loop milestones can mix incompatible gripper phases
+
+**Implementation/model limitation, observed in end-to-end synthesis.** The
+paper's Stack illustration folds completed placement fragments using `ON`.
+On dense physical demonstrations, the geometric interpretation of `ON` can
+already hold while the source remains grasped above its destination. Selecting
+the first such state does not establish a completed, released placement.
+
+The 2026-11-10 contract-search experiment synthesized a complete 17-primitive
+four-block Stack program from five full independent-controller demonstrations,
+without a supplied body or loop. It passed 15 fresh four-block executions and
+their contact/frame audits. This fixed-size result does not establish loop
+recovery. Repeated `ON` labels recover a three-iteration loop with initialization
+`b=b0`, update `b=b_prime`, and learned guard `Scattered(b0,b_prime)`, but its
+extracted body examples have incompatible hand phases: the five first iterations
+start empty and the ten later iterations still hold the preceding destination.
+
+Under the current shared nominal primitive contracts, Pick requires every
+example to be empty-handed, Release requires every example to be holding, and
+Move preserves heldness. Neither Pick nor Release is therefore available in
+this batch at any depth. Moves cannot change any block position in the initially
+empty examples, whose `ON(b_prime,b)` body goals are false. This is a structural
+obstruction for this partition, not a beam-width or CEM-budget problem. The
+[certificate](roboverify/runs/contract-end-to-end/20261110/loop-body-holding-obstruction.json)
+records all 15 heads, exact holding-state closure, four inductive Z3 checks and
+probes of the implemented nominal transitions. It is not a proof about every
+physical controller or a richer conditional language.
+
+This motivated recovering phase-consistent boundaries from
+observations (for example, placement together with a released hand), or to learn
+a first-transfer prologue, steady-state loop and release epilogue. No supplied
+loop template, hidden teacher phase labels or relaxed primitive preconditions
+were used to bypass the obstruction. The paper's synthesis algorithm permits
+failure; this finding does not refute its conditional soundness claims.
+
+A subsequent [observable release diagnostic](roboverify/runs/contract-end-to-end/20261110/stack-released-milestone-diagnostic.json)
+delays each learned placement milestone until its same `ON` formula holds with
+a known empty hand. All five demonstrations retain exactly three iterations;
+all 15 heads and endpoints are empty, and the resulting CFG validates. For
+demo 0 the cuts shift from `0,82,203,342` to `0,103,226,364`, with the remaining
+physical tail retained. The unchanged learner infers `Scattered(b,b_prime)`.
+This establishes segmentation feasibility without teacher phase labels;
+by itself it is not a synthesized body or successful whole-loop execution.
+The [subsequent bounded body search](roboverify/runs/contract-end-to-end/20261110/released-head-continuation-beam12/result-summary.json)
+reached depth 6 but found no complete candidate. Four evaluated prefixes
+achieved `ON` on all 15 examples while ending with closed fingers in every case.
+The original impossibility argument no longer applies to the aligned inputs;
+this later search result is empirical and bounded. Matching a geometric
+milestone must still be distinguished from matching its physical hand/retreat
+state.
+
+The [completed-retreat continuation](roboverify/synthesis/experiment/README.md#completed-retreat-recovers-a-loop-with-remaining-execution-failures)
+then delayed boundaries through an observation-derived upward retreat and
+low-speed plateau. Pick became admissible at all 15 starts. Using the same
+learned CFG, contract search synthesized a five-primitive loop body plus its
+remaining tail, with no supplied body or teacher action labels. All five whole
+training executions passed the immediate goal check; three passed an independent
+50-step settling audit. This resolves the demonstrated structural
+obstruction for these new boundaries, but does not establish a reliable
+generalizing controller: a frozen, CEM-disabled candidate passed fresh task and
+5 mm contact/frame audits in 15/15 three-block, 8/15 four-block and 0/15 five-block
+cases. Placement drift accumulated, sometimes causing premature current-top
+Scattered guard exits; taller towers became unstable. The candidate's 12
+symbolic VCs passed, including unbounded checks with a learned invariant, but
+motion refinement and termination remain unproved. The physical failures must
+not be presented as covered by that abstract proof.
+
+Training-only whole-loop CEM improved combined task/settling/5 mm physical success
+to 15/15, 14/15 and 11/15 on new three-, four- and five-block cases, respectively.
+A separate beam-24 Arc shortlist selected support-referenced descent and reached
+15/15, 15/15 and 3/15 on those same new cases. Both passed all 12 symbolic checks
+without repairs. The five-block physical-success target remains unmet; remaining
+failures include premature current-top guard exits and nonmover displacement.
+The initial baseline used different seeds. Exact candidates and full physical
+audits are preserved in the linked experiment; this is not a production boundary
+policy or a demonstrated motion refinement proof.
+
+A [matched automatic-boundary study](roboverify/synthesis/experiment/README.md#contract-guided-boundary-refinement-experiments)
+then replaced the manual retreat detector with bounded milestone truth windows
+and existing first-action contracts. Original/released-only cuts still produce
+no complete body; both manual and automatic cuts recover one under identical
+search budgets. Automatic cuts preserve all 15 ON endpoints, all five traces
+and their tails, with 5/5 settled training success. Its frozen loop has fresh
+combined task/settling/5 mm success of 15/15, 14/15 and 4/15 at three/four/five
+blocks. Unstack cut refinement similarly repairs a 0/5→5/5 handoff, but a separate
+shared-offset proposal is needed to synthesize the local released Higher region.
+No full Unstack program is recovered. See entry 33 for the observed reason that
+local ON cannot by itself justify the full symbolic abstraction.
+
+The investigation also corrected independent implementation defects: loop exit
+labels are checked at actual heads/exits rather than requiring first truth at
+the last internal state; quotienting removes already-consumed, bind-free
+intermediate milestones while retaining the final physical tail; rebound-only
+loops no longer require a nonempty carried-variable update; and extracted
+iterations require changed bindings or witnessed milestone progress. These
+repairs enable structural recovery but do not solve the mixed-phase body problem.
+
+The later opt-in [contract refinement implementation](roboverify/synthesis/cfg/CONTRACT-REFINEMENT.md)
+searches persistent milestone windows and matches continuing entries' hand phase
+to each demonstration's first iteration. It recovers a Stack loop from complete
+traces and permits shared Unstack Move→Pick prefixes. Full-program gates now
+reject observed contract/settling failures. The [integrated results](roboverify/synthesis/experiment/README.md#integrated-contract-refinement-and-final-stack-simulation)
+distinguish automatic training-only selection from a generated operand alternative
+selected on development starts. The latter passes 45/45 final physical audits.
+A subsequent full CLI run with additional validation starts and bounded float
+repair automatically recovers a different Stack loop and passes all 35
+training/development starts. Its separate fresh evaluation passes 45/45 task
+checks, 43/45 physical audits and 44/45 finite relational audits. The same
+executable passes all 12 symbolic VCs with learned invariants; the physical
+counterexamples remain and prevent a motion-refinement conclusion. A subsequent
+full run selecting by complete-execution frame margin passes all 45 new task,
+physical and finite relational audits with a different automatically recovered
+program, and all 12 symbolic VCs. This remains finite simulation evidence plus
+conditional abstract correctness, not universal motion refinement. Complete
+Unstack synthesis remains unresolved.
+The investigation also identified two implementation defects: the holding
+observer discarded active MuJoCo margin contacts, and fresh relational nodes
+were seeded with numeric operands that introduced aliases absent from later
+demonstration segments. Their corrections preserve the physical controllers,
+contact/endpoint acceptance requirements and existing loop inference.

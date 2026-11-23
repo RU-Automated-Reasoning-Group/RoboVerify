@@ -5,7 +5,6 @@ from copy import deepcopy
 from functools import lru_cache
 
 import z3
-
 from synthesis.inference_lib.demo_store import LoopHeadState
 from synthesis.util import on
 from synthesis.util.symbols import fresh_const
@@ -76,6 +75,7 @@ def _compile_state_predicate(expr):
             "ON_star": on.on_star_implementation,
             "ON_star_zero": on.on_star_implementation,
             "Higher": on.higher_implementation,
+            "EqualHeight": on.equal_height_implementation,
             "Scattered": on.scattered_implementation,
         }
         if name not in predicates:
@@ -148,11 +148,20 @@ def model_to_loop_head(context, model, loop_id, constants, *, timeout_ms=5000):
         formulas = (
             on_star(p, q),
             on_star(p0, q0),
-            on.higher_z3(p[2], q[2]),
+            (
+                on.equal_height_z3
+                if context.height_predicate == "EqualHeight"
+                else on.higher_z3
+            )(p[2], q[2]),
             z3.Or(z3.Abs(p[0] - q[0]) >= 2 * length, z3.Abs(p[1] - q[1]) >= 2 * length),
         )
         for relation, formula in zip(
-            (context.ON_star, context.ON_star_zero, context.Higher, context.Scattered),
+            (
+                context.ON_star,
+                context.ON_star_zero,
+                getattr(context, context.height_predicate),
+                context.Scattered,
+            ),
             formulas,
         ):
             solver.add(formula == model.eval(relation(a, b), model_completion=True))
@@ -188,7 +197,7 @@ def model_to_loop_head(context, model, loop_id, constants, *, timeout_ms=5000):
     for relation in (
         context.ON_star,
         context.ON_star_zero,
-        context.Higher,
+        getattr(context, context.height_predicate),
         context.Scattered,
     ):
         for a, b in itertools.product(objects, repeat=2):

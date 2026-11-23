@@ -1,17 +1,28 @@
 # Synthesis and verification
 
-`synthesis.entry.synthesize_cfg` runs the structured CFG synthesizer and both
-verification stages on the same candidate and task conditions.
+`synthesis.entry.synthesize_cfg` runs structured CFG synthesis and optional
+verification on the same candidate and task conditions. `--mode synthesize`
+stops after search and saves an executable candidate for simulation and later proof.
+
+All seven benchmarks have [symbolic task conditions](TASK-CONDITIONS.md), exposed
+through `symbolic_task_spec`. Goal-task assertions use a separate physical
+occupancy vocabulary; adding these specifications does not add goal-aware
+inference, weakest-precondition rules or integrated proof support.
 
 ## Collection and pipeline modes
 
-Collection supports all six current tasks: Stack, Unstack, Reverse, Restack,
-Grid and Pyramid. The integrated synthesis/verification CLI exposes Stack and
-Unstack only. Its ordinary loader rejects the current Unstack program's
-observation-relative extrema/gripper operands, which are execution/collection
-features. Goal programs remain collection-only as well. Do not interpret the
-cross-environment demo audit as six end-to-end synthesis/verification results;
+Collection supports all seven current tasks: Stack, Unstack, Reverse, Restack,
+Grid, Pyramid and Build3D. The integrated CLI accepts supplied Stack, Unstack
+and Reverse programs. Unstack/Reverse now have learned unbounded symbolic proofs;
+their current observation/table-relative coordinates remain outside the motion
+encoding. Reverse search and goal-program proofs are unsupported. Do not interpret
+the cross-environment demo audit as end-to-end synthesis/verification results;
 see the [support matrix](../../../README.md#project-status).
+
+The 2026-10-28 Reverse/Restack observed-height update changes executable
+fingerprints. The Reverse proof runs and archive paths below refer to the prior
+fixed-clearance executable; recollect demonstrations before checking the current
+program. Its symbolic and motion results have not been rerun.
 
 First collect a supplied primitive DSL program using
 `synthesis.entry.collect_demos`. The [collection guide](../inference_lib/README.md)
@@ -25,7 +36,7 @@ output directory gets a numbered suffix, use the printed archive path.
 
 Stack collection holds the reset gripper position for 50 control steps, then
 records the resulting full simulator state as demonstration state zero. The
-preparation is excluded from program actions, loop events, and video. Both
+preparation is excluded from program actions, loop events, and video. All
 pipeline modes restore archived starts for candidates and repairs; standalone
 MCMC uses the same saved starts for CEM/scoring and candidate videos. Seeds
 identify recordings rather than reconstructing their initial state. Restoration
@@ -53,18 +64,64 @@ uv run python -m synthesis.entry.synthesize_cfg --task stack --num-blocks 3 \
 uv run python -m synthesis.experiment.report --run runs/cfg/latest
 ```
 
-`--mode full` performs search and optional flat-loop recovery (`--quotient`).
+`--mode full` performs search and optional flat-loop recovery (`--quotient`),
+then runs the configured verification stages.
+`--mode synthesize` runs the same search/refinement/quotient pipeline without
+invariant bootstrap or final verification. `synthesized_unverified` means the
+search accepted a candidate, not that it passed an independent simulation audit.
+Use `--synthesis-approach id-first` to search concrete operands before relational
+quotienting; this approach enables quotienting automatically.
 `--mode verify` adapts the supplied executable into the same CFG and skips initial
-search. Its fingerprint must match the demonstration source. PickPlace and nested
+search. Its fingerprint must match the demonstration source unless the explicit
+`--candidate-program` option is used. That option checks a different candidate
+on the demonstration starts and learns from its own executed states and events.
+PickPlace and nested
 loops are unsupported in this workflow. `--output-dir` changes the experiment
 results root; `--run-name` adds an optional readable label. `--smoke` is a small
 search budget, not an acceptance criterion.
+
+Synthesis saves the structured CFG and reloadable `artifacts/program.json`,
+including exact float values, control settings, guard syntax, initial aliases,
+the executable fingerprint and resolved configuration. Every completed block
+attempt is retained under `artifacts/blocks/`, including unsuccessful search
+evidence; those partial bodies are not complete task programs. To verify a saved
+complete candidate later, use:
+
+```bash
+uv run python -m synthesis.entry.synthesize_cfg \
+  --mode verify --task stack --num-blocks 4 \
+  --program PATH/TO/artifacts/program.json --candidate-program \
+  --demos PATH/TO/original-demonstrations.npz
+```
+
+The task and block-count checks still apply. A candidate tied to four physical
+aliases does not thereby generalize to other block counts. See the
+[end-to-end experiment record](../experiment/README.md) for actual synthesis and
+simulation outcomes.
 
 The collector and pipeline accept `--higher-tolerance METRES` (default 0.001,
 zero for exact ordering). Runtime guards, inference and geometric verification
 share this setting; see the [height comparison guide](../inference_lib/README.md#higher-height-tolerance).
 
 ## Provided Stack verification
+
+### Selecting WP and the symbolic backend
+
+`--wp-system old|new|reduction` selects the existing WP/axioms (default), the
+shared-height WP with stronger relational axioms, or the shared-height WP with
+direct complete-tower model reduction. `--wp-support-complete` optionally adds
+support completeness to `new`. Both alternatives require `Higher`; the
+selection also reaches inference and rebuilt finite/unbounded contexts.
+
+The reduction checks its input fragment and derives its own countermodel bound.
+Unsupported quantifier alternation or exhausted compilation budgets return
+`UNKNOWN`. A finite check is never promoted to an unbounded proof. Quantified
+Unstack guards remain supported by `new`; they need not pass the unbounded
+reduction's fragment check. See the [backend guide](../verification_lib/WP-BACKENDS.md)
+for axioms, exact scope, budget flags and the Python API. Recorded benchmark
+results below use `old`; switching the backend does not reproduce them by itself.
+
+### Supplied Stack configuration
 
 The supplied program has an unchanged symbolic body
 `Put(b_prime, b); Assign(b, b_prime)`. Its physical placement uses b0 for XY and b
@@ -161,6 +218,13 @@ Finite symbolic checks are followed by an unbounded proof; motion checks also
 quantify over unnamed objects. The demonstration count supplies inference data,
 not a bound on the proof's block count. Full MCMC/CFG synthesis acceptance is
 resolved; it is separate from this supplied-program proof.
+
+**Relocation regression, 2026-10-23:** after correcting public Put's source
+detachment, table-valued destinations and enabling conditions (discrepancy 30),
+the documented Stack configuration again returned `verified_model`: 12 symbolic
+and 40 motion checks, including four new Put-enabling obligations, in 25.0 s.
+Run: `runs/cfg/20261023-160508-770d1d6-stack-relocation-regression/`.
+The historical Higher-removal ablations below have not been rerun with this rule.
 
 ### Removing the common-support comparability axiom (`on4`)
 
@@ -553,6 +617,896 @@ Each process ran the usual ablation command with `--case baseline
 --without-extra-motion-premises --symbolic-timeout-ms 300000
 --no-minimize-unsat-core`, using its own output directory.
 
+## Equal-height alternative
+
+Supplied-program verification accepts `--height-predicate EqualHeight` in place
+of the default `Higher`. For Stack and Unstack, the default inference vocabulary
+then becomes `ON_star EqualHeight Scattered equality`. Reverse keeps its
+`ON_star ON_star_zero equality` default; explicitly supply `--invariant-relations
+ON_star ON_star_zero EqualHeight Scattered equality` to include EqualHeight in
+Reverse learning. Runtime evaluation, both inference
+evaluators, invariant serialization, counterexample realization, symbolic WP,
+and motion translation share this choice. Finite proof contexts retain it.
+The EqualHeight domain uses reflexivity, symmetry, transitivity, exclusion of
+distinct ON*-related blocks at the same level, and table isolation. It adds no
+Higher ordering or hidden Higher assumptions. Mixing height vocabularies fails
+explicitly.
+
+For physical blocks, `EqualHeight(x,y)` means
+`abs(z(x)-z(y)) <= tolerance`. It shares `--higher-tolerance` (default 0.001 m);
+zero means exact equality. The table marker equals only itself. As with tolerant
+Higher, transitivity requires separated height levels whose within-level spread
+is at most the tolerance; it is not valid for arbitrary continuous heights.
+The Stack entry condition uses `forall x,y. EqualHeight(x,y)`. This is physically
+equivalent to the original all-pairs Higher entry condition, so archive task
+identity stays canonical and existing archives are revalidated under the selected
+predicate. Executable fingerprints and controller behavior are unchanged.
+
+For an enabled `Put(a,b)`, write `E` for EqualHeight. Self-pairs stay true and
+pairs not involving `a` are framed. For another physical block `x`:
+
+```text
+Put(a,tbl): E'(a,x) = Root(x)
+Put(a,b):   E'(a,x) = exists s. DirectON(x,s) and E(s,b)
+
+Root(x)       = forall s. ON*(x,s) => x=s
+DirectON(x,s) = x!=s and ON*(x,s) and
+                forall t. (ON*(x,t) and ON*(t,s)) => (t=x or t=s)
+```
+
+The reverse pair uses the same rule. Table aliases dispatch by value. These
+rules describe complete, uniformly supported towers on a common table; the
+weak abstract domain axioms alone do not establish that geometry. Motion
+verification separately proves their effects under its explicit premises.
+The block rule still introduces existential/universal quantifiers, and the
+table rule introduces a universal. Thus EqualHeight is a useful alternative,
+not a quantifier-free WP construction or a restoration of AFR closure. This
+implementation does not add a Lean correspondence theorem.
+
+The partition learner includes **one feature per unordered EqualHeight pair**.
+Including both orientations lets each feature be predicted by its symmetric
+duplicate, yielding symmetry tautologies instead of useful state facts. With
+both orientations, the first Stack trial retained only three structural clauses
+and returned UNKNOWN on the unbounded exit check. Canonical pairs recovered a
+six-clause invariant and the full proof, using the same learner and traces.
+
+Reproduce from `roboverify/` with the environment in AGENTS.md:
+
+```bash
+uv run python -m synthesis.entry.synthesize_cfg \
+  --mode verify --task stack --num-blocks 4 \
+  --program synthesis.examples.stack:build_program \
+  --demos demos/stack/4-blocks-5-trajectories-pyeda-verification/demonstrations.npz \
+  --height-predicate EqualHeight --invariant-minimizer pyeda \
+  --max-loop-iterations 3 --symbolic-iterations 0 --motion-iterations 0 \
+  --supported-towers --table-surface-height 0.4 \
+  --initial-arm 1.3446426 0.74911606 0.5314612 \
+  --verification-timeout-ms 30000 --motion-timeout-ms 30000 \
+  --wall-timeout-seconds 600 --run-name stack-equal-height
+uv run python -m synthesis.entry.synthesize_cfg \
+  --mode verify --task unstack --num-blocks 4 \
+  --program synthesis.examples.unstack:build_program \
+  --demos demos/unstack-base-guard-20261023/4-blocks/demonstrations.npz \
+  --height-predicate EqualHeight --invariant-minimizer pyeda \
+  --symbolic-iterations 0 --motion-iterations 0 \
+  --supported-towers --table-surface-height 0.4 \
+  --initial-arm 1.3446426 0.74911606 0.5314612 \
+  --verification-timeout-ms 30000 --motion-timeout-ms 30000 \
+  --wall-timeout-seconds 600 --run-name unstack-equal-height
+```
+
+The 2026-10-26 trials replayed all five Stack starts (20 loop states) and all
+15 Unstack starts (60 states). Both learned from False with no supplied invariant
+and no refinement/repair. Symbolic success includes sizes 2–4 and an unbounded
+proof, with premise-consistency checks retained. Motion uses the existing
+noiseless supported-tower model; it does not prove controller refinement or
+termination. Unstack retains the documented suspension of the 60-second limit.
+
+| Configuration | Symbolic checks | Motion checks | Overall result |
+| --- | --- | --- | --- |
+| Stack, EqualHeight | 12 valid | 40 valid | `verified_model` |
+| Unstack, EqualHeight | 12 valid | 31 valid, 1 UNKNOWN | `motion_unverified` |
+| Stack, Higher control | 12 valid | 40 valid | `verified_model` |
+| Unstack, Higher control | 12 valid | 29 valid, 3 UNKNOWN | `motion_unverified` |
+
+Final rechecks under `runs/cfg/`:
+`20261026-202416-f4f812c-stack-equal-height-final` (22 s) and
+`20261026-202414-f4f812c-unstack-equal-height-final` (92 s).
+Controls used the same archives, premises and budgets:
+`20261026-201959-f4f812c-stack-higher-control` (26 s) and
+`20261026-202003-f4f812c-unstack-higher-control` (162 s).
+These are individual, partly concurrent runs, not a speed benchmark. In the
+EqualHeight rechecks the height-effect checks took 0.226 s (Stack) and 0.169 s
+(Unstack); the Higher control took 0.037 s (Stack) and timed out (Unstack).
+Unstack's remaining EqualHeight UNKNOWN is initial arm clearance, an existing
+entry-premise issue; all seven collision checks, predicate effects, and geometric
+preservation checks passed. A timeout is not a proof, and changing the height
+predicate does not repair the documented initial-arm counterexample.
+
+Each run saves the inferred formula under
+`artifacts/candidates/0/invariant-1.smt2` (Stack) or `invariant-0.smt2`
+(Unstack), and the per-obligation formulas/verdicts under
+`artifacts/verification/`. For example, Stack learns
+`forall x. EqualHeight(b0,x) or ON_star(x,b0)`: every block is at the base level
+or belongs to the growing tower. This supplies useful information without a
+directional height ordering. The run IDs record the parent HEAD and dirty tree;
+implementation commit `3ed26e3` contains the finalized code.
+
+Regression coverage includes all 73 arrangements of four physical blocks into
+complete towers, every enabled block/table relocation and table alias, all
+ordered EqualHeight pairs, tolerance boundaries, table isolation, both learner
+evaluators, serialization, geometric realization, quantifier hygiene and summary
+havoc. These finite regression cases supplement the recorded unbounded VCs;
+they are not themselves an unbounded correctness theorem for the translator.
+The broader 413-test run passed all 407 existing tests; one new table-evaluation
+test exposed a missing table binding in its fixture. After fixing the fixture,
+the 25-test focused rerun passed, including all seven new EqualHeight tests and
+18 existing Put/summary tests. This covers 414 distinct passing tests across the
+runs. Logs and a bounded summary are in `runs/tests/20261026-equal-height/`.
+
+### Reverse vocabulary investigation
+
+The 2026-10-26 Reverse investigation uses all 15 four-block recordings from
+`demos/pipeline-audit-20261023/reverse/demonstrations.npz`. Every recording passes
+the current precondition and frozen-entry reversal postcondition. Each run
+reexecutes the supplied program, learns from all 75 continuing/exit states,
+starts with False, and uses no supplied invariant or refinement. The symbolic
+body is `Put(b_prime,b); b <- b_prime`, with both b=tbl and b!=tbl branches.
+
+The expanded vocabulary `ON_star ON_star_zero EqualHeight Scattered equality`
+learns 13 clauses. All nine checks at sizes 2–4 pass, but the unbounded
+establishment/preservation/exit results are **valid / invalid / UNKNOWN**.
+Motion is therefore not attempted. The run finishes after 322 seconds, below
+its 600-second wall budget. Its `symbolic_budget_exhausted` aggregate status
+means there are no allowed refinement rounds; the preservation result is an
+actual SAT counterexample, not a timeout.
+
+A concrete five-block witness explains the failure. Start from an initial tower
+c0,c1,c2,c3,c4, bottom to top. After transferring c4, the current source has four
+blocks and the destination has one. The entire learned invariant, the guard,
+the enabled-Put conditions, and all current/frozen domain axioms hold. Transfer
+c3 onto c4 and assign b=c3, producing towers of heights three and two. Clause 11
+then fails:
+
+```text
+forall x,y. Scattered(x,y) =>
+    EqualHeight(b0,x) or EqualHeight(b0,y) or EqualHeight(x,y)
+```
+
+Choose x=c2 at Z=0.525 and y=c3 at Z=0.475; b0 is at Z=0.425. The blocks are
+separated in XY, neither is at base height, and their heights differ. All domain
+axioms still hold after placement. The production WP also evaluates false on
+this same pre-state, agreeing with the geometric update. This is an invariant
+generalization failure beyond the four-block training scenes, not evidence of
+an incorrect EqualHeight placement rewrite. The witness is a symbolic/geometric
+scene, not a five-block MuJoCo execution; the supplied physical factory was
+limited to 2–4 blocks at the time of that diagnostic. The subsequent five-block
+collection is recorded below.
+
+The matched expanded Higher vocabulary also fails unbounded preservation
+(establish/preserve/exit: valid / invalid / valid), after 384 seconds. The same
+five-block transfer violates its learned clauses 22 and 23. Thus the failure
+also occurs with Higher when using the expanded vocabulary, rather than
+Reverse's established structural vocabulary.
+
+Here "expanded" means adding **one** height relation and Scattered to Reverse's
+usual `ON_star ON_star_zero equality` vocabulary. Higher and EqualHeight are
+never enabled together; `equality` is object identity, not height equality.
+
+Removing Scattered alone also fails: `ON_star ON_star_zero EqualHeight equality`
+passes all nine checks at sizes 2–4, then returns valid / invalid / valid for
+unbounded establish/preserve/exit. The same complete five-block transfer refutes
+its clause 11, which requires any object below the current tip in the frozen
+tower to be at the base or tip height whenever the tip is above the base. The
+run is `runs/cfg/20261026-203845-eb9a90e-reverse-equal-height-no-scattered`
+(313 s). This confirms that removing one predicate need not fix generalization
+from demonstrations of only four-block towers.
+
+The structural control uses the EqualHeight domain but learns only from
+`ON_star ON_star_zero equality`. It passes all 12 symbolic checks, including
+the unbounded proof. Its 263-second run is
+`runs/cfg/20261026-203704-eb9a90e-reverse-equal-height-structural`.
+Motion remains `motion_unverified`: 18 checks are valid, seven unsupported,
+five refuted and two UNKNOWN. Table-relative controller coordinates and tower
+root selection are unsupported, and the resulting incomplete motion translation
+does not justify treating the downstream refutations as physical collisions or
+as a counterexample to the EqualHeight rewrite. This control establishes a
+structural proof under the alternative domain; it does not learn height clauses.
+
+Reproduce the expanded EqualHeight trial from `roboverify/` with the simulator
+environment configured:
+
+```bash
+uv run python -m synthesis.entry.synthesize_cfg \
+  --mode verify --task reverse --num-blocks 4 \
+  --program synthesis.examples.reverse:build_program \
+  --demos demos/pipeline-audit-20261023/reverse/demonstrations.npz \
+  --height-predicate EqualHeight \
+  --invariant-relations ON_star ON_star_zero EqualHeight Scattered equality \
+  --invariant-minimizer pyeda --symbolic-iterations 0 --motion-iterations 0 \
+  --supported-towers --table-surface-height 0.4 \
+  --initial-arm 1.3446426 0.74911606 0.5314612 \
+  --verification-timeout-ms 30000 --motion-timeout-ms 30000 \
+  --wall-timeout-seconds 600 --run-name reverse-equal-height
+```
+
+For the structural control, keep `--height-predicate EqualHeight` and set
+`--invariant-relations ON_star ON_star_zero equality`.
+
+The expanded runs are `runs/cfg/20261026-203052-eb9a90e-reverse-equal-height`
+and `runs/cfg/20261026-203052-eb9a90e-reverse-higher-control`. For the Higher
+control, change both height-predicate and vocabulary entries to Higher.
+The saved invariant and symbolic checks are under
+`artifacts/candidates/0/invariant-1.smt2` and `artifacts/verification/`.
+Geometric witness coordinates, domain checks, failing clauses and the WP check
+are saved under `runs/diagnostics/20261026-reverse-equal-height/` in
+`five-block-witness.json` and `vocabulary-witnesses.json`. The one-off diagnostic
+scripts stay outside the repository.
+
+At the user's request, the follow-up collected five-block executions using the
+same program and controllers, extending only the factory's explicit block-count
+limit in commit `42664cf`. Seeds 0–14 all completed and passed immediate task
+validation, but the independent exact-replay/50-step settling audit passed only
+12: seeds 0, 1 and 3 lost task success while settling. The original archive and
+failures are retained in `demos/reverse/5-blocks-equal-height-20261026/`. The
+`audited/` subset selects seeds 2 and 4–14 solely by the audit result, before
+invariant inference, and records the criterion in `selection.json`. See the
+[collection evidence](../inference_lib/README.md#collect-reverse-demonstrations).
+
+The 12 audited executions provide 72 loop states. The old four-block invariant
+fails on **36 of those observed states**, confirming that its generalization
+failure occurs in actual controller executions. An explicit symbolic check at
+five physical blocks also returns valid / invalid / valid for
+establish/preserve/exit, in 3.85 s. That supplementary result is saved with the
+original run as `artifacts/verification/diagnostic-five-block-symbolic.json`;
+the observed-state check is
+`runs/diagnostics/20261026-reverse-equal-height/five-block-observed-counterexamples.json`.
+The standard relational pipeline still checks finite sizes 2–4 before its
+unbounded query, independently of training block count.
+
+The first five-block inference run, `20261026-204701-eb9a90e-reverse-five-block-equal-height`,
+was explicitly interrupted when the settling audit identified the three failed
+recordings; it has no verification result. The audited rerun uses the preceding
+expanded-EqualHeight command with `--num-blocks 5` and
+`--demos demos/reverse/5-blocks-equal-height-20261026/audited/demonstrations.npz`.
+It is recorded as
+`runs/cfg/20261026-204903-42664cf-reverse-five-block-equal-height-audited` and
+finishes in 381 seconds, learning 15 clauses from the 72 states. All nine
+standard finite checks at sizes 2–4 pass. A separate five-block check also
+passes establishment, preservation and exit in 8.55 seconds; its report is
+`artifacts/verification/diagnostic-five-block-symbolic.json` in that run.
+Unbounded establishment and exit pass, but preservation remains **invalid**.
+Motion is not attempted, and the aggregate `symbolic_budget_exhausted` again
+means zero permitted refinement rounds, not expiration of the 600-second limit.
+
+The new invariant admits a complete six-block Reverse prefix with source and
+destination heights 5+1. The next legal transfer produces heights 4+2 and
+violates clause 13:
+
+```text
+forall x,y. not ON_star(y,x) or EqualHeight(b,b0) or EqualHeight(x,y)
+            or EqualHeight(b,x) or not ON_star_zero(b,x)
+            or ON_star_zero(b0,x)
+```
+
+Label the frozen source c0,...,c5 from bottom to top. After the second transfer,
+b=c4, b0=c0, x=c2 and y=c3 falsify every disjunct. The entire invariant, guard,
+enabled-Put conditions and domain axioms hold before; the domain axioms still
+hold afterward. The production body WP evaluates false on the same pre-state,
+agreeing with the explicit geometric update. This is a symbolic/geometric
+witness, not a six-block simulator
+execution. It is saved under `five_block_training` in the vocabulary-witnesses
+diagnostic above. Thus five-block training removes the observed five-block
+failure but does not establish generalization to arbitrary tower sizes. The
+structural proof and the expanded-vocabulary failure concern different learned
+invariants under the same EqualHeight domain; they are not conflicting verdicts
+on the same invariant.
+
+The eight focused Reverse execution/reset and tower-verification tests passed,
+including the new five-block case. No controller budget, tolerance, payload
+feedback or placement primitive was strengthened.
+
+## Provided Unstack and Reverse verification
+
+Both current programs use the shared supplied-program pipeline: restore all
+archived starts, execute the actual primitives, learn from continuing heads and
+normal exits with `InvInference`, and check the resulting abstraction. Unstack
+uses `Put(b_prime,tbl)`. Reverse starts with `b <- tbl`, then repeats
+`Put(b_prime,b); b <- b_prime`; the WP dispatches on b's value, covering both the
+first table placement and later block placements. The source is detached from
+its old supports before attachment. The precondition, guard and frozen entry
+relation come from the current program/task, not an obsolete verifier.
+
+Run from `roboverify/` with the simulator environment in AGENTS.md configured:
+
+```bash
+uv run python -m synthesis.entry.synthesize_cfg \
+  --task unstack --mode verify --program synthesis.examples.unstack:build_program \
+  --num-blocks 4 --demos demos/unstack-base-guard-20261023/4-blocks/demonstrations.npz \
+  --invariant-minimizer pyeda --verification-level symbolic \
+  --verification-timeout-ms 30000 --wall-timeout-seconds 600 \
+  --symbolic-iterations 0 --motion-iterations 0 --run-name unstack-learned
+uv run python -m synthesis.entry.synthesize_cfg \
+  --task reverse --mode verify --program synthesis.examples.reverse:build_program \
+  --num-blocks 4 --demos demos/pipeline-audit-20261023/reverse/demonstrations.npz \
+  --invariant-minimizer pyeda --verification-level symbolic \
+  --verification-timeout-ms 30000 --wall-timeout-seconds 600 \
+  --symbolic-iterations 0 --motion-iterations 0 --run-name reverse-learned
+```
+
+If an archive is absent, collect it with `collect_demos --task TASK --num-blocks 4
+--num-trajectories 15 --seed-start 0 --output-dir demos/pipeline-audit-20261023/TASK`.
+For current Unstack, use `--output-dir demos/unstack-base-guard-20261023/4-blocks`;
+the earlier Unstack archive has the previous guard's fingerprint and cannot be
+used with the current factory. Use the collector's printed archive path.
+Unstack defaults to ON*/Higher/Scattered/
+equality; Reverse to ON*/frozen ON*_zero/equality. All 15 seeds are used, yielding
+60 Unstack and 75 Reverse states. Both contexts retain the top-existence axioms.
+Finite checks use 2–4 physical blocks plus the table marker, followed by an
+unbounded DeclareSort proof. This is partial correctness under the relational
+axioms, not a termination proof or a block-count bound.
+
+The user suspended the earlier 60-second Unstack limit for this feasibility
+investigation; `--wall-timeout-seconds 600` makes that override explicit. The CLI's
+Unstack default remains 60 seconds. `--symbolic-iterations 0` tests the initial
+learned invariant without counterexample refinement; it does not disable learning.
+No supplied invariant was used in the learned runs below.
+
+| Run under `runs/cfg/` | Total | Symbolic result | Motion result |
+| --- | ---: | --- | --- |
+| `20261023-155239-f72e967-unstack-learned-finite-sat-pruning` | 68.0 s | 12 valid, unbounded | Not requested |
+| `20261023-160301-f72e967-unstack-learned-shared-both` | 55.3 s | 12 valid, unbounded | Unsupported observation references |
+| `20261023-160302-f72e967-reverse-learned-shared-both` | 164.9 s | 12 valid, unbounded | Unsupported table coordinates/root selection |
+
+These run IDs record the HEAD at launch; the artifacts also record that the
+working tree contained this investigation's changes. Invariant SMT-LIB files and
+fresh candidate archives are under `artifacts/candidates/0/`; per-check results
+are under `artifacts/verification/`. Event timestamps split the 68-second run into
+approximately 11 s setup/replay, 41 s learning plus coverage checks and 16 s
+symbolic verification. The later Reverse run used approximately 13 s setup/replay,
+139 s learning/coverage, 6 s symbolic verification and 7 s motion/reporting.
+These are one-second-resolution phase estimates, not isolated CPU benchmarks.
+
+The original delay came from quantified tautology/redundancy queries with the
+top-existence axiom, not Boolean minimization. Pruning now tries finite SAT
+witnesses first, keeps clauses on UNKNOWN and bounds redundancy queries. Reverse
+initially proved the exit implication but returned UNKNOWN on premise consistency;
+a finite SAT witness now resolves that case after the unbounded proof. Finite
+UNSAT/UNKNOWN never establishes unrestricted validity or vacuity. See the
+[inference timing investigation](../inference_lib/README.md#truth-table-minimization).
+
+`--verification-level both` requests motion after symbolic success. The earlier
+Unstack run stopped on observation references; their encoding and current results
+are below. Reverse still reports unsupported table-coordinate instructions and
+root selection; its additional refuted checks come from that incomplete motion
+translation and do not certify an actual simulator collision. No payload-feedback
+primitive or stronger controller was introduced. `verified_symbolic` is kept
+distinct from `verified_model`.
+
+### Independent extrema witness recheck
+
+This section records the former finite-candidate encoding. The current
+[global-extrema encoding](#global-extrema-motion-vcs) replaces it.
+
+The `sym2` approach is implemented in the shared primitive checker and CFG path,
+with one extra arbitrary physical witness per extrema evaluation. The current
+Unstack body has three evaluations (two `Y_min`, one `Z_m`); they normally allocate
+`sym2`, `sym3`, `sym4`. These may alias any physical object, including one another
+and `sym`. No block-count restriction is added. Each reference takes its finite
+extremum over all represented physical objects at instruction entry; the next
+instruction recomputes it, including the moved payload. `gripper` is captured at
+entry too. Release uses its operand for retreat Z, with gripper XY and reference
+Z captured before opening. Stack has no extrema operands and allocates no extra
+witnesses. See the [encoding and scope](../verification_lib/README.md#observation-relative-motion-references).
+
+The following records the pre-strengthening run configuration; its guard and
+archive match revision `4f734bf`. For the current executable, use the
+[strengthened-guard command](#strengthened-unstack-guard) below.
+
+```bash
+timeout 610s uv run python -u -m synthesis.entry.synthesize_cfg \
+  --task unstack --mode verify --program synthesis.examples.unstack:build_program \
+  --num-blocks 4 --demos demos/pipeline-audit-20261023/unstack/demonstrations.npz \
+  --invariant-minimizer pyeda --verification-level both \
+  --table-surface-height 0.4 --verification-timeout-ms 30000 \
+  --motion-timeout-ms 10000 --wall-timeout-seconds 600 \
+  --symbolic-iterations 0 --motion-iterations 0 --run-name unstack-sym2
+```
+
+For the separately labeled supported-model check, add `--supported-towers
+--initial-arm 1.3446426 0.74911606 0.5314612` and use
+`--run-name unstack-sym2-supported`. This requests the existing geometric entry
+and preservation checks; it does not establish their premises from simulation.
+The Stack regression uses the [provided Stack command](#provided-stack-verification)
+with `--symbolic-iterations 0 --wall-timeout-seconds 600` and
+`--run-name stack-sym2-regression` replacing its run name.
+
+| Run under `runs/cfg/` | Total | Symbolic | Motion |
+| --- | ---: | --- | --- |
+| `20261023-181211-827d858-unstack-sym2` | 66.7 s | 12 valid | 19 valid, 9 refuted |
+| `20261023-181351-827d858-unstack-sym2-supported` | 103.6 s | 12 valid | 27 valid, 5 refuted, 2 unknown |
+| `20261023-181211-827d858-stack-sym2-regression` | 24.8 s | 12 valid | 40 valid; `verified_model` |
+
+The run IDs capture the pre-commit HEAD and dirty tree; implementation was
+committed as `4f734bf`. Both Unstack runs reexecuted all 15 archived starts and
+learned from all 60 states. Neither used a supplied invariant or refinement.
+The full regression suite passed 475 tests across 68 modules, with no skips,
+failures or errors, in 242.9 s (247.7 s including imports); logs and summary are
+under `runs/tests/20261023-motion-extrema/`. This includes nine focused extrema
+regressions and the installed real-solver baseline tests. Run timings are wall
+times from this machine, with some checks running concurrently.
+Their observation references have no unsupported obligations. Without the
+supported-tower premises, the extrema-dependent transfer, descent and retreat
+collision checks pass; approach/lift collisions, exact release support, placement,
+Put source clearance and predicate effects have countermodels in the broader
+geometric model. Solver-query time summed to 0.72 s; run events attribute about
+4 s to the complete motion stage.
+
+Under the supported-tower premises, **all seven swept collision checks pass**,
+as do Put enabling conditions, frame preservation and ON*/Higher/Scattered
+effects. This remains conditional: the full motion result is unsuccessful.
+Release support and the placement contract are refuted by a singleton physical
+loop head allowed by the learned invariant/guard: `b_prime = b0`, with all
+witnesses aliased to that same block at Z=0.425. The lift moves b0 as well, so the
+descent's b0 reference leaves the block at Z=0.575 instead of the resting height.
+The release counterexample is distinct from the historical simulator's
+submillimetre settling-height discrepancy.
+
+Arm-clearance and column-alignment entry checks each reach the 10 s query limit
+and return `unknown`. Their preservation and supported-height preservation are
+refuted. Globally quantified geometric invariants range beyond the finite extrema
+candidates; a nonextremizing witness assignment can therefore admit a target
+that the real global minimum would exclude. These SAT witnesses do not establish
+actual simulator failures. Addressing these loop-head/model obligations is
+separate from adding the operand encoding. The supported run spent about 41 s
+in motion, with 37.72 s summed solver-query time, including the two timeouts.
+
+The extrema and swept-collision expressions introduce no quantifiers, but full
+VCs retain quantified geometry and predicate effects. Their quantifier treatment
+is deferred by request and recorded as `TODO(motion-quantifiers)` in
+`primitive_motion.py`; no quantified premise or conclusion was discarded.
+
+### Strengthened Unstack guard
+
+Revision `a2e789d` adds `b_prime != b0` to the existing guard. The loop body's six
+primitives, controllers, offsets, reset workspace, task conditions and motion
+premises are unchanged. The guard is used by runtime collection, symbolic VCs
+and the motion loop-head constraints (`invariant AND guard`). It prevents the
+previous singleton-world counterexample without requiring a minimum of two
+physical blocks as a proof assumption.
+This is the adopted groundtruth at `synthesis.examples.unstack:build_program` and
+the default for `collect_demos --task unstack`. The previous guard is historical;
+there is no alternative groundtruth flag. The executable difference is exactly
+`new_guard = (b_prime != b0) AND old_guard`.
+
+Fresh collection and replay/settling audits passed 15 seeds (0–14) each for 1,
+2, 3 and 4 blocks under `demos/unstack-base-guard-20261023/{N}-blocks/`. The loop
+executes N−1 times; singleton traces have zero primitive actions. Every replay
+has zero observation error and remains successful after 50 extra steps. The 15
+four-block action/observation sequences are identical to the old guard's archived
+executions. See the [collection commands](../inference_lib/README.md#collect-unstack-demonstrations).
+The guard's fingerprint changed, so the shared pipeline uses the new archive.
+
+```bash
+timeout 610s uv run python -u -m synthesis.entry.synthesize_cfg \
+  --task unstack --mode verify --program synthesis.examples.unstack:build_program \
+  --num-blocks 4 --demos demos/unstack-base-guard-20261023/4-blocks/demonstrations.npz \
+  --invariant-minimizer pyeda --verification-level both \
+  --supported-towers --table-surface-height 0.4 \
+  --initial-arm 1.3446426 0.74911606 0.5314612 \
+  --verification-timeout-ms 30000 --motion-timeout-ms 10000 \
+  --wall-timeout-seconds 600 --symbolic-iterations 0 --motion-iterations 0 \
+  --run-name unstack-base-guard-supported
+```
+
+To reproduce the comparison without additional tower geometry, omit
+`--supported-towers` and `--initial-arm ...`, and use
+`--run-name unstack-base-guard`. These are shared pipeline runs: all 15 starts
+are reexecuted, the invariant is learned from all 60 heads/exits, and symbolic
+verification precedes motion. There is no supplied invariant or refinement.
+
+| Run under `runs/cfg/` | Total | Symbolic | Motion |
+| --- | ---: | --- | --- |
+| `20261023-184247-a2e789d-unstack-base-guard-supported` | 107.3 s | 12 valid, including unbounded | 29 valid, 3 SAT, 2 UNKNOWN |
+| `20261023-184248-a2e789d-unstack-base-guard` | 66.9 s | 12 valid, including unbounded | 19 valid, 9 SAT |
+
+With supported towers, **release support and the table-placement contract now
+pass**. All seven collision checks, Move support, frame preservation, Put enabling
+conditions and exact ON*/Higher/Scattered effects also pass. The remaining checks
+are:
+
+| Obligation | Result |
+| --- | --- |
+| `arm_clearance_entry` | UNKNOWN, 10 s timeout |
+| `column_alignment_entry` | UNKNOWN, 10 s timeout |
+| `arm_clearance_preserved` | SAT |
+| `column_alignment_preserved` | SAT |
+| `tower_height_preserved` | SAT |
+
+The arm-preservation countermodel now has a supported placement; it is no longer
+the arbitrary-fall consequence of the singleton release. All three preservation
+checks quantify over objects beyond the finite extrema candidates. A selected
+`Z_m` witness can miss a higher unnamed block after removing the source, and
+`Y_min` witnesses can miss an unnamed object relevant to column/height
+preservation. The extra behaviors admitted by this conservative encoding remain
+subject to the deferred quantifier investigation. The full result is still
+`motion_unverified`; passing body checks conditional on geometric premises does
+not establish their entry and preservation obligations.
+
+Without supported-tower premises, the same nine obligation categories remain
+SAT as before (approach/descent/lift collisions, release support, placement, source
+clearance and three predicate effects). The stronger guard removes base aliasing
+but supplies neither supported heights nor arm clearance by itself.
+
+The focused regression run passed 33 tests in 6.1 s, covering symbolic singleton/
+finished/tower guards, real singleton collection and auditing, collection contracts
+and extrema motion. The previous 475-test full-suite result predates this guard
+change; it was not rerun for this focused experiment. Collections ran in parallel;
+the archive audit and two independent pipeline configurations also overlapped.
+
+### Unstack motion counterexamples and longer timeouts
+
+The five-check result below predates the removal of Unstack's exact-column
+invariant; see [the current configuration](#unstack-without-exact-column-alignment).
+
+The two UNKNOWN entry checks above were rerun through the shared pipeline with
+`--motion-timeout-ms 120000` instead of 10000. Use the strengthened-guard command
+above with that substitution and `--run-name unstack-base-guard-motion-120s`;
+the total wall budget stays 600 seconds. There was no program, controller, premise
+or quantifier change. All 15 starts were replayed and the invariant was relearned.
+
+Run `runs/cfg/20261023-184930-50662ed-unstack-base-guard-motion-120s` completed in
+122.3 s: **12 valid symbolic checks; 29 valid and 5 refuted motion checks; no
+UNKNOWN results**. The exact per-check times were:
+
+| Obligation | Result | Solver-query time |
+| --- | --- | ---: |
+| `arm_clearance_entry` | SAT | 0.562 s |
+| `column_alignment_entry` | SAT | 0.084 s |
+| `arm_clearance_preserved` | SAT | 1.252 s |
+| `column_alignment_preserved` | SAT | 3.546 s |
+| `tower_height_preserved` | SAT | 5.644 s |
+
+Both formerly UNKNOWN checks finished well below the new cap. This establishes
+counterexamples, not that either query inherently needs more than ten seconds;
+quantified solver behavior varies with the reconstructed formulas and solver state.
+The overall result remains `motion_unverified`.
+
+To explain the SAT results, the shared motion verifier was also reconstructed
+with the preceding run's saved learned invariant. Each of its five original
+quantified violation queries was exported, then constrained to a small scene.
+All five constrained queries returned SAT (0.16–1.30 s). The restrictions were
+diagnostic witness choices, not new production assumptions. A SAT model under
+additional restrictions is also a counterexample to the unrestricted VC; no
+finite UNSAT result was used to establish validity.
+
+Coordinates below are metres. Block side length is 0.05, table surface Z is 0.4,
+and the resting center is 0.425. XY coordinates are chosen for a simple abstract
+scene; these are not claims of simulator reachability. All extrema witnesses
+and `sym` alias b0, which the model permits. Additional objects in the full
+quantified domain are not inserted into the finite extrema candidate set.
+
+1. **Arm clearance at entry.** A complete three-block tower has centers at
+   Z = 0.425, 0.475, 0.525. The fixed initial gripper Z is 0.5314612, but the
+   requested invariant requires at least `0.525 + 0.025 = 0.550`. The requirement
+   concerns height above every block regardless of horizontal separation; failing
+   it is not itself evidence of an initial collision.
+2. **Column alignment at entry.** Put b0 at `(0, 0, 0.425)` and the upper block
+   at `(0.01, 0, 0.475)`. This satisfies the input alignment radius of `<0.0125`
+   per XY axis, but the candidate column invariant requires exactly equal XY.
+   Supported heights and the relational precondition do not close that gap.
+3. **Arm clearance after the body.** Start with a complete five-block tower at
+   Z = 0.425, 0.475, 0.525, 0.575, 0.625 and move the highest block. The represented
+   objects after placement are all at Z=0.425, so the encoded maximum gives
+   retreat Z=0.575. An unrepresented block remains at Z=0.575, requiring clearance
+   Z≥0.600. The actual global maximum would instead give retreat Z=0.725. This
+   example uses a complete tower, not a height gap admitted by the abstraction.
+4. **Column alignment after the body.** Start with b0 at `(0, 0, 0.425)`, source
+   at `(0, 0, 0.475)`, and an unrepresented loose block at `(0.01, -0.15, 0.425)`.
+   The represented minimum is Y=0, so the encoded placement is `(0, -0.15, 0.425)`.
+   The two blocks are horizontally close enough to satisfy geometric ON*, yet
+   differ in X by 0.01, violating exact alignment. The actual global minimum is
+   -0.15 and would place the source at Y=-0.30.
+5. **Supported height after the body.** Use the preceding scene with the loose
+   block at `(0, -0.15, 0.425)`. The encoded placement gives two distinct objects
+   exactly coincident centers. Their required vertical separation is 0.05, but
+   their actual separation is zero. Again, the real global minimum would choose
+   Y=-0.30 and avoid this placement.
+
+The preservation counterexamples explain how global geometric checks can fail
+while the collision VC passes: collision uses the arbitrary `sym` object, which
+also participates in the computed extremum. Choosing the loose block as `sym`
+changes the target to Y=-0.30. The global invariant separately quantifies over an
+object that can be absent from all extrema candidates. The encoding admits extra
+motions for such witness assignments; these examples do not refute the actual
+global-extrema primitive's behavior.
+
+Artifacts are under `runs/diagnostics/20261023-unstack-motion-vcs/`:
+`counterexamples.json` includes named and previously unrepresented objects,
+before/after coordinates, gripper positions and instruction-entry reference values.
+Each obligation has an unrestricted `.smt2` query, a `-scene.smt2` query with the
+explicit scene restrictions, and a SAT `-model.smt2` result. The one-off capture
+script stayed in `/tmp`; no diagnostic runner was added to the project. Existing
+archives still match the groundtruth fingerprint. Quantifier handling and the
+remaining proof-model changes remain deferred.
+
+### Unstack without exact-column alignment
+
+The alignment policy below remains current. Its recorded results used the former
+finite-candidate extrema; see [global-extrema results](#global-extrema-motion-vcs)
+for the current reference semantics.
+
+The integrated Unstack task now passes `exact_column_alignment=False` to
+`verify_cfg_motion`. This removes `column_alignment_entry` and
+`column_alignment_preserved`, **and** removes exact-column assumptions from fresh
+loop-body and exit states. Removing only the checks would leave an unjustified
+premise in the motion proof. Stack retains the API default (`True`). Ordinary
+geometric ON* still allows per-axis offsets below L/2; the separate tight input
+alignment premise is unchanged.
+
+The remaining known SAT obligations are `arm_clearance_entry`,
+`arm_clearance_preserved`, and `tower_height_preserved`. The numerical scenes in
+the preceding section still apply after dropping exact columns. In particular,
+the five-block arm-clearance scene moves the top block to the table; an unnamed
+remaining block has center Z=0.575, while the represented maximum is only 0.425.
+The encoded retreat is 0.575 instead of the true global-extrema retreat of 0.725,
+violating the required height of 0.600. This is an extra trace admitted by the
+extrema overapproximation, not a reproduced simulator failure.
+The actual `ReleaseByName("Z_m", target_z=0.15)` resolves `Z_m` over every
+physical block in the observation at instruction entry, then adds 0.15 to that
+block-center height. It does retract above the true global maximum; the lower
+retreat in this countermodel comes solely from the finite candidate abstraction.
+
+The three scene queries were reconstructed from the newly learned invariant in
+`runs/cfg/20261023-193438-a9a483d-unstack-without-exact-columns` and returned SAT
+in 0.205, 2.633 and 0.314 s respectively. Original quantified VCs, restricted
+scene queries and SAT models are under
+`runs/diagnostics/20261023-unstack-without-exact-columns-current/`.
+Finite scene restrictions are only diagnostic witness choices; their SAT results
+refute the original queries, but finite UNSAT could not establish validity.
+No diagnostic runner was added to the repository.
+
+The focused suite passed **23 tests in 30.7 s**, including a regression that
+finds offset tower models at both fresh loop boundaries when the option is off.
+Stack's shared pipeline retains all column checks and passed **12 symbolic and
+40 motion checks in 25.8 s** (`runs/cfg/20261023-193438-a9a483d-stack-column-policy-regression`).
+The full Python suite was not rerun for this scoped change.
+
+The Unstack shared run relearned from all 60 states and passed all 12 symbolic
+checks. Its motion stage did **not** finish within the requested 600-second wall
+budget with 120-second query limits. The Python alarm and external TERM did not
+end the native solver call promptly, so the process was explicitly killed;
+the wrapper returned 124. No complete motion report was saved. See the run's
+`budget-observation.json` for the external termination record; its stale logger
+status is not evidence of a live or successful run. To retry with a hard outer
+limit, use `timeout --kill-after=5s 610s` around the strengthened-guard supported
+command, with `--motion-timeout-ms 120000` and
+`--run-name unstack-without-exact-columns`.
+
+The separate 10-second-query diagnostic using the new learned invariant completed
+with 26 valid checks. Two collision queries (`collision_1_sym`, `collision_5_sym`)
+and `effect_Higher` returned UNKNOWN after removing the exact-column premise.
+The remaining three geometric queries have the concrete SAT scenes above,
+although their unrestricted solver calls did not resolve in that diagnostic
+(the entry query was captured without an unrestricted retry). Do not present
+these combined diagnostic observations as a completed shared-pipeline proof or
+promote UNKNOWN to SAT/UNSAT. No additional body SAT failure was established.
+
+### Global-extrema motion VCs
+
+The original global-extrema run below predates the
+[universal-instance descent proof](#unstack-descent-proof-from-universal-instances).
+Its 300-second UNKNOWN is retained as the baseline, not the current descent result.
+
+The primitive checker now selects one physical extremizing block m_i for each
+instruction-entry reference. Write S_i for that entry state and Phys(c) for
+`c != tbl`. The added constraints are:
+
+\[
+E_i^{\min}=\mathrm{Phys}(m_i)\land
+  \forall c.\;(\mathrm{Phys}(c)\Rightarrow
+  Y_{S_i}(m_i)\leq Y_{S_i}(c)),
+\]
+\[
+E_i^{\max}=\mathrm{Phys}(m_i)\land
+  \forall c.\;(\mathrm{Phys}(c)\Rightarrow
+  Z_{S_i}(c)\leq Z_{S_i}(m_i)).
+\]
+
+Unstack uses the first rule at instructions 4 and 5, and the second at Release
+(instruction 6). Each reference is frozen before that instruction changes state.
+The held source is included. Table objects are excluded. The arbitrary collision
+witness sym is independent of all three selected extrema witnesses. Every finite,
+nonempty scene has extrema, without imposing a fixed cardinality bound. Scalar
+extrema are exact; the model admits either tied extremizing block rather than
+encoding runtime ID tie-breaking. Unstack uses only Y from Y_min and Z from Z_m.
+
+Let I be the learned symbolic invariant translated to geometry, G the witnessed
+guard, H the supported-height condition, C the empty-arm clearance condition, and
+T the composed primitive transitions including these global reference constraints.
+The preservation violation queries are:
+
+\[
+I\land G\land H_{\mathrm{in}}\land C_{\mathrm{in}}\land T
+\land\neg C_{\mathrm{out}},
+\qquad
+I\land G\land H_{\mathrm{in}}\land C_{\mathrm{in}}\land T
+\land\neg H_{\mathrm{out}}.
+\]
+
+The existing tight input-alignment premise also remains; exact-column alignment
+is disabled for Unstack. These are unbounded, quantified queries. The new
+constraints specify how references are computed; neither postcondition is added
+as an assumption. Entry clearance still checks the initial premises against
+`not C_in` before any extrema instruction executes.
+
+Use the strengthened-guard supported command above with
+`--motion-timeout-ms 30000 --wall-timeout-seconds 600
+--run-name unstack-global-extrema` and the guarded four-block archive. The run
+`runs/cfg/20261023-195605-8589a8c-unstack-global-extrema` replayed all 15 starts,
+relearned from all 60 states, and finished in **212.1 s**. All **12 symbolic checks
+passed**, including unbounded checks. Motion returned **28 valid, 4 UNKNOWN**:
+entry arm clearance, `collision_1_sym`, `collision_5_sym`, and `effect_Higher`
+each reached the 30-second query limit. The overall result is `motion_unverified`.
+Both preservation checks are now valid: the arm-clearance violation is UNSAT in
+0.136 s and the tower-height violation is UNSAT in 23.196 s.
+
+An independent invocation of the same motion API with 10-second query limits
+returned 28 valid, one SAT (`arm_clearance_entry`), and three UNKNOWN body queries.
+Its saved learned invariant is byte-identical to the fresh shared-run invariant.
+This diagnostic exports the original unbounded violation queries; there are no
+finite-domain restrictions in those queries. Separate small-scene checks confirm
+that the previous two preservation counterexamples are excluded nonvacuously:
+
+| Scene | Scene premises | Violation | Corrected final value |
+| --- | --- | --- | --- |
+| Five-block tower, move its top block | SAT | UNSAT | Gripper Z=0.725, above required 0.600 |
+| Loose block already at Y=-0.15 | SAT | UNSAT | Placement Y=-0.30, avoiding that block |
+
+The entry scene remains feasible; its restricted violation solver returned
+UNKNOWN, while the unrestricted diagnostic query returned SAT. Keep those
+individual outcomes distinct. Extrema changes do not alter the initial gripper
+height or establish its clearance above every allowed tower.
+
+The three UNKNOWN body queries were replayed independently with 120-second
+budgets, preserving their full unbounded formulas:
+
+| Query | Result | Time |
+| --- | --- | ---: |
+| `collision_1_sym` | UNSAT | 116.857 s |
+| `effect_Higher` | UNSAT | 11.829 s |
+| `collision_5_sym` | UNKNOWN (timeout) | 120.141 s |
+| `collision_5_sym`, retried at 300 seconds | UNKNOWN (timeout) | 300.215 s |
+
+The longer retries therefore establish **30 valid motion checks, one confirmed
+SAT entry-clearance obligation, and one unresolved descent-collision query**
+when combined with the completed diagnostic. This is not a single fully verified
+pipeline run. The original shared report remains 28 valid / 4 UNKNOWN. Replays
+start fresh solvers; a result below the previous timeout does not imply the
+original run should have found it in the same time. No finite validity result
+was promoted to an unbounded proof.
+
+Exported VCs, original results and scene models are under
+`runs/diagnostics/20261023-unstack-global-extrema/`. No one-off runner was added
+to the repository. Stack's shared regression still passes **12 symbolic and 40
+motion checks in 25.4 s** (`runs/cfg/20261023-195605-8589a8c-stack-global-extrema-regression`).
+The affected primitive/CFG regression suite passed **72 tests in 57.5 s**.
+An existing offset-scene test now uses a closed finite SAT witness to avoid an
+unrelated open-domain SAT timeout; finite UNSAT still proves nothing about the
+unbounded premises. The full Python suite was not rerun for this change.
+
+### Unstack descent proof from universal instances
+
+`collision_5_sym` is the carried-block descent in the fifth primitive. It has a
+short proof in the current noiseless cube model, independent of exact XY tower
+alignment. Let a be the carried block, o any other physical block, and m the
+global minimum Y immediately before the fourth, lateral move. Then:
+
+\[
+m\leq Y(o),\qquad y_{\mathrm{start}}=m-0.15.
+\]
+
+Nonmovers keep their coordinates. The fifth move recomputes the global minimum n,
+which includes the carried block, so its endpoint satisfies
+`y_end = n <= y_start`. For every interpolation parameter t in [0,1]:
+
+\[
+y(t)=(1-t)y_{\mathrm{start}}+ty_{\mathrm{end}}
+\leq y_{\mathrm{start}}\leq Y(o)-0.15.
+\]
+
+Hence `Y(o)-y(t) >= 0.15`. The swept-cube collision predicate requires absolute
+center separation below L=0.05 on **all** axes, which is impossible on Y alone.
+This proof does not even need to establish that the second minimum equals the
+carried block's Y; its upper bound suffices. The argument is for noiseless motion;
+noisy calls retain their actual noise constraints and must pass their own VCs.
+
+The exported original query contains quantified learned/height/clearance premises,
+alias-dependent coordinate updates, global extrema, and nonlinear swept-segment
+arithmetic (`t * coordinate`). A diagnostic kept 99 quantifier-free premise
+conjuncts and generated 168 instances from 12 positive universal conjuncts, dropping
+one other quantified conjunct. With the **unchanged collision violation**, Z3
+returned UNSAT in **0.0196 s**. Adding those same instances while retaining the
+full quantified query still returned UNKNOWN at 10 s; the original baseline
+had timed out at 300 s. An unsat core uses only ordinary type/guard facts,
+minimum-reference instances, L=0.05, and the collision violation.
+
+This establishes that Z3 can prove the property, while its search on the full
+quantified formula was ineffective under the tested budgets. It does not identify
+a single internal heuristic responsible for the timeout. The simpler query
+exposes sufficient arithmetic facts and avoids the remaining quantifier search.
+
+The proof is unbounded: every retained conjunct and ground universal instance
+is a consequence of the original premises. Removing the other conjuncts weakens
+the query. UNSAT for that weaker query implies UNSAT for the original one.
+**No finite-domain closure or exact-column premise was added.** SAT on the weaker
+query would be inconclusive and could not be reported as a counterexample.
+
+The shared motion checker now uses this UNSAT-only route for quantifier-free
+violations, with bounded instance generation and a short preliminary solver
+budget; otherwise it falls back to the original query. Consistency checks and
+quantified postconditions retain their prior semantics. See the
+[implementation contract](../verification_lib/README.md#proving-safety-from-universal-instances).
+The one-off comparison stayed outside the repository. Queries, timings and core
+terms are under `runs/diagnostics/20261023-unstack-descent-proof/`.
+
+The shared pipeline recheck
+`runs/cfg/20261023-202317-74b859f-unstack-universal-instance-proof` finished in
+**128.5 s**, using the same guarded archive, 30-second motion query budgets and
+600-second wall budget as the command above. Use
+`--run-name unstack-universal-instance-proof` to reproduce the configuration.
+It relearned from all 60 states and passed all **12 symbolic checks**. Motion
+returned **29 valid, one SAT, two UNKNOWN**. All seven collision checks passed;
+`collision_5_sym` was proved through universal instances in **0.0809 s**.
+Initial arm clearance remains SAT (0.666 s). `effect_Higher` and
+`tower_height_preserved` timed out at 30 seconds in this particular run; their
+original formulas are unchanged and prior unbounded proofs remain recorded above.
+Skipping full-solver calls changes later incremental solver state, so timings and
+UNKNOWN outcomes need not reproduce earlier runs. This is still `motion_unverified`,
+not a full motion proof. No controller, precondition or geometric assumption was
+strengthened to obtain the descent result.
+
+Stack's shared regression returned `verified_model` with **12 symbolic and 40
+motion checks in 22.9 s** (`runs/cfg/20261023-202318-74b859f-stack-universal-instance-regression`).
+The focused suite passed **79 tests in 70.2 s**, including seven tests for the
+new unbounded relaxation, quantifier polarity, fallback behavior, nonvacuity and
+lateral descent. The full Python suite was not rerun for this scoped change.
+
+### Paper invariant controls
+
+`--loop-invariant synthesis.examples.tower_invariants:FACTORY` replaces inference
+with a fixed formula while retaining candidate execution, coverage reporting and
+the same symbolic checker. A failed supplied invariant is not repaired by the
+learner. The literal Fig. 14/15 formulas remain in the module; their undefined
+Unstack `b` and Reverse `tbk` are rejected as out-of-scope names. Explicitly named
+interpretations and repairs are separate controls:
+
+| Factory | Interpretation/change | Current result |
+| --- | --- | --- |
+| `unstack_paper_base` | Interpret b as b0 | Finite checks pass; unbounded preservation admits an all-table countermodel |
+| `unstack_paper_physical_base` | Also retain b0 != tbl in the invariant | All 12 checks valid |
+| `reverse_paper_table` | Interpret tbk as tbl | Preservation invalid; exit vacuous |
+| `reverse_paper_final` | Also admit the final b=b0 phase in clause 6 | All 12 checks valid |
+
+For the last repair, writing O for ON*, clause 6 changes from
+`O(b,u) => not O(u,b0)` to `O(b,u) => (b=b0 or not O(u,b0))`.
+The printed version excludes the actual last transfer/exit by reflexivity. The
+paper's Reverse guard also differs from the current all-block loop. These are
+explicit interpretations and a candidate paper correction, not learned results.
+See discrepancies 10 and 39.
+
+Final controls: `20261023-160643-770d1d6-unstack_paper_base-final-control`
+(invalid, 15 s), `20261023-160910-770d1d6-unstack-paper-physical-base-control`
+(valid, 16 s), `20261023-160639-770d1d6-reverse_paper_table-final-control`
+(invalid/vacuous, 15 s), and
+`20261023-160640-770d1d6-reverse_paper_final-final-control` (valid, 23 s).
+The earlier successful paper-Unstack observation should not be used in place of
+the final countermodel and explicit physical-base control.
+
+The final Python regression suite passed 466 tests across 67 modules in 248.7 s
+including loading, with optional real-solver baselines enabled and no skips.
+The log and run manifest are in `runs/tests/20261023-tower-verification/`.
+
 ## User-supplied Unstack groundtruth diagnostic
 
 **The original +X program is not an acceptable demonstration source in the
@@ -878,8 +1832,14 @@ modes above, which still require demonstration archives.
 
 ## Synthesis approaches
 
+`--search-strategy mcmc|enumeration` independently selects candidate generation
+for either approach below; MCMC remains the default. Enumeration checks each
+primitive structure with BMC before tuning its floats with CEM. The strategy is
+retained for block resynthesis and named loop-body search. See the
+[search guide](../mcmc/README.md) for bounds, BMC scope and both CLI interfaces.
+
 `--synthesis-approach relational` is the default and retains the existing
-behavior: bind numeric seed operands to names before local MCMC, search over
+behavior: bind numeric seed operands to names before local search, search over
 those names, and allow existential classifiers to introduce scoped bindings.
 `--quotient` enables its existing interleaved flat-loop recovery.
 
@@ -1026,11 +1986,13 @@ adds an explicit initial-arm condition; without it, all arm positions are checke
 `--motion-noise` and the associated bounds are available through the shared
 motion options. Table placements require `--table-surface-height`.
 
-The current execution tasks are Stack, Unstack, Reverse, Restack, Grid and
-Pyramid; PartialStack has been removed. The integrated CLI exposes Stack and
-Unstack, with the current observation-relative Unstack groundtruth rejected
-until its operands have a proof encoding. Reverse/Restack and goal-task
-integration, branch synthesis, nested/starred quotient, total-termination proofs
+The current execution tasks are Stack, Unstack, Reverse, Restack, Grid, Pyramid
+and Build3D; PartialStack has been removed. The integrated CLI accepts supplied
+Stack/Unstack/Reverse programs. Unstack/Reverse invariant learning and symbolic
+verification pass. Unstack observation-relative motion is encoded, but geometric
+loop obligations remain unproved; Reverse table-relative motion is unsupported.
+Reverse search, Restack and goal-task proof integration, branch
+synthesis, nested/starred quotient, total-termination proofs
 and controller refinement remain outside the supported pipeline scope. Existing
 execution code and passing demonstrations do not establish formal verification.
 
@@ -1046,10 +2008,14 @@ fixture. Missing premises can cause rejection of otherwise valid motion;
 failed/unknown checks are never silently accepted.
 
 With this flag, every loop also checks entry and preservation of the height
-consequences, empty-arm clearance (at least L/2 above every center), and exact XY
-alignment of ON*-related blocks. The latter two are checked loop invariants, not
-new input assumptions. In Stack, pairwise scattering establishes column alignment
-at entry and ideal root-aligned placement preserves it. A slightly offset placement
+consequences and empty-arm clearance (at least L/2 above every center). Exact XY
+alignment of ON*-related blocks is an additional optional invariant, controlled
+by `verify_cfg_motion(..., exact_column_alignment=True)`. The integrated Unstack
+task disables it: neither column checks nor column assumptions at loop body/exit
+boundaries remain. Stack retains it. These auxiliary invariants must be established
+and preserved before their loop-boundary assumptions justify an overall proof.
+In Stack, pairwise scattering establishes column alignment at entry and ideal
+root-aligned placement preserves it. A slightly offset placement
 can fail this check even if it satisfies the older L/4 bound. This matters for
 Scattered at its sharp 2L threshold. Noiseless proof does not certify nonzero error.
 
@@ -1077,7 +2043,10 @@ modes are existential even with noise, and do not prove robustness.
 ## Placement effects and alignment
 
 Placement summaries are proposed from the outgoing ON relation or the final
-transport reference, then checked against all ON*/Higher/Scattered WP effects.
+transport reference, then checked against all ON*/Higher/Scattered effects.
+Public Put's source/support enabling conditions are proved at transfer entry
+separately from those effects. Source deletion precedes attachment, and destination
+aliases select table versus block semantics by value.
 Root discovery follows §5.5: enumerate in-scope physical names `r` and prove
 `forall u. ON*(target,u) => ON*(u,r)`, including unnamed objects. The integrated
 path uses `P = wp(remaining symbolic body, postcondition)` under the established

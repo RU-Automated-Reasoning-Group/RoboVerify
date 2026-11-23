@@ -1,0 +1,92 @@
+{
+  "code_commit": "760fe7a44bf2061fb0fe68e0b90cb098ca7c008d",
+  "same_standalone_setting": {
+    "goal": "ON(1,0)",
+    "num_blocks": 4,
+    "operand_pool": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "max_length": 5,
+    "initial_seed": "five Skip slots"
+  },
+  "target_scope": "First iteration of supplied Stack loop, physical instructions only; floats ignored; Assign(b,b_prime) is not in the standalone grammar",
+  "binding_map": {
+    "b0": 0,
+    "b": 0,
+    "b_prime": 1
+  },
+  "alphabet_size": 72,
+  "target_alphabet_indices": [
+    1,
+    24,
+    4,
+    4,
+    69
+  ],
+  "target_structure": [
+    {
+      "instruction": "Pick",
+      "operands": [
+        1
+      ]
+    },
+    {
+      "instruction": "Move",
+      "operands": [
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "instruction": "Move",
+      "operands": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "instruction": "Move",
+      "operands": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "instruction": "Release",
+      "operands": [
+        1
+      ]
+    }
+  ],
+  "first_target_enumerated_candidate": 63105263,
+  "enumerated_candidates_before_target": 63105262,
+  "checker_calls_before_target_including_seed": 63105263,
+  "checker_calls_through_target_including_seed": 63105264,
+  "actual_z3_checks_before_target": 59388189,
+  "actual_z3_checks_through_target": 59388190,
+  "nonempty_bmc_builder_calls_before_target": 63105261,
+  "empty_candidates_rejected_before_target": 2,
+  "missing_goal_block_rejections_before_target": 3717072,
+  "reference_mask_counts_before_target": {
+    "neither_goal_block": 22621,
+    "only_0": 2386281,
+    "only_1": 1308171,
+    "both_0_and_1": 59388189
+  },
+  "target_passes_production_bmc": true,
+  "target_bmc_check_seconds": 0.021238083019852638,
+  "target_bmc_report": "BMC: FEASIBLE \u2014 5 executable instruction(s): [Pick(1); Move(1(?), 1(?), 0(?)); Move(0(?), 0(?), 0(?)); Move(0(?), 0(?), 0(?)); Release(1, ?)]",
+  "count_method": "Exact base-72 rank plus dynamic programming over operand-reference masks; cross-checked against the measured first-hit run and its first 79 generated candidates",
+  "exhaustive_prefix_run": false,
+  "cem_eligible_prefix_count": 28254518,
+  "cem_called": false,
+  "simulator_called": false,
+  "cem_eligible_count_through_demo": 28254519,
+  "cem_eligibility_method": "Exact count under nominal production BMC semantics, checked against 1,249 production-checker comparisons; see cem-eligibility.json and report.md"
+}

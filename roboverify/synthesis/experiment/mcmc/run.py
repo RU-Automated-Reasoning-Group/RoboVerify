@@ -1,10 +1,8 @@
-"""CLI entry point for an instrumented MCMC search.
+"""CLI entry point for MCMC or enumerative search with BMC and CEM.
 
-The MCMC path previously had no entry point: its only driver is
-``synthesis/entry/main.py``, whose body is a single ``if __name__`` block mixing
-commented-out experiments with an ``exit()`` partway through. This module gives the
-search a real, reproducible invocation whose every argument is recorded in
-``config.json``.
+Every argument, including the structural search strategy, is recorded in
+``config.json``. Enumeration requires a BMC goal and screens each candidate
+before invoking the same CEM optimizer used by MCMC.
 
 Examples::
 
@@ -20,10 +18,8 @@ Then read it with::
 
     uv run python -m synthesis.experiment.report --run runs/mcmc/latest
 
-Learning the goal feature is deliberately out of scope: this runs *one* search
-against a feature you name. The decision-tree staging that discovers a feature and
-splits demos around it lives in ``synthesis/mcmc/decision_tree.py`` and is driven by
-``synthesis/entry/main.py``.
+This runs one straight-line search against a feature you name. Structured search,
+predicate discovery, refinement and quotienting use ``synthesis.entry.synthesize_cfg``.
 """
 
 import argparse
@@ -51,9 +47,22 @@ def parse_goal_feature(text: str):
     return decision_tree.ON_feature(int(match.group(1)), int(match.group(2)))
 
 
+def contract_goal(task, goal_feature=None):
+    """Preserve standalone numeric ON semantics, including height and self tests."""
+    if goal_feature is None:
+        from synthesis.cfg.tasks import task_spec
+
+        return task_spec(task)[1]
+    from synthesis.util.on import on
+
+    return lambda scene: bool(
+        on(scene.positions[goal_feature.b1], scene.positions[goal_feature.b2])
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run an instrumented MCMC program search into a run directory.",
+        description="Run MCMC or enumerative program search into a run directory.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     add_cli_arguments(parser)
@@ -83,8 +92,18 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv=None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
     config = config_from_args(args)
+
+    if config.search_strategy == "enumeration" and (
+        args.no_bmc or not args.goal_feature
+    ):
+        parser.error(
+            "--search-strategy enumeration requires --goal-feature with BMC enabled"
+        )
+    if config.search_strategy == "contract" and args.no_bmc:
+        parser.error("--search-strategy contract requires BMC entry feasibility checks")
 
     goal_feature = parse_goal_feature(args.goal_feature) if args.goal_feature else None
     bmc_goal = None
@@ -129,6 +148,32 @@ def main(argv=None) -> int:
 
     available_operands = {"Box": list(range(config.num_blocks))}
     initial_program = program.Program(config.program_slots)
+    candidate_programs = None
+    feasibility_check = None
+    if config.search_strategy == "contract":
+        from functools import partial
+
+        from synthesis.cfg.contract_search import (
+            check_contract_feasibility,
+            make_contract_candidates,
+        )
+        from synthesis.cfg.demos import DemoSegment
+
+        segments = [
+            DemoSegment(i, 0, len(trace.states) - 1, trace, trace.snapshots[0].bindings)
+            for i, trace in enumerate(traces[: config.num_seeds])
+        ]
+        post = contract_goal(config.task, goal_feature)
+        candidate_programs = make_contract_candidates(
+            segments,
+            post,
+            initial_program,
+            (),
+            max_length=config.program_slots,
+            budget=config,
+            id_first=True,
+        )
+        feasibility_check = partial(check_contract_feasibility, segments=segments)
 
     synthesis.set_np_seed(config.rng_seed)
 
@@ -144,6 +189,14 @@ def main(argv=None) -> int:
     config.runtime["initial_states"] = dict(
         source="archive_snapshots", state_index=0, seeds=active_seeds
     )
+    if candidate_programs is not None:
+        config.runtime["contract_search"] = dict(
+            operands="physical IDs",
+            proposal_goal=str(goal_feature) if goal_feature is not None else str(post),
+            bmc="existential feasibility at every archived entry; not a goal proof",
+            numeric_objective="existing standalone MMD/CEM objective",
+        )
+        config.runtime["bmc_enabled"] = True
 
     logger = RunLogger(
         config.run_root,
@@ -173,24 +226,48 @@ def main(argv=None) -> int:
             bmc_initial_constraints=bmc_initial_constraints,
             goal_feature=goal_feature,
             refresh_best_metrics=not args.no_refresh_best_metrics,
+            candidate_programs=candidate_programs,
+            feasibility_check=feasibility_check,
         )
     except BaseException as exc:  # noqa: BLE001 - recorded, then re-raised
         logger.log_exception(exc)
         logger.finish("failed", exit_reason=f"{type(exc).__name__}: {exc}")
         raise
 
+    if candidate_programs is not None:
+        import json
+
+        logger.write_artifact(
+            "contract-search.json",
+            json.dumps(
+                dict(
+                    status=candidate_programs.status,
+                    reason=candidate_programs.reason,
+                    stats=candidate_programs.stats,
+                ),
+                indent=2,
+            ),
+        )
     logger.finish(
-        "completed",
-        best_cost=float(result.best_cost),
+        "no_feasible_candidate" if result.best_program is None else "completed",
+        search_strategy=config.search_strategy,
+        termination_reason=result.termination_reason,
+        best_checks_passed=result.best_checks_passed,
+        best_cost=float(result.best_cost) if result.best_program is not None else None,
         best_iter=result.best_iter,
         iters_completed=result.iters_completed,
         best_program=str(result.best_program),
     )
-    logger.progress_line(
-        f"[run] done: best cost {result.best_cost:.6g} at iteration "
-        f"{result.best_iter} over {result.iters_completed} iterations"
-    )
-    return 0
+    if result.best_program is None:
+        logger.progress_line(
+            f"[run] done: no BMC-feasible candidate after {result.iters_completed} iterations"
+        )
+    else:
+        logger.progress_line(
+            f"[run] done: best cost {result.best_cost:.6g} at iteration "
+            f"{result.best_iter} over {result.iters_completed} iterations"
+        )
+    return 0 if result.best_program is not None else 2
 
 
 if __name__ == "__main__":

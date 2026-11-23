@@ -7,8 +7,8 @@ unrecorded steps after the execution ends and decides success on the settled
 state only (``task-spec-v2``); the end-of-execution postcondition and the
 environment's physical evaluator remain diagnostics.
 
-Tower tasks evaluate the shared ``task_spec`` formulas. Grid and Pyramid
-evaluate goal occupancy (20 mm, 3D): goals empty and blocks pairwise Scattered at
+Tower tasks evaluate the shared ``task_spec`` formulas. Goal tasks evaluate
+goal occupancy (20 mm, 3D): goals empty and blocks pairwise Scattered at
 entry, every goal occupied at the end. The Release-event checks of
 ``validate_goal_trace`` are a demonstration-quality filter, not part of this
 criterion.
@@ -21,9 +21,10 @@ from dataclasses import asdict, dataclass, field
 
 import numpy as np
 
+from synthesis.cfg.goal_collection import GOAL_TASKS
+
 SETTLING_STEPS = 50
 CRITERIA = {0: "task-spec-v1", "settled": "task-spec-v2"}
-GOAL_TASKS = ("grid", "pyramid")
 TABLE_TASKS = ("unstack", "reverse", "restack")
 
 

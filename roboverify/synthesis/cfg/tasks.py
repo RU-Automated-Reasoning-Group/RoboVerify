@@ -11,7 +11,14 @@ from synthesis.predicates.term import (
 )
 
 
-def task_spec(task):
+def task_spec(task, *, height_predicate=None):
+    """Block-only terms used by the current pipeline.
+
+    Use ``symbolic_task_spec`` for Z3 conditions, including goal benchmarks.
+    """
+    from synthesis.verification_lib.height_predicate import get_height_predicate
+
+    height_predicate = height_predicate or get_height_predicate()
     x, y, b0 = ref("x"), ref("y"), ref("b0")
     if task == "stack":
         different = negate(atom("eq", x, y))
@@ -28,7 +35,7 @@ def task_spec(task):
                 ),
                 # Both ordered pairs enforce one initial height level; concrete
                 # observations use the configured Higher tolerance.
-                forall(["x", "y"], atom("Higher", x, y)),
+                forall(["x", "y"], atom(height_predicate, x, y)),
             ),
             forall(["x"], atom("ON_star", x, b0)),
         )
@@ -86,8 +93,28 @@ def task_spec(task):
     raise ValueError(f"Unsupported task: {task}")
 
 
+def symbolic_task_spec(task, context):
+    """Return Z3 pre/postconditions for any benchmark.
+
+    Tower tasks take HighLevelContext; goal tasks take GoalTaskContext. This
+    defines assertions only, without enabling unsupported CFG/WP backends.
+    """
+    if task in ("grid", "pyramid", "build3d"):
+        from synthesis.cfg.goal_specs import GoalTaskContext
+
+        if not isinstance(context, GoalTaskContext):
+            raise TypeError("Goal tasks require a GoalTaskContext")
+        return context.task_spec(task)
+    from synthesis.predicates.term import to_z3
+
+    return tuple(
+        to_z3(term, context)
+        for term in task_spec(task, height_predicate=context.height_predicate)
+    )
+
+
 def task_identity(task):
-    if task in ("grid", "pyramid"):
+    if task in ("grid", "pyramid", "build3d"):
         from synthesis.environment.goal_layout import GOAL_TOLERANCE
 
         return dict(
@@ -97,5 +124,6 @@ def task_identity(task):
             precondition="All goals empty; physical blocks pairwise Scattered; one block per goal available",
             postcondition="Every goal occupied by a physical block",
         )
-    pre, post = task_spec(task)
+    # Canonical archive identity; EqualHeight is the equivalent height encoding.
+    pre, post = task_spec(task, height_predicate="Higher")
     return {"task": task, "precondition": str(pre), "postcondition": str(post)}

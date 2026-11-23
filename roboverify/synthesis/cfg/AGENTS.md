@@ -22,7 +22,7 @@ of the 2026-10-26 change are in
     RoboVerify–CaP comparison, and score both systems with the same value.
 - Under `task-spec-v2`, the end-of-execution postcondition (`post_at_end`) and the
   physical evaluator `_is_success` (end and settled) are diagnostics only.
-- Tower tasks evaluate `tasks.task_spec`. Grid and Pyramid evaluate 20 mm goal
+- Tower tasks evaluate `tasks.task_spec`. Grid, Pyramid and Build3D evaluate 20 mm goal
   occupancy on the same settled state. The Release-event checks of
   `goal_collection.validate_goal_trace` are a demonstration-quality filter, not
   part of the shared criterion.
@@ -38,7 +38,7 @@ of the 2026-10-26 change are in
   position with gripper command 0.0 (the finger position actuators keep the
   opening at the start of each step). Do not add inlined settling loops.
 - **Initial settling** is a configuration option that is **on by default**:
-  every fresh reset of all six tasks settles for `initial_settling_steps` steps
+  every fresh reset settles for `initial_settling_steps` steps
   (default 50, `SETTLING_STEPS`) before recording or before the policy starts.
   Keep the default for all new work. Set 0 only to reproduce runs made before
   2026-10-26, whose Unstack/Reverse starts were unsettled, and record that

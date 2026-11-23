@@ -70,6 +70,7 @@ def prepare_candidate(
     timeout_seconds=60,
     logger=None,
     revision=0,
+    invariant_factory=None,
 ):
     program, locations = lower_with_locations(cfg, context)
     original = cfg._task_demos
@@ -83,6 +84,7 @@ def prepare_candidate(
         source = segment.trace
         bindings = dict(source.snapshots[segment.t_start].bindings)
         bindings.update(segment.bindings)
+        bindings.update(getattr(cfg, "_initial_bindings", {}))
         definition = ProgramDefinition(program, bindings, "candidate")
         trace = record_execution(
             definition,
@@ -116,8 +118,10 @@ def prepare_candidate(
         if hasattr(cfg, "_initial_bindings") and not getattr(
             cfg, "_expert_segments_initialized", False
         ):
-            graph.demos.segments[name] = block_segments(
-                [segment.trace for segment in original], paths
+            graph.demos.segments[name] = (
+                candidate_rows
+                if getattr(cfg, "_candidate_program", False)
+                else block_segments([segment.trace for segment in original], paths)
             )
     cfg._expert_segments_initialized = True
     stores = {}
@@ -134,7 +138,7 @@ def prepare_candidate(
         )
         vocabulary = InferenceVocabulary(
             variables,
-            tuple(relations or ("ON_star", "Higher", "Scattered", "equality")),
+            tuple(relations or (*context.mutable_relations, "equality")),
             names,
         )
         for row in store._states:
@@ -150,11 +154,24 @@ def prepare_candidate(
             logger.write_artifact(
                 f"candidates/{revision}/invariant-{loop_path}-initial.smt2", "false"
             )
-        formula = InvInference(store, "loop", vocabulary, context)[0]
-        if not all(
+        formula = (
+            InvInference(store, "loop", vocabulary, context)[0]
+            if invariant_factory is None
+            else invariant_factory(context)
+        )
+        if invariant_factory is not None:
+            from z3.z3util import get_vars
+
+            missing = {str(v) for v in get_vars(formula)} - scope
+            if missing:
+                raise CandidateTraceError(
+                    f"Supplied invariant has out-of-scope names: {sorted(missing)}"
+                )
+        covered = all(
             state_holds(formula, _project(row, context.use_tbl))
             for row in store.for_loop("loop")
-        ):
+        )
+        if not covered and invariant_factory is None:
             raise CandidateTraceError(
                 f"Learned invariant excludes recorded states for loop {loop_path}"
             )
@@ -185,5 +202,7 @@ def prepare_candidate(
                 f"{cfg_path}: {len(rows)} runtime states",
                 force=True,
                 revision=revision,
+                source="learned" if invariant_factory is None else "supplied",
+                covers_recorded_states=covered,
             )
     return stores

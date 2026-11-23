@@ -118,6 +118,159 @@ if __name__ == "__main__":
 
 
 class FullQuotientTests(unittest.TestCase):
+    def continuation_cfg(self):
+        from synthesis.api.instructions import Release
+        from synthesis.cfg.demos import DemoAssignment, DemoSegment, DemoTrace
+        from synthesis.cfg.graph import Edge, Node, RelationalCFG
+        from synthesis.cfg.region import BlockRegion
+        from synthesis.cfg.tasks import task_spec
+        from synthesis.predicates.scene import Scene
+        from synthesis.predicates.term import block_id, boolean, negate
+
+        positions = {i: (0.2 * i, 0, 0.425) for i in range(4)}
+        states = [Scene(dict(positions), {"b0": 0})]
+        for block, value in [
+            (1, (0.15, 0, 0.5)),
+            (1, (0, 0, 0.475)),
+            (2, (0.15, 0, 0.55)),
+            (2, (0, 0, 0.525)),
+            (3, (0.6, 0, 0.65)),
+            (3, (0.05, 0, 0.65)),
+            (3, (0, 0, 0.575)),
+        ]:
+            positions[block] = value
+            states.append(Scene(dict(positions), {"b0": 0}))
+        states.append(states[-1])
+        trace = DemoTrace(tuple(states), num_blocks=4)
+        names, cuts = ["v0", "v1", "v2", "tail"], [0, 2, 4, 5, 8]
+        post = task_spec("stack")[1]
+        labels = [
+            atom("ON", block_id(1), ref("b0")),
+            atom("ON", block_id(2), block_id(1)),
+            negate(atom("Higher", ref("b0"), block_id(3))),
+            post,
+        ]
+        regions = {n: Node(n, BlockRegion(None)) for n in names}
+        regions["tail"].region.physical = (Release(3, target_z=0.15),)
+        return RelationalCFG(
+            regions,
+            [Edge("entry", names[0], boolean(True))]
+            + [
+                Edge(n, names[k + 1] if k < 3 else "exit", labels[k])
+                for k, n in enumerate(names)
+            ],
+            names,
+            DemoAssignment(
+                {
+                    n: [
+                        DemoSegment(
+                            0, cuts[k], cuts[k + 1], trace, {"b0": 0}, entry_index=0
+                        )
+                    ]
+                    for k, n in enumerate(names)
+                }
+            ),
+            postcondition=post,
+            initial_scope=frozenset({"b0"}),
+            synthesis_approach="id-first",
+        )
+
+    def test_fold_consumes_redundant_milestone_but_preserves_release_tail(self):
+        from synthesis.cfg.quotient import quotient
+        from synthesis.cfg.refine import scene_at
+        from synthesis.cfg.validate import first_true, validate_cfg
+        from synthesis.predicates.scene import evaluate
+
+        cfg = self.continuation_cfg()
+        self.assertTrue(validate_cfg(cfg))
+        original_tail = cfg.nodes["tail"].region
+        self.assertTrue(quotient(cfg))
+        self.assertEqual(cfg.order, ["v0.loop", "tail"])
+        self.assertIs(cfg.nodes["tail"].region, original_tail)
+        loop_row = cfg.demos.for_node("v0.loop")[0]
+        tail_row = cfg.demos.for_node("tail")[0]
+        self.assertEqual((loop_row.t_start, loop_row.t_end), (0, 7))
+        self.assertEqual(
+            (tail_row.t_start, tail_row.t_end, tail_row.entry_index), (7, 8, 0)
+        )
+        self.assertIs(tail_row.trace, loop_row.trace)
+        exit_label = cfg.outgoing("v0.loop")[0].label
+        self.assertEqual(
+            first_true(loop_row, lambda s: evaluate(exit_label, s), scene_at), 6
+        )
+        self.assertTrue(validate_cfg(cfg))
+
+    def test_consumed_milestone_with_binding_effects_is_not_discarded(self):
+        from synthesis.api.instructions import Assign
+        from synthesis.cfg.quotient import quotient
+
+        for effect in ("export", "assignment"):
+            with self.subTest(effect=effect):
+                cfg = self.continuation_cfg()
+                if effect == "export":
+                    cfg.nodes["v2"].region.bindings = frozenset({"introduced"})
+                else:
+                    cfg.nodes["v2"].region.physical = (Assign("cursor", "b0"),)
+                original_order = list(cfg.order)
+                self.assertFalse(quotient(cfg))
+                self.assertEqual(cfg.order, original_order)
+
+    def test_fixed_base_repetition_recovers_loop_without_pointer_update(self):
+        from synthesis.cfg.demos import DemoAssignment, DemoSegment, DemoTrace
+        from synthesis.cfg.graph import Edge, Node, RelationalCFG
+        from synthesis.cfg.quotient import quotient
+        from synthesis.cfg.region import BlockRegion
+        from synthesis.predicates.scene import Scene, evaluate
+        from synthesis.predicates.term import block_id, boolean
+
+        states = []
+        for completed in range(4):
+            positions = {
+                b: (
+                    (0.2 * b, 0, 0.425)
+                    if b >= 4 - completed
+                    else (0, 0, 0.425 + 0.05 * b)
+                )
+                for b in range(4)
+            }
+            states.extend([Scene(positions, {"b0": 0})] * 2)
+        trace = DemoTrace(tuple(states), num_blocks=4)
+        names, cuts = ["v0", "v1", "v2"], [0, 2, 4, 7]
+        labels = [atom("Higher", ref("b0"), block_id(b)) for b in (3, 2, 1)]
+        cfg = RelationalCFG(
+            {n: Node(n, BlockRegion(None)) for n in names},
+            [Edge("entry", names[0], boolean(True))]
+            + [
+                Edge(n, names[k + 1] if k < 2 else "exit", labels[k])
+                for k, n in enumerate(names)
+            ],
+            names,
+            DemoAssignment(
+                {
+                    n: [DemoSegment(0, cuts[k], cuts[k + 1], trace, {"b0": 0})]
+                    for k, n in enumerate(names)
+                }
+            ),
+            initial_scope=frozenset({"b0"}),
+            synthesis_approach="id-first",
+        )
+        self.assertTrue(quotient(cfg))
+        loop = cfg.nodes[cfg.order[0]].region
+        self.assertEqual(loop.init, ())
+        self.assertEqual(loop.update, ())
+        self.assertEqual(loop.iteration_counts, (3,))
+        witness = loop.exists_vars[0]
+        bodies = loop.body_demos[0]
+        self.assertEqual([s.bindings[witness] for s in bodies], [3, 2, 1])
+        for segment in bodies:
+            self.assertTrue(
+                evaluate(loop.guard, states[segment.t_start], segment.bindings)
+            )
+        for value in states[-1].positions:
+            self.assertFalse(evaluate(loop.guard, states[-1], {witness: value}))
+        # This establishes structural recovery and observed coverage only.
+        # Unselected continuing-head witnesses remain unlabeled by guard learning.
+
     def test_full_flat_fold_learns_guard_and_lowers_carried_assignment(self):
         import z3
 

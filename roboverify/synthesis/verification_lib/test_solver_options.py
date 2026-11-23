@@ -5,10 +5,10 @@ import unittest
 from unittest.mock import patch
 
 import z3
-
 from synthesis.entry.verification_options import add_verification_options
 from synthesis.verification_lib.highlevel_verification_lib import HighLevelContext
 from synthesis.verification_lib.solver_options import (
+    finite_sat_witness,
     get_minimize_unsat_core,
     using_unsat_core_minimization,
 )
@@ -16,6 +16,64 @@ from synthesis.verification_lib.symbolic_verify import VC, discharge_vc
 
 
 class UnsatCoreOptionsTests(unittest.TestCase):
+    def test_finite_unsat_does_not_refute_unbounded_consistency(self):
+        context = HighLevelContext()
+        objects = [z3.FreshConst(context.BoxSort) for _ in range(6)]
+        solver = z3.Solver()
+        solver.add(z3.Distinct(*objects))
+        self.assertFalse(finite_sat_witness(solver, context, restore_timeout_ms=1000))
+        self.assertEqual(solver.check(), z3.sat)
+
+    def test_finite_sat_witness_preserves_assertions_and_scope(self):
+        context = HighLevelContext(use_tbl=True, exists_top=True)
+        solver = context.new_solver(1000)
+        a, b = [context.get_consts(n) for n in ("a", "b")]
+        solver.add(a != b)
+        assertions = list(solver.assertions())
+        self.assertTrue(finite_sat_witness(solver, context, restore_timeout_ms=1000))
+        self.assertEqual(solver.num_scopes(), 0)
+        self.assertEqual(
+            [a.sexpr() for a in solver.assertions()], [a.sexpr() for a in assertions]
+        )
+
+    def test_inconclusive_redundancy_keeps_the_candidate(self):
+        from synthesis.inference_lib.inference import check_redundancy
+
+        context = HighLevelContext()
+        a, b = [context.get_consts(n) for n in ("a", "b")]
+        candidate = context.ON_star(a, b)
+        with patch(
+            "synthesis.inference_lib.inference.z3.Solver", spec=z3.Solver
+        ) as solver, contextlib.redirect_stdout(io.StringIO()):
+            solver.return_value.check.return_value = z3.unknown
+            solver.return_value.reason_unknown.return_value = "timeout"
+            kept = check_redundancy([candidate, candidate], context, timeout_ms=1)
+        self.assertEqual(len(kept), 1)
+        self.assertTrue(kept[0].eq(candidate))
+
+    def test_consistency_unknown_can_use_sat_but_not_finite_unsat(self):
+        original_check = z3.Solver.check
+        for count, expected in ((2, "valid"), (6, "unknown")):
+            with self.subTest(count=count):
+                context = HighLevelContext(use_tbl=True, exists_top=True)
+                objects = [z3.FreshConst(context.BoxSort) for _ in range(count)]
+                vc = VC("exit", "loop", z3.Implies(z3.Distinct(*objects), True))
+                calls = 0
+
+                def unknown_consistency(solver, *args):
+                    nonlocal calls
+                    calls += 1
+                    return z3.unknown if calls == 2 else original_check(solver, *args)
+
+                with patch.object(
+                    z3.Solver, "check", unknown_consistency
+                ), patch.object(
+                    z3.Solver, "reason_unknown", return_value="incomplete quantifiers"
+                ):
+                    result = discharge_vc(vc, context, 1000)
+                self.assertEqual(result.status, expected)
+                self.assertEqual(result.queries, 3)
+
     def test_cli_default_and_both_switches(self):
         parser = argparse.ArgumentParser()
         add_verification_options(parser)

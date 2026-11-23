@@ -1,0 +1,104 @@
+{
+  "code_commit": "432e7ffb84d242c237901603084b0da6134d90b1",
+  "goal": "ON(1,0)",
+  "operand_pool": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "demo_alphabet_indices": [
+    1,
+    24,
+    4,
+    4,
+    69
+  ],
+  "demo_enumerated_candidate": 63105263,
+  "bmc_passes_before_demo": 28254518,
+  "bmc_passes_through_demo": 28254519,
+  "all_passing_candidates_have_float_parameters": true,
+  "initial_seed_passes": false,
+  "shorter_length_pass_counts": [
+    0,
+    0,
+    74,
+    19222,
+    2460508
+  ],
+  "length_five_prefix_pass_counts_by_first_differing_position": [
+    19486009,
+    6288640,
+    0,
+    0,
+    65
+  ],
+  "calculation_seconds": 0.015390487387776375,
+  "validation_seconds": 20.354531966149807,
+  "real_bmc_validation_counts": {
+    "exhaustive_valid_core_patterns": 546,
+    "rejected": 933,
+    "sat": 316,
+    "operand_variants": 448,
+    "random_full_alphabet": 250,
+    "targeted_cases": 5
+  },
+  "targeted_checks": [
+    {
+      "alphabet_indices": [
+        2,
+        5,
+        5
+      ],
+      "bmc_passes": true
+    },
+    {
+      "alphabet_indices": [
+        3,
+        5,
+        5
+      ],
+      "bmc_passes": true
+    },
+    {
+      "alphabet_indices": [
+        2,
+        5,
+        70,
+        2,
+        5
+      ],
+      "bmc_passes": true
+    },
+    {
+      "alphabet_indices": [
+        2,
+        5,
+        70,
+        3,
+        5
+      ],
+      "bmc_passes": false
+    },
+    {
+      "alphabet_indices": [
+        1,
+        24,
+        4,
+        4,
+        69
+      ],
+      "bmc_passes": true
+    }
+  ],
+  "independent_small_space_pass_counts": [
+    0,
+    0,
+    74,
+    19222
+  ],
+  "count_method": "Exact dynamic programming over hand state, goal motion, repeated helper motion and referenced goal blocks; validates against production check_bmc_candidate",
+  "exhaustive_full_prefix_solver_run": false,
+  "cem_called": false,
+  "simulator_called": false
+}

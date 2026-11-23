@@ -13,6 +13,7 @@ from synthesis.environment.cee_us_env.abstract_environments import MaskedGoalSpa
 from synthesis.environment.cee_us_env.fpp_construction.construction import FetchBlockConstructionEnv
 from synthesis.environment.cee_us_env.robotics import GymRoboticsGroundTruthSupportEnv
 from synthesis.environment.goal_layout import GoalLayout, occupancy
+from synthesis.environment.build3d_layout import goal_positions as build3d_goal_positions
 from synthesis.environment.relaxed_workspace import (
     RELAXED_CONTACT_BUFFER,
     check_relaxed_goals,
@@ -117,7 +118,7 @@ class FetchPickAndPlaceConstruction(
             self.symbolic_name_to_box_id = {"b0": self.roboverify_base_block_id}
         else:
             self.roboverify_base_block_id = None
-        if self.case in ("RoboVerifyGrid", "RoboVerifyPyramid"):
+        if self.case in ("RoboVerifyGrid", "RoboVerifyPyramid", "RoboVerifyBuild3D"):
             self.symbolic_name_to_box_id = {}
             self.symbolic_name_to_goal = {}
             self.table_surface_height = float(self.sim.data.get_geom_xpos("table0")[2])
@@ -168,6 +169,7 @@ class FetchPickAndPlaceConstruction(
             or self.case in ROBOVERIFY_CASES
             or self.case == "RoboVerifyGrid"
             or self.case == "RoboVerifyPyramid"
+            or self.case == "RoboVerifyBuild3D"
         ):
             self.threshold = 0.02
         elif self.case == "PickAndPlace":
@@ -330,6 +332,7 @@ class FetchPickAndPlaceConstruction(
             "RoboVerifyRestack",
             "RoboVerifyGrid",
             "RoboVerifyPyramid",
+            "RoboVerifyBuild3D",
         ]
         if self.case == "All":
             case_id = np.random.randint(0, len(cases))
@@ -339,6 +342,9 @@ class FetchPickAndPlaceConstruction(
         else:
             raise NotImplementedError
 
+        if case == "RoboVerifyBuild3D":
+            goals = self._roboverify_build3d_goal_positions()
+            return np.concatenate([goals.reshape(-1), np.zeros(3, dtype=np.float32)])
         if case == "RoboVerifyGrid":
             return self._roboverify_grid_goals_flat().copy()
         if case == "RoboVerifyPyramid":
@@ -471,6 +477,8 @@ class FetchPickAndPlaceConstruction(
             return self._reset_sim_roboverify_stack()
         if self.case == "RoboVerifyRestack":
             return self._reset_sim_roboverify_restack()
+        if self.case == "RoboVerifyBuild3D":
+            return self._reset_sim_roboverify_build3d()
         if self.case == "RoboVerifyGrid":
             return self._reset_sim_roboverify_grid()
         if self.case == "RoboVerifyPyramid":
@@ -672,7 +680,7 @@ class FetchPickAndPlaceConstruction(
         # Keep the ten-block source layout within the arm's nominal XY workspace.
         # Pyramid sources must also be reachable at the highest goal clearance.
         # The ten-block far/lower-Y corner otherwise stalls on the final approach.
-        offset = 0.14 if self.case == "RoboVerifyPyramid" else 0.10
+        offset = 0.14 if self.case in ("RoboVerifyPyramid", "RoboVerifyBuild3D") else 0.10
         workspace_x = self.initial_gripper_xpos[0] - offset
         return np.array(
             [
@@ -744,6 +752,13 @@ class FetchPickAndPlaceConstruction(
                 self.height_offset,
             ]
         return goals
+
+    def _roboverify_build3d_goal_positions(self) -> np.ndarray:
+        return build3d_goal_positions(
+            self.build_rows, self.build_cols, self.build_layers,
+            gripper_position=self.initial_gripper_xpos, robot_base_xy=self.robot_base_xy,
+            height=self.height_offset,
+        )
 
     def _roboverify_grid_goals_flat(self) -> np.ndarray:
         goals = self._roboverify_grid_goal_positions()
@@ -822,12 +837,21 @@ class FetchPickAndPlaceConstruction(
         self._update_roboverify_goal_markers()
         return True
 
+    def _reset_sim_roboverify_build3d(self):
+        self.sim.set_state(self.initial_state)
+        self._install_goal_layout(self._roboverify_build3d_goal_positions())
+        self._reset_sim_roboverify_workspace_blocks()
+        self._update_roboverify_goal_markers()
+        return True
+
     def _install_goal_layout(self, positions, *, reset_bindings=True):
-        rows = (
-            (self.grid_cols,) * self.grid_rows
-            if self.case == "RoboVerifyGrid"
-            else self.pyramid_layer_sizes
-        )
+        if self.case == "RoboVerifyBuild3D":
+            rows = (self.build_cols,) * (self.build_rows * self.build_layers)
+            layers = (self.build_rows,) * self.build_layers
+        else:
+            rows = ((self.grid_cols,) * self.grid_rows
+                    if self.case == "RoboVerifyGrid" else self.pyramid_layer_sizes)
+            layers = None
         radii = np.linalg.norm(
             np.asarray(positions)[:, :2] - self.robot_base_xy, axis=1
         )
@@ -835,7 +859,7 @@ class FetchPickAndPlaceConstruction(
             check_relaxed_goals(positions, self.robot_base_xy)
         elif np.any(radii > self.manipulability_r):
             raise ValueError("Goal layout exceeds the robot's nominal XY workspace")
-        self.goal_layout = GoalLayout.from_positions(positions, rows)
+        self.goal_layout = GoalLayout.from_positions(positions, rows, layer_row_counts=layers)
         self.roboverify_goal_marker_positions = self.goal_layout.positions
         if reset_bindings:
             self.symbolic_name_to_box_id = {}
@@ -877,7 +901,7 @@ class FetchPickAndPlaceConstruction(
         mj_state = state[: -self.goal_space_size]
         self.goal = state[-self.goal_space_size :]
         super().set_GT_state(mj_state)
-        if self.case in ("RoboVerifyGrid", "RoboVerifyPyramid"):
+        if self.case in ("RoboVerifyGrid", "RoboVerifyPyramid", "RoboVerifyBuild3D"):
             self._install_goal_layout(
                 self.goal[:-3].reshape(self.num_blocks, 3), reset_bindings=False
             )
@@ -1322,7 +1346,7 @@ class FetchPickAndPlaceConstruction(
         raise ValueError(f"unsupported RoboVerify case: {self.case}")
 
     def compute_reward(self, obs):
-        if self.case in ("RoboVerifyGrid", "RoboVerifyPyramid"):
+        if self.case in ("RoboVerifyGrid", "RoboVerifyPyramid", "RoboVerifyBuild3D"):
             achieved_goal = obs["achieved_goal"]
             desired_goal = obs["desired_goal"]
             return (
@@ -1342,7 +1366,7 @@ class FetchPickAndPlaceConstruction(
         return 1.0 if self._roboverify_task_complete(block_positions) else 0.0
 
     def _is_success(self, obs):
-        if self.case in ("RoboVerifyGrid", "RoboVerifyPyramid"):
+        if self.case in ("RoboVerifyGrid", "RoboVerifyPyramid", "RoboVerifyBuild3D"):
             achieved_goal = self.achieved_goal_from_observation(obs)
             desired_goal = self.goal_from_observation(obs)
             return self._roboverify_goal_layout_complete(achieved_goal, desired_goal)
@@ -1368,7 +1392,7 @@ class FetchPickAndPlaceConstruction(
         return np.asarray(results, dtype=np.bool_).reshape(leading_shape)
 
     def eval_success(self, observation):
-        if self.case in ("RoboVerifyGrid", "RoboVerifyPyramid"):
+        if self.case in ("RoboVerifyGrid", "RoboVerifyPyramid", "RoboVerifyBuild3D"):
             if torch.is_tensor(observation):
                 obs_np = observation.detach().cpu().numpy()
             else:

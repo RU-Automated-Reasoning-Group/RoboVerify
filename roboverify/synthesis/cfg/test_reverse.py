@@ -23,7 +23,7 @@ class ReverseTests(unittest.TestCase):
         self.addCleanup(np.random.set_state, np.random.get_state())
 
     def test_reset_uses_one_side_for_every_block_count_and_factory(self):
-        for count in (2, 3, 4):
+        for count in (2, 3, 4, 5):
             expected = {}
             for factory in (
                 make_roboverify_reverse_env,
@@ -82,10 +82,13 @@ class ReverseTests(unittest.TestCase):
 
     def test_groundtruth_moves_each_block_top_first_to_the_opposite_side(self):
         context = HighLevelContext(use_tbl=True)
-        for count, base_id in ((2, 0), (3, 0), (4, 0), (4, 2)):
+        for count, base_id in ((2, 0), (3, 0), (4, 0), (4, 2), (5, 0)):
             with self.subTest(count=count, base_id=base_id):
                 definition = load_program(
-                    "synthesis.examples.reverse:build_program", context, count
+                    "synthesis.examples.reverse:build_program",
+                    context,
+                    count,
+                    allow_observation_references=True,
                 )
                 definition.initial_bindings["b0"] = base_id
                 self.assertEqual(definition.initial_bindings["tbl"], "tbl")
@@ -117,6 +120,27 @@ class ReverseTests(unittest.TestCase):
                     timeout_seconds=12,
                 )
                 self.assertTrue(validate_trace(trace), trace.metadata)
+                for path in ("1.0", "1.2"):
+                    starts = [
+                        e
+                        for e in trace.events
+                        if e["kind"] == "instruction_start" and e["path"] == path
+                    ]
+                    ends = [
+                        e
+                        for e in trace.events
+                        if e["kind"] == "instruction_end" and e["path"] == path
+                    ]
+                    self.assertEqual(len(starts), count)
+                    self.assertEqual(len(ends), count)
+                    for start, end in zip(starts, ends):
+                        start_state = trace.states[start["index"]]
+                        max_z = max(
+                            get_block_pos(start_state, i)[2] for i in range(count)
+                        )
+                        self.assertAlmostEqual(
+                            trace.states[end["index"]][2], max_z + 0.10, delta=0.0021
+                        )
                 final = np.array(
                     [get_block_pos(trace.states[-1], i) for i in range(count)]
                 )
@@ -164,6 +188,7 @@ class ReverseTests(unittest.TestCase):
             "synthesis.examples.reverse:build_program",
             HighLevelContext(use_tbl=True),
             2,
+            allow_observation_references=True,
         )
         trace = record_execution(
             definition,

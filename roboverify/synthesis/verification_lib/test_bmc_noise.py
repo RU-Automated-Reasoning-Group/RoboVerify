@@ -54,7 +54,14 @@ class BMCNoise(unittest.TestCase):
             sym.ee_z[3] == sym.bz["0"][2] + z3.RealVal(0),
             z3.And(*(frame(b, 2) for b in sym.block_names)),
         )
-        self.assertTrue(pick.eq(bmc._encode_pick(sym, 0, 1)))
+        # Pick now checks clearance for a lateral approach. With that enabling
+        # condition established, its original noiseless endpoint/frame remains.
+        solver = z3.Solver()
+        solver.add(
+            sym.ee_z[0] >= sym.bz["1"][0] + z3.RealVal(".05"),
+            z3.Xor(pick, bmc._encode_pick(sym, 0, 1)),
+        )
+        self.assertEqual(solver.check(), z3.unsat)
         self.assertTrue(release.eq(bmc._encode_release(sym, 2, 0, z3.RealVal(0))))
         tx, ty, tz = (
             sym.bx["0"][1] + 0,

@@ -4,6 +4,7 @@ This fixture tests proof obligations, not acceptance of the inference algorithm.
 """
 
 import unittest
+from unittest.mock import patch
 
 import z3
 
@@ -76,8 +77,11 @@ class ConsistencyWitnessTests(unittest.TestCase):
             )
         assume_tower_geometry(p, 0.4)
         self.assertEqual(p.check("consistency").status, "valid")
-        self.assertEqual(
-            p.check("column", z3.Not(column_alignment(p))).status, "refuted"
+        # A closed two-block SAT witness conclusively refutes an exact-column
+        # assumption, without relying on open-domain quantified SAT heuristics.
+        p.solver.add(z3.Not(column_alignment(p)))
+        self.assertTrue(
+            p.finite_consistency_witness((p.constants["a"], p.constants["b"]))
         )
 
     def test_finite_unsat_does_not_establish_unbounded_inconsistency(self):
@@ -142,6 +146,50 @@ class SupportedStackTests(unittest.TestCase):
             checks = [c for c in motion.checks if c.obligation.endswith("/" + suffix)]
             self.assertEqual(len(checks), 1)
             self.assertEqual(checks[0].status, "valid")
+
+    def test_disabling_exact_columns_allows_offsets_at_body_and_exit(self):
+        from synthesis.verification_lib.motion_verification import MotionProblem
+
+        context, cfg = stack_cfg_with_fixture_invariant()
+        original = MotionProblem.check
+        offset_models = []
+
+        def check(problem, obligation, violation=None):
+            if obligation == "initial_consistency":
+                # A distinct offset tower member must remain possible at BOTH
+                # fresh loop states when the corresponding checks are disabled.
+                low = problem.context
+                problem.solver.push()
+                problem.solver.add(
+                    low.X(problem.constants["b"]) != low.X(problem.constants["b0"])
+                )
+                # SAT in a closed finite domain also witnesses the unrestricted
+                # premises. No finite UNSAT result is accepted as a proof.
+                offset_models.append(
+                    problem.finite_consistency_witness(
+                        tuple(problem.constants.values())
+                    )
+                )
+                problem.solver.pop()
+            return original(problem, obligation, violation)
+
+        with patch.object(MotionProblem, "check", check):
+            motion = verify_cfg_motion(
+                cfg,
+                context,
+                supported_tower_model=True,
+                exact_column_alignment=False,
+                table_surface_height=0.4,
+                initial_arm=[0.0, 0.0, 0.6],
+                timeout_ms=2000,
+            )
+        self.assertEqual(len(offset_models), 3)  # Program entry, body, exit.
+        self.assertEqual(offset_models[1:], [True, True])
+        self.assertFalse(any("column_alignment" in c.obligation for c in motion.checks))
+        for suffix in ("arm_clearance_preserved", "tower_height_preserved"):
+            self.assertTrue(
+                any(c.obligation.endswith("/" + suffix) for c in motion.checks)
+            )
 
     def test_clearance_is_not_assumed_at_program_entry(self):
         context, cfg = stack_cfg_with_fixture_invariant()

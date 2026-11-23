@@ -1,8 +1,9 @@
 """Executable adaptation of Fig. 16's two-phase Restack program.
 
 The printed unstack guard repeats b0 forever after freeing it. Tracking the last
-parked block p excludes it once p = b0. Table-relative waypoints replace the
-paper's moving extrema and place the temporary row on the robot's lower-Y side.
+parked block p excludes it once p = b0. Table-relative horizontal waypoints
+place the temporary row on the robot's lower-Y side; observed maximum height
+sets the vertical clearance.
 Only existing Pick/Move/Release/Assign/While instructions are used.
 """
 
@@ -31,16 +32,16 @@ def build_program(context, *, num_blocks):
     top = z3.ForAll(
         [other], z3.Or(other == selected, z3.Not(context.ON_star(other, selected)))
     )
-    clearance = num_blocks * BLOCK_LENGTH + 0.10
+    # Hold the lifted gripper height across each lateral transfer.
     unstack_body = [
-        MoveByName("b_prime", "b_prime", "tbl", target_offset=[0, 0, clearance]),
+        MoveByName("b_prime", "b_prime", "Z_m", target_offset=[0, 0, 0.10]),
         PickByName("b_prime"),
-        MoveByName("b_prime", "b_prime", "tbl", target_offset=[0, 0, clearance]),
+        MoveByName("b_prime", "b_prime", "Z_m", target_offset=[0, 0, 0.10]),
         MoveByName(
             "tbl",
             "p",
-            "tbl",
-            target_offset=[PARKING_X_OFFSET, PARKING_Y_STEP, clearance],
+            "gripper",
+            target_offset=[PARKING_X_OFFSET, PARKING_Y_STEP, 0],
         ),
         MoveByName(
             "tbl",
@@ -48,16 +49,16 @@ def build_program(context, *, num_blocks):
             "tbl",
             target_offset=[PARKING_X_OFFSET, PARKING_Y_STEP, BLOCK_LENGTH],
         ),
-        ReleaseByName("tbl", target_z=clearance),
+        ReleaseByName("Z_m", target_z=0.10),
         Assign("p", "b_prime"),
     ]
     stack_body = [
-        MoveByName("b_prime", "b_prime", "tbl", target_offset=[0, 0, clearance]),
+        MoveByName("b_prime", "b_prime", "Z_m", target_offset=[0, 0, 0.10]),
         PickByName("b_prime"),
-        MoveByName("b_prime", "b_prime", "tbl", target_offset=[0, 0, clearance]),
-        MoveByName("b0", "b0", "tbl", target_offset=[0, 0, clearance]),
+        MoveByName("b_prime", "b_prime", "Z_m", target_offset=[0, 0, 0.10]),
+        MoveByName("b0", "b0", "gripper", target_offset=[0, 0, 0]),
         MoveByName("b0", "b0", "b", target_offset=[0, 0, BLOCK_LENGTH]),
-        ReleaseByName("tbl", target_z=clearance),
+        ReleaseByName("Z_m", target_z=0.10),
         Assign("b", "b_prime"),
     ]
     instructions = [

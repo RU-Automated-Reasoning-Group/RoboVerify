@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from synthesis.api.instructions import (
     Assign,
+    Get,
     Move,
     MoveByName,
     Pick,
@@ -50,6 +51,66 @@ class Repetition:
     width: int
     substitutions: tuple
     template: object
+
+
+def _partition_copy(cfg):
+    # Naming and later synthesis mutate regions, aliases and segment bindings.
+    # Snapshot those objects, while sharing immutable recorded trace payloads.
+    memo, pending = {}, [cfg]
+    while pending:
+        graph = pending.pop()
+        for rows in [*graph.demos.segments.values(), getattr(graph, "_task_demos", ())]:
+            for row in rows:
+                memo[id(row.trace)] = row.trace
+        for trace in getattr(graph, "_validation_traces", ()):
+            memo[id(trace)] = trace
+        pending.extend(
+            node.region.body_cfg
+            for node in graph.nodes.values()
+            if isinstance(node.region, LoopRegion) and node.region.body_cfg is not None
+        )
+    return deepcopy(cfg, memo)
+
+
+@dataclass
+class BoundaryFold:
+    source: object
+    repetition: object
+    language: object
+    infer_invariant: object
+    budget: object
+    stable_guards: bool
+    choice: int
+
+
+def retry_boundary_fold(cfg, node_name):
+    """Try the next bounded cut vector without discarding the discovered loop."""
+    prior = getattr(cfg, "_boundary_folds", {}).get(node_name)
+    if prior is None:
+        return False
+    for choice in range(prior.choice + 1, prior.budget.max_proposals):
+        trial = _partition_copy(prior.source)
+        if not _fold(
+            trial,
+            prior.repetition,
+            prior.language,
+            prior.infer_invariant,
+            prior.budget,
+            prior.stable_guards,
+            choice,
+        ):
+            continue
+        if (
+            trial.synthesis_approach == "id-first"
+            and cfg.synthesis_approach != "id-first"
+        ):
+            from synthesis.cfg.id_first import close_id_candidate
+
+            close_id_candidate(trial, allow_unresolved=True)
+            trial.synthesis_approach = cfg.synthesis_approach
+        cfg.__dict__.update(trial.__dict__)
+        return True
+    return False
 
 
 def find_repetition(labels, excluded=frozenset()):
@@ -116,10 +177,21 @@ def _rename_instruction(instruction, names):
     return result
 
 
-def _fold(cfg, repetition, language, infer_invariant):
+def _fold(
+    cfg,
+    repetition,
+    language,
+    infer_invariant,
+    boundary_budget=None,
+    stable_guards=False,
+    boundary_choice=0,
+):
     r = repetition
+    original_partition = _partition_copy(cfg) if boundary_budget is not None else None
     carry, rebound = carried_bindings(r.template)
-    if not carry or not rebound:
+    # A loop can rebind its next object while keeping every scoped reference
+    # fixed. Such a template needs neither pointer initialization nor Assign.
+    if not rebound:
         return False
     available = set(graph_scope(cfg)[cfg.order[r.start]])
     occupied = set(available)
@@ -187,6 +259,15 @@ def _fold(cfg, repetition, language, infer_invariant):
         if not iterations.bodies:
             return False
         extracted.append(iterations)
+    boundary_reports = []
+    if boundary_budget is not None:
+        from synthesis.cfg.boundaries import refine_iterations
+
+        extracted, boundary_reports = refine_iterations(
+            extracted, posts, budget=boundary_budget, choice=boundary_choice
+        )
+        if extracted is None:
+            return False
     positive, heads, exits = [], [], []
     body_demos = [[] for _ in posts]
     loop_demos = []
@@ -224,6 +305,7 @@ def _fold(cfg, repetition, language, infer_invariant):
         loop_scope,
         language=language,
         candidates=(conjunction(*posts),),
+        updated_names=({left for left, _ in updates} if stable_guards else None),
     )
     if not learned:
         return False
@@ -290,6 +372,20 @@ def _fold(cfg, repetition, language, infer_invariant):
         posts[-1],
         initial_scope=frozenset(loop_scope | set(rebound_names)),
     )
+    body_cfg._boundary_reports = boundary_reports
+    for body_node in body_cfg.nodes.values():
+        body_node._inferred_loop_body = True
+    if boundary_budget is not None and len(body_names) == 1:
+        successors = {}
+        for iterations in extracted:
+            for i, parts in enumerate(iterations.bodies):
+                row = parts[0]
+                successors[(id(row.trace), row.demo_idx, row.t_start, row.t_end)] = (
+                    dict(iterations.bodies[i + 1][0].bindings)
+                    if i + 1 < len(iterations.bodies)
+                    else None
+                )
+        body_cfg.nodes[body_names[0]]._contract_successors = successors
     region = LoopRegion(
         learned.term,
         rebound_names,
@@ -337,6 +433,32 @@ def _fold(cfg, repetition, language, infer_invariant):
         del trial.demos.segments[name]
     trial.nodes[new] = Node(new, region)
     trial.demos.segments[new] = loop_demos
+    if outgoing.target == cfg.exit and any(
+        it.terminal.t_end < len(row.trace.states) - 1
+        for row, it in zip(examples, extracted)
+    ):
+        # A bounded terminal window may finish before the recording does. Keep
+        # the complete suffix even when the repetition consumed the final node.
+        tail = fresh_name(new + ".tail", set(trial.nodes))
+        trial.nodes[tail] = Node(tail, BlockRegion(None))
+        trial.order.append(tail)
+        trial.demos.segments[tail] = [
+            DemoSegment(
+                row.demo_idx,
+                it.terminal.t_end,
+                len(row.trace.states) - 1,
+                row.trace,
+                dict(row.bindings, **it.terminal.bindings),
+                parent=row,
+                entry_index=row.entry_index,
+            )
+            for row, it in zip(examples, extracted)
+        ]
+        edge_index = next(i for i, edge in enumerate(trial.edges) if edge.source == new)
+        trial.edges[edge_index : edge_index + 1] = [
+            Edge(new, tail, exit_label),
+            Edge(tail, trial.exit, cfg.postcondition),
+        ]
     # The loop may explain more of a demo than the original detected pair.
     # Repartition its continuation from the newly recovered terminal head.
     cursors = [it.terminal.t_end for it in extracted]
@@ -346,6 +468,7 @@ def _fold(cfg, repetition, language, infer_invariant):
         if len(old_rows) != len(examples):
             return False
         post = trial.outgoing(name)[0].label
+        remaining_rows = []
         for i, (old, it) in enumerate(zip(old_rows, extracted)):
             bindings = dict(old.bindings, **it.terminal.bindings)
             remaining = DemoSegment(
@@ -357,6 +480,50 @@ def _fold(cfg, repetition, language, infer_invariant):
                 old,
                 old.entry_index,
             )
+            remaining_rows.append(remaining)
+        before, after = trial.incoming(name)[0], trial.outgoing(name)[0]
+        old_region = trial.nodes[name].region
+        binding_effects = (
+            before.binds
+            or before.kills
+            or before.binding_condition is not None
+            or after.binds
+            or after.kills
+            or after.binding_condition is not None
+            or isinstance(old_region, LoopRegion)
+            or (
+                isinstance(old_region, BlockRegion)
+                and (
+                    old_region.bindings
+                    or any(
+                        isinstance(instruction, (Assign, Get))
+                        for instruction in (
+                            *old_region.physical,
+                            *(old_region.symbolic or ()),
+                        )
+                    )
+                )
+            )
+        )
+        if (
+            after.target != trial.exit
+            and not binding_effects
+            and all(
+                evaluate(post, scene_at(row, row.t_start)) for row in remaining_rows
+            )
+        ):
+            # The recovered loop consumed this intermediate milestone. Keep
+            # the final tail, which may still contain release/retreat, but do
+            # not manufacture a one-frame segment for an already-true target.
+            edge_index = trial.edges.index(before)
+            trial.edges[edge_index : edge_index + 2] = [
+                Edge(before.source, after.target, before.label)
+            ]
+            trial.order.remove(name)
+            del trial.nodes[name]
+            del trial.demos.segments[name]
+            continue
+        for i, (old, remaining) in enumerate(zip(old_rows, remaining_rows)):
             end = (
                 remaining.t_end
                 if trial.outgoing(name)[0].target == cfg.exit
@@ -377,7 +544,7 @@ def _fold(cfg, repetition, language, infer_invariant):
                     cursors[i],
                     end,
                     old.trace,
-                    bindings,
+                    remaining.bindings,
                     old,
                     old.entry_index,
                 )
@@ -388,6 +555,17 @@ def _fold(cfg, repetition, language, infer_invariant):
 
     if not validate_cfg(trial):
         return False
+    if boundary_budget is not None:
+        trial._boundary_folds = dict(getattr(cfg, "_boundary_folds", {}))
+        trial._boundary_folds[new] = BoundaryFold(
+            original_partition,
+            repetition,
+            language,
+            infer_invariant,
+            boundary_budget,
+            stable_guards,
+            boundary_choice,
+        )
     cfg.__dict__.update(trial.__dict__)
     return True
 
@@ -518,7 +696,14 @@ def _quotient_label(cfg, name, edge):
     )
 
 
-def quotient(cfg, *, language=None, infer_invariant=None):
+def quotient(
+    cfg,
+    *,
+    language=None,
+    infer_invariant=None,
+    boundary_budget=None,
+    stable_guards=False,
+):
     """Collapse flat repetitions to a fixed point; failed matches leave no edits."""
     cfg.validate_structure()
     changed, excluded = False, set()
@@ -535,7 +720,9 @@ def quotient(cfg, *, language=None, infer_invariant=None):
         repetition = find_repetition(word, excluded)
         if repetition is None:
             return changed
-        if _fold(cfg, repetition, language, infer_invariant):
+        if _fold(
+            cfg, repetition, language, infer_invariant, boundary_budget, stable_guards
+        ):
             changed, excluded = True, set()
         else:
             excluded.add((repetition.start, repetition.width))

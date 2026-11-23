@@ -68,6 +68,9 @@ class LoopHeadState:
                 if block_id != "tbl":
                     raise ValueError("tbl cannot alias a physical block")
                 continue
+            if isinstance(block_id, str) and block_id == "tbl":
+                constants[str(name)] = "tbl"
+                continue
             if (
                 not isinstance(block_id, (int, np.integer))
                 or not 0 <= block_id < num_blocks
@@ -202,6 +205,13 @@ def InvInference(D_V, loop_id, vocab, context, *, minimizer=None):
     from synthesis.inference_lib.inference import loop_inference
     from synthesis.inference_lib.minimization import using_invariant_minimizer
 
+    if any(
+        r in ("Higher", "EqualHeight") and r != context.height_predicate
+        for r in vocab.relations
+    ):
+        raise ValueError(
+            "Vocabulary height predicate differs from the selected algebra"
+        )
     states_zero, states, mappings = to_inference_inputs(D_V, loop_id, vocab, context)
     relations = [r if r == "equality" else getattr(context, r) for r in vocab.relations]
     constants = [context.get_consts(name) for name in vocab.constants]

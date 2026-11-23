@@ -1,6 +1,9 @@
-"""Instrumented MCMC program search.
+"""Instrumented MCMC or enumerative program search.
 
-Same search as :func:`synthesis.mcmc.synthesis.MCMC` -- same mutation operators, same
+``search_strategy=enumeration`` replaces mutation and acceptance with a bounded,
+length-first iterator. It requires BMC screening and shares the CEM scorer below.
+
+The default is the same search as :func:`synthesis.mcmc.synthesis.MCMC` -- same mutation operators, same
 acceptance rule, same RNG consumption -- with the per-iteration prints replaced by
 structured records, and with metrics chosen so that a bad run can be diagnosed rather
 than merely observed.
@@ -34,6 +37,7 @@ import numpy as np
 from synthesis.experiment.mcmc import cem as instrumented_cem
 from synthesis.experiment.run_logger import RollingRate, RunLogger
 from synthesis.mcmc import cost_func
+from synthesis.mcmc.enumeration import enumerate_programs
 from synthesis.mcmc.search_core import acceptance_probability, imitation_objective
 from synthesis.mcmc.synthesis import (
     BMC_FAILED_COST,
@@ -179,6 +183,8 @@ class MCMCResult:
     costs: list = field(default_factory=list)
     recent_programs: list = field(default_factory=list)
     iters_completed: int = 0
+    best_checks_passed: bool = False
+    termination_reason: str = "budget_exhausted"
 
 
 def optimize_program(
@@ -266,14 +272,21 @@ def score_candidate_program(
     motion_penalty=None,
     motion_penalty_weight: float = 1.0,
     initial_snapshots: Optional[dict] = None,
+    feasibility_check=None,
 ) -> CandidateResult:
     """Require BMC feasibility if configured, then optimize ``p``'s parameters."""
-    bmc_feasible, bmc_report = check_bmc_candidate(
-        p, bmc_goal, initial_constraints=bmc_initial_constraints
-    )
-    bmc_reason = classify_bmc_report(bmc_report)
+    if feasibility_check is None:
+        bmc_feasible, bmc_report = check_bmc_candidate(
+            p, bmc_goal, initial_constraints=bmc_initial_constraints
+        )
+        bmc_reason = classify_bmc_report(bmc_report)
+    else:
+        feasibility = feasibility_check(p)
+        bmc_feasible = bool(feasibility)
+        bmc_report = feasibility.reason
+        bmc_reason = feasibility.status
 
-    if bmc_goal is not None and not bmc_feasible:
+    if (bmc_goal is not None or feasibility_check is not None) and not bmc_feasible:
         return CandidateResult(
             cost=bmc_failed_cost,
             program=p,
@@ -306,8 +319,12 @@ def score_candidate_program(
     return CandidateResult(
         cost=cost,
         program=p,
-        checks_passed=candidate_checks_passed(
-            bmc_goal=bmc_goal, bmc_passed=bool(bmc_feasible)
+        checks_passed=(
+            bool(bmc_feasible)
+            if feasibility_check is not None
+            else candidate_checks_passed(
+                bmc_goal=bmc_goal, bmc_passed=bool(bmc_feasible)
+            )
         ),
         bmc_feasible=bmc_feasible,
         bmc_reason=bmc_reason,
@@ -338,8 +355,38 @@ def MCMC(
     motion_penalty=None,
     motion_penalty_weight: float = 1.0,
     initial_snapshots: Optional[dict] = None,
+    candidate_programs=None,
+    feasibility_check=None,
 ) -> MCMCResult:
-    """Run the instrumented search, writing records through ``logger``."""
+    """Run the selected structural search using the same BMC/CEM scorer.
+
+    The public name is retained for existing callers. Enumeration has no
+    mutation or Metropolis acceptance; every generated structure is screened.
+    """
+    enumeration = config.search_strategy == "enumeration"
+    contract = config.search_strategy == "contract"
+    streaming = enumeration or contract
+    if contract and (candidate_programs is None or feasibility_check is None):
+        raise ValueError(
+            "Contract search requires its candidate stream and entry BMC checker"
+        )
+    if enumeration and bmc_goal is None:
+        raise ValueError(
+            "Enumeration requires a BMC goal; use --goal-feature and keep BMC enabled"
+        )
+    candidates = (
+        iter(candidate_programs)
+        if contract
+        else (
+            iter(
+                enumerate_programs(
+                    available_operands, available_instructions, config.program_slots
+                )
+            )
+            if enumeration
+            else None
+        )
+    )
     num_seeds = config.num_seeds if config.num_seeds is not None else len(seeds or [])
     result = MCMCResult()
     accept_rate = RollingRate(config.rolling_window)
@@ -368,6 +415,7 @@ def MCMC(
             refresh_best_metrics=refresh_best_metrics,
             motion_penalty=motion_penalty,
             motion_penalty_weight=motion_penalty_weight,
+            feasibility_check=feasibility_check if contract else None,
         )
 
     def save_checkpoint(candidate, subdir: str) -> None:
@@ -379,17 +427,35 @@ def MCMC(
     logger.set_status(phase="initial")
     logger.write_artifact("initial/program.txt", str(initial_program))
 
-    initial = score(initial_program)
+    initial = (
+        CandidateResult(
+            cost=config.bmc_failed_cost,
+            program=initial_program,
+            checks_passed=False,
+            bmc_feasible=None,
+            bmc_reason="proposal_seed",
+            bmc_report="Contract search starts from its proposal stream",
+            goal_report="Not scored",
+            scored=False,
+        )
+        if contract
+        else score(initial_program)
+    )
     current_program = initial.program
     current_cost = initial.cost
     current_checks_passed = initial.checks_passed
 
-    result.best_program = current_program
-    result.best_cost = current_cost
-    result.best_iter = -1
+    result.best_program = (
+        current_program if not streaming or initial.checks_passed else None
+    )
+    result.best_cost = current_cost if result.best_program is not None else -math.inf
+    result.best_checks_passed = initial.checks_passed
+    result.best_iter = -1 if result.best_program is not None else None
     result.costs.append(current_cost)
 
-    logger.log_metrics(-1, phase="initial", **initial.metrics())
+    logger.log_metrics(
+        -1, phase="initial", search_strategy=config.search_strategy, **initial.metrics()
+    )
     logger.log_event(
         "initial_scored",
         f"initial program cost={current_cost:.6g} "
@@ -399,7 +465,7 @@ def MCMC(
         cost=current_cost,
         bmc_reason=initial.bmc_reason,
     )
-    if current_cost <= config.bmc_failed_cost:
+    if not streaming and current_cost <= config.bmc_failed_cost:
         # The chain starting on the BMC floor means every candidate has a positive
         # cost delta and is accepted unconditionally until the first feasible
         # program appears, i.e. the early search is an unguided random walk.
@@ -411,19 +477,39 @@ def MCMC(
             force=True,
             bmc_reason=initial.bmc_reason,
         )
-    save_checkpoint(current_program, "best")
-    logger.set_status(phase="mcmc")
+    if result.best_program is not None:
+        save_checkpoint(current_program, "best")
+    logger.set_status(phase=config.search_strategy)
 
     for i in range(config.iters):
         iter_start = time.time()
 
-        new_program, changed, mutation_info = mutate_program(
-            current_program, available_operands, available_instructions
-        )
-        equivalence = executable_instructions(
-            current_program
-        ) == executable_instructions(new_program)
-        evaluated = bool(changed) and not equivalence
+        if streaming:
+            try:
+                new_program = next(candidates)
+            except StopIteration:
+                result.termination_reason = (
+                    getattr(candidate_programs, "status", "space_exhausted")
+                    if contract
+                    else "space_exhausted"
+                )
+                break
+            changed, equivalence, evaluated = True, False, True
+            mutation_info = {
+                "type": config.search_strategy,
+                "changed": True,
+                "details": [
+                    f"Proposed structure with {len(new_program.instructions)} instructions"
+                ],
+            }
+        else:
+            new_program, changed, mutation_info = mutate_program(
+                current_program, available_operands, available_instructions
+            )
+            equivalence = executable_instructions(
+                current_program
+            ) == executable_instructions(new_program)
+            evaluated = bool(changed) and not equivalence
 
         if evaluated:
             candidate = score(new_program)
@@ -444,7 +530,12 @@ def MCMC(
 
         accepted = False
         acceptance_ratio: Optional[float] = None
-        if evaluated:
+        if evaluated and streaming:
+            accepted = candidate.checks_passed
+            if accepted:
+                current_program, current_cost = new_program, new_cost
+                current_checks_passed = True
+        elif evaluated:
             acceptance_ratio = acceptance_probability(
                 config.beta * (new_cost - current_cost)
             )
@@ -456,11 +547,16 @@ def MCMC(
                 current_cost = new_cost
                 current_checks_passed = candidate.checks_passed
 
-        is_new_best = evaluated and new_cost > result.best_cost
+        is_new_best = (
+            evaluated
+            and new_cost > result.best_cost
+            and (not streaming or candidate.checks_passed)
+        )
         if is_new_best:
             result.best_cost = new_cost
             result.best_iter = i
             result.best_program = new_program
+            result.best_checks_passed = candidate.checks_passed
 
         if evaluated:
             accept_rate.add(accepted)
@@ -483,9 +579,14 @@ def MCMC(
 
         logger.log_metrics(
             i,
+            search_strategy=config.search_strategy,
             iter_s=round(time.time() - iter_start, 3),
             current_cost=round(float(current_cost), 6),
-            best_cost=round(float(result.best_cost), 6),
+            best_cost=(
+                round(float(result.best_cost), 6)
+                if result.best_program is not None
+                else None
+            ),
             accepted=accepted,
             changed=bool(changed),
             equivalent=equivalence,
@@ -499,7 +600,11 @@ def MCMC(
         logger.set_progress(
             i,
             config.iters,
-            best_cost=round(float(result.best_cost), 6),
+            best_cost=(
+                round(float(result.best_cost), 6)
+                if result.best_program is not None
+                else None
+            ),
             best_iter=result.best_iter,
             current_cost=round(float(current_cost), 6),
             accept_rate_window=accept_rate.rate,

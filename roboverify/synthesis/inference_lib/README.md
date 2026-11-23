@@ -65,7 +65,7 @@ uv run python -m synthesis.entry.collect_demos \
   --num-blocks 3 --num-trajectories 5 --save-video
 ```
 
-All six tasks have a default supplied program; `--program` is optional and
+All seven tasks have a default supplied program; `--program` is optional and
 selects a replacement factory. The editable factory in `synthesis/examples/stack.py`
 uses explicit Pick, Move,
 and Release primitives. Its transfer and placement waypoints use the base block
@@ -74,7 +74,7 @@ and Release primitives. Its transfer and placement waypoints use the base block
 `--program path/to/program.py:factory` must return a `Program` from
 `factory(context, *, num_blocks)`. Named and numeric physical operands, Assign,
 Get, Skip, and flat While loops are supported for tower tasks. PickPlace is
-rejected. Grid/Pyramid collection additionally accepts nested goal loops as
+rejected. Grid/Pyramid/Build3D collection additionally accepts nested goal loops as
 described below. Numeric operands get fixed aliases; their identities are not learned.
 
 Collection runs exactly N distinct seeds, defaulting to five seeds starting at
@@ -145,16 +145,50 @@ timeout --signal=TERM --kill-after=2s 55s \
   --num-blocks 4 --num-trajectories 15 --trajectory-timeout-seconds 12
 ```
 
-The default is `synthesis.examples.unstack:build_program`. It retains the source
-base and moves each clear upper block 15 cm toward decreasing Y. `Y_min` and
+The adopted groundtruth and default is `synthesis.examples.unstack:build_program`.
+Its guard explicitly
+requires `b_prime != b0`, retaining the source base and moving each clear upper
+block 15 cm toward decreasing Y. `--num-blocks 1` is supported by the collector:
+the already-unstacked scene exits with zero iterations and no primitive actions.
+This strengthens the original guard rather than defining a separate selectable
+program; the difference and proof scope are recorded in
+[discrepancy 10](../../../PAPER-DISCREPANCIES.md#10-the-historical-unstack-oracle-does-not-establish-its-final-task-condition).
+`Y_min` and
 `Z_m` select physical block coordinates at instruction entry; `gripper` captures
 the current gripper position. Each Move freezes its target throughout execution.
 These are coordinate references for Move/Release, not physical Pick operands.
-The reference semantics enter fingerprints, and ordinary synthesis/verification
-loading rejects them until they have proof support. Collection opts in explicitly.
+The reference semantics enter fingerprints. Collection and supplied-program
+verification opt in for execution/inference; ordinary synthesis loading rejects
+them. Motion checking encodes them with independent extrema witnesses, with
+remaining geometric proof obligations documented in the verification guide.
+The shared pipeline now learns an
+invariant and proves the current Unstack abstraction; see the
+[tower verification guide](../cfg/VERIFICATION.md#provided-unstack-and-reverse-verification).
 Direct reset, controller tolerances and step budgets are unchanged. The old
 experiment wrapper has been removed. Use smaller seed batches when rendering
 so each Unstack invocation remains within the 60-second wall-clock limit.
+
+The strengthened-guard recheck collected **60 valid demonstrations**, 15 seeds
+(0–14) each for 1, 2, 3 and 4 blocks, under
+`demos/unstack-base-guard-20261023/{N}-blocks/`. Each directory contains
+`demonstrations.npz`, `collection.json` and `audit.json`. Every trajectory passed
+exact action replay and retained physical task success after 50 extra steps;
+iteration counts are respectively 0, 1, 2 and 3. All 15 four-block executions
+have identical actions and observations to the previous guard's archived starts;
+the comparison is in `guard-comparison.json` at the collection root. The new guard
+changes executable fingerprints, so use these fresh archives with the current
+factory rather than the earlier collection-audit Unstack archive.
+
+Reproduce for each N in 1, 2, 3, 4 (choose a fresh output directory):
+
+```bash
+uv run python -m synthesis.entry.collect_demos --task unstack --num-blocks 4 \
+  --num-trajectories 15 --seed-start 0 \
+  --output-dir demos/unstack-base-guard-20261023/4-blocks
+uv run python -m synthesis.entry.audit_demos \
+  --demos demos/unstack-base-guard-20261023/4-blocks/demonstrations.npz \
+  --output demos/unstack-base-guard-20261023/4-blocks/audit.json
+```
 
 ## Collect Reverse demonstrations
 
@@ -188,9 +222,20 @@ relational tbl remains an isolated geometry-free marker in predicates. Pick
 still requires a physical block. Missing table geometry fails explicitly.
 The table-reference convention is recorded in table-using program fingerprints.
 
-Transfers and retreats reference tbl at `N*0.05 + 0.10` m above that support
-reference, 10 cm above the highest nominal block center. The physical program
-supports 2–4 blocks. Primitive limits remain 50 steps and tolerances remain 2 mm.
+Approach and lift moves use `Z_m + 0.10` m, where `Z_m` is the current
+maximum physical block center at instruction entry; Release uses the same
+reference and retreat offset. The lateral transfer retains the gripper's current
+height, avoiding an extra rise when the carried block is the highest object.
+No clearance parameter depends on block count. The physical factory accepts 2–5
+blocks. Primitive limits remain 50 steps and tolerances remain 2 mm.
+
+**2026-10-28 observed-height revision:** 15 seeds (0–14) each for four- and
+five-block Reverse completed and passed exact action replay and 50 extra final
+settling steps (30/30). The same audit passed 15/15 for each five-block Restack
+layout with initial tower heights 3 and 4. The collections and audit reports are under
+`demos/observed-height-20261028/`. These are empirical results,
+not a new proof. The changed executable fingerprints require fresh archives;
+the verification results and archived runs below used the earlier controller.
 
 Run from `roboverify/` with the MuJoCo environment configured:
 
@@ -226,9 +271,34 @@ top-first and final XY error relative to the intended column stayed below
 The older `*-lateral` collections and video retain the previous program, which
 handled the first block outside its loop; their fingerprints differ.
 
-These results validate the tested simulator executions. The integrated
-synthesis CLI still exposes Stack and Unstack. The historical standalone Reverse
-verifier encoded a different task and has been removed; see
+**2026-10-26 five-block trial:** the factory's explicit limit was extended to
+five; at that time the `N*0.05 + 0.10` clearance formula, primitives and
+controller settings were unchanged. All 15 executions (seeds 0–14) completed,
+converged and passed the immediate task pre/postconditions. The independent replay/50-step
+settling audit passed **12 of 15**: seeds 0, 1 and 3 lost task success during
+settling. This does not establish reliable five-block control. All source traces
+and the audit are retained under `demos/reverse/5-blocks-equal-height-20261026/`.
+The `audited/demonstrations.npz` subset contains seeds 2 and 4–14, with the
+selection criterion and exclusions in `audited/selection.json`. Accepted replays
+had zero observation error and retained physical success after settling. Use
+this subset for the [five-block EqualHeight investigation](../cfg/VERIFICATION.md#reverse-vocabulary-investigation).
+
+The following commands now collect the revised executable, not the historical
+controller used in that 2026-10-26 result:
+
+```bash
+uv run python -m synthesis.entry.collect_demos --task reverse --num-blocks 5 \
+  --num-trajectories 15 --seed-start 0 --max-loop-iterations 5 \
+  --output-dir demos/reverse/5-blocks-equal-height-20261026
+uv run python -m synthesis.entry.audit_demos \
+  --demos demos/reverse/5-blocks-equal-height-20261026/demonstrations.npz \
+  --settle-steps 50 --output demos/reverse/5-blocks-equal-height-20261026/audit.json
+```
+
+These collection results validate the tested simulator executions. The integrated
+CLI also accepts supplied Reverse programs for inference and symbolic verification;
+its table-relative motion encoding remains unsupported. The historical standalone
+Reverse verifier encoded a different task and has been removed; see
 [discrepancy 39](../../../PAPER-DISCREPANCIES.md#39-the-historical-reverse-verifier-encodes-unstack-rather-than-reversal).
 
 ## Collect Restack demonstrations
@@ -267,14 +337,17 @@ The supplied program corrects the paper's first-loop guard, which would continue
 selecting b0 after placing it on the table. `p <- tbl` tracks the last parked
 block, the first guard excludes p, and `p <- b_prime` ends each iteration.
 Once p is b0 that loop exits. The second loop starts `b <- b0` and handles every
-remaining clear block. Table-relative XY offsets and clearance adapt the paper's
-waypoints to the lateral setup, using unchanged primitive controllers. These
-changes and the Table 8 precondition correction are documented in
+remaining clear block. Table-relative XY offsets adapt the waypoints to the
+lateral setup. Approach, lift and retreat use observed `Z_m + 0.10`; horizontal
+transport retains the gripper height. The primitive controllers are unchanged.
+These changes and the Table 8 precondition correction are documented in
 [discrepancy 41](../../../PAPER-DISCREPANCIES.md#41-restack-needs-a-terminating-first-loop-and-an-executable-lateral-layout).
 This is supplied-program execution/collection; Restack synthesis and formal
 verification have not been added.
 
-Five-seed collections passed for four blocks and both five-block layouts above.
+The following historical five-seed collections used the preceding fixed-clearance
+program; their executable fingerprints differ from the current program. They
+passed for four blocks and both five-block layouts above.
 All 15 filmed trajectories formed a complete physical tower, with converged
 primitives. Data and videos are in `demos/restack/4-blocks-5-trajectories/`,
 `demos/restack/5-blocks-3-tower-5-trajectories/` and
@@ -346,7 +419,91 @@ synthesis/verification entry points retain their existing restrictions, and
 their goal state. Collection support does not establish goal-aware synthesis,
 invariant learning or formal verification.
 
+## Collect Build3D demonstrations
+
+Build3D creates an `m × n × k` rectangular arrangement: `m` rows per layer,
+`n` columns per row, and `k` vertical layers. All dimensions default to 2 and
+must be positive integers; the block count is their product. The environment
+uses Grid's 10 cm horizontal spacing for finger clearance, with each higher
+block directly above its support at 5 cm vertical spacing. Goal centers are
+on the higher-Y side of the robot and scattered source blocks on the lower-Y
+side. Source center X is initial-gripper X minus 0.14 m; the target grid is
+centered 0.04 m closer in X than the initial gripper.
+
+```bash
+uv run python -m synthesis.entry.collect_demos --task build3d \
+  --build-rows 2 --build-cols 3 --build-layers 2 \
+  --num-trajectories 5 --save-video
+```
+
+The default groundtruth is [`synthesis.examples.build3d`](../examples/build3d.py).
+It reuses the unchanged six-primitive Grid/Pyramid transfer, with approach and
+transport Z equal to the current goal Z plus 0.15 m. Its three loops follow
+goal-only links: `r` within a row, `d` between row heads within a layer, and `u`
+between layer heads. The last row's `d` is null, so the entire current layer
+finishes before the next layer starts. Physical blocks have no traversal links.
+
+```text
+u <- h0
+while u != null:
+    d <- u
+    while d != null:
+        r <- d
+        while r != null and exists b_prime: not AtGoal(b_prime):
+            Move(b_prime, b_prime, r, (0, 0, 0.15))
+            Pick(b_prime)
+            Move(b_prime, b_prime, r, (0, 0, 0.15))
+            Move(r, r, r, (0, 0, 0.15))
+            Move(r, r, r, (0, 0, 0))
+            Release(r, 0.15)
+            r <- r.r
+        d <- d.d
+    u <- u.u
+```
+
+Default output names include all three dimensions, for example
+`demos/build3d/2x3x2-12-blocks-5-trajectories/`. The shared collector, archive
+auditor and optional `execute_goal_program --task build3d` all support this task.
+Collection uses the same 50-step initial settling, controller convergence checks,
+identity-independent occupancy, and preservation of earlier goals as the 2D
+tasks. Version-2 archives add `layer_row_counts` and `u` links only for Build3D;
+existing Grid/Pyramid serialization is unchanged. Snapshots and events preserve
+all three cursors, including logical cursor changes between physical actions.
+Loading a snapshot with a different layer partition is rejected even when its
+flattened row lengths match.
+
+**Physical validation:** 25/25 demonstrations passed, with exact final-state
+action replay and successful occupancy after 50 additional settling steps:
+
+| Dimensions | Blocks | Seeds | Archive directory under `demos/build3d/` |
+| --- | ---: | --- | --- |
+| 2×2×2 | 8 | 0–14 | `2x2x2-15-seeds/` |
+| 2×3×2 | 12 | 0–4 | `2x3x2-5-seeds/` |
+| 2×2×3 | 12 | 0–4 | `2x2x3-5-seeds/` |
+
+Each directory contains `demonstrations.npz`, `collection.json` and `audit.json`.
+All final replay errors were zero; the maximum primitive used 18 of 50 steps.
+An additional twelve-block video is in
+`demos/build3d/2x3x2-video/videos/seed_0000.mp4`.
+The 22 focused Build3D and existing 2D goal tests passed. They cover single-row,
+single-column and single-layer topology, all three loop exits, archive replay,
+dimension conflicts, and synthesis-loader rejection.
+
+Dimensions are configurable rather than hardcoded to these tested shapes.
+The finite robot workspace still limits physical layouts: source sampling fails
+explicitly when separated blocks cannot fit, out-of-workspace goals are rejected,
+and unreachable motions fail collection through the normal primitive budgets.
+These runs do not establish success for arbitrary sizes. As for Grid/Pyramid,
+Build3D currently supports execution and collection, not synthesis or formal
+verification.
+
 ## Higher height tolerance
+
+Supplied-program verification also supports `--height-predicate EqualHeight`.
+It uses the same tolerance for symmetric height equality and includes one
+feature per unordered pair, avoiding duplicate symmetric predictors in the
+partition learner. The abstract domain and WP use EqualHeight instead of Higher;
+see the [rules, commands and Stack/Unstack results](../cfg/VERIFICATION.md#equal-height-alternative).
 
 `Higher(x,y)` evaluates `z(x) >= z(y) - tolerance`. The default tolerance is
 **0.001 m (1 mm)**, compared with a **0.05 m** block side. This treats small
@@ -571,6 +728,23 @@ heuristic search for a smaller equivalent Boolean expression; a globally minimum
 formula is not guaranteed. It can reduce minimization time, but truth-table
 enumeration, predicate selection and Z3 verification still contribute to runtime.
 End-to-end speedups require measuring the workload.
+
+For tower contexts with the top-existence axiom, quantified Z3 satisfiability
+queries can dominate inference. Tautology and redundancy pruning first try a
+small finite model of the same assertions. **Only SAT is used**: it witnesses
+non-tautology/non-redundancy, so the clause is retained. Finite UNSAT or UNKNOWN
+cannot remove a clause; that still requires an unrestricted proof. Redundancy
+queries have a 10-second default budget and retain clauses on UNKNOWN. The
+symbolic verifier can also use a finite SAT witness to resolve an inconclusive
+premise-consistency query after proving the VC in the unbounded domain. This
+never replaces the unbounded validity proof with finite checking.
+
+On the same 60 Unstack states, the 2026-10-23 timing investigation measured
+Boolean minimization at 0.021 s (SymPy) and 0.072 s (PyEDA), compared with about
+241 s of tautology checks for each backend before the finite-witness shortcut.
+The subsequent shared PyEDA run took 68 s overall: approximately 11 s setup and
+candidate replay, 41 s learning/coverage and 16 s symbolic verification. Motion
+verification was excluded. See the [tower verification results](../cfg/VERIFICATION.md#provided-unstack-and-reverse-verification).
 
 SymPy retains its existing POS policy: above five selected predicates, it builds
 unminimized CNF to avoid expensive minimization. PyEDA minimizes at those sizes

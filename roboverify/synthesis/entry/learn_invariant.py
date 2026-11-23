@@ -7,7 +7,10 @@ from dataclasses import asdict
 from synthesis.cfg.collection import VideoRecorder
 from synthesis.entry.inference_options import add_inference_options
 from synthesis.entry.predicate_options import add_predicate_options
-from synthesis.entry.verification_options import add_verification_options
+from synthesis.entry.verification_options import (
+    add_verification_options,
+    wp_options_from_args,
+)
 from synthesis.experiment.invariant_learning.runner import (
     ExperimentConfig,
     run_experiment,
@@ -16,6 +19,7 @@ from synthesis.experiment.invariant_learning.tasks import TASKS
 from synthesis.experiment.run_logger import RunLogger
 from synthesis.util.on import using_higher_tolerance
 from synthesis.verification_lib.solver_options import using_unsat_core_minimization
+from synthesis.verification_lib.wp_options import using_wp_system
 
 
 def build_parser():
@@ -86,6 +90,7 @@ def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        selected_wp = wp_options_from_args(args)
         config = ExperimentConfig(
             **{
                 name: getattr(args, name)
@@ -102,7 +107,9 @@ def main(argv=None):
             VideoRecorder.check_available()
         with using_higher_tolerance(
             args.higher_tolerance
-        ), using_unsat_core_minimization(args.minimize_unsat_core):
+        ), using_unsat_core_minimization(args.minimize_unsat_core), using_wp_system(
+            **selected_wp.kwargs()
+        ):
             task = TASKS[args.task](
                 args.program,
                 relations=args.invariant_relations,
@@ -129,7 +136,9 @@ def main(argv=None):
     try:
         with using_higher_tolerance(
             args.higher_tolerance
-        ), using_unsat_core_minimization(args.minimize_unsat_core):
+        ), using_unsat_core_minimization(args.minimize_unsat_core), using_wp_system(
+            **selected_wp.kwargs()
+        ):
             result = run_experiment(
                 task, config, motion_options=motion_options, logger=logger
             )

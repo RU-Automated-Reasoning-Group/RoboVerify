@@ -6,6 +6,17 @@ Its [Lean companion](../../proofs/wp_soundness/README.md) checks the relational
 rewrites and conditional program soundness under explicit model assumptions.
 Python correspondence and the motion checks below remain separate.
 
+The [WP backend guide](WP-BACKENDS.md) documents `--wp-system old|new|reduction`:
+existing rules/axioms, shared-height rules with relational axioms, or direct
+complete-tower model reduction. The last choice compiles supported symbolic
+queries to Boolean formulas; it does not replace geometric motion checking.
+
+[Higher/Scattered action summaries](RELATIONAL-SUMMARIES.md) additionally support
+inferred endpoint atoms through an explicit nondeterministic relation contract.
+CFG motion checks its endpoint, nonmover frame and successor-domain axioms;
+the guide records the exact WP, Lean theorem scope and quantified-array solver
+limits. Existing ON* Put behavior is unchanged.
+
 `Program.lowlevel_verification` requires an explicit `MotionContract` for each
 loop. The contract identifies the manipulated source and placement target.
 `frame_base` is a compatibility hint; root discovery must prove the reference.
@@ -55,8 +66,81 @@ the saved motion-counterexample penalties used by CEGIS and CFG repair.
 That replay is a Z3 check of saved geometry; it is not a MuJoCo execution or
 an unrestricted proof of the repaired program.
 
+### Observation-relative motion references
+
+Named primitive motion supports `Y_min`, `Z_m` and `gripper`, with targets
+captured at instruction entry, as in the controller. `Y_min` selects the position
+of a minimum-Y physical block; `Z_m` selects a maximum-Z block. The held block
+participates, while the table and gripper do not. A later instruction recomputes
+the reference. Ties admit either extremizing block and preserve its complete XYZ
+vector. Release captures gripper XY and reference Z before opening; its operand
+specifies the retreat reference, not the identity of the held block.
+
+`PrimitiveMotionProblem` selects a **global extremizer**, using one physical
+witness per instruction/extremum evaluation. Unstack needs three, normally named
+`sym2`, `sym3`, `sym4`, for its two minimum-Y references and maximum-Z retreat.
+They are allocated before entry-condition translation, receive the same relational
+instances and alias/frame updates as `sym`, and may alias any physical object.
+The collision witness remains independent. Programs without extrema, including
+Stack, allocate no extra witnesses and add no extrema constraints.
+
+At instruction entry, the selected minimum witness m satisfies
+`forall c. physical(c) => Y(m) <= Y(c)`; the maximum witness satisfies
+`forall c. physical(c) => Z(c) <= Z(m)`. Coordinates come from the current
+functional state, so the bounds cover **unnamed objects and moved aliases**, not
+just the represented object dictionary. The witness itself is physical, and the
+returned XYZ vector belongs to that single block. Cached references retain their
+instruction-entry values after motion or release. Every nonempty finite physical
+scene has an admissible extremizer; no fixed block-count bound is imposed.
+
+These constraints replace the earlier finite-candidate extrema overapproximation.
+They encode exact scalar minimum/maximum values. Tied blocks may still be chosen
+nondeterministically because the model has no runtime object-ID order. Unstack
+uses only the extremizing coordinate, so this tie freedom does not change its
+waypoints. The remaining idealized motion assumptions still apply.
+
+Global extrema deliberately introduce universal quantifiers. Complete motion VCs
+also retain quantified supported-height/alignment premises and exact predicate
+effects. `TODO(motion-quantifiers)` in `primitive_motion.py` records the remaining
+quantifier-elimination investigation; the complete checks are not quantifier-free.
+See the [Unstack pipeline results](../cfg/VERIFICATION.md#provided-unstack-and-reverse-verification).
+
+### Proving safety from universal instances
+
+For a quantifier-free violation, the shared checker first tries a necessary
+condition of the original premises. It keeps quantifier-free conjuncts,
+instantiates positive top-level universal conjuncts whose bodies are
+quantifier-free at known object terms (including the arbitrary obstacle sym),
+and drops other quantified conjuncts. It never substitutes finite instances
+inside a negative universal, disjunction, or nested quantified body.
+
+If P is the original premise and R the resulting formula, P implies R.
+Therefore `R and violation` UNSAT proves `P and violation` UNSAT for the original
+unbounded domain. **There is no domain-closure assertion.** This differs from
+finite-world enumeration, whose UNSAT cannot establish unbounded validity.
+SAT/UNKNOWN from R are inconclusive and always fall back to the untouched
+original solver; they never produce counterexamples or a successful result.
+Quantified violations also use the original solver. Existing consistency checks
+continue to use the original premises and their separate SAT-only witness path.
+
+The helper `universal_instances.py` caps generated instances at 256. This limits
+proof effort, not the number of blocks. The preliminary solver uses at most
+1 second or one tenth of the query timeout, whichever is smaller, and its elapsed
+time is deducted from the fallback budget. Successful checks record
+`UNSAT from universal instances; no domain restriction` in their reason.
+The original extrema semantics and remaining quantified obligations are retained;
+this is a sufficient proof route, not complete quantifier elimination.
+
+See the [Unstack descent proof](../cfg/VERIFICATION.md#unstack-descent-proof-from-universal-instances).
+
+### Obligations and model scope
+
 The checks cover consistency, collision sweeps, release/support, direct placement,
 frame preservation, complete ON*/Higher/Scattered effects and root alignment.
+They also prove Put's enabling conditions at transfer entry: a clear physical
+source and a distinct clear block support when applicable. These conditions are
+separate from predicate effects. Public Put detaches old source support edges,
+then attaches to the new support, selecting table/block WP by destination value.
 Aliases follow the current bindings,
 and relative waypoint targets use updated geometry. `ON_star_zero` uses separate
 frozen entry coordinates. An explicitly manipulated source is excluded from the
@@ -76,10 +160,14 @@ witness is constrained by the instantiated axioms/invariants; finite instantiati
 alone is not a reason to call it spurious. Supplied geometric premises may still
 admit scenes outside the agreed supported-height model (discrepancy 16). The CFG
 verifier's opt-in `supported_tower_model=True` (`--supported-towers`) adds explicit
-height consequences and checks height, arm-clearance and exact-column loop
-invariants at entry and after the body. Exact columns and arm clearance are not
-assumed at program entry. Only consistency queries may use a finite SAT witness;
-safety queries stay unbounded. See the
+height consequences and checks height and arm-clearance loop invariants at entry
+and after the body. The API additionally checks and assumes exact columns when
+`exact_column_alignment=True` (the default). The integrated Unstack task sets this
+to `False`, removing both column checks and the corresponding assumptions at body
+and exit boundaries. Stack retains the exact-column invariant. Ordinary geometric
+ON* and the tight input alignment radius are unchanged. Exact columns and arm
+clearance are not assumed at program entry. Only consistency queries may use a
+finite SAT witness; safety queries stay unbounded. See the
 [Stack configuration](../cfg/VERIFICATION.md#provided-stack-verification). Each
 physical object's canonical name is given by `bindings`;
 multiple symbolic names may share a position and refer to the same object.
@@ -102,7 +190,7 @@ This convention is separate from relational tbl and is not yet encoded by
 `PrimitiveMotionProblem`. A resolved table operand there returns `unsupported`
 explicitly, rather than inventing coordinates or claiming a proof.
 
-Named Pick/Release primitives explicitly permit contact with their selected
+Named Pick/Release primitives explicitly permit contact with the picked/released
 object. Empty-gripper sweeps use a point; carried payloads use a cube. Primitive
 Release proves support and treats unsupported positions as arbitrary falls.
 These semantics differ from the legacy BMC Release formula described below.
@@ -166,7 +254,8 @@ The integrated CFG CLI and all four standalone tower entry points accept:
 Omitting `--motion-noise` keeps noise off. The standalone Unstack verifier
 requires `--table-surface-height`; integrated Unstack motion checking also needs
 that value for table-placement contracts. Read it from the environment; the bundled tower environments
-use `0.4`. Keep Unstack end-to-end invocations under `timeout 60s`.
+use `0.4`. The current inference/motion feasibility investigation uses the user's
+explicit 600-second override; the CLI's Unstack default remains 60 seconds.
 
 The BMC APIs accept the same optional `noise`. `bmc_verify` returns a
 `BMCVerificationResult` with boolean truthiness, `status`, `mode`, `model`, and
@@ -190,7 +279,8 @@ From `roboverify/`, with the environment variables in `AGENTS.md` configured:
 uv run python -m unittest synthesis.verification_lib.test_bmc_lib \
   synthesis.verification_lib.test_bmc_noise \
   synthesis.verification_lib.test_motion_verification \
-  synthesis.verification_lib.test_primitive_motion -v
+  synthesis.verification_lib.test_primitive_motion \
+  synthesis.verification_lib.test_motion_extrema -v
 uv run python -m synthesis.entry.benchmark_motion_verification
 ```
 
@@ -233,6 +323,9 @@ and `--motion-noise` are separate parameters.
 
 The current Unstack runtime also accepts observation-relative `Y_min`, `Z_m`
 and `gripper` coordinates. Their targets are fixed at instruction entry. They
-are fingerprinted execution/collection features; the ordinary program loader
-rejects them for integrated synthesis/verification. See the
+are fingerprinted execution features. Supplied-program verification now opts in
+for candidate execution, inference and symbolic checking. Ordinary synthesis
+loading rejects them; motion encoding uses the independent extrema witnesses
+described above, but geometric loop obligations still prevent a complete proof.
+Reverse's physical table-coordinate references are not encoded. See the
 [project support matrix](../../../README.md#project-status).

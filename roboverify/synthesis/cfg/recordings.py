@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 
 import numpy as np
-
 from synthesis.cfg.demos import DemoTrace
 from synthesis.cfg.reset import Snapshot
 from synthesis.environment.goal_layout import GoalLayout, decode_goal_bindings
@@ -44,7 +43,7 @@ def check_trace(trace):
         if "entry_index" in event and not 0 <= event["entry_index"] <= event["index"]:
             raise ValueError("Invalid frozen loop-entry index")
     layout = trace.snapshots[0].goal_layout
-    if trace.task in ("grid", "pyramid") and layout is None:
+    if trace.task in ("grid", "pyramid", "build3d") and layout is None:
         raise ValueError(
             "Goal demonstrations require a goal layout and cursor bindings"
         )
@@ -187,7 +186,7 @@ def loop_store(traces, *, loop_id=None, names=None):
 
     store = DemoStore()
     for trace in traces:
-        if trace.task in ("grid", "pyramid"):
+        if trace.task in ("grid", "pyramid", "build3d"):
             raise ValueError(
                 "Goal demonstration collection is supported; goal invariant inference is not yet supported"
             )

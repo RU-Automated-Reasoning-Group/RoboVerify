@@ -18,10 +18,15 @@ from synthesis.api.instructions import (
     ReleaseByName,
     Skip,
 )
+from synthesis.api.relational_summary import (
+    RelationalSummary,
+    check_summary_realization,
+)
 from synthesis.cfg.bindings import require_closed
 from synthesis.cfg.lower import lower, lower_region
 from synthesis.cfg.region import BlockRegion, LoopRegion
 from synthesis.cfg.scope import scope
+from synthesis.environment.motion_reference import OBSERVATION_REFERENCE_NAMES
 from synthesis.predicates.term import to_z3
 from synthesis.verification_lib.lowlevel_verification_lib import LowLevelContext
 from synthesis.verification_lib.motion_verification import (
@@ -35,16 +40,22 @@ from synthesis.verification_lib.motion_verification import (
     check_frame_preservation,
     prepare_alignment,
 )
-from synthesis.verification_lib.primitive_motion import PrimitiveMotionProblem
+from synthesis.verification_lib.primitive_motion import (
+    PrimitiveMotionProblem,
+    count_extrema_references,
+)
 from synthesis.verification_lib.root_selection import RootContext
 
 
 def propose_summaries(cfg, context):
-    """Attach a Put only to a structurally identified completed placement.
+    """Propose an action contract for a structurally completed placement.
 
     Pure binding/arm operations have no relational object effect. Transfers may
     span adjacent blocks, but no relational observation/control boundary may
-    intervene while their abstract Put is pending.
+    intervene while their abstract action is pending. Explicit Higher/Scattered
+    edges select framed nondeterministic contracts; ON* and transport-target
+    fallback retain the established Put interpretation. Motion must prove the
+    entire selected contract before it is accepted.
     """
     from synthesis.cfg.scope import scope
 
@@ -85,15 +96,32 @@ def propose_summaries(cfg, context):
                 held = i.grab_box_name
                 last_move = None
             elif isinstance(i, ReleaseByName):
-                if held is None or held != i.release_box_name:
-                    raise ValueError("Release must refer to the currently held object")
+                if held is None:
+                    raise ValueError("Release requires a currently held object")
+                if post.op in ("Higher", "EqualHeight", "Scattered"):
+                    if any(arg.op != "ref" for arg in post.args) or held not in (
+                        post.args[0].value,
+                        post.args[1].value,
+                    ):
+                        raise ValueError(
+                            "Relational placement edge must name the moved object"
+                        )
+                    summary.append(
+                        RelationalSummary(
+                            post.op, post.args[0].value, post.args[1].value, moved=held
+                        )
+                    )
+                    held = None
+                    continue
                 if post.op in ("ON", "ON_star") and post.args[0].value == held:
                     target = post.args[1].value
                 elif last_move is not None:
                     # This is only a proposed abstraction. The motion stage must
                     # prove all its effects even when the edge is a global goal.
                     target = last_move.target_box_name_z
-                    if target == held and context.use_tbl:
+                    if context.use_tbl and (
+                        target == held or last_move.target_offset[2].numeric_val() == 0
+                    ):
                         target = "tbl"
                 else:
                     raise ValueError(
@@ -142,7 +170,10 @@ def _all_names(cfg):
                     names.update((inst.left, inst.right))
                 else:
                     names.update(
-                        o["val"] for o in inst.get_operand() if o["type"] == "BoxName"
+                        o["val"]
+                        for o in inst.get_operand()
+                        if o["type"] == "BoxName"
+                        and o["val"] not in OBSERVATION_REFERENCE_NAMES
                     )
     return names
 
@@ -157,13 +188,16 @@ def verify_cfg_motion(
     initial_arm=None,
     table_surface_height=None,
     supported_tower_model=False,
+    exact_column_alignment=True,
     entry_conditions=None,
 ):
     """Thread geometry/arm/held state through blocks; fresh states at loop boundaries.
 
     Each loop body is checked from invariant + witnessed guard, and continuation
     starts from a fresh invariant + guard-false state. A failed/unknown premise or
-    unsupported primitive is never a successful proof.
+    unsupported primitive is never a successful proof. With supported towers,
+    exact_column_alignment controls both the auxiliary column invariant checks
+    and its loop-boundary assumptions; disabling it removes both.
     """
     from synthesis.verification_lib.tower_geometry import (
         arm_clearance,
@@ -173,7 +207,23 @@ def verify_cfg_motion(
     )
 
     constants = sorted(_all_names(cfg))
-    low = LowLevelContext(default_L=0.05, use_tbl=context.use_tbl)
+
+    def extrema_count(graph):
+        return sum(
+            (
+                extrema_count(node.region.body_cfg)
+                if isinstance(node.region, LoopRegion)
+                else count_extrema_references(node.region.physical)
+            )
+            for node in graph.nodes.values()
+        )
+
+    witness_count = extrema_count(cfg)
+    low = LowLevelContext(
+        default_L=0.05,
+        use_tbl=context.use_tbl,
+        height_predicate=context.height_predicate,
+    )
     checks = []
     count = 0
     physical_names = [n for n in constants if n != "tbl"]
@@ -200,11 +250,14 @@ def verify_cfg_motion(
             initial_positions=positions,
             initial_arm=arm,
             enforce_source=False,
+            extrema_witness_count=witness_count,
         )
         if supported_tower_model:
             assume_tower_geometry(p, table_surface_height)
             if clear_arm:
-                p.solver.add(arm_clearance(p), column_alignment(p))
+                p.solver.add(arm_clearance(p))
+                if exact_column_alignment:
+                    p.solver.add(column_alignment(p))
         p.root_context = RootContext(context, z3.And(*conditions), timeout_ms)
         assume_input_alignment(p, p.root_context.initial_roots(available))
         p.check("initial_consistency")
@@ -257,10 +310,11 @@ def verify_cfg_motion(
                     p.check(
                         "arm_clearance_entry", z3.Not(arm_clearance(p, fields=p.fields))
                     )
-                    p.check(
-                        "column_alignment_entry",
-                        z3.Not(column_alignment(p, fields=p.fields)),
-                    )
+                    if exact_column_alignment:
+                        p.check(
+                            "column_alignment_entry",
+                            z3.Not(column_alignment(p, fields=p.fields)),
+                        )
                     p.check(
                         "tower_height_entry",
                         z3.Not(tower_height_invariant(p, fields=p.fields)),
@@ -293,10 +347,11 @@ def verify_cfg_motion(
                         "arm_clearance_preserved",
                         z3.Not(arm_clearance(child, fields=child.fields)),
                     )
-                    child.check(
-                        "column_alignment_preserved",
-                        z3.Not(column_alignment(child, fields=child.fields)),
-                    )
+                    if exact_column_alignment:
+                        child.check(
+                            "column_alignment_preserved",
+                            z3.Not(column_alignment(child, fields=child.fields)),
+                        )
                     child.check(
                         "tower_height_preserved",
                         z3.Not(tower_height_invariant(child, fields=child.fields)),
@@ -333,28 +388,51 @@ def verify_cfg_motion(
             remaining.extend(tail)
             for instruction in region.physical:
                 if isinstance(instruction, PickByName):
-                    proposed = next((i for i in remaining if isinstance(i, Put)), None)
+                    proposed = next(
+                        (
+                            i
+                            for i in remaining
+                            if isinstance(i, (Put, RelationalSummary))
+                        ),
+                        None,
+                    )
                     if proposed is None:
                         raise ValueError("Pick has no completed symbolic placement")
                     p.contract = MotionContract(
-                        p.bindings[proposed.upper_block],
-                        p.bindings[proposed.base_block],
+                        p.bindings[
+                            (
+                                proposed.moved
+                                if isinstance(proposed, RelationalSummary)
+                                else proposed.upper_block
+                            )
+                        ],
+                        p.bindings[
+                            (
+                                proposed.reference
+                                if isinstance(proposed, RelationalSummary)
+                                else proposed.base_block
+                            )
+                        ],
                         table_surface_height=table_surface_height,
                     )
-                    prepare_alignment(
-                        p,
-                        p.root_context,
-                        available,
-                        target=proposed.base_block,
-                        continuation=remaining,
-                        postcondition=postcondition,
-                    )
+                    if isinstance(proposed, Put):
+                        prepare_alignment(
+                            p,
+                            p.root_context,
+                            available,
+                            target=proposed.base_block,
+                            continuation=remaining,
+                            postcondition=postcondition,
+                        )
+                    else:
+                        p.alignment_root = None
                     pending = (
                         dict(p.current),
                         p.fields,
                         p.contract,
                         p.alignment_root,
                         proposed,
+                        dict(p.bindings),
                     )
                 p.execute([instruction])
                 if isinstance(instruction, (Get, Assign)):
@@ -367,7 +445,11 @@ def verify_cfg_motion(
                         remaining.pop(0)
                 elif isinstance(instruction, ReleaseByName) and pending is not None:
                     p.root_context.history.append(pending[4])
-            puts = [i for i in region.symbolic or () if isinstance(i, Put)]
+            puts = [
+                i
+                for i in region.symbolic or ()
+                if isinstance(i, (Put, RelationalSummary))
+            ]
             if puts:
                 if len(puts) != 1 or pending is None:
                     checks.append(
@@ -379,13 +461,23 @@ def verify_cfg_motion(
                     )
                     return p
                 old_initial = p.initial
-                p.initial, p.effect_entry_fields, p.contract, p.alignment_root, _ = (
-                    pending
-                )
-                check_contract_realization(p)
+                (
+                    p.initial,
+                    p.effect_entry_fields,
+                    p.contract,
+                    p.alignment_root,
+                    summary,
+                    entry_bindings,
+                ) = pending
                 check_frame_preservation(p)
-                check_abstract_effects(p)
-                check_alignment(p)
+                if isinstance(summary, RelationalSummary):
+                    check_summary_realization(
+                        p, summary, context, entry_bindings=entry_bindings
+                    )
+                else:
+                    check_contract_realization(p)
+                    check_abstract_effects(p, symbolic_context=context)
+                    check_alignment(p)
                 p.initial = old_initial
                 pending = None
             p.check("transition_consistency")
@@ -431,7 +523,15 @@ def symbolic_problem(cfg, original_context, size=None):
     context = HighLevelContext(
         mode="declare" if size is None else "enum",
         num_blocks=size,
+        enum_names=(
+            [f"o{i}" for i in range(size)] + ["table_object"]
+            if size is not None and original_context.use_tbl
+            else None
+        ),
         use_tbl=original_context.use_tbl,
+        exists_top=original_context.exists_top,
+        height_predicate=original_context.height_predicate,
+        **original_context.wp_options.kwargs(),
         sort_name="Box" if size is None else "CFGBox_" + uuid4().hex,
     )
     clone = deepcopy(cfg)

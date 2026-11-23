@@ -9,6 +9,7 @@ from mujoco_py.generated import const
 
 from .colors import get_colors
 from synthesis.environment.goal_layout import positive_size, pyramid_layers
+from synthesis.environment.build3d_layout import goal_positions as build3d_goal_positions
 from synthesis.util.actions import bound_delta_action
 from synthesis.util.on import BLOCK_LENGTH
 
@@ -32,6 +33,9 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
         grid_cols=None,
         bottom_row_blocks=3,
         contact_buffer=None,
+        build_rows=2,
+        build_cols=2,
+        build_layers=2,
     ):
         # Different parameters for the construction task:
         #   num_blocks: int (default: 1)
@@ -55,6 +59,12 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
             self.pyramid_layer_sizes = pyramid_layers(bottom_row_blocks)
             self.bottom_row_blocks = self.pyramid_layer_sizes[0]
             num_blocks = sum(self.pyramid_layer_sizes)
+
+        if case == "RoboVerifyBuild3D":
+            self.build_rows = positive_size(build_rows, "build_rows")
+            self.build_cols = positive_size(build_cols, "build_cols")
+            self.build_layers = positive_size(build_layers, "build_layers")
+            num_blocks = self.build_rows * self.build_cols * self.build_layers
 
         self.num_blocks = num_blocks
         initial_qpos = {
@@ -89,7 +99,7 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
             from synthesis.environment.cee_us_env.fpp_construction.xml_gen_grid import (
                 generate_xml_grid as generate_xml,
             )
-        elif case == "RoboVerifyPyramid":
+        elif case in ("RoboVerifyPyramid", "RoboVerifyBuild3D"):
             distance_threshold = 0.05
             from synthesis.environment.cee_us_env.fpp_construction.xml_gen_grid import (
                 generate_xml_grid as generate_xml,
@@ -312,7 +322,7 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
                         type=const.GEOM_BOX,
                         label="",
                     )
-            elif self.case in ("RoboVerifyGrid", "RoboVerifyPyramid"):
+            elif self.case in ("RoboVerifyGrid", "RoboVerifyPyramid", "RoboVerifyBuild3D"):
                 if hasattr(self, "_update_roboverify_goal_markers"):
                     self._update_roboverify_goal_markers()
             elif self.case != "Flip" and self.case != "Slide":
@@ -326,7 +336,7 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
             for body_idx1, val in enumerate(self.sim.model.body_mocapid):
                 if val != -1:
                     body_name = self.sim.model.body_id2name(body_idx1)
-                    if self.case in ("RoboVerifyGrid", "RoboVerifyPyramid") and body_name.startswith(
+                    if self.case in ("RoboVerifyGrid", "RoboVerifyPyramid", "RoboVerifyBuild3D") and body_name.startswith(
                         "grid_marker"
                     ):
                         continue
@@ -403,6 +413,7 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
             "RoboVerifyRestack",
             "RoboVerifyGrid",
             "RoboVerifyPyramid",
+            "RoboVerifyBuild3D",
         ]
         if self.case == "All":
             case_id = np.random.randint(0, len(cases))
@@ -423,6 +434,12 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
             # Dummy desired goal. Reward/success for these cases must be computed
             # from achieved object positions (not from desired goals).
             goals = [np.zeros(3, dtype=np.float32) for _ in range(self.num_blocks)]
+        elif case == "RoboVerifyBuild3D":
+            goals = list(build3d_goal_positions(
+                self.build_rows, self.build_cols, self.build_layers,
+                gripper_position=self.initial_gripper_xpos, robot_base_xy=self.robot_base_xy,
+                height=self.height_offset,
+            ))
         elif case == "RoboVerifyGrid":
             from synthesis.environment.cee_us_env.fpp_construction_env import (
                 ROBOVERIFY_GRID_GOAL_Y_OFFSET,

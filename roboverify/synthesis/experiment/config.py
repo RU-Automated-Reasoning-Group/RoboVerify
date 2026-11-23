@@ -9,8 +9,15 @@ via :func:`describe_runtime` instead of being dropped.
 """
 
 import argparse
+import math
 from dataclasses import asdict, dataclass, field
 from typing import Any, Optional
+
+from synthesis.entry.search_options import (
+    add_contract_search_options,
+    add_search_options,
+    validate_search_strategy,
+)
 
 VIDEO_POLICIES = ("none", "best", "all")
 
@@ -25,11 +32,19 @@ class MCMCConfig:
     demos: str = ""
 
     # Search
+    search_strategy: str = "mcmc"
     iters: int = 2000
     program_slots: int = 4
     rng_seed: int = 0
     beta: float = 1.0
     bmc_failed_cost: float = -1e6
+    contract_beam_width: int = 24
+    contract_max_expansions: int = 300
+    contract_seconds: float = 35.0
+    contract_pool_limit: int = 12
+    contract_observation_proposals: bool = True
+    contract_memoize: bool = True
+    contract_diversity: bool = True
 
     # Inner parameter optimization (CEM)
     cem_N: int = 16
@@ -60,6 +75,17 @@ class MCMCConfig:
     runtime: dict = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        validate_search_strategy(self.search_strategy)
+        if self.iters < 0 or self.program_slots < 0:
+            raise ValueError("Search iterations and program slots must be nonnegative")
+        if (
+            self.contract_beam_width <= 0
+            or self.contract_max_expansions <= 0
+            or not math.isfinite(self.contract_seconds)
+            or self.contract_seconds <= 0
+            or self.contract_pool_limit <= 0
+        ):
+            raise ValueError("Contract proposal budgets must be positive")
         if self.video_policy not in VIDEO_POLICIES:
             raise ValueError(
                 f"video_policy must be one of {VIDEO_POLICIES}, got {self.video_policy!r}"
@@ -137,6 +163,8 @@ def add_cli_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParse
     )
 
     search = parser.add_argument_group("search")
+    add_search_options(search)
+    add_contract_search_options(parser)
     search.add_argument("--iters", type=int, default=defaults.iters)
     search.add_argument("--program-slots", type=int, default=defaults.program_slots)
     search.add_argument("--rng-seed", type=int, default=defaults.rng_seed)
@@ -203,6 +231,14 @@ def add_cli_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParse
 def config_from_args(args: argparse.Namespace) -> MCMCConfig:
     """Build a config from parsed CLI arguments, applying ``--smoke`` last."""
     config = MCMCConfig(
+        search_strategy=args.search_strategy,
+        contract_beam_width=args.contract_beam_width,
+        contract_max_expansions=args.contract_max_expansions,
+        contract_seconds=args.contract_seconds,
+        contract_pool_limit=args.contract_pool_limit,
+        contract_observation_proposals=not args.contract_grid_only,
+        contract_memoize=not args.contract_no_memo,
+        contract_diversity=not args.contract_no_diversity,
         task=args.task,
         num_blocks=args.num_blocks,
         demos=args.demos,

@@ -309,10 +309,36 @@ class MotionProblem:
 
     def check(self, obligation, violation=None):
         start = perf_counter()
+        reason = ""
+        instance_proof = False
+        shortcut_ms = 0
+        if violation is not None:
+            from synthesis.verification_lib.universal_instances import (
+                is_quantifier_free,
+                universal_instance_relaxation,
+            )
+
+            if is_quantifier_free(violation):
+                relaxed = universal_instance_relaxation(
+                    self.solver.assertions(), tuple(self.constants.values())
+                )
+                if relaxed is not None:
+                    # Only UNSAT is conclusive for this weaker, unbounded query.
+                    # Keep the actual quantified solver untouched for fallback,
+                    # counterexample extraction, and all consistency checks.
+                    instance_solver = z3.Solver(ctx=self.solver.ctx)
+                    instance_solver.set(
+                        timeout=max(1, min(1000, self.timeout_ms // 10))
+                    )
+                    instance_solver.add(*relaxed, violation)
+                    instance_proof = instance_solver.check() == z3.unsat
+                    shortcut_ms = int(1000 * (perf_counter() - start))
+                    if instance_proof:
+                        reason = "UNSAT from universal instances; no domain restriction"
         self.solver.push()
         if violation is not None:
             self.solver.add(violation)
-        answer = None
+        answer = z3.unsat if instance_proof else None
         candidates = getattr(self, "consistency_candidates", ())
         if (
             violation is None
@@ -321,9 +347,13 @@ class MotionProblem:
         ):
             answer = z3.sat
         if answer is None:
-            answer = self.solver.check()
+            remaining_ms = max(1, self.timeout_ms - shortcut_ms)
+            self.solver.set(timeout=remaining_ms)
+            try:
+                answer = self.solver.check()
+            finally:
+                self.solver.set(timeout=self.timeout_ms)
         counterexample = None
-        reason = ""
         if answer == z3.unknown:
             status = "unknown"
             reason = self.solver.reason_unknown()
@@ -502,7 +532,7 @@ def check_contract_realization(problem):
     )
 
 
-def check_abstract_effects(problem):
+def check_abstract_effects(problem, symbolic_context=None):
     """Check the entire Put interpretation, not just its local placement atom.
 
     Every relation involving the manipulated object is checked against each
@@ -511,7 +541,7 @@ def check_abstract_effects(problem):
     translation is necessary here: weakening under an equivalence is unsound.
     """
     from synthesis.api.instructions import Put
-    from synthesis.api.program import wp
+    from synthesis.api.program import put_effect
     from synthesis.verification_lib.highlevel_verification_lib import HighLevelContext
 
     problem.solver.push()
@@ -525,8 +555,40 @@ def check_abstract_effects(problem):
                 for c in problem.initial_condition
             )
         )
-        high = HighLevelContext(use_tbl=problem.context.use_tbl)
+        high = symbolic_context or HighLevelContext(
+            use_tbl=problem.context.use_tbl,
+            height_predicate=problem.context.height_predicate,
+        )
         put = Put(problem.contract.source, problem.contract.target)
+        # Prove the public action's enabling conditions at transfer entry.
+        # These are separate obligations, not part of an atom's truth value.
+        current = problem.current
+        try:
+            problem.current = problem.initial
+            source, target = problem.contract.source, problem.contract.target
+            problem.check("put_source_physical", z3.Not(problem.physical(source)))
+            problem.check_obstacles(
+                "put_source_clear",
+                lambda point: _on_star(
+                    point, problem.initial[source], problem.context.L
+                ),
+                exclude=(source,),
+            )
+            if target != "tbl":
+                problem.check(
+                    "put_distinct_support",
+                    z3.And(problem.physical(target), problem.same(source, target)),
+                )
+                problem.check_obstacles(
+                    "put_support_clear",
+                    lambda point: z3.And(
+                        problem.physical(target),
+                        _on_star(point, problem.initial[target], problem.context.L),
+                    ),
+                    exclude=(target,),
+                )
+        finally:
+            problem.current = current
         names = list(problem.constants)
         source = problem.contract.source
         # Include source/other in both directions, plus unchanged named pairs.
@@ -538,7 +600,7 @@ def check_abstract_effects(problem):
                 (problem.context.X, problem.context.Y, problem.context.Z)
             )
         ]
-        for relation in ("ON_star", "Higher", "Scattered"):
+        for relation in high.mutable_relations:
             violations = []
             for left, right in pairs:
                 atom = getattr(high, relation)(
@@ -546,14 +608,14 @@ def check_abstract_effects(problem):
                 )
                 if hasattr(problem, "effect_entry_fields"):
                     expected = problem.at(
-                        wp(put, atom, high),
+                        put_effect(put, atom, high),
                         fields=problem.effect_entry_fields,
                         resolve=False,
                     )
                     actual = problem.at(atom, resolve=False)
                 else:
                     expected = problem.context.translate_exact(
-                        wp(put, atom, high), problem.constants
+                        put_effect(put, atom, high), problem.constants
                     )
                     before = problem.context.translate_exact(atom, problem.constants)
                     actual = z3.substitute(before, *replacements)
@@ -631,11 +693,12 @@ def prepare_alignment(
         problem.alignment_root = None  # A separated table placement starts a singleton.
         return
     from synthesis.api.instructions import Put
+    from synthesis.api.relational_summary import RelationalSummary
 
     # Get/Assign may expose another input root without changing object positions.
-    # Once a Put has occurred, alignment must follow from checked motion, never
+    # Once any placement summary has occurred, alignment follows from motion, never
     # a newly inserted assumption on an already-built tower.
-    if not any(isinstance(i, Put) for i in root_context.history):
+    if not any(isinstance(i, (Put, RelationalSummary)) for i in root_context.history):
         assume_input_alignment(
             problem,
             [problem.bindings[name] for name in root_context.initial_roots(candidates)],
@@ -721,15 +784,36 @@ def verify_motion_block(
             ],
             noise,
         )
-    context = context or LowLevelContext(default_L=0.05, use_tbl="tbl" in constants)
+    context = context or LowLevelContext(
+        default_L=0.05,
+        use_tbl="tbl" in constants,
+        height_predicate=(
+            symbolic_context.height_predicate if symbolic_context else None
+        ),
+    )
+    if (
+        symbolic_context
+        and symbolic_context.height_predicate != context.height_predicate
+    ):
+        raise ValueError("Symbolic and motion height predicates must agree")
     from synthesis.api.instructions import Get, MoveByName, PickByName, ReleaseByName
-    from synthesis.verification_lib.primitive_motion import PrimitiveMotionProblem
+    from synthesis.verification_lib.primitive_motion import (
+        PrimitiveMotionProblem,
+        count_extrema_references,
+    )
 
     primitive = any(
         isinstance(i, (Get, PickByName, MoveByName, ReleaseByName)) for i in body
     )
     problem_type = PrimitiveMotionProblem if primitive else MotionProblem
-    options = {"initial_arm": initial_arm} if primitive else {}
+    options = (
+        {
+            "initial_arm": initial_arm,
+            "extrema_witness_count": count_extrema_references(body),
+        }
+        if primitive
+        else {}
+    )
     problem = problem_type(
         context,
         initial_condition,
@@ -747,7 +831,9 @@ def verify_motion_block(
     from synthesis.verification_lib.root_selection import RootContext
 
     high = symbolic_context or HighLevelContext(
-        sort_name=context.sort_name, use_tbl=context.use_tbl
+        sort_name=context.sort_name,
+        use_tbl=context.use_tbl,
+        height_predicate=context.height_predicate,
     )
     roots = RootContext(high, z3.And(*initial_condition), timeout_ms)
     assume_input_alignment(problem, roots.initial_roots(constants))
@@ -765,7 +851,7 @@ def verify_motion_block(
         if problem.check("transition_consistency").status == "valid":
             check_contract_realization(problem)
             check_frame_preservation(problem)
-            check_abstract_effects(problem)
+            check_abstract_effects(problem, symbolic_context=high)
             check_alignment(problem)
     return MotionVerificationResult(problem.checks, noise, 1, perf_counter() - start)
 

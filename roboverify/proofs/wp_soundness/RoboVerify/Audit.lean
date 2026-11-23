@@ -1,4 +1,12 @@
 import RoboVerify.Examples
+import RoboVerify.RelationalSummary
+import RoboVerify.WitnessWP
+import RoboVerify.FragmentSoundness
+import RoboVerify.Placement
+import RoboVerify.BlockProgram
+import RoboVerify.FiniteDecision
+import RoboVerify.GroundEPR
+import RoboVerify.AFPreservation
 import Lean
 
 /- Audit every declaration in this development, including generated helpers.
@@ -28,3 +36,35 @@ run_elab do
 #print axioms RoboVerify.Command.verified_program
 #print axioms RoboVerify.Command.loopFree_wp_exact
 #print axioms RoboVerify.Command.chooseLoop_vc
+#print axioms RoboVerify.Command.chooseIf_wp
+#print axioms RoboVerify.WitnessWP.wpPut_exact
+#print axioms RoboVerify.WitnessWP.wpSeparate_exact
+#print axioms RoboVerify.WitnessWP.putAtom_qf
+#print axioms RoboVerify.Fragments.lift_AF_action
+#print axioms RoboVerify.Fragments.Program.vcgen_epr
+#print axioms RoboVerify.Fragments.Program.vcgen_background_epr
+#print axioms RoboVerify.Fragments.Program.verified_program
+#print axioms RoboVerify.Fragments.Rules.sharedPut_exact
+#print axioms RoboVerify.Fragments.EA.eval_close
+#print axioms RoboVerify.Fragments.AE.eval_toFormula
+#print axioms RoboVerify.Fragments.Placement.wpBlock_equivWitness
+#print axioms RoboVerify.Fragments.Placement.wpTable_equivWitness
+#print axioms RoboVerify.Fragments.Placement.wp_action_exact
+#print axioms RoboVerify.Fragments.Placement.put_preserves_table
+#print axioms RoboVerify.BlockProgram.Operation.wp_exact
+#print axioms RoboVerify.BlockProgram.verified_program
+#print axioms RoboVerify.BlockProgram.vcgen_epr
+#print axioms RoboVerify.BlockSmallModel.finite_counterexample_iff
+#print axioms RoboVerify.FiniteDecision.counterexample_exact
+#print axioms RoboVerify.FiniteDecision.check_exact
+#print axioms RoboVerify.FiniteDecision.verified_program
+#print axioms RoboVerify.GroundEPR.reduction_exact
+#print axioms RoboVerify.GroundEPR.generated_vc_reduction
+#print axioms RoboVerify.AFPreservation.af_mutual_embeddings
+#print axioms RoboVerify.AFPreservation.finite_counterexample
+#print axioms RoboVerify.AFPreservation.no_exact_af_wp
+#print axioms RoboVerify.RelationalSummary.rewrite_correct
+#print axioms RoboVerify.RelationalSummary.wp_exact
+#print axioms RoboVerify.RelationalSummary.wp_weakest
+#print axioms RoboVerify.RelationalSummary.implementation_refines
+#print axioms RoboVerify.RelationalSummary.scattered_self_rejects

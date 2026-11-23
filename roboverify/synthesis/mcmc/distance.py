@@ -1,4 +1,4 @@
-"""Cached demonstration densities with reproducible, local Monte Carlo KL."""
+"""Cached density distances and optional ordered spatial trajectory distance."""
 
 from typing import Protocol
 
@@ -102,7 +102,84 @@ class MMDDistance:
         )
 
 
-def make_distance(name, demos, **kwargs):
-    return {"kl_kde": KDEDistance, "kl_gmm": GMMDistance, "mmd": MMDDistance}[name](
-        demos, **kwargs
+def arc_resample(values, *, points=64):
+    """Resample one ordered polyline by arc length, ignoring pauses and speed.
+
+    Endpoints are retained. A constant trajectory repeats its only position;
+    separate demonstrations must never be concatenated before this operation.
+    """
+    values = KDEDistance._states(values)
+    if not isinstance(points, int) or points < 2:
+        raise ValueError("Arc distance requires at least two resampling points")
+    cumulative = np.r_[0.0, np.cumsum(np.linalg.norm(np.diff(values, axis=0), axis=1))]
+    keep = np.r_[True, np.diff(cumulative) > 1e-12]
+    values, cumulative = values[keep], cumulative[keep]
+    if len(values) == 1:
+        return np.repeat(values, points, axis=0)
+    grid = np.linspace(0.0, cumulative[-1], points)
+    return np.column_stack(
+        [np.interp(grid, cumulative, values[:, j]) for j in range(values.shape[1])]
     )
+
+
+class ArcDistance:
+    """One demonstration's speed-insensitive spatial RMS distance, in metres.
+
+    Raw RoboVerify observations supply gripper XYZ and every block XYZ. An
+    observed block excursion greater than ``motion_threshold`` (5 mm by default)
+    gives that block weight 2; other blocks get 0.25 and the gripper gets 1.
+    Weights depend only on demonstration motion, never symbolic role bindings.
+    Their sum normalizes squared Euclidean object errors, preserving metre units.
+
+    This compares ordered paths, not timing, finger aperture or velocities. It
+    does not replace endpoint, PostScore, physical-safety or verification checks.
+    The ``samples`` argument is accepted for the shared distance interface; this
+    deterministic metric always uses its fixed ``points`` resolution.
+    """
+
+    name = "arc"
+
+    def __init__(self, demos, *, num_blocks, points=64, motion_threshold=0.005):
+        if not isinstance(num_blocks, int) or num_blocks < 1:
+            raise ValueError("Arc distance needs a positive physical block count")
+        if not np.isfinite(motion_threshold) or motion_threshold < 0:
+            raise ValueError("Arc motion threshold must be finite and nonnegative")
+        self.num_blocks = num_blocks
+        self.points = points
+        objects = self._objects(demos)
+        excursion = np.max(
+            np.linalg.norm(objects[:, 1:] - objects[0, 1:], axis=2), axis=0
+        )
+        self.moving_blocks = excursion > motion_threshold
+        self.weights = np.r_[1.0, np.where(self.moving_blocks, 2.0, 0.25)]
+        self.scale = np.sqrt(self.weights / self.weights.sum())[None, :, None]
+        self.reference = arc_resample(self._features(objects), points=self.points)
+
+    def _objects(self, observations):
+        observations = KDEDistance._states(observations)
+        if observations.shape[1] < 10 + 12 * self.num_blocks:
+            raise ValueError("Arc distance requires raw gripper and block observations")
+        return np.stack(
+            [observations[:, :3]]
+            + [
+                observations[:, 10 + 12 * i : 13 + 12 * i]
+                for i in range(self.num_blocks)
+            ],
+            axis=1,
+        )
+
+    def _features(self, objects):
+        return (objects * self.scale).reshape(len(objects), -1)
+
+    def __call__(self, states, *, samples=256):
+        actual = arc_resample(self._features(self._objects(states)), points=self.points)
+        return float(np.sqrt(np.mean(np.sum((actual - self.reference) ** 2, axis=1))))
+
+
+def make_distance(name, demos, **kwargs):
+    return {
+        "kl_kde": KDEDistance,
+        "kl_gmm": GMMDistance,
+        "mmd": MMDDistance,
+        "arc": ArcDistance,
+    }[name](demos, **kwargs)

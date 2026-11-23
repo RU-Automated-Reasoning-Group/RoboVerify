@@ -73,29 +73,61 @@ Read [README.md](README.md#project-status) for current project status and
 reasoning and remaining actions. Collection and supplied-program verification
 are implemented; full synthesis acceptance is resolved. Stack reset bounds initial
 blocks to 0.70 m XY from the robot base.
-The current tasks are Stack, Unstack, Reverse, Restack, Grid and Pyramid.
-`collect_demos --task TASK` defaults to a provided groundtruth for all six.
+The current tasks are Stack, Unstack, Reverse, Restack, Grid, Pyramid and Build3D.
+`collect_demos --task TASK` defaults to a provided groundtruth for all seven.
+All seven have [symbolic pre/postconditions](roboverify/synthesis/cfg/TASK-CONDITIONS.md)
+through `cfg.tasks.symbolic_task_spec`. Tower conditions are unchanged;
+Grid/Pyramid/Build3D share `cfg.goal_specs.GoalTaskContext` occupancy assertions,
+with no shape/traversal restrictions. This supplies specifications only, not
+new goal-aware inference, WP rules or proof integration.
 The 2026-10-23 audit saved 15 seeds (0–14) for each of seven configurations,
 105 valid demonstrations including both five-block Restack layouts. Archives
 and audit reports are under `demos/pipeline-audit-20261023/`; see the
 [collection audit](roboverify/synthesis/inference_lib/README.md#cross-environment-audit).
 All final states replayed exactly and remained successful after 50 extra steps.
 This did not establish new synthesis or verification results. The integrated
-CLI exposes Stack/Unstack; current Unstack observation-relative operands and
-the other four tasks remain outside integrated proof support.
+CLI exposes Stack/Unstack/Reverse. Current Unstack and Reverse supplied programs
+now pass inference and unbounded symbolic verification through the shared pipeline,
+using all 60/75 states from 15 archived starts. Unstack observation-relative motion
+now uses global extrema witnesses with universal bounds over all physical blocks
+at instruction entry. The strengthened `b_prime != b0` guard removes the singleton
+release failure. Unstack omits the auxiliary exact-column invariant and its loop
+assumptions; Stack retains them. Global extrema resolve the previous arm-clearance
+and tower-height preservation counterexamples: both unbounded violations are UNSAT.
+The descent collision now also has an unbounded proof: a necessary condition
+built from ground universal instances is UNSAT in 0.020 s (0.081 s in the shared
+pipeline). This adds no domain bound or geometric assumption. The shared recheck
+passes all 12 symbolic VCs and all seven collision checks; its full motion report
+has 29 valid, one SAT (initial arm clearance), and two UNKNOWN at 30 seconds
+(Higher effects and tower-height preservation, both proved in earlier runs).
+It finishes in 128.5 seconds and is still `motion_unverified`. The remaining SAT
+entry condition has not been repaired by proving later motion. See the recorded
+universal-instance proof for the argument, solver comparison and result scope.
+Reverse table-relative operands remain unsupported; the other four tasks are
+outside integrated proof support. See the
+[tower verification commands](roboverify/synthesis/cfg/VERIFICATION.md#provided-unstack-and-reverse-verification).
 The Pyramid source center moved 4 cm closer after seed 12 failed at its final
 high approach; the original failed batch and replay video are retained.
 
 Unstack and Reverse share one lateral source workspace: base-relative X in
 [0.54, 0.70] m and Y in [0.15, 0.25] m, independent of block count. The Unstack
 provided program uses shared observation-relative coordinates and collection;
-the old lateral experiment and compatibility wrapper have been removed. Reverse's
+the old lateral experiment and compatibility wrapper have been removed. Its
+guard now explicitly excludes b0; this is the adopted groundtruth, not an
+optional experimental variant. Single-block collection exits with no actions.
+Fresh 15-seed collections for each of 1–4 blocks passed exact replay and 50-step
+settling audits under `demos/unstack-base-guard-20261023/`. The changed guard changes
+the executable fingerprint; use the new archive for current Unstack verification.
+Reverse's
 supplied primitive program starts with `b <- tbl` and uses one loop for all N
 transfers. Table-relative Move offsets position the new tower on the lower-Y side
 and remain trainable.
 `collect_demos --task reverse --program synthesis.examples.reverse:build_program`
-validates frozen-entry order reversal for 2–4 blocks. Archived full states still
-restore exactly.
+validates frozen-entry order reversal for 2–5 blocks. The five-block trial
+completed all 15 seeds, but only 12 passed the independent 50-step final-settling
+audit; seeds 0, 1 and 3 lost task success. The accepted subset and exclusions
+are under `demos/reverse/5-blocks-equal-height-20261026/audited/`; this is not a
+reliable five-block controller result. Archived full states still restore exactly.
 Payload-aware placement remains a documented idea; its diagnostic runner was
 retired. The user deferred adoption because it strengthens primitive capabilities
 and needs a review of motion contracts and verification assumptions. See the
@@ -108,6 +140,15 @@ goal topology, cursor bindings and nested-loop events. `execute_goal_program`
 remains the execution-only entry point. Goal occupancy is independent of block
 identity. Goal-aware synthesis and verification remain unsupported; see
 [discrepancy 40](PAPER-DISCREPANCIES.md#40-grid-and-pyramid-execution-and-verification-have-separate-support).
+Build3D adds configurable rows, columns and vertical layers, with goal-only `u`
+links between layer heads in addition to `r` and `d`. Its three nested loops use
+the existing six-primitive transfer body and 15 cm goal-relative clearance.
+`collect_demos --task build3d --build-rows M --build-cols N --build-layers K`
+collects M×N×K transfers. All 25 trials across 2×2×2, 2×3×2 and 2×2×3 passed
+exact action replay and 50-step final settling. Existing 2D archive topology
+is preserved; new layer links are serialized only for 3D layouts. See the
+[collection guide](roboverify/synthesis/inference_lib/README.md#collect-build3d-demonstrations).
+Build3D execution/collection is supported; synthesis and verification are not.
 Restack now supports a lateral source tower plus loose blocks and collection
 with an adapted version of the paper's two-phase program. `--num-blocks` sets
 the total and `--initial-tower-blocks` sets the source height; b0 starts inside
@@ -166,7 +207,8 @@ The [Higher-removal ablation](roboverify/synthesis/cfg/VERIFICATION.md#higher-re
 shows that ON*/Scattered/equality learning alone loses necessary structure, but a
 diagnostic four-clause Higher-free invariant passes both proof levels with the
 supported-height premises retained. It is not a production learner or fallback;
-defaults and the attachment/replay model limit remain unchanged.
+defaults remain unchanged. Public Put now detaches its source before attachment;
+the historical Higher-removal ablations have not been rerun under that correction.
 The diagnostic `--without-extra-motion-premises` also removes arm/column/input
 alignment assumptions, the initial arm pose, and exact premise reassertions.
 Even the learned Higher baseline then fails motion (gripper approach and input
@@ -174,6 +216,24 @@ alignment), while all 12 symbolic checks and carried-block collision checks pass
 See the [full premise ablation](roboverify/synthesis/cfg/VERIFICATION.md#removing-all-extra-motion-premises).
 The supported-tower motion proof contains quantifiers; this diagnostic removes
 them from premises but retains exact quantified conclusions where required.
+Supplied-program verification also accepts `--height-predicate EqualHeight`,
+replacing Higher in inference, domain axioms, WP and motion effects. EqualHeight
+shares the height tolerance and uses one learner feature per unordered pair.
+The 2026-10-26 rechecks pass 12 symbolic and 40 motion checks for Stack; Unstack
+passes 12 symbolic and 31 motion checks, with initial arm clearance UNKNOWN.
+These use learned invariants with no refinement or repair. Higher remains the
+default. Block-placement EqualHeight WP still introduces exists/forall support
+checks; this does not establish quantifier-free WP or AFR closure. See the
+[alternative and commands](roboverify/synthesis/cfg/VERIFICATION.md#equal-height-alternative).
+Reverse retains the structural learner default `ON_star ON_star_zero equality`,
+which passes all 12 symbolic checks under EqualHeight too. Expanded vocabularies
+add one height relation and Scattered, never Higher and EqualHeight together.
+Expanded EqualHeight learning from four-block data fails unbounded preservation
+on a five-block transfer. Learning from 72 states of 12 audited five-block runs
+passes finite checks at sizes 2–5 but fails on a six-block transfer. This is
+fixed-size invariant overfitting; it does not refute the structural proof or
+establish a motion proof. See the
+[Reverse comparison](roboverify/synthesis/cfg/VERIFICATION.md#reverse-vocabulary-investigation).
 The standalone [Section 6.2 experiment](roboverify/synthesis/experiment/invariant_learning/README.md)
 starts from no demos and False, directly minimizes reachable VC failures with
 bounded unordered execution queries, and learns only from complete validated
@@ -182,6 +242,35 @@ replayed and checked; ordinary execution retains lowest-ID selection.
 `learn_invariant --verification-level symbolic|both` keeps the supplied program
 fixed; Stack is the initial adapter. Its proof is unbounded and separate from
 the bounded search for executable counterexamples.
+
+Symbolic verification exposes `--wp-system old|new|reduction` (default `old`).
+The alternatives use shared-height Put rules with either succinct relational
+axioms or exact complete-tower scene reduction. Optional support completeness
+belongs to `new`; reduction derives its own model bound and returns UNKNOWN on
+unsupported formulas or exhausted compilation budgets. Use `context.new_solver()`
+so inference and verification retain this selection. See the
+[WP backend guide](roboverify/synthesis/verification_lib/WP-BACKENDS.md) for scope,
+quantified-guard restrictions and the unproved Python/Lean correspondence.
+
+Higher/Scattered endpoint actions now use `RelationalSummary`, with a framed,
+nondeterministic WP that requires an admissible successor and correctness for
+every allowed successor. CFG summary inference and motion refinement share this
+contract; successor domain axioms are motion conclusions, not assumptions.
+Finite enumeration is exact; unbounded quantified-array queries may return
+unknown. Lean checks the abstract rewrite, weakestness and conditional refinement
+theorems, separately from Python/controller correspondence. See the
+[summary contract guide](roboverify/synthesis/verification_lib/RELATIONAL-SUMMARIES.md).
+
+Independent baselines live under `roboverify/baselines/`, with a separate package
+per family. The current pinned mypyvy/cvc5 baseline inferred and independently
+checked Stack, Unstack and Reverse invariants without supplied supporting
+invariants. Its domain assumptions establish abstract partial safety, not motion
+safety or termination; Reverse uses detach-before-attach semantics. Z3 returned
+unknown under the tested query limits. See the
+[baseline guide](roboverify/baselines/mypyvy/README.md) for reproduction, optional
+dependencies and result scope. `python -m baselines.report --run PATH` reads only
+bounded JSON summaries; these runs use a different schema from experiment runs.
+
 Update the relevant status or entry when it changes, rather than maintaining a
 separate implementation-plan history.
 
@@ -190,8 +279,13 @@ separate implementation-plan history.
   paper says so, and do not use its experimental numbers as regression targets.
 - **Discrepancies get logged, not silently fixed.** Preserve entry IDs and the
   distinction between implementation defects, paper corrections and model limits.
+  New extensions absent from the paper belong in feature documentation; their
+  absence alone is not a paper discrepancy.
 - Keep Unstack end-to-end invocations under the user's **60-second wall-clock
   limit**. A timeout or exhausted budget is not successful verification.
+  For the current Unstack/Reverse inference feasibility investigation, the user
+  explicitly suspended that limit: use a larger recorded budget (initially
+  600 seconds) and prioritize feasibility before speed.
 
 ### Settled implementation decisions
 
@@ -260,10 +354,94 @@ Use the environment and module commands above; the full-suite command is below.
 - [CFG workflow](roboverify/synthesis/cfg/VERIFICATION.md): integrated synthesis and verification.
 
 Instrumented MCMC entry point: `uv run python -m synthesis.experiment.mcmc.run`.
+This and `synthesis.entry.synthesize_cfg` accept `--search-strategy mcmc|enumeration|contract`
+(default MCMC). Enumeration and contract proposals use BMC before CEM; the CFG filter checks existential
+trace feasibility at demonstration entries, while the standalone path retains its
+explicit BMC goal for MCMC/enumeration. Contract search uses nominal endpoint goals
+and entry-specific BMC feasibility, with the same existing numeric objective.
+Its generic backend is `synthesis/search/`. The integrated opt-in
+`--contract-refinement` adds persistent
+milestone cuts, shared numeric endpoint solving, reference-diverse proposals,
+hard physical endpoint checks and complete-program validation; see the
+[implementation guide](roboverify/synthesis/cfg/CONTRACT-REFINEMENT.md).
+A full CLI run recovered a Stack loop; a generic operand continuation selected
+on development starts passed 45/45 untouched three/four/five-block physical
+audits. Three development Scattered failures remain for that candidate. A fresh
+full CLI run with multi-size validation and bounded float repair now recovers a
+different Stack loop in 368.3 seconds and passes all 35 training/development
+starts. Independent evaluation passes 45/45 task/settling checks, 43/45 physical
+audits and 44/45 finite relational audits (42/45 combined). The same executable
+passes all 12 symbolic VCs with learned invariants, including unbounded validity
+under the existing abstract action contracts. Those failures remain archived.
+The subsequent automatic frame-margin selection run finishes in 680.1 seconds;
+its exact program passes all 45 new task, physical and finite relational audits
+at three/four/five blocks and all 12 symbolic VCs. Neither result is an unbounded
+motion refinement proof. Complete Unstack synthesis remains unresolved.
+The contact observer now recognizes force-bearing
+MuJoCo margin contacts; its historical distance cutoff caused false unknown
+holding reports. See the [integrated study](roboverify/synthesis/experiment/README.md#integrated-contract-refinement-and-final-stack-simulation).
+Existing search defaults remain unchanged. Named proposals use observation
+references, while ID-first/standalone proposals use physical IDs. The separate
+`synthesis/experiment/search_comparison/` runner compares beam and matched
+Metropolis search with shared proposals and fitting budgets; it does not establish
+loop recovery or formal verification. See the [search guide](roboverify/synthesis/mcmc/README.md) for
+length/candidate bounds, scope handling and the distinction from final verification.
 Use `--smoke --task stack --num-blocks 3
 --demos demos/stack/3-blocks-5-trajectories/demonstrations.npz` (on one line)
 for a bounded search with the collection above, or iteration options for
 longer runs. Read the resulting directory through the report tool described below.
+
+`synthesis.entry.synthesize_cfg --mode synthesize` runs CFG refinement and
+optional quotienting without final verification. It saves exact executable JSON,
+per-block attempts and complete unrolled checkpoints before quotienting. A saved
+JSON can be loaded with `--mode verify --program PATH --candidate-program`;
+candidate replay uses its own aliases and events, not teacher events. The
+[end-to-end study](roboverify/synthesis/experiment/README.md#end-to-end-synthesis-from-full-demonstrations)
+found a complete 17-primitive four-block Stack program from five whole independent
+demonstrations, passing 15/15 fresh simulation and 5 mm contact/frame audits.
+It used MMD with CEM disabled and does not generalize across block counts. The
+observed mixed-hand-phase partition blocks a shared loop body under the nominal
+primitive grammar; see discrepancy 44. No formal proof of that fixed-size
+candidate has been established. A completed-retreat continuation of the learned
+CFG now recovers a five-primitive shared loop body from the same demonstrations.
+Its immediate training success was 5/5, but 50-step settled success was 3/5.
+Training-only whole-loop CEM and a separate beam-24 Arc shortlist each reached
+5/5 settled training success. On matched fresh three/four/five-block scenes,
+task/settling/5 mm contact-frame success is 15/15,14/15,11/15 for CEM and
+15/15,15/15,3/15 for the Arc shortlist. The 90% per-size target remains unmet.
+All three candidates passed 12 symbolic checks including unbounded proofs with
+learned invariants; motion refinement and termination were not proved.
+Premature guard exits and taller-tower nonmover displacement remain. The frozen
+executables, captures, HTML videos and diagnosis are under
+`runs/contract-retreat-boundaries/20261110/`. Boundary selection remains an
+experimental continuation, not a production CLI default.
+The follow-up `runs/contract-boundary-refinement/20261110/` replaces the manual
+cut detector with bounded milestone truth windows and existing primitive
+contracts, preserving all learned ON endpoints and trace coverage. Matched
+original/released-only controls find no body; automatic cuts recover a loop in
+62.2 s after 3.46 s of cut proposals and pass 5/5 settled training episodes.
+Fresh task/settling/5 mm success is 15/15,14/15,4/15 at three/four/five blocks;
+all 12 symbolic checks pass. Finite production-effect audit shows direct ON on
+132/132 transfers but ON*/Scattered effects matching only 129/132 at Release
+and 124/132 after transfer intervals/settling. No Higher or full motion proof is
+claimed. A separate stable-reference guard experiment on the earlier CEM body
+has identical 45/45 fresh successes for both guards, while repairing three
+selected historical early exits. Unstack contract-based cuts improve next-Pick
+readiness from 0/5 to 5/5; an additional solved shared offset makes the local
+Higher fragment pass 5/5. This is not complete Unstack synthesis. The HTML report,
+exact programs, protocols and all failures are saved; no production defaults
+changed. See the experiment guide for the different bodies, seeds and scopes.
+Arc distance and its metre-valued thresholds are optional; KL and the existing
+numeric defaults remain unchanged.
+
+Unstack's five-demo runs exhausted local search/refinement after 275.6/254.5 s
+within recorded 600 s caps, producing three short first-transfer segments but
+no complete program. Its unresolved release boundary distinguishes geometric
+height success from a released, settled payload; no settling effect or partial
+acceptance bypass was added. Empty-hand-only Stack alignment repairs the
+mixed-phase partition, but that boundary policy's bounded body search still
+does not produce a complete loop. Keep these negative controls distinct from supplied-program
+verification and the successful fixed-four-block executable.
 
 ### Validation
 
@@ -274,7 +452,8 @@ uv run python - <<'PYTEST'
 from pathlib import Path
 import unittest
 modules = sorted('.'.join(p.with_suffix('').parts)
-                 for p in Path('synthesis').rglob('test_*.py'))
+                 for root in ('synthesis', 'baselines')
+                 for p in Path(root).rglob('test_*.py'))
 result = unittest.TextTestRunner(verbosity=2).run(
     unittest.defaultTestLoader.loadTestsFromNames(modules))
 raise SystemExit(not result.wasSuccessful())
@@ -285,6 +464,13 @@ Run focused tests for changed behavior and the appropriate broader checks. Scope
 formatting to changed files (`uvx isort --profile black`, then `uvx black`) and run
 `git diff --check`. Documentation-only edits need reference checks, not simulator
 runs. Tests use synthetic scenes or generated traces, not saved demonstration files.
+
+The command includes baseline adapter tests. Real-solver baseline tests skip when
+the optional dependencies are absent; configure `ROBOVERIFY_MYPYVY_ROOT`,
+`ROBOVERIFY_CVC5` and `ROBOVERIFY_BASELINE_PYTHON` as described in the
+[baseline guide](roboverify/baselines/mypyvy/README.md) to include them. The
+[Lean proof](roboverify/proofs/wp_soundness/README.md) has a separate build and
+kernel/axiom audit.
 
 ## Architecture
 
@@ -313,7 +499,7 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
     (`Parameter`) as a flat vector for MCMC/CEM optimization. Verification-only instructions
     (`Put`, `MarkGoal`) raise on `eval()` and
     must be lowered to physical instructions before execution. `GoalAssign`,
-    `MoveRight` and `MoveDown` execute using separate goal bindings. Move/Release
+    `MoveRight`, `MoveDown` and `MoveUp` execute using separate goal bindings. Move/Release
     accept goal-center references; Pick accepts only physical blocks. `Assign` updates
     runtime aliases, and `Get` finds an object satisfying its binding condition.
     `While` evaluates a restricted subset of Z3 formulas against concrete block
@@ -326,6 +512,19 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
     (`ON_star`, `Higher`, `Scattered`) across a `Put`. `Program.highlevel_verification(...)`
     and `Program.lowlevel_verification(...)` are the two verification entry points a program
     exposes.
+
+  Public `wp(Put, ...)` requires a clear physical source and, for a block target,
+  a distinct clear support. It detaches the source's old ON* edges before
+  attachment and dispatches on the target's value, including aliases of tbl.
+  `put_effect` is the pure transformer; motion checking proves enabling conditions
+  separately from equivalence of predicate effects. Frozen ON*_zero is unchanged.
+  - `relational_summary.py`: verification-only Higher/Scattered endpoint actions.
+    The moved object is independent of operand order. Mutable relations incident
+    to it may change; the other pairs, equality and frozen entry ON* are framed.
+    `summary_wp` requires existence and universal successor correctness under an
+    explicit domain. CFG motion checking proves release, endpoint, the full
+    nonmover coordinate frame and all successor-domain axioms. A new summary in
+    the history prevents later Put checks from assuming fresh input alignment.
 
 - **`synthesis/verification_lib/`** — the two verification backends.
   - `highlevel_verification_lib.py`: `HighLevelContext` sets up the Z3 sort for boxes in one
@@ -343,6 +542,10 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   - `symbolic_verify.py`: labeled VC results, exact vacuity detection, increasing-size
     finite counterexample search and optional unbounded proof. `counterexamples.py`
     realizes relation tables as geometry or explicitly refuses the model.
+    Tower inference pruning uses finite SAT witnesses only; finite UNSAT/UNKNOWN
+    cannot discard clauses. After unbounded VC validity, an inconclusive premise
+    consistency check may use the same SAT-only witness. No finite validity result
+    is promoted to an unbounded proof.
   - `cegis.py`: bounded symbolic/motion refinement using the intended
     `InvInference` algorithm, explicit coverage/progress checks,
     `NeedsResynthesis` for entry failures, and counterexample penalties.
@@ -354,6 +557,22 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
     Missing physical programs in a verifier and uncovered instructions fail closed.
     The obsolete Reverse verifier was removed because it encoded Unstack (39).
     See [motion verification semantics](roboverify/synthesis/verification_lib/README.md).
+  - `universal_instances.py`: a sufficient unbounded proof for quantifier-free
+    motion violations. Retain quantifier-free premise conjuncts and instances of
+    positive top-level universals; drop other quantified conjuncts. Only UNSAT
+    proves the original VC. No domain closure is added; SAT/UNKNOWN fall back to
+    the original solver. Negative/nested quantifiers are never finitely rewritten.
+    Instance and preliminary-query limits bound proof effort, not block count.
+  - `primitive_motion.py`: named primitive waypoint encoding, including `Y_min`,
+    `Z_m` and `gripper` references frozen at instruction entry. Independent extrema
+    witnesses (`sym2`, etc.) coexist with collision witness `sym`, receive the same
+    entry instances and frame updates, and may alias other objects. The shared APIs
+    allocate one per instruction/extremum evaluation, none for Stack. Each selected
+    physical witness is constrained universally against every physical object's
+    current functional coordinates. Scalar extrema are exact; tied-object selection
+    remains nondeterministic. Global extrema, height premises and exact effects
+    retain quantifiers; `TODO(motion-quantifiers)` records the remaining elimination
+    investigation.
   - `lowlevel_verification_lib.py`: geometric low-level context, box-corner/cube drawing
     helpers used to visualize/verify concrete 3D placements.
 
@@ -384,7 +603,7 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
     divergence from demos (via `cost_func`) combined with BMC feasibility checks
     (`check_bmc_candidate`/`score_candidate_program`), and drives the outer `MCMC(...)` search
     loop. Also has the `make_roboverify_*_env` factories (stack/unstack/reverse/restack/grid/
-    pyramid) and video/frame saving utilities.
+    pyramid/build3d) and video/frame saving utilities.
   - `decision_tree.py`: a compatibility alias only. `ON_feature` now resolves to
     `predicates.atoms.GroundON`; the shallow-tree feature learner it used to hold was
     superseded by the bounded predicate enumerator in `synthesis/predicates/`, which can
@@ -394,6 +613,9 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
     instrumented MCMC share its acceptance and objective helpers; keep the
     Metropolis ratio here rather than writing it out a second time.
   - `distance.py`: cached KL/MMD trajectory distances for the candidate pool.
+  - `enumeration.py`: lazy length-first Pick/Move/Release structures over numeric
+    or scoped named operands. Floats belong to CEM. The instrumented search and
+    CFG driver select it with `--search-strategy enumeration`; default MCMC is unchanged.
   - `cem.py` / `cost_func.py`: cross-entropy-method parameter optimizer, and KL/MMD-based
     trajectory-distribution distance metrics used as the optimization objective.
 
@@ -429,7 +651,9 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   start loose. Restack uses the same 50-step settling policy and records both
   flat loops. Optional MP4s run at 20 FPS. Reverse uses `synthesis.examples.reverse:build_program`;
   its validation compares current ON* with transposed frozen entry ON*.
-  All six tasks default to their provided example when --program is omitted.
+  Build3D defaults to `synthesis.examples.build3d:build_program`; `--build-rows`,
+  `--build-cols` and `--build-layers` determine its block count and three-loop
+  traversal. All seven tasks default to their provided example when --program is omitted.
   `audit_demos` independently checks current fingerprints, task validation,
   snapshot/action replay and physical success after extra final settling, or
   with `--post-settling-steps N` the shared settled task check.
@@ -442,19 +666,25 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   `--mode verify --program ...` starts with the matching supplied program.
   Both execute the actual candidate for inference, then perform symbolic and
   motion verification with shared feedback. Changed executables get fresh traces.
+  Supplied-program mode accepts Stack/Unstack/Reverse. `--verification-level
+  symbolic|both` keeps `verified_symbolic` separate from `verified_model`.
+  `--loop-invariant module:factory` is an explicit fixed-formula control, not an
+  alternate learner or fallback. `--wall-timeout-seconds` overrides the total run
+  budget (Unstack defaults to 60); the current feasibility investigation uses 600.
   Experiment results stay in `runs/`; `--output-dir` changes that root and
   `--run-name` adds a label. `main.py` forwards to this driver.
   `verified_synthesis.py` and the Stack verifier CLI forward to verify mode.
   The historical Unstack verifier consumes `--demos` via the inference adapter
   for its own abstraction. The obsolete Reverse verifier and legacy PartialStack
   verifier have been removed. Neither certified the current physical programs. `execute_goal_program.py`
-  executes the shared Grid/Pyramid example through Program.eval with nested While
+  executes Grid/Pyramid/Build3D examples through Program.eval with nested While
   loops, checks primitive convergence and occupancy, and optionally saves video.
   It does not create synthesis archives or invoke verification. The historical
   2D verifier remains a separate symbolic mark-all example.
 
 - **`synthesis/environment/goal_layout.py`** — immutable goal graphs with XYZ,
-  r links within rows and d links between row heads. Only goals have these links.
+  r links within rows and d links between row heads. Build3D restricts d to a
+  layer and adds u links between layer heads. Only goals have these links.
   Runtime goal bindings are separate from physical block IDs. Shared 20 mm
   occupancy semantics drive guards and task completion. Pyramid traverses bottom
   to top; Grid uses 10 cm tabletop spacing for finger clearance. Goal-marker
@@ -462,6 +692,8 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   preserves Scattered and rejects layouts outside the nominal workspace. Source
   center X is initial-gripper X minus 0.10 m for Grid and 0.14 m for Pyramid,
   keeping the latter reachable at its higher goal clearance.
+  `build3d_layout.py` supplies rectangular layered geometry with 10 cm XY
+  spacing and 5 cm layer height; Build3D uses the closer source center as well.
 
 - **`synthesis/environment/relaxed_workspace.py`** — opt-in
   `relax_boundaries_for_generalization_test` (constructor, factories,
@@ -481,7 +713,8 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
 - **`synthesis/environment/motion_reference.py`** — typed runtime-only operands
   Y_min, Z_m and gripper, resolved at instruction entry. The shared controller
   freezes each target for its servo loop. Fingerprints include these semantics;
-  collection opts in and synthesis/verification loading rejects them.
+  collection and supplied-program verification opt in for execution/inference;
+  ordinary synthesis loading rejects them and motion encoding is still missing.
 
 - **`synthesis/environment/tower_reset.py`** — shared lateral Unstack/Reverse
   reset geometry. Both sample X in [0.54, 0.70] m ahead of the robot base and
@@ -593,8 +826,10 @@ the DSL, verification backends, inference, search and integrated CFG pipeline.
   --mode full --demos demos/stack/3-blocks-5-trajectories/demonstrations.npz
   --smoke --quotient` (on one line) for a bounded integration smoke.
   The driver requires validated current archives and has no historical-oracle
-  fallback. `--reset-mode replay` is the default; Unstack retains its 60-second
-  process alarm. Success is `verified_model` in the documented scope.
+  fallback. `--reset-mode replay` is the default; Unstack defaults to a 60-second
+  process alarm, explicitly overridden to 600 for the current investigation.
+  Both-level success is `verified_model`; symbolic-only success is
+  `verified_symbolic` and does not certify motion.
   Supplied Stack verification passes with the intended learner, the equal-height
   task precondition and `ON_star Higher Scattered equality`; full synthesis
   acceptance is resolved. `--supported-towers` adds explicit height

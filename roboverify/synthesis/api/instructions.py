@@ -967,6 +967,23 @@ class MoveDown(Instruction):
         return []
 
 
+class MoveUp(Instruction):
+    """Advance a 3D goal cursor to the head of the next higher layer."""
+
+    def __init__(self, var_name):
+        self.var_name = var_name
+
+    def __str__(self):
+        return f"{self.var_name} := {self.var_name}.u"
+
+    def eval(self, env, traj, return_image=False) -> List:
+        mapping = goal_bindings(env)
+        if self.var_name in ("h0", "null"):
+            raise ValueError("Cannot advance the goal head or null constant")
+        mapping[self.var_name] = env.goal_layout.get(mapping[self.var_name]).u
+        return []
+
+
 class Seq:
     def __init__(self, s1, s2):
         self.s1 = s1

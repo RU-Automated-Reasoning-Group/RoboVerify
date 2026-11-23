@@ -5,6 +5,7 @@ import shutil
 import signal
 import subprocess
 import time
+from contextvars import ContextVar
 from pathlib import Path
 
 import numpy as np
@@ -35,28 +36,53 @@ from synthesis.util.on import get_higher_tolerance
 
 # Initial settling after a fresh reset, for every task.
 STACK_SETTLING_STEPS = SETTLING_STEPS
+_active_deadline = ContextVar("roboverify_execution_deadline", default=None)
+
+
+def check_execution_deadline():
+    """Recheck the wall budget even if a native callback swallowed SIGALRM."""
+    active = _active_deadline.get()
+    if active is not None and time.monotonic() >= active[0]:
+        raise TimeoutError(active[1])
 
 
 @contextlib.contextmanager
-def execution_deadline(seconds):
-    """Preserve a shorter enclosing deadline (including the Unstack process cap)."""
+def execution_deadline(seconds, *, message=None):
+    """Preserve enclosing alarms and a sticky monotonic deadline for checkpoints."""
+    if seconds is None:
+        yield
+        check_execution_deadline()
+        return
+    check_execution_deadline()
+    started = time.monotonic()
+    message = message or f"Trajectory exceeded {seconds:g} seconds"
+    active = _active_deadline.get()
+    requested = (started + seconds, message)
+    if active is not None and active[0] < requested[0]:
+        requested = active
+    token = _active_deadline.set(requested)
     previous = signal.getitimer(signal.ITIMER_REAL)
     if previous[0] and previous[0] <= seconds:
-        yield
+        try:
+            yield
+            check_execution_deadline()
+        finally:
+            _active_deadline.reset(token)
         return
     handler = signal.getsignal(signal.SIGALRM)
-    started = time.monotonic()
 
     def expired(signum, frame):
-        raise TimeoutError(f"Trajectory exceeded {seconds:g} seconds")
+        raise TimeoutError(message)
 
     signal.signal(signal.SIGALRM, expired)
     signal.setitimer(signal.ITIMER_REAL, seconds)
     try:
         yield
+        check_execution_deadline()
     finally:
         signal.setitimer(signal.ITIMER_REAL, 0)
         signal.signal(signal.SIGALRM, handler)
+        _active_deadline.reset(token)
         if previous[0]:
             signal.setitimer(
                 signal.ITIMER_REAL,
