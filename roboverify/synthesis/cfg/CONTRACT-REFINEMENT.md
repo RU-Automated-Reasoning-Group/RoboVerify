@@ -242,6 +242,13 @@ inferred abstract program, including its unbounded verification conditions.
 The [experiment guide](../experiment/README.md#integrated-contract-refinement-and-final-stack-simulation)
 records the separate 45-case held-out audit and the scope of the proof.
 
+A fresh Python environment reproduced the result in 642.6 seconds for synthesis
+and 20.0 seconds for verification. It passed all 35 bundled starts and all 12
+symbolic checks. The emitted program differed from the reference by about
+`1.1e-16` m in one vertical offset. In a separate recheck on the held-out seeds,
+it passed all 45 physical audits with zero-action settling and all 135 finite
+transfer checks.
+
 Run directories retain CFG cuts and boundary proposals, exact executable JSON
 when available, endpoint rejection counts, solver statuses and bounded-search
 termination reasons. Frozen programs must be evaluated independently on fresh
