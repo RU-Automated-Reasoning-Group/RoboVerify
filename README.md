@@ -5,6 +5,25 @@ symbolic correctness and geometric motion obligations. Programs execute in a
 Fetch/MuJoCo environment. The pipeline uses relational CFGs, flat-loop recovery,
 learned invariants and counterexample-guided refinement.
 
+## Reproduce Stack synthesis
+
+With [MuJoCo 2.1 installed](AGENTS.md#environment) and `uv` on your path, run from
+the repository root.
+
+```bash
+./roboverify/reproduce_stack.sh
+```
+
+The first run installs the Python environment, including the legacy Gym
+runtime for Fetch. The command uses the five bundled four-block demonstrations
+and 30 bundled development starts, synthesizes a Stack loop, and runs symbolic
+verification on the program it just generated. The reference synthesis took about 11
+minutes. The command prints a directory under
+`roboverify/runs/stack-reproduction/` that contains the generated
+`artifacts/program.json` and a separate verification report. See the
+[reproduction configuration](roboverify/synthesis/cfg/CONTRACT-REFINEMENT.md#metrics-and-reproduction)
+for the data and the scope of the checks.
+
 ## Project status
 
 The seven current tasks are **Stack, Unstack, Reverse, Restack, Grid, Pyramid and Build3D**.

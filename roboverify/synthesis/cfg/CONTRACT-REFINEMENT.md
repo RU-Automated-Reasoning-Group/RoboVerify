@@ -215,35 +215,33 @@ fragment search. A recovered loop can use a separate metric with all three of
 must be supplied explicitly in the chosen metric's units; no KL/MMD/Arc scale
 conversion is inferred.
 
-For the current independent-controller archives, from `roboverify/` with the
-simulator environment configured as in [AGENTS.md](../../../AGENTS.md):
+From the repository root, with [the simulator installed](../../../AGENTS.md#environment),
+run the bundled Stack configuration.
 
 ```bash
-uv run python -m synthesis.entry.synthesize_cfg \
-  --task stack --num-blocks 4 --mode synthesize \
-  --demos runs/contract-end-to-end/20261110/data/stack-independent-accepted-5-holding.npz \
-  --synthesis-approach id-first --search-strategy contract --contract-refinement --quotient \
-  --slots 6 --iterations 7 --refinements 20 --cem-iterations 0 \
-  --distance mmd --theta .1 --epsilon .1 \
-  --inner-samples 64 --final-samples 256 --reset-mode reset --seed 0 \
-  --loop-body-distance arc --loop-body-theta .03 --loop-body-epsilon .003 \
-  --contract-beam-width 12 --contract-pool-limit 8 --contract-seconds 60 \
-  --contract-max-expansions 100000 --predicate-seconds 5 \
-  --validation-starts runs/contract-integrated/20261110/data/stack-all-development-starts.npz \
-  --candidate-validation-limit 8 --candidate-validation-seconds 900 \
-  --candidate-selection frame-margin \
-  --candidate-parameter-trials 40 --candidate-parameter-step .001 \
-  --candidate-max-total-actions 300000 --wall-timeout-seconds 1200
+./roboverify/reproduce_stack.sh
 ```
 
-The [recorded invocation and frozen source](../../runs/contract-integrated/20261110/invocations/stack-full-multisize-frame-margin/command.json)
-at commit `0faa92d` recovered a loop and selected a candidate on all 35 original
-and development starts in 680.1 pipeline seconds. It tested seven structures
-and 170 coordinate vectors. Its exact executable passes a separate 45-case
-fresh simulation/audit evaluation and all 12 symbolic VCs; see the
-[experiment guide](../experiment/README.md#integrated-contract-refinement-and-final-stack-simulation)
-for the earlier first-passing selection, conditions and proof scope.
-Additional starts are selection data, not imitation data or held-out evaluation.
+The [runner](../../reproduce_stack.sh) records the search settings and then
+symbolically verifies the executable produced by that run. The general CLI
+defaults to MCMC, relational synthesis, KL distance and first-passing candidate
+selection. This experiment uses contract search, ID-first synthesis, MMD for
+straight-line search, Arc for the loop body and frame-margin selection. PyEDA
+minimizes the invariant truth table for symbolic verification.
+
+Both [input archives](../../demos/stack/contract-reproduction/) are checked in.
+`demonstrations.npz` contains five full trajectories from the independent Stack
+controller. `development-starts.npz` contains 30 full-state starts used for
+candidate selection across three, four and five blocks. Held-out seeds
+3000–3014 at each size were used in the separate physical audit.
+
+The reference synthesis at `0faa92d` recovered a loop and selected a candidate
+on all 35 original and development starts in 680.1 pipeline seconds. It tested
+seven structures and 170 coordinate vectors. Symbolic verification checks the
+inferred abstract program, including its unbounded verification conditions.
+The [experiment guide](../experiment/README.md#integrated-contract-refinement-and-final-stack-simulation)
+records the separate 45-case held-out audit and the scope of the proof.
+
 Run directories retain CFG cuts and boundary proposals, exact executable JSON
 when available, endpoint rejection counts, solver statuses and bounded-search
 termination reasons. Frozen programs must be evaluated independently on fresh
